@@ -1,0 +1,41 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-04-30T14:08:58.015Z",
+  "activeFeatures": [
+    "scripts"
+  ],
+  "primaryFeature": "scripts",
+  "features": {
+    "scripts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-30T14:08:58.015Z",
+        "lastUpdated": "2026-04-30T14:08:58.015Z"
+      },
+      "lastFile": "/Users/mj/Soongsil/.sfs-local/scripts/sfs-review.sh"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-04-30T00:58:53.058Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-04-30T14:08:58.015Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-30T14:08:58.015Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

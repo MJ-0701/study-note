@@ -1,9 +1,9 @@
 ---
 phase: plan
 gate_id: G1
-sprint_id: ""        # filled by /sfs start
-goal: ""             # filled by /sfs start <goal>
-created_at: ""       # filled by /sfs start
+sprint_id: "2026-W18-sprint-3"
+goal: "Phase 1 — repo scaffold + dev compose + DB schema + manifest schema"
+created_at: "2026-04-30T23:22:33+09:00"
 last_touched_at: ""  # filled by /sfs plan (auto, ISO8601 + tz)
 ---
 

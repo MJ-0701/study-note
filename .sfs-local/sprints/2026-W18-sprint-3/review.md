@@ -1,9 +1,9 @@
 ---
 phase: review
 gate_id: ""          # one of G2, G3, G4 (set by /sfs review --gate <id>) — 미설정 시 빈 문자열
-sprint_id: ""        # filled by /sfs start
-goal: ""             # filled by /sfs start <goal>
-created_at: ""       # filled by /sfs start
+sprint_id: "2026-W18-sprint-3"
+goal: "Phase 1 — repo scaffold + dev compose + DB schema + manifest schema"
+created_at: "2026-04-30T23:22:33+09:00"
 last_touched_at: ""  # filled by /sfs review (auto, ISO8601 + tz)
 evaluator_role: CPO
 evaluator_persona: ".sfs-local/personas/cpo-evaluator.md"
