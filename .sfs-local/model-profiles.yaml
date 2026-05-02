@@ -1,6 +1,6 @@
 # .sfs-local/model-profiles.yaml
 # Project-local model and agent profile settings for Solon.
-# Installed by Solon 0.5.50-product on 2026-05-01.
+# Installed by Solon 0.5.88-product on 2026-05-03.
 #
 # This file is intentionally editable by the project owner. Solon recommends
 # cost-aware defaults, but does not block an "all high-end models" policy when
@@ -8,15 +8,15 @@
 
 version: 1.1
 project: "study-note"
-created: "2026-05-01"
-solon_mvp_version: "0.5.50-product"
+created: "2026-05-03"
+solon_mvp_version: "0.5.88-product"
 
 configuration:
   status: "confirmed"        # current_model_fallback | selected_at_install | confirmed | review_required
   selected_runtime: "claude"   # current | claude | codex | gemini | custom
   selected_policy: "solon_recommended"       # current_model | solon_recommended | all_high | custom
   confirmed_by: "sfs upgrade"
-  confirmed_at: "2026-05-01T12:49:25Z"
+  confirmed_at: "2026-05-02T16:47:51Z"
   note: "If this stays unconfigured, Solon uses the user's current runtime/model. When asked about agent/model settings in this state, the AI must say it is unconfirmed fallback and ask which policy to apply."
 
 reasoning_tiers:
