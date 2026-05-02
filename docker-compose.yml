@@ -41,29 +41,30 @@ services:
 
   be-service:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: be-service
     depends_on:
       db-service:
-        condition: service_healthy
-      s3-service:
         condition: service_healthy
     ports:
       - "3001:3000"
     environment:
       - PORT=3000
+      - HOST=0.0.0.0
       - DATABASE_URL=mysql://study_note:study_note@db-service:3306/study_note
-      - STORAGE_PROVIDER=s3
-      - S3_BUCKET=study-note-materials
-      - S3_REGION=ap-northeast-2
-      - S3_ENDPOINT=http://s3-service:4566
-      - S3_FORCE_PATH_STYLE=true
+      - STORAGE_PROVIDER=local
       - SESSION_TOKEN_PEPPER=change-me-local-session-pepper
+      - STUDY_NOTE_DEV_USER_NAME=채명정
+      - STUDY_NOTE_DEV_STUDENT_NUMBER=20264514
+      - STUDY_NOTE_DEV_USER_EMAIL=student@example.com
+      - STUDY_NOTE_SECOND_USER_NAME=Ownership Reviewer
+      - STUDY_NOTE_SECOND_STUDENT_NUMBER=20260000
+      - STUDY_NOTE_SECOND_USER_EMAIL=reviewer@example.com
     networks:
       - study-note-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

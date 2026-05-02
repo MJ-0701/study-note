@@ -13,7 +13,8 @@ async function bootstrap() {
   });
 
   const port = Number(process.env.PORT ?? 3001);
-  await app.listen(port, "127.0.0.1");
+  const host = process.env.HOST ?? "0.0.0.0";
+  await app.listen(port, host);
 }
 
 void bootstrap();

@@ -1,24 +1,24 @@
-# Build stage
-FROM node:20-alpine AS build
+# Backend Dockerfile — built from repo root context.
+# root package.json holds NestJS/Prisma deps for the monorepo.
+
+FROM node:20-alpine
 
 WORKDIR /app
 
+# Install all deps (incl. devDeps: prisma CLI, typescript) — needed for build + migrate.
 COPY package*.json ./
 RUN npm install
 
+# Copy full repo (root context) so backend/* and prisma schema are present.
 COPY . .
-RUN npm run build
 
-# Runtime stage
-FROM node:20-alpine AS runtime
+# Generate Prisma client types (resolves @prisma/client model imports at compile time).
+RUN npx prisma generate --schema backend/prisma/schema.prisma
 
-WORKDIR /app
-
-COPY --from=build /app/package*.json ./
-RUN npm install --omit=dev
-
-COPY --from=build /app/dist ./dist
+# Compile backend TypeScript to backend/dist.
+RUN npm run build:backend
 
 EXPOSE 3000
 
-CMD ["node", "dist/main"]
+# On boot: apply migrations -> seed (idempotent upsert) -> start NestJS.
+CMD ["sh", "-c", "npx prisma migrate deploy --schema backend/prisma/schema.prisma && node backend/prisma/seed.mjs && node backend/dist/main.js"]
