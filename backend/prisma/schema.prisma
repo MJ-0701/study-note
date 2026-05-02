@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  displayName   String
+  studentNumber String        @unique
+  email         String?       @unique
+  createdAt     DateTime      @default(now())
+  sessions      Session[]
+  materials     PdfMaterial[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Subject {
+  id        String        @id
+  title     String
+  createdAt DateTime      @default(now())
+  materials PdfMaterial[]
+}
+
+model PdfMaterial {
+  id          String               @id @default(cuid())
+  ownerId     String
+  subjectId   String
+  classDate   String
+  fileName    String
+  fileSize    Int
+  pageCount   Int
+  contentType String
+  storageKey  String
+  uploadStatus String              @default("pending")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  owner       User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  subject     Subject              @relation(fields: [subjectId], references: [id])
+  annotation  AnnotationSnapshot?
+
+  @@index([ownerId, subjectId, classDate])
+  @@index([subjectId])
+}
+
+model AnnotationSnapshot {
+  id            String      @id @default(cuid())
+  materialId    String      @unique
+  ownerId       String
+  schemaVersion Int
+  payload       Json
+  savedAt       DateTime    @default(now())
+  material      PdfMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}

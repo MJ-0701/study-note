@@ -1,0 +1,36 @@
+{
+  "name": "study-note",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "dev:backend": "npm run prisma:migrate:deploy && npm run prisma:seed && npm run build:backend && node backend/dist/main.js",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "tsc --noEmit && vite build",
+    "build:backend": "tsc -p backend/tsconfig.json",
+    "prisma:generate": "prisma generate --schema backend/prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema backend/prisma/schema.prisma",
+    "prisma:seed": "node backend/prisma/seed.mjs",
+    "smoke:backend": "npm run build:backend && node scripts/smoke-backend-contract.mjs",
+    "smoke:s3-storage": "npm run build:backend && node scripts/smoke-s3-storage.mjs",
+    "smoke:s3-real": "npm run build:backend && node scripts/smoke-real-s3-storage.mjs",
+    "smoke:pdf-workspace": "npm run build:backend && node scripts/smoke-pdf-workspace.mjs",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "prisma": "^6.19.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1041.0",
+    "@nestjs/common": "^11.1.19",
+    "@nestjs/core": "^11.1.19",
+    "@nestjs/platform-express": "^11.1.19",
+    "@prisma/client": "^6.19.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  }
+}

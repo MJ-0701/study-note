@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-labelledby="title desc">
+  <title id="title">Lecture note coverage flow</title>
+  <desc id="desc">A compact flow from private professor PDF through required keywords, concept notes, and practice questions.</desc>
+  <rect width="720" height="220" fill="#ffffff"/>
+  <g fill="none" stroke="#eaeaea" stroke-width="1">
+    <rect x="28" y="38" width="142" height="104" rx="8"/>
+    <rect x="208" y="38" width="142" height="104" rx="8"/>
+    <rect x="388" y="38" width="142" height="104" rx="8"/>
+    <rect x="568" y="38" width="124" height="104" rx="8"/>
+  </g>
+  <g stroke="#3b6ef5" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M170 90h38"/>
+    <path d="M350 90h38"/>
+    <path d="M530 90h38"/>
+  </g>
+  <g fill="#eaf0ff" stroke="#3b6ef5" stroke-width="1">
+    <circle cx="99" cy="72" r="18"/>
+    <circle cx="279" cy="72" r="18"/>
+    <circle cx="459" cy="72" r="18"/>
+    <circle cx="630" cy="72" r="18"/>
+  </g>
+  <g fill="#1a1a1a" font-family="Inter, Pretendard, -apple-system, BlinkMacSystemFont, Segoe UI, system-ui, sans-serif" font-size="15" font-weight="600" text-anchor="middle">
+    <text x="99" y="113">Private PDF</text>
+    <text x="279" y="113">Keywords</text>
+    <text x="459" y="113">Concepts</text>
+    <text x="630" y="113">Practice</text>
+  </g>
+  <g fill="#4f4f4f" font-family="Inter, Pretendard, -apple-system, BlinkMacSystemFont, Segoe UI, system-ui, sans-serif" font-size="12" text-anchor="middle">
+    <text x="99" y="132">metadata only</text>
+    <text x="279" y="132">coverage state</text>
+    <text x="459" y="132">plain language</text>
+    <text x="630" y="132">answer review</text>
+  </g>
+  <g fill="#267a45">
+    <circle cx="261" cy="72" r="4"/>
+    <circle cx="279" cy="72" r="4"/>
+    <circle cx="297" cy="72" r="4"/>
+  </g>
+  <g fill="#a55a00">
+    <circle cx="448" cy="72" r="4"/>
+    <circle cx="470" cy="72" r="4"/>
+  </g>
+</svg>

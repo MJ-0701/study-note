@@ -1,0 +1,17 @@
+services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "${STUDY_NOTE_SMOKE_DB_PORT:-33306}:3306"
+    environment:
+      MYSQL_DATABASE: study_note
+      MYSQL_USER: study_note
+      MYSQL_PASSWORD: study_note
+      MYSQL_ROOT_PASSWORD: study_note_root
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ustudy_note", "-pstudy_note"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/mysql
