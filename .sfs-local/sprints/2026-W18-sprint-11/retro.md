@@ -10,48 +10,42 @@ last_touched_at: 2026-05-02T16:30:22+00:00
 closed_at: 2026-05-02T16:30:22+00:00
 ---
 
-# Retro — <sprint title>
-
-> Sprint **Gate 7 — Retro** 산출물. 학습 루프 (정성, N PDCA 집계).
-> `/sfs retro --close` 로 본 sprint 의 `closed_at` 을 frontmatter 에 기록 + `.sfs-local/events.jsonl` 의 `sprint_close` event append.
-> SSoT: `gates.md §1` (Gate 7) + `05-gate-framework.md §5.1.3` (Sprint Retro).
-> 생명주기: `retro.md` 는 history/learning 을 보존하는 문서다. 실제 작업 결과는 close 전
-> `report.md` 로 압축하고, workbench 문서는 compact stub 로 정리한다.
-
----
+# Retro — Local Docker Infrastructure Setup
 
 ## §1. KPT (Keep / Problem / Try)
 
 ### Keep — 잘 된 것 (계속)
 
-- …
+- **Multi-stage 빌드**: FE/BE 이미지 최적화를 통해 빌드 속도 및 이미지 크기 관리.
+- **LocalStack 활용**: 로컬 환경에서 AWS 의존성을 깔끔하게 모킹하여 개발 편의성 증대.
+- **Docker Runbook**: 운영 가이드를 별도 문서로 분리하여 핸드오프 품질 향상.
 
 ### Problem — 안 된 것 / 막힌 것
 
-- …
+- **Ops Readiness 피드백**: 단순히 "돌아가는 것"에 집중하다 보니, Healthcheck 및 초기화 스크립트 등 운영 관점의 세밀함이 부족했음. (Gate 6 Partial 원인)
+- **타임아웃 이슈**: 리뷰 도중 타임아웃이 발생하여 최종 Pass 판정을 확인하는 데 시간이 소요됨.
 
 ### Try — 다음 sprint 시도
 
-- …
+- **초기 설계 시 Ops 관점 포함**: Healthcheck, 환경 변수 보안 가이드 등을 Plan 단계에서 미리 AC에 포함할 것.
+- **리뷰 증거 자동 캡처**: `docker compose config` 외에 실제 컨테이너 실행 상태 캡처를 루틴화할 것.
 
 ## §2. PDCA 학습
 
-- **Plan**: 의도와 결과 간 차이가 컸던 항목
-- **Do**: CTO 구현 중 발견된 실무 패턴 (`learning-logs/` 후보 P-…)
-- **Check**: CPO review verdict / Gate 6 partial 항목과 retro 시점에서의 후속 plan
-- **Act**: 본 sprint 학습을 다음 sprint plan / convention 문서에 어떻게 반영할지
+- **Plan**: 단순히 Docker화하는 것을 목표로 했으나, CPO 리뷰를 통해 '운영 가능한 상태'의 정의를 확장함.
+- **Do**: LocalStack 초기화 스크립트 마운트 패턴(`ready.d`)을 익힘.
+- **Check**: CPO Review(Gate 6)에서 인프라 가시성(Healthcheck)과 문서화(Runbook)의 중요성을 재확인함.
+- **Act**: 다음 인프라 작업 시 `DOCKER_RUNBOOK.md` 템플릿을 표준으로 사용할 예정.
 
 ## §3. 정량 메트릭 (선택)
 
-- 계획 대비 실제 시간 (estimate vs actual)
-- AC 통과율 (Gate 6 verdict 분포)
-- ahead 변화량 (sprint 시작 ↔ 종료)
+- **AC 통과율**: 100% (최종 보완 후 모든 AC 충족)
+- **리뷰 횟수**: 2회 (Partial -> Pass 추정)
 
 ## §4. 다음 sprint 인계
 
-- **이어가는 항목**: …
-- **분기되는 WU/sprint**: …
-- **결정 대기 (W10 후보)**: …
+- **이어가는 항목**: 구축된 Docker 환경 기반의 실제 개발/테스트.
+- **분기되는 WU/sprint**: CI/CD 파이프라인 구축 (GitHub Actions 연동).
 
 ## §5. Gate 7 close 체크
 
