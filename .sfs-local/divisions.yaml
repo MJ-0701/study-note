@@ -5,7 +5,7 @@
 # `.sfs-local/decisions/<N>-activate-<division>.md` 에 기록.
 
 version: 1.0-mvp-minimal
-project: "<PROJECT-NAME>"
+project: "study-note"
 runtime: claude-code   # (향후) codex / gemini-cli 전환 시 값 변경
 created: "2026-05-01"
 solon_mvp_version: "0.5.28-product"
@@ -26,8 +26,9 @@ divisions:
     reason: "MVP 1 cycle 에서는 manual smoke test 로 대체. cycle 3 누적 후 activate 검토."
 
   design:
-    activation_state: abstract
-    reason: "기존 디자인 시스템 (shadcn/ui 등) 차용. 자체 design 본부 불필요."
+    activation_state: active
+    lead: "사용자 직접 + Codex Design Review"
+    notes: "태블릿/모바일 중심 lecture-note UX, 정보구조, 가독성, 액션성, 반응형/touch 검증 owner. Decision 0002에서 활성화."
 
   infra:
     activation_state: abstract

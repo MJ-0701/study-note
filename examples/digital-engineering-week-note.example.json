@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "study-note.week-note.v1",
+  "subjectId": "digital-engineering",
+  "sourceMaterials": [
+    {
+      "id": "de-pdf-20260502",
+      "title": "디지털공학개론 5월 2일(토) 교수님 PDF",
+      "kind": "professor-pdf",
+      "visibility": "private-source",
+      "pages": "p.1-p.38",
+      "note": "원문은 local-materials에만 보관하고 reader에는 메타데이터만 둔다."
+    }
+  ],
+  "requiredKeywords": [
+    {
+      "id": "de-kw-kmap",
+      "label": "카르노맵",
+      "status": "covered",
+      "professorSignal": "논리식 간소화 계산 강조",
+      "conceptIds": ["de-kmap"]
+    }
+  ],
+  "concepts": [
+    {
+      "id": "de-kmap",
+      "title": "카르노맵 간소화",
+      "priority": "high",
+      "summary": "인접한 1을 묶어 부울식을 더 단순하게 만드는 방법이다.",
+      "easyExplanation": "truth table에서 출력 1인 칸들을 보기 좋게 묶어 더 짧은 논리식으로 바꾸는 절차다.",
+      "sourceHints": ["교수님 PDF p.22-p.30"],
+      "relatedKeywordIds": ["de-kw-kmap"],
+      "exampleQuestionIds": ["de-q-kmap"]
+    }
+  ],
+  "exampleQuestions": [
+    {
+      "id": "de-q-kmap",
+      "conceptId": "de-kmap",
+      "difficulty": "applied",
+      "prompt": "카르노맵에서 인접한 1을 묶는 이유를 설명하라.",
+      "answer": "논리식의 항과 변수를 줄여 같은 출력을 더 단순한 회로로 표현하기 위해서다.",
+      "explanation": "간소화의 목적과 회로 복잡도 감소를 함께 설명하면 된다."
+    }
+  ],
+  "weekNote": {
+    "id": "de-session-20260502",
+    "label": "5월 2일(토)",
+    "title": "카르노맵",
+    "focus": "인접 묶음으로 부울식을 간소화하는 절차를 연습한다.",
+    "sourceMaterialIds": ["de-pdf-20260502"],
+    "requiredKeywordIds": ["de-kw-kmap"],
+    "conceptIds": ["de-kmap"],
+    "exampleQuestionIds": ["de-q-kmap"],
+    "reviewStatus": "ready"
+  }
+}
