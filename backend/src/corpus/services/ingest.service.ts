@@ -62,9 +62,20 @@ export class IngestService {
   /**
    * Ingest pre-extracted text. Used by smoke / future non-PDF sources
    * (raw notes, etc). Same idempotency policy as execute().
+   *
+   * Guards (sprint-2 Gate 6 fix): refuses to persist a corpus when text is
+   * empty/whitespace OR chunking produced zero windows. Without this, an
+   * empty extraction would still create a corpus row whose content_hash
+   * blocks all future re-ingest attempts of the same PDF.
    */
   async ingestExtracted(input: IngestExtractedInput): Promise<IngestResult> {
     const { subject, text, sourceLabel, contentHash } = input;
+
+    if (text.trim().length === 0) {
+      throw new Error(
+        `ingestExtracted: extracted text is empty or whitespace (sourceLabel=${sourceLabel}, contentHash=${contentHash})`
+      );
+    }
 
     const existing = await this.findExisting(contentHash);
     if (existing) {
@@ -74,6 +85,12 @@ export class IngestService {
     this.logger.log(`chunking text (${text.length} chars)`);
     const chunks = await this.chunker.chunk(text);
     this.logger.log(`got ${chunks.length} chunks`);
+
+    if (chunks.length === 0) {
+      throw new Error(
+        `ingestExtracted: chunker produced 0 chunks for non-empty text (${text.length} chars, sourceLabel=${sourceLabel}, contentHash=${contentHash}); refusing to persist a useless corpus`
+      );
+    }
 
     const modelName = this.embedder.modelName();
     this.logger.log(`embedding ${chunks.length} chunks via ${modelName}`);

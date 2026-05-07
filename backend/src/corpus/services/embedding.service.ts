@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import * as path from "node:path";
+import { MODEL_MAX_TOKENS } from "./chunker.service";
+import { configureTransformersEnv } from "./transformers-env";
 
 export const EMBEDDING_MODEL = "Xenova/multilingual-e5-base";
 export const EMBEDDING_DIMENSION = 768;
-const CACHE_DIR = path.resolve(process.cwd(), "local-materials/.xenova-cache");
 
 type FeatureExtractionPipeline = (
   text: string | string[],
@@ -16,10 +16,8 @@ async function loadPipeline(): Promise<FeatureExtractionPipeline> {
   if (cachedPipeline) {
     return cachedPipeline;
   }
+  await configureTransformersEnv();
   const transformers = await import("@xenova/transformers");
-  // route model cache under repo-local local-materials so dev runs are
-  // reproducible and the cache is gitignored alongside lecture PDFs.
-  (transformers.env as { cacheDir?: string }).cacheDir = CACHE_DIR;
   const built = await transformers.pipeline("feature-extraction", EMBEDDING_MODEL);
   cachedPipeline = built as unknown as FeatureExtractionPipeline;
   return cachedPipeline;
@@ -29,13 +27,18 @@ async function loadPipeline(): Promise<FeatureExtractionPipeline> {
 export class EmbeddingService {
   /**
    * Embed a passage chunk. multilingual-e5-base expects "passage: " prefix
-   * for document chunks (and "query: " for retrieval queries — that lands
-   * in the next sprint when retrieval is wired). Returns a 768-dim Float32
-   * vector that is mean-pooled and L2-normalized.
+   * for document chunks. Returns a 768-dim Float32 vector that is mean-pooled
+   * and L2-normalized. truncation belt clips at MODEL_MAX_TOKENS so a
+   * mis-sized chunk never silently exceeds the e5 context window.
    */
   async embed(text: string): Promise<Float32Array> {
     const pipeline = await loadPipeline();
-    const output = await pipeline(`passage: ${text}`, { pooling: "mean", normalize: true });
+    const output = await pipeline(`passage: ${text}`, {
+      pooling: "mean",
+      normalize: true,
+      truncation: true,
+      max_length: MODEL_MAX_TOKENS
+    });
     return output.data;
   }
 
