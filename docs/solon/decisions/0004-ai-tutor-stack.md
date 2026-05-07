@@ -147,6 +147,27 @@ ADR 0005 안 결정에 따라 후속 결정. 본 ADR 은 후보군만 enumerate.
   시안이 floating. 그러나 ADR 0005 와 묶어 단일 트리거로 처리.
 - (h.6) opt-out 확인은 사용자 본인의 manual console 작업. 자동화 안 됨.
 
+## Follow-up resolutions — sprint-2 (2026-05-07)
+
+본 섹션은 sprint `2026-W19-sprint-2` 의 plan.md (R11) 결정 산물 — 위 (a)~(h) 의 implement
+첫 단추 4가지를 *추가* 로 정착한다. 기존 Decision / Alternatives / Consequences 본문은
+수정하지 않는다 (additive only).
+
+- **selected_subject_pilot**: `디지털공학개론`. 4과목 중 1과목 점진 도입 ((f)) 의 첫 과목.
+  사용자가 사전에 PDF 1개를 ingest 가능 상태로 준비. 나머지 3과목 (정보통신개론·C언어·
+  컴퓨터개론) 은 본 sprint 미포함, 다음 sprint 후보.
+- **embedding_model_first_pick**: `Xenova/multilingual-e5-base` via `@xenova/transformers`
+  (768 dim, multilingual, 로컬 inference). (e) "Bedrock Titan Embeddings 또는 자체 임베딩"
+  슬롯의 *자체 임베딩* 분기를 선택. Bedrock Titan 분기는 D1 (비용 안) 결정 후 재평가.
+  Tokenizer = XLM-Roberta sentencepiece, 512 token / 50 token overlap.
+- **vector_store_first_pick**: `stub — Prisma chunk.embedding Bytes BLOB`. 본 sprint 는
+  검색 가능한 ANN index 를 만들지 않는다. (e) 의 vector store 결정 (sqlite-vec / FAISS /
+  pgvector / OpenSearch) 은 D1 직후 sprint-3 에서 마이그레이션 작업으로 처리. 본 sprint 의
+  chunk.embedding 컬럼은 다음 store 로 옮길 자리.
+- **idempotency_policy**: `content_hash dedupe + 중복 무시 (a)`. PDF 디스크 file SHA256 이
+  기존 corpus 와 일치하면 ingest no-op + log. SHA256 이 다르면 별 corpus 로 등재 (페이지
+  번호만 바뀐 PDF 도 새 corpus). 의미적 dedupe 는 본 sprint scope 외.
+
 ## References
 
 - Plan: `.sfs-local/sprints/2026-W19-sprint-1/plan.md` (R5 / AC3)

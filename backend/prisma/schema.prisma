@@ -67,3 +67,31 @@ model AnnotationSnapshot {
 
   @@index([ownerId])
 }
+
+model Corpus {
+  id            String   @id @default(cuid())
+  subject       String
+  sourcePdfPath String   @db.Text
+  contentHash   String   @unique
+  createdAt     DateTime @default(now())
+
+  chunks Chunk[]
+
+  @@index([subject])
+}
+
+model Chunk {
+  id        String   @id @default(cuid())
+  corpusId  String
+  ord       Int
+  text      String   @db.Text
+  charCount Int
+  embedding Bytes?
+  modelName String
+  createdAt DateTime @default(now())
+
+  corpus Corpus @relation(fields: [corpusId], references: [id], onDelete: Cascade)
+
+  @@unique([corpusId, ord])
+  @@index([corpusId])
+}

@@ -106,6 +106,35 @@ npm run dev
 학번: 20264514
 ```
 
+### Corpus ingest CLI (sprint-2)
+
+Sprint `2026-W19-sprint-2` 에서 PDF → corpus ingest 최소 경로를 도입했습니다. 4과목 중
+**디지털공학개론** 1과목 PDF 1개를 텍스트 추출 → 청크 (512 token / 50 overlap) → embedding
+(`Xenova/multilingual-e5-base`, 768 dim, 로컬 inference) → Prisma 영속까지 흘려보냅니다.
+경계는 다음과 같습니다:
+
+- Embedding 은 로컬 (`@xenova/transformers`) 만 사용합니다 — Bedrock 호출 없음. ONNX
+  runtime 은 `onnxruntime-node` (optionalDependency, 1.14.0) 로 실행됩니다 — `npm install`
+  시 자동 설치되지만 일부 환경에서 prebuild 가 빠질 수 있어 `npm i onnxruntime-node@1.14.0`
+  로 재시도 가능합니다. 모델 cache 는 `local-materials/.xenova-cache/` 에 자동 생성되며,
+  최초 1회 약 500MB 다운로드가 발생합니다 (이후 재사용). 해당 경로는 `.gitignore` 의
+  `local-materials/` 로 covered.
+- Vector 영속은 `chunk.embedding` Bytes BLOB 에 Float32 buffer 로 저장하는 **stub** 입니다 —
+  본 sprint 는 검색 가능한 ANN index 를 만들지 않습니다. 실제 vector store 통합은 다음
+  sprint 작업입니다 (ADR 0004 follow-up 참조).
+- HTTP endpoint 는 노출하지 않습니다 — **CLI 만** 제공합니다.
+- 사용자가 본 CLI 로 ingest 하는 PDF 는 1과목 (디지털공학개론) 1개만 검증합니다. 나머지
+  과목 (정보통신개론·C언어·컴퓨터개론) 은 다음 sprint 후보입니다.
+
+```bash
+npm run ingest:pdf -- --path <path-to-pdf> --subject digital-engineering
+npm run smoke:corpus-ingest
+```
+
+`ingest:pdf` 는 `backend/dist` 빌드 후 `node backend/dist/cli/ingest-pdf.js` 를 실행합니다.
+같은 PDF 를 두 번 ingest 하면 SHA256 content_hash dedupe 가 동작하여 두 번째 호출은
+no-op + `alreadyIngested: true` 로 종료됩니다 (idempotency 정책 = 중복 무시).
+
 ## Verification
 
 ```bash
