@@ -1,7 +1,0 @@
-solon_mvp_version: 0.5.89-product
-installed_at: 2026-04-30T15:26:45Z
-upgraded_at: 2026-05-02T16:52:46Z
-upgraded_from: 0.5.88-product
-installed_from: local
-install_layout: thin
-source_repo: https://github.com/MJ-0701/solon-product
