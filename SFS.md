@@ -14,10 +14,10 @@ router for Claude, Codex, and Gemini.
 - **공유/운영 방식**: `<PROJECT-DELIVERY>`
 
 Read order:
-1. `sfs context path kernel`
-2. `sfs context path index`
-3. Only the matching module from `sfs context path commands/<name>.md` or
-   `sfs context path policies/<name>.md`
+1. `sfs context cat kernel`
+2. `sfs context cat index`
+3. Only the matching module from `sfs context cat commands/<name>.md` or
+   `sfs context cat policies/<name>.md`
 
 In thin layout, managed context lives in the packaged global `sfs` runtime.
 `.sfs-local/context/` is optional project-local override space, not a normal
@@ -25,8 +25,9 @@ project document surface.
 
 Default entry:
 - `sfs status`
-- current sprint `report.md`
-- expand to workbench/logs only when the routed context needs evidence
+- current sprint `report.md` when one exists
+- `docs/solon/` for shared adoption or handoff summaries
+- expand to private workbench/logs only when the routed context needs evidence
 
 Project overview refresh:
 - `sfs profile` updates only this file's `## 프로젝트 개요` section.
@@ -35,3 +36,12 @@ Never paraphrase bash adapter output. Bash-first commands may still surface one
 compact Next action after verbatim output. Never hardcode external private docsets.
 In Solon reports, show gates as `Gate N (Name)`, not naked ids. Use gate
 numbers 1..7 for new CLI examples; legacy ids remain compatibility-only.
+Solon reports should feel like compact console dashboards, not flat bullet
+dumps: title/verdict strip, 2-4 labeled status panels, one action rail, and at
+most 1-3 questions.
+Decision questions must be self-contained: before any `Q1`, `D1`, or option
+id, explain in plain user language what is being decided, why it matters, the
+recommended default, and what each option changes. Labels are cross-references,
+not the explanation.
+Keep only what must remain: `.sfs-local/` is private local workbench state,
+shared durable docs live under `docs/solon/`, and step docs are created lazily.
