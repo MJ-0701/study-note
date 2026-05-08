@@ -38,12 +38,28 @@ afterEach(() => {
 function buildService(chunks: RetrievedChunk[]): PersonaTurnService {
   const persona = new PersonaService();
   const retrieval = makeRetrieval(chunks) as RetrievalService;
-  // Provider real-mode would call spawn — fixture env forces fixture path so
-  // the spawn injection is unused. Pass a throwing spawn as belt-and-braces.
+  // fixture path doesn't reach spawn; if a code regression routes to real,
+  // throwing immediately surfaces it without a real subprocess.
   const provider = new ClaudeCliProvider(() => {
-    throw new Error("real spawn must not run under STUDY_NOTE_LLM_FIXTURE=1");
+    throw new Error("real spawn must not run when fixture branch is taken");
   });
   return new PersonaTurnService(persona, retrieval as RetrievalService, provider);
+}
+
+function buildServiceWithSpawnTracker(chunks: RetrievedChunk[]): {
+  service: PersonaTurnService;
+  spawnCalls: () => number;
+} {
+  const persona = new PersonaService();
+  const retrieval = makeRetrieval(chunks) as RetrievalService;
+  let calls = 0;
+  const trackedSpawn = ((..._args: unknown[]) => {
+    calls++;
+    throw new Error("provider.generate (real spawn) must not be reached on this branch");
+  }) as unknown as typeof import("node:child_process").spawn;
+  const provider = new ClaudeCliProvider(trackedSpawn);
+  const service = new PersonaTurnService(persona, retrieval as RetrievalService, provider);
+  return { service, spawnCalls: () => calls };
 }
 
 describe("PersonaTurnService", () => {
@@ -121,5 +137,27 @@ describe("PersonaTurnService", () => {
         }),
       /unsupported subject: c-language/
     );
+  });
+
+  it("empty retrieval in REAL mode — bypasses provider.generate (no spawn, no cloud send)", async () => {
+    // Force real mode but expect the spawn tracker to record 0 calls because
+    // PersonaTurnService must short-circuit empty retrieval into a deterministic
+    // fixture refusal (ADR 0004 (b): 출처 없는 임의 teaching 금지).
+    delete process.env.STUDY_NOTE_LLM_FIXTURE;
+    process.env.STUDY_NOTE_LLM_REAL_OPT_IN = "1";
+
+    const { service, spawnCalls } = buildServiceWithSpawnTracker([]);
+    const result = await service.execute({
+      subject: "digital-engineering",
+      queryText: "반가산기 설명해줘",
+      k: 5
+    });
+
+    assert.equal(spawnCalls(), 0, "spawn must not be called on empty-retrieval real mode");
+    assert.equal(result.isFallback, true);
+    assert.equal(result.provider, "claude-cli-fixture", "must report fixture-refusal provider, not claude-cli");
+    assert.match(result.response, /출처: 없음/);
+    assert.match(result.response, /npm run ingest:pdf/);
+    assert.match(result.response, /FIXTURE:/);
   });
 });

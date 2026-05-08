@@ -127,7 +127,13 @@ export class ClaudeCliProvider implements LlmProvider {
         });
       });
 
-      const stdinPayload = `${input.systemPrompt}\n\nUser question: ${input.userMessage}\n`;
+      const chunkBlock =
+        input.retrievedChunks && input.retrievedChunks.length > 0
+          ? `Retrieved PDF chunks:\n${input.retrievedChunks
+              .map((c) => `chunk[${c.ord}]: ${c.text}`)
+              .join("\n")}\n\n`
+          : "";
+      const stdinPayload = `${input.systemPrompt}\n\n${chunkBlock}User question: ${input.userMessage}\n`;
       child.stdin.write(stdinPayload);
       child.stdin.end();
     });

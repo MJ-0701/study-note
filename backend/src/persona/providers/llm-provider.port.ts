@@ -1,6 +1,12 @@
 export interface LlmGenerateInput {
   systemPrompt: string;
+  /** Raw user query (no `User question:` label, no chunks). The provider
+   *  is responsible for adding the label exactly once. */
   userMessage: string;
+  /** Optional retrieved PDF chunks. When provided, the provider must place
+   *  them BEFORE the final `User question:` line so the model sees the
+   *  citations as context (sprint-3 R3 contract). */
+  retrievedChunks?: ReadonlyArray<{ ord: number; text: string }>;
 }
 
 export interface LlmGenerateResult {

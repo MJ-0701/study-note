@@ -153,6 +153,63 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
     );
   });
 
+  it("stdin payload places chunks BEFORE User question, with query as the final line (R3 contract)", async () => {
+    const mockChild = makeMockChild();
+    const spawnFn = (() => {
+      setImmediate(() => {
+        mockChild.stdout.emit("data", "ok");
+        mockChild.emit("close", 0);
+      });
+      return mockChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
+    }) as unknown as typeof import("node:child_process").spawn;
+    const provider = new ClaudeCliProvider(spawnFn, 5_000);
+
+    await provider.generate({
+      systemPrompt: "system body",
+      userMessage: "반가산기 핵심만",
+      retrievedChunks: [
+        { ord: 0, text: "반가산기는 ..." },
+        { ord: 1, text: "전가산기는 ..." }
+      ]
+    });
+
+    const written = mockChild.stdin.written;
+    const chunkPos = written.indexOf("chunk[0]:");
+    const userQuestionPos = written.indexOf("User question:");
+    assert.ok(chunkPos >= 0, "stdin must contain chunk[0]: marker");
+    assert.ok(userQuestionPos >= 0, "stdin must contain User question: label");
+    assert.ok(
+      chunkPos < userQuestionPos,
+      `chunks must appear BEFORE User question:; got chunkPos=${chunkPos}, userQuestionPos=${userQuestionPos}`
+    );
+    // User question: line must contain ONLY the raw query, not the chunks
+    const userQuestionLine = written.slice(userQuestionPos).split("\n")[0];
+    assert.equal(
+      userQuestionLine,
+      "User question: 반가산기 핵심만",
+      `User question: line must contain raw query only, got: ${userQuestionLine}`
+    );
+  });
+
+  it("omits chunk block when retrievedChunks is missing (empty retrieval shape)", async () => {
+    const mockChild = makeMockChild();
+    const spawnFn = (() => {
+      setImmediate(() => {
+        mockChild.stdout.emit("data", "ok");
+        mockChild.emit("close", 0);
+      });
+      return mockChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
+    }) as unknown as typeof import("node:child_process").spawn;
+    const provider = new ClaudeCliProvider(spawnFn, 5_000);
+
+    await provider.generate({ systemPrompt: "system", userMessage: "raw query" });
+
+    const written = mockChild.stdin.written;
+    assert.ok(!/Retrieved PDF chunks:/.test(written), "no chunk block expected");
+    assert.ok(!/chunk\[/.test(written), "no chunk[ marker expected");
+    assert.match(written, /User question: raw query/);
+  });
+
   it("throws on timeout and SIGKILL the child", async () => {
     const mockChild = makeMockChild();
     const spawnFn = (() => mockChild as unknown as ReturnType<typeof import("node:child_process").spawn>) as unknown as typeof import("node:child_process").spawn;

@@ -58,16 +58,31 @@ export class PersonaTurnService {
     const isFallback = chunks.length === 0;
 
     const systemPrompt = this.persona.systemPromptFor(archetype);
-    const userMessage = this.composeUserMessage(queryText, chunks);
+    const retrievedChunks = chunks.map((c) => ({ ord: c.ord, text: c.text }));
 
     const mode = resolveProviderMode();
-    const llmResult =
-      mode === "fixture"
-        ? this.provider.generateFixture(
-            { systemPrompt, userMessage },
-            { retrievalCount: chunks.length, queryText, k }
-          )
-        : await this.provider.generate({ systemPrompt, userMessage });
+    let llmResult;
+    if (isFallback) {
+      // ADR 0004 (b) invariant — when retrieval is empty, neither fixture nor
+      // real provider is allowed to fabricate teaching. Force a deterministic
+      // refusal at the service layer so cloud send is never reached and the
+      // "출처 없는 임의 teaching 금지" rule holds across providers.
+      llmResult = this.provider.generateFixture(
+        { systemPrompt, userMessage: queryText },
+        { retrievalCount: 0, queryText, k }
+      );
+    } else if (mode === "fixture") {
+      llmResult = this.provider.generateFixture(
+        { systemPrompt, userMessage: queryText, retrievedChunks },
+        { retrievalCount: chunks.length, queryText, k }
+      );
+    } else {
+      llmResult = await this.provider.generate({
+        systemPrompt,
+        userMessage: queryText,
+        retrievedChunks
+      });
+    }
 
     const response = this.formatResponse({
       personaName: archetype.name,
@@ -95,22 +110,6 @@ export class PersonaTurnService {
       retrievalCount: chunks.length,
       isFallback
     };
-  }
-
-  private composeUserMessage(queryText: string, chunks: RetrievedChunk[]): string {
-    // Returns the *body* the provider should embed below "User question:" —
-    // the provider wraps with the User question label exactly once. Empty
-    // retrieval just returns the raw query so provider stdin is well-formed.
-    if (chunks.length === 0) {
-      return queryText;
-    }
-    const sections = chunks.map((c) => `chunk[${c.ord}]: ${c.text}`);
-    return [
-      "Retrieved PDF chunks:",
-      ...sections,
-      "",
-      queryText
-    ].join("\n");
   }
 
   /**
