@@ -23,6 +23,15 @@ async function loadPipeline(): Promise<FeatureExtractionPipeline> {
   return cachedPipeline;
 }
 
+/**
+ * Test-only injection hook for the cached pipeline. Production callers must
+ * never use this; sprint-4 AC7 spec depends on it to verify embedQuery passes
+ * a `query: ` prefix to the underlying pipeline at runtime. Pass null to clear.
+ */
+export function __setPipelineForTests(p: FeatureExtractionPipeline | null): void {
+  cachedPipeline = p;
+}
+
 @Injectable()
 export class EmbeddingService {
   /**

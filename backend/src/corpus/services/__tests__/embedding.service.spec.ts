@@ -2,7 +2,12 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it } from "node:test";
-import { EmbeddingService, EMBEDDING_DIMENSION, EMBEDDING_MODEL } from "../embedding.service";
+import {
+  EmbeddingService,
+  EMBEDDING_DIMENSION,
+  EMBEDDING_MODEL,
+  __setPipelineForTests
+} from "../embedding.service";
 
 /**
  * Sprint-3 Gate 6 round 2 finding 2 — focused evidence that EmbeddingService
@@ -39,5 +44,41 @@ describe("EmbeddingService prefix contract", () => {
     assert.equal(svc.modelName(), "Xenova/multilingual-e5-base");
     assert.equal(svc.dimension(), EMBEDDING_DIMENSION);
     assert.equal(svc.dimension(), 768);
+  });
+
+  it("embedQuery() passes a runtime `query: ` prefix to the pipeline (AC7)", async () => {
+    const captured: string[] = [];
+    const fakePipeline = async (text: string | string[]) => {
+      captured.push(typeof text === "string" ? text : text.join("|"));
+      return { data: new Float32Array(EMBEDDING_DIMENSION) };
+    };
+    __setPipelineForTests(fakePipeline as never);
+    try {
+      const svc = new EmbeddingService();
+      await svc.embedQuery("반가산기 진리표");
+      assert.equal(captured.length, 1);
+      assert.match(captured[0], /^query: /, `expected runtime input to start with "query: ", got: ${captured[0]}`);
+      assert.equal(captured[0], "query: 반가산기 진리표");
+    } finally {
+      __setPipelineForTests(null);
+    }
+  });
+
+  it("embed() passes a runtime `passage: ` prefix to the pipeline (regression complement)", async () => {
+    const captured: string[] = [];
+    const fakePipeline = async (text: string | string[]) => {
+      captured.push(typeof text === "string" ? text : text.join("|"));
+      return { data: new Float32Array(EMBEDDING_DIMENSION) };
+    };
+    __setPipelineForTests(fakePipeline as never);
+    try {
+      const svc = new EmbeddingService();
+      await svc.embed("반가산기 본문 chunk");
+      assert.equal(captured.length, 1);
+      assert.match(captured[0], /^passage: /);
+      assert.equal(captured[0], "passage: 반가산기 본문 chunk");
+    } finally {
+      __setPipelineForTests(null);
+    }
   });
 });

@@ -56,6 +56,7 @@ export async function prepareSmokeDatabase(label) {
   return {
     databaseUrl,
     sessionTokenPepper: env.SESSION_TOKEN_PEPPER,
+    composeProject: project,
     async stop() {
       await stopCompose(project, composeEnv);
     }

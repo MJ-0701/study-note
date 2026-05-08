@@ -20,6 +20,10 @@
     "smoke:corpus-ingest": "npm run build:backend && node scripts/smoke-corpus-ingest.mjs",
     "persona:turn": "npm run build:backend && node backend/dist/cli/persona-turn.js",
     "smoke:persona-turn": "npm run build:backend && node scripts/smoke-persona-turn.mjs",
+    "evidence:real-fixture": "npm run build:backend && node scripts/ac13-fixture-evidence.mjs",
+    "evidence:real-pdf": "npm run build:backend && node scripts/ac13-real-pdf-evidence.mjs",
+    "db:up-persistent": "node scripts/db-persistent.mjs up",
+    "db:down-persistent": "node scripts/db-persistent.mjs down",
     "test:backend": "npm run build:backend && node scripts/run-backend-tests.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },

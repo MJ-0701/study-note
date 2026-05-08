@@ -60,8 +60,17 @@ function emitConsentBannerIfRealMode(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
+function preflightDatabaseUrl(): void {
+  if (process.env.DATABASE_URL && process.env.DATABASE_URL.length > 0) return;
+  process.stderr.write(
+    "[persona-turn] DATABASE_URL is required. start a dev DB first (e.g., `npm run db:up-persistent`, then export DATABASE_URL=...) or run via the evidence harness `node scripts/ac13-real-pdf-evidence.mjs`.\n"
+  );
+  process.exit(1);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  preflightDatabaseUrl();
   await emitConsentBannerIfRealMode();
 
   const app = await NestFactory.createApplicationContext(PersonaModule, {
