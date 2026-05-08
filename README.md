@@ -168,6 +168,12 @@ STUDY_NOTE_LLM_REAL_OPT_IN=1 npm run persona:turn -- \
 
 npm run smoke:persona-turn   # 항상 fixture mode 강제, end-to-end 1 turn 검증
 npm run test:backend         # 단위 테스트 (chunker / ingest / persona / retrieval / claude-cli)
+
+# sprint-4 — 실 PDF + real Claude CLI evidence harness 와 persistent dev DB
+npm run evidence:real-fixture   # ac13-fixture-evidence: real Claude CLI + 합성(fixture) corpus
+npm run evidence:real-pdf       # ac13-real-pdf-evidence: real Claude CLI + 실 PDF (anchor 3건)
+npm run db:up-persistent        # 학습용 docker MySQL 영속 lane (stdout 의 DATABASE_URL/COMPOSE_PROJECT export)
+npm run db:down-persistent -- "<COMPOSE_PROJECT>"   # cleanup
 ```
 
 CLI stdout 은 인간 가독 응답 + 마지막 줄 JSON (`personaName, subject, response,
