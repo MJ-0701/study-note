@@ -45,16 +45,24 @@ function parseArgs(argv: string[]): CliArgs {
   return { subject, query, k };
 }
 
-function emitConsentBannerIfRealMode(): void {
-  if (resolveProviderMode() !== "real") return;
+function emitConsentBannerIfRealMode(): Promise<void> {
+  if (resolveProviderMode() !== "real") return Promise.resolve();
   const banner =
-    "[디공이] real-mode (provider=claude-cli) — 본 turn 의 system prompt + retrieved PDF chunks 가 Claude CLI 를 통해 Anthropic API 로 송신됩니다. 송신 안 함이면 Ctrl+C 후 STUDY_NOTE_LLM_FIXTURE=1 로 재실행.";
+    "[디공이] real-mode (provider=claude-cli) — 본 turn 의 system prompt + retrieved PDF chunks 가 Claude CLI 를 통해 Anthropic API 로 송신됩니다. 송신 안 함이면 Ctrl+C 후 STUDY_NOTE_LLM_FIXTURE=1 로 재실행. (1초 후 진행)";
   process.stderr.write(`${banner}\n`);
+  const delayMs = Number.parseInt(
+    process.env.STUDY_NOTE_LLM_CONSENT_DELAY_MS ?? "1000",
+    10
+  );
+  if (!Number.isFinite(delayMs) || delayMs < 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  emitConsentBannerIfRealMode();
+  await emitConsentBannerIfRealMode();
 
   const app = await NestFactory.createApplicationContext(PersonaModule, {
     logger: false,

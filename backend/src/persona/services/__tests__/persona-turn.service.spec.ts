@@ -85,6 +85,11 @@ describe("PersonaTurnService", () => {
     assert.match(result.response, /FIXTURE:/, "fixture raw text must survive wrapping");
     assert.match(result.response, /chunk\[0\]/, "wrapper must list chunk[0] source");
     assert.match(result.response, /chunk\[1\]/, "wrapper must list chunk[1] source");
+    assert.match(
+      result.response,
+      /pdf=de\.pdf/,
+      "wrapper must include the PDF basename for each source (ADR 0004 (b) 출처 명시)"
+    );
     assert.match(result.response, /\?$/m, "wrapper must trail a follow-up question");
   });
 

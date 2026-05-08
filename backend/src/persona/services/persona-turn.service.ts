@@ -1,7 +1,14 @@
 import { Injectable } from "@nestjs/common";
+import { basename } from "node:path";
 import { ClaudeCliProvider, resolveProviderMode } from "../providers/claude-cli.provider";
 import { PersonaService } from "./persona.service";
 import { RetrievalService, RetrievedChunk } from "./retrieval.service";
+
+function pdfBasename(p: string): string {
+  if (!p) return "<unknown>";
+  if (p.startsWith("smoke://")) return p.replace("smoke://", "");
+  return basename(p);
+}
 
 export interface PersonaTurnInput {
   subject: string;
@@ -91,17 +98,18 @@ export class PersonaTurnService {
   }
 
   private composeUserMessage(queryText: string, chunks: RetrievedChunk[]): string {
+    // Returns the *body* the provider should embed below "User question:" —
+    // the provider wraps with the User question label exactly once. Empty
+    // retrieval just returns the raw query so provider stdin is well-formed.
     if (chunks.length === 0) {
       return queryText;
     }
-    const sections = chunks.map(
-      (c) => `chunk[${c.ord}]: ${c.text}`
-    );
+    const sections = chunks.map((c) => `chunk[${c.ord}]: ${c.text}`);
     return [
       "Retrieved PDF chunks:",
       ...sections,
       "",
-      `User question: ${queryText}`
+      queryText
     ].join("\n");
   }
 
@@ -124,7 +132,7 @@ export class PersonaTurnService {
       ? ["  - 출처: 없음 (corpus 비어있음)"]
       : args.chunks.map(
           (c) =>
-            `  - 출처: chunk[${c.ord}] (corpus=${c.corpusId.slice(0, 8)}...)`
+            `  - 출처: chunk[${c.ord}] (pdf=${pdfBasename(c.sourcePdfPath)}, corpus=${c.corpusId.slice(0, 8)}...)`
         );
     const followUp = args.isFallback
       ? "다음 단계로 npm run ingest:pdf 로 PDF 1개 ingest 후 다시 물어볼래?"

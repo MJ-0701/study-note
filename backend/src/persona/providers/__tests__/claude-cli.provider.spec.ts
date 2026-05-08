@@ -124,6 +124,14 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
     assert.deepEqual(captured.args, ["-p", "--dangerously-skip-permissions"]);
     assert.match(mockChild.stdin.written, /system prompt body/);
     assert.match(mockChild.stdin.written, /User question: 반가산기/);
+    // Provider is the SOLE owner of the "User question:" label — caller (PersonaTurnService)
+    // must pass raw body in input.userMessage, not pre-wrapped. Guard regression:
+    const userQuestionMatches = mockChild.stdin.written.match(/User question:/g) ?? [];
+    assert.equal(
+      userQuestionMatches.length,
+      1,
+      `User question: label must appear exactly once in stdin, got ${userQuestionMatches.length}`
+    );
     assert.equal(result.text, "안녕! 반가산기는 디지털논리회로 의 첫 단원이야.");
     assert.equal(result.provider, "claude-cli");
   });
