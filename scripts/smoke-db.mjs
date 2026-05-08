@@ -20,6 +20,7 @@ export async function prepareSmokeDatabase(label) {
     return {
       databaseUrl: process.env.DATABASE_URL,
       sessionTokenPepper: env.SESSION_TOKEN_PEPPER,
+      composeProject: null,
       async stop() {}
     };
   }

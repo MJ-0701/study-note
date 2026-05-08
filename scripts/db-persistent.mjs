@@ -24,7 +24,23 @@ const composeFile = resolve("backend/prisma/docker-compose.smoke.yml");
 const subcommand = process.argv[2] ?? "up";
 
 if (subcommand === "up") {
+  // Gate 6 codex CPO finding: STUDY_NOTE_USE_EXISTING_DB=1 routes prepareSmokeDatabase
+  // to a branch that does not own a docker compose project, so this lane cannot teardown
+  // the DB. Refuse explicitly instead of printing an empty COMPOSE_PROJECT.
+  if (process.env.STUDY_NOTE_USE_EXISTING_DB === "1") {
+    process.stderr.write(
+      "[db-persistent] up: STUDY_NOTE_USE_EXISTING_DB=1 is unsupported in this lane (no docker compose project to teardown). unset it and retry, or manage the external DB yourself.\n"
+    );
+    process.exit(1);
+  }
   const db = await prepareSmokeDatabase("dev-persistent");
+  if (!db.composeProject) {
+    process.stderr.write(
+      "[db-persistent] up: prepareSmokeDatabase returned no composeProject — refusing to print incomplete teardown handle.\n"
+    );
+    await db.stop?.();
+    process.exit(1);
+  }
   process.stdout.write("[db-persistent] up — container is running, stop() intentionally skipped\n");
   process.stdout.write("[db-persistent] export the two lines below to use this DB:\n");
   process.stdout.write(`DATABASE_URL=${db.databaseUrl}\n`);
