@@ -18,6 +18,9 @@
     "smoke:pdf-workspace": "npm run build:backend && node scripts/smoke-pdf-workspace.mjs",
     "ingest:pdf": "npm run build:backend && node backend/dist/cli/ingest-pdf.js",
     "smoke:corpus-ingest": "npm run build:backend && node scripts/smoke-corpus-ingest.mjs",
+    "persona:turn": "npm run build:backend && node backend/dist/cli/persona-turn.js",
+    "smoke:persona-turn": "npm run build:backend && node scripts/smoke-persona-turn.mjs",
+    "test:backend": "npm run build:backend && node scripts/run-backend-tests.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "devDependencies": {

@@ -42,6 +42,23 @@ export class EmbeddingService {
     return output.data;
   }
 
+  /**
+   * Embed a retrieval query. multilingual-e5-base contract: passages get
+   * `passage: ` prefix, queries get `query: `. Sprint-3 retrieval uses this;
+   * embed() (above) stays passage-only so the sprint-2 corpus pipeline is
+   * untouched. Same 768-dim L2-normalized output.
+   */
+  async embedQuery(text: string): Promise<Float32Array> {
+    const pipeline = await loadPipeline();
+    const output = await pipeline(`query: ${text}`, {
+      pooling: "mean",
+      normalize: true,
+      truncation: true,
+      max_length: MODEL_MAX_TOKENS
+    });
+    return output.data;
+  }
+
   modelName(): string {
     return EMBEDDING_MODEL;
   }

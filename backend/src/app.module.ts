@@ -8,12 +8,13 @@ import { CorpusModule } from "./corpus/corpus.module";
 import { HealthController } from "./health.controller";
 import { MaterialsController } from "./materials/materials.controller";
 import { MaterialsService } from "./materials/materials.service";
+import { PersonaModule } from "./persona/persona.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { createStorageProvider } from "./storage/storage.provider";
 import { StoragePort } from "./storage/storage.port";
 
 @Module({
-  imports: [PrismaModule, CorpusModule],
+  imports: [PrismaModule, CorpusModule, PersonaModule],
   controllers: [AuthController, HealthController, MaterialsController],
   providers: [
     AuthService,

@@ -135,6 +135,45 @@ npm run smoke:corpus-ingest
 같은 PDF 를 두 번 ingest 하면 SHA256 content_hash dedupe 가 동작하여 두 번째 호출은
 no-op + `alreadyIngested: true` 로 종료됩니다 (idempotency 정책 = 중복 무시).
 
+### Persona turn CLI (sprint-3)
+
+Sprint `2026-W19-sprint-3` 에서 디지털공학개론 페르소나 1명 (`디공이`, 친근한 멘토 톤)
+의 첫 응답 turn 을 제공합니다. sprint-2 corpus 위에 in-memory cosine top-k retrieval
++ Claude CLI stub provider 를 결합. 경계는 다음과 같습니다:
+
+- 페르소나는 1과목 (디지털공학개론) 1명만 지원합니다 — 다른 subject 호출 시 exit 1.
+  4과목 4 페르소나 점진 도입은 다음 sprint 후보 (ADR 0004 (f)).
+- Retrieval 은 `chunk.embedding` Bytes BLOB 메모리 로드 → cosine top-k. 실 vector
+  store 마이그레이션은 D1 (월 AI 비용 안) 결정 후 sprint-4+ 후보.
+- LLM provider 는 **Claude CLI** stub (`claude -p --dangerously-skip-permissions`).
+  Bedrock 호출 0건 (D1 결정 전). Routing 은 fixture-default + opt-in:
+  - `STUDY_NOTE_LLM_FIXTURE=1` → fixture mode (deterministic, Anthropic API 송신 0).
+  - `STUDY_NOTE_LLM_REAL_OPT_IN=1` (fixture 미세팅 시) → real Claude CLI subprocess.
+  - 둘 다 unset → fixture default (= 사용자 명시 opt-in 없으면 cloud 송신 안 됨).
+- Real mode 호출 시 system prompt + retrieved PDF chunks 가 Claude CLI 를 통해
+  **Anthropic API** 로 송신됩니다 (CLI 시작 시 stderr banner 1줄 안내). 사용자 본인
+  PDF 의 저작권 (교수님 자료) + fair use 가정에서 1인 실행만 허용 — 외부 공유 금지
+  (ADR 0004 (h.1)).
+- HTTP endpoint 는 노출하지 않습니다 — **CLI 만**. POST `/v1/persona/turn` 등은
+  frontend sprint 직전 후보.
+
+```bash
+# fixture mode (default — Anthropic 호출 0)
+STUDY_NOTE_LLM_FIXTURE=1 npm run persona:turn -- \
+  --subject digital-engineering --query "반가산기 설명해줘" --k 3
+
+# real Claude CLI mode (사용자 opt-in, 본인 환경에 claude CLI 가 PATH 에 있어야 함)
+STUDY_NOTE_LLM_REAL_OPT_IN=1 npm run persona:turn -- \
+  --subject digital-engineering --query "반가산기 설명해줘"
+
+npm run smoke:persona-turn   # 항상 fixture mode 강제, end-to-end 1 turn 검증
+npm run test:backend         # 단위 테스트 (chunker / ingest / persona / retrieval / claude-cli)
+```
+
+CLI stdout 은 인간 가독 응답 + 마지막 줄 JSON (`personaName, subject, response,
+sources, provider, modelName, retrievalCount, isFallback`) 으로 구성. NestJS
+Logger 는 `createApplicationContext({logger:false})` 로 비활성화되어 stdout 오염 0건.
+
 ## Verification
 
 ```bash

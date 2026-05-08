@@ -168,6 +168,33 @@ ADR 0005 안 결정에 따라 후속 결정. 본 ADR 은 후보군만 enumerate.
   기존 corpus 와 일치하면 ingest no-op + log. SHA256 이 다르면 별 corpus 로 등재 (페이지
   번호만 바뀐 PDF 도 새 corpus). 의미적 dedupe 는 본 sprint scope 외.
 
+## Follow-up resolutions — sprint-3 (2026-05-08)
+
+본 섹션은 sprint `2026-W19-sprint-3` 의 plan.md (R11) 결정 산물 — 위 (a)~(h) +
+sprint-2 follow-up 위에 *추가* 정착 (additive only, 기존 본문 수정 0건).
+
+- **persona_archetype_first**: `디지털공학개론` 1명 — 4 페르소나 점진 도입 ((f)) 의
+  첫 case. 정보통신개론 / C언어 / 컴퓨터개론 페르소나 정착은 다음 sprint 후보.
+  PersonaTurnService 의 unsupported subject guard 가 sprint-3 의 1-페르소나 invariant
+  를 enforced — 디공이 외 subject 호출 시 throw + exit 1.
+- **persona_name**: `디공이`. PersonaService 상수 `PERSONA_DIGITAL_ENGINEERING.name`
+  + ADR follow-up + plan §1·R1·R11·R13 동일 표기.
+- **persona_tone_policy** (D2 결정): "친근한 멘토 — 사용자가 모르는 가정, 먼저 쉬운
+  질문으로 수준 탐색 후 PDF 출처 명시하며 하나씩 짚어올림."
+- **llm_provider_first_pick**: `Claude CLI stub` (`claude -p --dangerously-skip-
+  permissions` subprocess). ADR (g) "dev stub provider" 의 첫 implement.
+  Provider routing 은 fixture-default + opt-in env var 2단계:
+  - `STUDY_NOTE_LLM_FIXTURE=1` → fixture mode (top precedence, Anthropic 송신 0건).
+  - `STUDY_NOTE_LLM_REAL_OPT_IN=1` (단 fixture 미세팅 시) → real Claude CLI subprocess.
+  - 둘 다 unset → fixture (default — Anthropic 송신 0건 guarantee).
+  Bedrock primary 분기는 D1 (월 비용 안) 결정 후 sprint-4+ 에서 재평가.
+- **retrieval_first_pick**: `in-memory cosine over chunk.embedding Bytes BLOB`.
+  ADR (e) vector store 결정의 *임시* 분기 — sqlite-vec / FAISS / pgvector /
+  OpenSearch 마이그레이션은 D1 후 sprint-4+ 후보. sprint-2 EmbeddingService 가
+  `pipeline(..., {normalize:true})` 로 출력하므로 모든 vector 가 unit (L2-normalized)
+  → cosine = dot product. RetrievalService 의 cosineRank 가 그 fast path 를 사용.
+  단위 테스트는 dot product 와 explicit cosine 결과가 1e-6 이내 일치함을 검증.
+
 ## References
 
 - Plan: `.sfs-local/sprints/2026-W19-sprint-1/plan.md` (R5 / AC3)
