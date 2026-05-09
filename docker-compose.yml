@@ -57,7 +57,7 @@ services:
       - SESSION_TOKEN_PEPPER=change-me-local-session-pepper
       - STUDY_NOTE_DEV_USER_NAME=채명정
       - STUDY_NOTE_DEV_STUDENT_NUMBER=20264514
-      - STUDY_NOTE_DEV_USER_EMAIL=student@example.com
+      - STUDY_NOTE_DEV_USER_EMAIL=jack2718@soongsil.ac.kr
       - STUDY_NOTE_SECOND_USER_NAME=Ownership Reviewer
       - STUDY_NOTE_SECOND_STUDENT_NUMBER=20260000
       - STUDY_NOTE_SECOND_USER_EMAIL=reviewer@example.com
