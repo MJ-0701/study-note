@@ -132,4 +132,51 @@ describe("ConversationService", () => {
     assert.equal(result.sources[0]?.sourcePdfPath, "de.pdf");
     assert.ok(!JSON.stringify(prisma.createdTurns).includes("/Users/mj/private"));
   });
+
+  it("history() preserves sprint-1 stored provider/modelName strings (sprint-2 AC4 backward compat)", async () => {
+    const storedTurn = {
+      id: "cmulti0000000000000000999",
+      conversationId: VALID_CONVERSATION_ID,
+      subject: "digital-engineering",
+      query: "지난 질문",
+      k: 3,
+      response: "[디공이] 이전 응답",
+      sources: [{ ord: 1, corpusId: "cmovexample0001abcd", sourcePdfPath: "de.pdf", score: 0.7 }],
+      // sprint-1 stored shape: raw string provider/modelName (3-layer 도입 전)
+      provider: "claude-cli-fixture",
+      modelName: "claude-cli@stub-fixture",
+      retrievalCount: 1,
+      isFallback: false,
+      createdAt: new Date("2026-05-09T00:00:00.500Z")
+    };
+    const prismaWithTurn = {
+      conversation: {
+        async findUnique(args: { where: { id: string }; include?: unknown }) {
+          if (args.where.id !== VALID_CONVERSATION_ID) return null;
+          if (args.include) {
+            return {
+              id: VALID_CONVERSATION_ID,
+              subject: "digital-engineering",
+              personaName: "디공이",
+              createdAt: new Date("2026-05-09T00:00:00.000Z"),
+              turns: [storedTurn]
+            };
+          }
+          return null;
+        }
+      },
+      turn: { async findMany() { return []; }, async create() { return {}; } }
+    };
+    const service = new ConversationService(
+      prismaWithTurn as unknown as PrismaService,
+      new PersonaService(),
+      {} as unknown as PersonaTurnService
+    );
+
+    const result = await service.history(VALID_CONVERSATION_ID);
+    assert.equal(result.turns.length, 1);
+    // sprint-2 invariant: stored string provider/modelName 그대로 통과 (Q5=A backward compat)
+    assert.equal(result.turns[0]?.provider, "claude-cli-fixture");
+    assert.equal(result.turns[0]?.modelName, "claude-cli@stub-fixture");
+  });
 });

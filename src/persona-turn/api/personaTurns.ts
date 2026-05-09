@@ -4,6 +4,12 @@
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "http://127.0.0.1:3001";
 
+/**
+ * sprint-2 AC3 — single-source agent enum. backend `LLM_AGENT_IDS` (canonical source
+ * at `backend/src/persona/providers/llm-provider.port.ts`) 와 *값 동일* lock.
+ * frontend ↔ backend 가 별도 bundle 이라 import 불가 — string literal 동기 검증
+ * (CI 또는 grep diff). drift 시 sprint-3+ 의 shared types package 후보.
+ */
 export type Agent = "claude-cli" | "gemini-cli";
 
 export interface PersonaTurnSource {

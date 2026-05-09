@@ -21,10 +21,12 @@ export interface LlmGenerateResult {
   /** Raw model response text. PersonaTurnService formatter wraps this with
    *  invariant cues (persona name, provider banner, sources). */
   text: string;
-  /** Concrete provider id, e.g. "claude-cli", "claude-cli-fixture". */
-  provider: string;
-  /** Concrete model id, e.g. "claude-cli@stub-fixture", "claude-cli@<binary>". */
-  modelName: string;
+  /** Concrete provider id, e.g. "claude-cli", "claude-cli-fixture".
+   *  sprint-2 AC2: ProviderId branded type, runtime string compatible. */
+  provider: import("./agent-id").ProviderId | string;
+  /** Concrete model id, e.g. "claude-cli@stub-fixture", "claude-cli@<binary>".
+   *  sprint-2 AC2: ModelTag branded type, runtime string compatible. */
+  modelName: import("./agent-id").ModelTag | string;
 }
 
 export interface LlmProvider {

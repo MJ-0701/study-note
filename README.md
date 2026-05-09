@@ -212,6 +212,38 @@ endpoint 로 노출. CLI lane 은 그대로 보존, 새로 web 화면 lane 이 �
 - 회귀: `npm run test:backend` 가 CLI 패턴 (sprint-3/4) 을 그대로 회귀 PASS, HTTP
   endpoint 패턴 (sprint-5 신규) 6 case 추가. 총 44/44 PASS.
 
+### MCP server: get_chunks tool (sprint-2 post-adopt)
+
+Sprint `2026-W19-sprint-2` 에서 Anthropic MCP server 의 first slice 가 추가됩니다.
+Claude Desktop / Cursor 같은 MCP client 가 본 backend 의 corpus retrieval 을 *tool*
+로 호출 가능 — 사용자 본인 Claude Pro 구독으로 LLM 호출, mj backend 는 corpus + retrieval
+만 hosting (사용자 명시 architecture 의도).
+
+- **Tool**: `get_chunks(subject, query, k?)` — 강의자료 corpus 의 top-K chunks 반환.
+- **Transport**: stdio (Claude Desktop default).
+- **Process**: backend repo 안 entry — `npm run mcp:server`.
+- **Wire shape (CallToolResult)**: `{ content: [{ type: "text", text: JSON.stringify({chunks:[...], retrievedCount}) }] }`. chunk 의 `sourcePdfPath` 는 basename 만 (절대 경로 노출 0).
+- **Error**: invalid input → `InvalidParams (-32602)` + `errorCode: "INVALID_INPUT"`. retrieval throw → `InternalError (-32603)` + `errorCode: "RETRIEVAL_FAILED"`.
+
+#### Claude Desktop config (예시 — `~/Library/Application Support/Claude/claude_desktop_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "study-note": {
+      "command": "npm",
+      "args": ["run", "mcp:server", "--silent", "--prefix", "/ABSOLUTE/PATH/TO/study-note"],
+      "env": {
+        "DATABASE_URL": "mysql://study_note:study_note@127.0.0.1:<port>/study_note"
+      }
+    }
+  }
+}
+```
+
+등록 후 Claude Desktop 재시작 → 디공이 turn (또는 다른 chat) 에서 `@study-note` 도구
+호출 → tool call paste evidence (sprint-2 AC7).
+
 ## Verification
 
 ```bash

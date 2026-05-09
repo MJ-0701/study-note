@@ -25,6 +25,7 @@
     "evidence:real-agent": "npm run build:backend && STUDY_NOTE_LLM_AGENT=gemini-cli node scripts/ac13-real-pdf-evidence.mjs",
     "db:up-persistent": "node scripts/db-persistent.mjs up",
     "db:down-persistent": "node scripts/db-persistent.mjs down",
+    "mcp:server": "npm run build:backend && node --env-file-if-exists=.env backend/dist/mcp-server/index.js",
     "test:backend": "npm run build:backend && node scripts/run-backend-tests.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
@@ -41,6 +42,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1041.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs/common": "^11.1.19",
     "@nestjs/core": "^11.1.19",
     "@nestjs/platform-express": "^11.1.19",
@@ -54,7 +56,8 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "zod": "^4.4.3"
   },
   "optionalDependencies": {
     "onnxruntime-node": "^1.14.0"
