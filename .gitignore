@@ -6,8 +6,12 @@ local-materials/
 .prisma-cache/
 .env
 .env.local
-backend/.env
-backend/.env.local
+apps/*/.env
+apps/*/.env.local
+apps/*/dist/
+packages/*/dist/
+infra/.env
+infra/.env.local
 localstack/cache/
 
 

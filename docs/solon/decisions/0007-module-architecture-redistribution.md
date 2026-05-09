@@ -158,16 +158,16 @@ Dockerfile 은 각 `apps/*` 가 자기 빌드 컨텍스트로 소유. `infra/doc
 | `backend/src/mcp-server/index.ts` | `apps/mcp/src/index.ts` | move | mcp |
 | `backend/src/mcp-server/get-chunks.tool.ts` | `apps/mcp/src/get-chunks.tool.ts` | move | mcp |
 | `backend/tsconfig.json` | 삭제 → `apps/api/tsconfig.json` + `apps/mcp/tsconfig.json` + `apps/cli/tsconfig.json` (모두 extends `tsconfig.base.json`) | split | api/mcp/cli build |
-| `backend/prisma/schema.prisma` | `apps/api/prisma/schema.prisma` (§8 잠정) | move | api/cli/mcp DB |
+| `apps/api/prisma/schema.prisma` | `apps/api/prisma/schema.prisma` (§8 잠정) | move | api/cli/mcp DB |
 | `backend/prisma/migrations/*` | `apps/api/prisma/migrations/*` (§8 잠정) | move | api DB |
-| `backend/prisma/seed.mjs` | `apps/api/prisma/seed.mjs` (§8 잠정) | move | api DB seed |
+| `apps/api/prisma/seed.mjs` | `apps/api/prisma/seed.mjs` (§8 잠정) | move | api DB seed |
 | `backend/Dockerfile` | `apps/api/Dockerfile` | move + build context 갱신 | api docker |
 | `Dockerfile` (root, frontend serve) | `apps/web/Dockerfile` | move + multi-stage 정리 | web docker |
 | `docker-compose.yml` (root) | `infra/docker-compose.yml` | move + service 경로 갱신 (build context = `../apps/*`) | infra |
 | `localstack/*` (root) | `infra/localstack/*` | move | infra |
-| `scripts/smoke-backend-contract.mjs` (`backend/dist/main.js` 하드코드) | scripts/* 그대로, 내부 path → `apps/api/dist/main.js` | patch (3+ 경로) | smoke |
-| `scripts/smoke-corpus-ingest.mjs` (`backend/dist/cli/ingest-pdf.js` 등) | 내부 path → `apps/cli/dist/ingest-pdf.js` | patch (3 경로) | smoke |
-| `scripts/smoke-pdf-workspace.mjs` (`backend/dist/main.js`) | 내부 path → `apps/api/dist/main.js` | patch | smoke |
+| `scripts/smoke-backend-contract.mjs` (`apps/api/dist/main.js` 하드코드) | scripts/* 그대로, 내부 path → `apps/api/dist/main.js` | patch (3+ 경로) | smoke |
+| `scripts/smoke-corpus-ingest.mjs` (`apps/cli/dist/ingest-pdf.js` 등) | 내부 path → `apps/cli/dist/ingest-pdf.js` | patch (3 경로) | smoke |
+| `scripts/smoke-pdf-workspace.mjs` (`apps/api/dist/main.js`) | 내부 path → `apps/api/dist/main.js` | patch | smoke |
 | `scripts/smoke-persona-turn.mjs` | 내부 path → `apps/cli/dist/persona-turn.js` 또는 `apps/api/dist/main.js` | patch | smoke |
 | `scripts/smoke-s3-storage.mjs` / `smoke-real-s3-storage.mjs` | 내부 path → `apps/api/dist/main.js` | patch | smoke |
 | `scripts/ac13-fixture-evidence.mjs` / `ac13-real-pdf-evidence.mjs` | 내부 path → `apps/api/dist/main.js` 또는 `apps/cli/dist/persona-turn.js` | patch | evidence |
@@ -175,14 +175,14 @@ Dockerfile 은 각 `apps/*` 가 자기 빌드 컨텍스트로 소유. `infra/doc
 | `scripts/run-backend-tests.mjs` | 내부 path → `apps/api/dist/*` | patch | test |
 | `scripts/db-persistent.mjs` | 그대로 (DB only, surface 모듈 의존 없음) | unchanged | infra |
 | `package.json#scripts.dev` (`vite --host 127.0.0.1`) | `pnpm --filter @study-note/web dev` | replace | dev |
-| `package.json#scripts.dev:backend` (`build:backend && node backend/dist/main.js`) | `pnpm --filter @study-note/api dev` (또는 build + node) | replace | dev |
+| `package.json#scripts.dev:backend` (`build:backend && node apps/api/dist/main.js`) | `pnpm --filter @study-note/api dev` (또는 build + node) | replace | dev |
 | `package.json#scripts.build:frontend` (`tsc --noEmit && vite build`) | `pnpm --filter @study-note/web build` | replace | build |
 | `package.json#scripts.build:backend` (`tsc -p backend/tsconfig.json`) | `pnpm --filter @study-note/api build` (+ mcp/cli) | replace | build |
 | `package.json#scripts.smoke:*` (모든 smoke 항목) | `pnpm --filter @study-note/api build && node scripts/smoke-*` (filter prefix 추가) | replace | smoke |
-| `package.json#scripts.mcp:server` (`backend/dist/mcp-server/index.js`) | `pnpm --filter @study-note/mcp start` | replace | mcp run |
-| `package.json#scripts.persona:turn` / `ingest:pdf` (`backend/dist/cli/*`) | `pnpm --filter @study-note/cli run *` | replace | cli run |
+| `package.json#scripts.mcp:server` (`apps/mcp/dist/index.js`) | `pnpm --filter @study-note/mcp start` | replace | mcp run |
+| `package.json#scripts.persona:turn` / `ingest:pdf` (`apps/cli/dist/*`) | `pnpm --filter @study-note/cli run *` | replace | cli run |
 | `package.json#scripts.preview` (`vite preview`) | `pnpm --filter @study-note/web preview` | replace | preview |
-| `package.json#scripts.prisma:*` (schema path = `backend/prisma/schema.prisma`) | schema path → `apps/api/prisma/schema.prisma` (§8 잠정), 또는 `pnpm --filter @study-note/api prisma:*` | replace | DB |
+| `package.json#scripts.prisma:*` (schema path = `apps/api/prisma/schema.prisma`) | schema path → `apps/api/prisma/schema.prisma` (§8 잠정), 또는 `pnpm --filter @study-note/api prisma:*` | replace | DB |
 | `README.md` (Vite-편향 root layout 설명) | layout 섹션 갱신 (apps/* + infra + packages/*) | patch | docs |
 | `backend/README.md` (root path 가정) | api/mcp/cli 분리 반영 | patch | docs |
 
@@ -280,7 +280,7 @@ Dockerfile 은 각 `apps/*` 가 자기 빌드 컨텍스트로 소유. `infra/doc
 
 1. **Workspaces 도입 PR**. `pnpm-workspace.yaml`, root `tsconfig.base.json`, `.eslintrc.json`, `.prettierrc`, `.editorconfig`, `.nvmrc`, `.npmrc`, root `devDependencies` 갱신. 코드 이동 없음. PR 끝 검증 = `pnpm install` + `pnpm -r build` (현재 단일 모듈만 build 하지만 통과해야 함).
 2. **Domain 통합 PR**. `packages/domain/` 신설 + frontend `src/domain/*` ∪ backend `backend/src/domain/*` 통합 + 중복 4종 invariant merge + import path 갱신. PR 끝 검증 = `pnpm -r build` + 기존 smoke 모두 통과.
-3. **Surface 분리 PR**. `apps/{api,mcp,cli,web}` 으로 코드 이동 + 각 app `package.json` + tsconfig + Dockerfile 신설 + `scripts/*.mjs` 의 backend/dist path 일괄 patch + html 이동. PR 끝 검증 = `pnpm -r build` + 모든 smoke 명령 (`smoke:backend`, `smoke:s3-storage`, `smoke:pdf-workspace`, `smoke:persona-turn` 등) 통과.
+3. **Surface 분리 PR**. `apps/{api,mcp,cli,web}` 으로 코드 이동 + 각 app `package.json` + tsconfig + Dockerfile 신설 + `scripts/*.mjs` 의 apps/*/dist path 일괄 patch + html 이동. PR 끝 검증 = `pnpm -r build` + 모든 smoke 명령 (`smoke:backend`, `smoke:s3-storage`, `smoke:pdf-workspace`, `smoke:persona-turn` 등) 통과.
 4. **Infra 분리 PR**. `infra/docker-compose.yml` + `infra/localstack/*` 이동 + `apps/*/Dockerfile` 작성 + root `Dockerfile` 삭제 + `docker-compose.yml` 의 build context 갱신. PR 끝 검증 = `docker compose build` + `docker compose up` healthcheck 통과.
 
 PR 사이 working tree 가 깨지지 않도록 각 PR 끝에 빌드/smoke 통과 의무. 한 PR 에 다 묶거나 더 잘게 자르는 결정은 다음 sprint plan 의 일.

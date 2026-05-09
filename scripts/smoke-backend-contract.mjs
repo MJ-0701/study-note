@@ -326,7 +326,7 @@ try {
 function startBackend(port, db) {
   baseUrl = `http://127.0.0.1:${port}/api`;
 
-  return spawn("node", ["backend/dist/main.js"], {
+  return spawn("node", ["apps/api/dist/main.js"], {
     env: {
       ...process.env,
       PORT: String(port),

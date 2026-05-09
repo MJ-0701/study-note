@@ -6,8 +6,8 @@ import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
 const require = createRequire(import.meta.url);
 const { NestFactory } = require("@nestjs/core");
-const { CorpusModule } = require("../backend/dist/corpus/corpus.module.js");
-const { IngestService } = require("../backend/dist/corpus/services/ingest.service.js");
+const { CorpusModule } = require("../apps/api/dist/corpus/corpus.module.js");
+const { IngestService } = require("../apps/api/dist/corpus/services/ingest.service.js");
 
 const SUBJECT = "digital-engineering";
 const QUERY = "fixture query: 반가산기";
@@ -144,7 +144,7 @@ try {
 async function runCli(env, args) {
   const child = spawn(
     "node",
-    ["backend/dist/cli/persona-turn.js", ...args],
+    ["apps/cli/dist/persona-turn.js", ...args],
     { env, stdio: ["ignore", "pipe", "pipe"] }
   );
   let stdout = "";

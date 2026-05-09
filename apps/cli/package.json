@@ -1,0 +1,26 @@
+{
+  "name": "@study-note/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "ingest:pdf": "node --env-file-if-exists=../../.env dist/ingest-pdf.js",
+    "persona:turn": "node --env-file-if-exists=../../.env dist/persona-turn.js"
+  },
+  "dependencies": {
+    "@study-note/corpus": "workspace:*",
+    "@study-note/domain": "workspace:*",
+    "@study-note/persona-engine": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1041.0",
+    "@prisma/client": "^6.19.3",
+    "@xenova/transformers": "^2.17.2",
+    "pdf-parse": "^1.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/pdf-parse": "^1.1.5",
+    "typescript": "^5.9.3"
+  }
+}

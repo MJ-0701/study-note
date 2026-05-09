@@ -1,0 +1,353 @@
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+import type { Readable } from "node:stream";
+import type {
+  AnnotationSnapshotRecord,
+  PdfInkStroke,
+  PdfMaterialRecord,
+  PdfStickyNote
+} from "@study-note/domain";
+import { PrismaService } from "../prisma/prisma.service";
+import {
+  toAnnotationPayload,
+  toAnnotationSnapshotRecord,
+  toPdfMaterialRecord
+} from "../prisma/workspace.mappers";
+import { StoragePort } from "../storage/storage.port";
+
+interface CreateUploadIntentInput {
+  subjectId: string;
+  classDate: string;
+  fileName: string;
+  fileSize: number;
+  pageCount: number;
+  contentType: string;
+}
+
+interface SaveAnnotationInput {
+  schemaVersion: 1;
+  stickyNotes: PdfStickyNote[];
+  inkStrokes: PdfInkStroke[];
+}
+
+interface UploadFileInput {
+  body: Readable;
+  contentType: string;
+  contentLength: number;
+}
+
+@Injectable()
+export class MaterialsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StoragePort
+  ) {}
+
+  async createUploadIntent(ownerId: string, input: CreateUploadIntentInput) {
+    const now = new Date().toISOString();
+    const materialId = randomUUID();
+    const fileName = requirePdfFileName(input.fileName);
+    const fileSize = requirePositiveNumber(input.fileSize, "fileSize");
+    requireAllowedFileSize(fileSize);
+    const material = await this.prisma.pdfMaterial.create({
+      data: {
+        id: materialId,
+        ownerId,
+        subjectId: requireString(input.subjectId, "subjectId"),
+        classDate: requireString(input.classDate, "classDate"),
+        fileName,
+        fileSize,
+        pageCount: Math.max(
+          1,
+          Math.trunc(requirePositiveNumber(input.pageCount, "pageCount"))
+        ),
+        contentType: requirePdfContentType(input.contentType),
+        storageKey: `users/${ownerId}/materials/${materialId}/${sanitizeFileName(fileName)}`,
+        uploadStatus: "pending",
+        createdAt: now,
+        updatedAt: now
+      }
+    });
+    const materialRecord = toPdfMaterialRecord(material);
+
+    return {
+      material: materialRecord,
+      upload: this.storage.createUploadIntent(materialRecord)
+    };
+  }
+
+  async uploadFile(
+    ownerId: string,
+    materialId: string,
+    input: UploadFileInput
+  ): Promise<PdfMaterialRecord> {
+    const material = await this.getMaterial(ownerId, materialId);
+    const contentType = requirePdfContentType(input.contentType);
+    const contentLength = requirePositiveNumber(input.contentLength, "contentLength");
+    const maxBytes = getMaxPdfUploadBytes();
+
+    if (contentLength > maxBytes) {
+      throw new BadRequestException(`PDF upload exceeds ${maxBytes} bytes`);
+    }
+
+    if (contentLength !== material.fileSize) {
+      throw new BadRequestException("contentLength must match material fileSize");
+    }
+
+    await this.storage.putObject(material, {
+      body: input.body,
+      contentType,
+      contentLength,
+      maxBytes
+    });
+
+    const saved = await this.prisma.pdfMaterial.update({
+      where: {
+        id: material.id
+      },
+      data: {
+        uploadStatus: "uploaded"
+      }
+    });
+
+    return toPdfMaterialRecord(saved);
+  }
+
+  async listMaterials(ownerId: string): Promise<PdfMaterialRecord[]> {
+    const materials = await this.prisma.pdfMaterial.findMany({
+      where: {
+        ownerId
+      },
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return materials.map(toPdfMaterialRecord);
+  }
+
+  async getMaterial(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
+    const material = await this.prisma.pdfMaterial.findFirst({
+      where: {
+        id: materialId,
+        ownerId
+      }
+    });
+
+    if (!material) {
+      throw new NotFoundException("PDF material not found");
+    }
+
+    return toPdfMaterialRecord(material);
+  }
+
+  async getDownload(ownerId: string, materialId: string) {
+    const material = await this.getUploadedMaterial(ownerId, materialId);
+
+    return {
+      material,
+      download: this.storage.createDownloadIntent(material)
+    };
+  }
+
+  async getFile(ownerId: string, materialId: string) {
+    const material = await this.getUploadedMaterial(ownerId, materialId);
+    const object = await this.readStoredObject(material);
+
+    return {
+      material,
+      object
+    };
+  }
+
+  async saveAnnotation(
+    ownerId: string,
+    materialId: string,
+    input: SaveAnnotationInput
+  ): Promise<AnnotationSnapshotRecord> {
+    const material = await this.getMaterial(ownerId, materialId);
+    const savedAt = new Date();
+    const snapshot = await this.prisma.annotationSnapshot.upsert({
+      where: {
+        materialId: material.id
+      },
+      update: {
+        ownerId,
+        schemaVersion: input.schemaVersion,
+        payload: toAnnotationPayload(input),
+        savedAt
+      },
+      create: {
+        materialId: material.id,
+        ownerId,
+        schemaVersion: input.schemaVersion,
+        payload: toAnnotationPayload(input),
+        savedAt
+      }
+    });
+
+    return toAnnotationSnapshotRecord(snapshot);
+  }
+
+  async getAnnotation(
+    ownerId: string,
+    materialId: string
+  ): Promise<AnnotationSnapshotRecord> {
+    const material = await this.getMaterial(ownerId, materialId);
+    const snapshot = await this.prisma.annotationSnapshot.findUnique({
+      where: {
+        materialId: material.id
+      }
+    });
+
+    return snapshot
+      ? toAnnotationSnapshotRecord(snapshot)
+      : {
+          materialId: material.id,
+          ownerId,
+          schemaVersion: 1,
+          stickyNotes: [],
+          inkStrokes: [],
+          savedAt: material.updatedAt
+        };
+  }
+
+  async getExportBundle(ownerId: string, materialId: string) {
+    const material = await this.getUploadedMaterial(ownerId, materialId);
+    const annotation = await this.getAnnotation(ownerId, materialId);
+
+    return this.storage.createExportBundle(material, annotation);
+  }
+
+  private async getUploadedMaterial(
+    ownerId: string,
+    materialId: string
+  ): Promise<PdfMaterialRecord> {
+    const material = await this.getMaterial(ownerId, materialId);
+
+    if (material.uploadStatus !== "uploaded") {
+      throw new ConflictException("PDF upload is not complete");
+    }
+
+    return material;
+  }
+
+  private async readStoredObject(material: PdfMaterialRecord) {
+    try {
+      return await this.storage.getObject(material);
+    } catch (error) {
+      if (isMissingStorageObject(error)) {
+        throw new NotFoundException("PDF object not found");
+      }
+
+      throw new BadGatewayException("PDF storage read failed");
+    }
+  }
+}
+
+export function parseUploadIntentBody(body: unknown): CreateUploadIntentInput {
+  const input = requireObject(body);
+
+  return {
+    subjectId: String(input.subjectId ?? ""),
+    classDate: String(input.classDate ?? ""),
+    fileName: String(input.fileName ?? ""),
+    fileSize: Number(input.fileSize ?? 0),
+    pageCount: Number(input.pageCount ?? 1),
+    contentType: String(input.contentType ?? "application/pdf")
+  };
+}
+
+export function parseAnnotationBody(body: unknown): SaveAnnotationInput {
+  const input = requireObject(body);
+  const schemaVersion = Number(input.schemaVersion ?? 1);
+
+  if (schemaVersion !== 1) {
+    throw new BadRequestException("Only annotation schemaVersion 1 is supported");
+  }
+
+  return {
+    schemaVersion,
+    stickyNotes: Array.isArray(input.stickyNotes) ? (input.stickyNotes as PdfStickyNote[]) : [],
+    inkStrokes: Array.isArray(input.inkStrokes) ? (input.inkStrokes as PdfInkStroke[]) : []
+  };
+}
+
+function requireObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    throw new BadRequestException("Request body is required");
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function requireString(value: string, name: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    throw new BadRequestException(`${name} is required`);
+  }
+
+  return trimmed;
+}
+
+function requirePdfFileName(value: string): string {
+  const fileName = requireString(value, "fileName");
+
+  if (!fileName.toLowerCase().endsWith(".pdf")) {
+    throw new BadRequestException("fileName must be a PDF");
+  }
+
+  return fileName;
+}
+
+function requirePdfContentType(value: string): string {
+  const contentType = ((value.trim().toLowerCase() || "application/pdf")
+    .split(";")[0] ?? "application/pdf")
+    .trim();
+
+  if (contentType !== "application/pdf") {
+    throw new BadRequestException("contentType must be application/pdf");
+  }
+
+  return contentType;
+}
+
+function requirePositiveNumber(value: number, name: string): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new BadRequestException(`${name} must be positive`);
+  }
+
+  return value;
+}
+
+function requireAllowedFileSize(fileSize: number): void {
+  const maxBytes = getMaxPdfUploadBytes();
+
+  if (fileSize > maxBytes) {
+    throw new BadRequestException(`fileSize exceeds ${maxBytes} bytes`);
+  }
+}
+
+function getMaxPdfUploadBytes(): number {
+  const value = Number(process.env.PDF_UPLOAD_MAX_BYTES ?? 25 * 1024 * 1024);
+
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 25 * 1024 * 1024;
+}
+
+function sanitizeFileName(fileName: string): string {
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function isMissingStorageObject(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const name = error instanceof Error ? error.name : "";
+
+  return name === "NoSuchKey" || /not found|missing/i.test(message);
+}

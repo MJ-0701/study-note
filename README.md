@@ -80,23 +80,26 @@
 ## Local Setup
 
 ```bash
-npm install
+pnpm install
 cp .env.example .env
-npm run prisma:generate
-npm run prisma:migrate:deploy
-npm run prisma:seed
+pnpm --filter @study-note/api prisma:generate
+pnpm --filter @study-note/api prisma:migrate:deploy
+pnpm --filter @study-note/api prisma:seed
 ```
 
 Backend:
 
 ```bash
-npm run dev:backend
+pnpm --filter @study-note/api prisma:migrate:deploy
+pnpm --filter @study-note/api prisma:seed
+pnpm --filter @study-note/api build
+node --env-file-if-exists=.env apps/api/dist/main.js
 ```
 
 Frontend:
 
 ```bash
-npm run dev
+pnpm --filter @study-note/web dev
 ```
 
 기본 개발 계정은 `.env.example`에 정의되어 있습니다 (placeholder). 실제 사용 시
@@ -128,11 +131,11 @@ Sprint `2026-W19-sprint-2` 에서 PDF → corpus ingest 최소 경로를 도입�
   과목 (정보통신개론·C언어·컴퓨터개론) 은 다음 sprint 후보입니다.
 
 ```bash
-npm run ingest:pdf -- --path <path-to-pdf> --subject digital-engineering
-npm run smoke:corpus-ingest
+pnpm --filter @study-note/cli build && node --env-file-if-exists=.env apps/cli/dist/ingest-pdf.js --path <path-to-pdf> --subject digital-engineering
+pnpm --filter @study-note/api build && node scripts/smoke-corpus-ingest.mjs
 ```
 
-`ingest:pdf` 는 `backend/dist` 빌드 후 `node backend/dist/cli/ingest-pdf.js` 를 실행합니다.
+`ingest:pdf` 는 `apps/cli/dist` 빌드 후 `node apps/cli/dist/ingest-pdf.js` 를 실행합니다.
 같은 PDF 를 두 번 ingest 하면 SHA256 content_hash dedupe 가 동작하여 두 번째 호출은
 no-op + `alreadyIngested: true` 로 종료됩니다 (idempotency 정책 = 중복 무시).
 
@@ -160,21 +163,22 @@ Sprint `2026-W19-sprint-3` 에서 디지털공학개론 페르소나 1명 (`디�
 
 ```bash
 # fixture mode (default — Anthropic 호출 0)
-STUDY_NOTE_LLM_FIXTURE=1 npm run persona:turn -- \
+pnpm --filter @study-note/cli build
+STUDY_NOTE_LLM_FIXTURE=1 node --env-file-if-exists=.env apps/cli/dist/persona-turn.js \
   --subject digital-engineering --query "반가산기 설명해줘" --k 3
 
 # real Claude CLI mode (사용자 opt-in, 본인 환경에 claude CLI 가 PATH 에 있어야 함)
-STUDY_NOTE_LLM_REAL_OPT_IN=1 npm run persona:turn -- \
+STUDY_NOTE_LLM_REAL_OPT_IN=1 node --env-file-if-exists=.env apps/cli/dist/persona-turn.js \
   --subject digital-engineering --query "반가산기 설명해줘"
 
-npm run smoke:persona-turn   # 항상 fixture mode 강제, end-to-end 1 turn 검증
-npm run test:backend         # 단위 테스트 (chunker / ingest / persona / retrieval / claude-cli)
+pnpm --filter @study-note/api build && node scripts/smoke-persona-turn.mjs
+pnpm --filter @study-note/api build && node scripts/run-backend-tests.mjs
 
 # sprint-4 — 실 PDF + real Claude CLI evidence harness 와 persistent dev DB
-npm run evidence:real-fixture   # ac13-fixture-evidence: real Claude CLI + 합성(fixture) corpus
-npm run evidence:real-pdf       # ac13-real-pdf-evidence: real Claude CLI + 실 PDF (anchor 3건)
-npm run db:up-persistent        # 학습용 docker MySQL 영속 lane (stdout 의 DATABASE_URL/COMPOSE_PROJECT export)
-npm run db:down-persistent -- "<COMPOSE_PROJECT>"   # cleanup
+pnpm run evidence:real-fixture
+pnpm run evidence:real-pdf
+pnpm run db:up-persistent
+pnpm run db:down-persistent -- "<COMPOSE_PROJECT>"
 ```
 
 CLI stdout 은 인간 가독 응답 + 마지막 줄 JSON (`personaName, subject, response,
@@ -195,22 +199,22 @@ endpoint 로 노출. CLI lane 은 그대로 보존, 새로 web 화면 lane 이 �
 - 3 터미널 dev 흐름 (`db:up-persistent` 가 `.env` 자동 갱신 → 이후 명령은 export 0):
   ```bash
   # 터미널 1 — DB 기동 (.env 자동 write: DATABASE_URL / COMPOSE_PROJECT / SESSION_TOKEN_PEPPER / PORT / HOST / STUDY_NOTE_LLM_TIMEOUT_MS)
-  npm run db:up-persistent
+  pnpm run db:up-persistent
 
   # 터미널 1 — (1회) PDF ingest, .env 자동 load
-  npm run ingest:pdf -- --path "asset/digital_logical_engine/제07장 조합논리회로_2ndE_GT.pdf" --subject digital-engineering
+  pnpm --filter @study-note/cli build && node --env-file-if-exists=.env apps/cli/dist/ingest-pdf.js --path "asset/digital_logical_engine/제07장 조합논리회로_2ndE_GT.pdf" --subject digital-engineering
 
   # 터미널 2 — backend (NestJS, port 3001), .env 자동 load
-  npm run dev:backend
+  pnpm --filter @study-note/api prisma:migrate:deploy && pnpm --filter @study-note/api prisma:seed && pnpm --filter @study-note/api build && node --env-file-if-exists=.env apps/api/dist/main.js
 
   # 터미널 3 — frontend (vite, port 5173)
-  npm run dev
+  pnpm --filter @study-note/web dev
   # 브라우저: http://127.0.0.1:5173/persona-turn.html
   ```
 - 화면: turn form (subject + query + k) → response panel (markdown + 응답 복사 버튼)
   + sources panel (chunk[N] · pdfBasename · score) + mode toggle (fixture/real) +
   consent banner (real 켤 때만, 1초 delay).
-- 회귀: `npm run test:backend` 가 CLI 패턴 (sprint-3/4) 을 그대로 회귀 PASS, HTTP
+- 회귀: `pnpm --filter @study-note/api build && node scripts/run-backend-tests.mjs` 가 CLI 패턴 (sprint-3/4) 을 그대로 회귀 PASS, HTTP
   endpoint 패턴 (sprint-5 신규) 6 case 추가. 총 44/44 PASS.
 
 ### MCP server: get_chunks tool (sprint-2 post-adopt)
@@ -222,7 +226,7 @@ Claude Desktop / Cursor 같은 MCP client 가 본 backend 의 corpus retrieval �
 
 - **Tool**: `get_chunks(subject, query, k?)` — 강의자료 corpus 의 top-K chunks 반환.
 - **Transport**: stdio (Claude Desktop default).
-- **Process**: backend repo 안 entry — `npm run mcp:server`.
+- **Process**: backend repo 안 entry — `pnpm --filter @study-note/mcp build && node --env-file-if-exists=.env apps/mcp/dist/index.js`.
 - **Wire shape (CallToolResult)**: `{ content: [{ type: "text", text: JSON.stringify({chunks:[...], retrievedCount}) }] }`. chunk 의 `sourcePdfPath` 는 basename 만 (절대 경로 노출 0).
 - **Error**: invalid input → `InvalidParams (-32602)` + `errorCode: "INVALID_INPUT"`. retrieval throw → `InternalError (-32603)` + `errorCode: "RETRIEVAL_FAILED"`.
 
@@ -262,16 +266,16 @@ config 에 등록된 *모든 MCP client* 가 `get_chunks` 호출 가능 — corp
 ## Verification
 
 ```bash
-npm run build
-npm run smoke:backend
-npm run smoke:pdf-workspace
-npm run smoke:s3-storage
+pnpm -r build
+pnpm --filter @study-note/api build && node scripts/smoke-backend-contract.mjs
+pnpm --filter @study-note/api build && node scripts/smoke-pdf-workspace.mjs
+pnpm --filter @study-note/api build && node scripts/smoke-s3-storage.mjs
 ```
 
 실제 S3 검증은 bucket/credential이 준비된 뒤 opt-in으로 실행합니다.
 
 ```bash
-RUN_REAL_S3_SMOKE=1 STORAGE_PROVIDER=s3 S3_BUCKET="..." S3_REGION="..." npm run smoke:s3-real
+RUN_REAL_S3_SMOKE=1 STORAGE_PROVIDER=s3 S3_BUCKET="..." S3_REGION="..." pnpm --filter @study-note/api build && node scripts/smoke-real-s3-storage.mjs
 ```
 
 (다음 sprint의 rewrite 결과에 따라 위 npm script 들이 재구축될 수 있습니다.)

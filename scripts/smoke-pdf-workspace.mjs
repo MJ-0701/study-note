@@ -59,7 +59,7 @@ let cdp;
 
 try {
   smokeDb = await prepareSmokeDatabase("pdf-workspace");
-  backendServer = spawn("node", ["backend/dist/main.js"], {
+  backendServer = spawn("node", ["apps/api/dist/main.js"], {
     env: {
       ...process.env,
       PORT: String(backendPort),
