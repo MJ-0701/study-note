@@ -1,13 +1,13 @@
 ---
 phase: report
-status: in-progress
+status: final
 sprint_id: "2026-W19-sprint-1"
 workspace: "root-module-frontend"
 handoff_dir: "docs/solon/root-module-frontend/20260509"
-goal: "모듈 아키텍처 재설계 (설계 sprint, S7·S8 PII hygiene 코드 변경) — pnpm workspaces 기반 평평 monorepo (apps/{api,mcp,cli,web} + infra + packages/domain + 후보 layer packages) 도면 + 공통 설정 명세 + 영향 path 표 + Security 4종 명세 + ADR 1건"
+goal: "아키텍처 모듈 분리 — 현재 root module 이 frontend (프론트 프로젝트에 백엔드 모듈 붙인 형태) → 모듈 재설계 및 재배치"
 created_at: "2026-05-09T20:49:40+09:00"
-last_touched_at: "2026-05-09T22:35:00+09:00"
-closed_at: ""
+last_touched_at: "2026-05-09T21:23:53+09:00"
+closed_at: "2026-05-09T21:23:53+09:00"
 ---
 
 # 보고서
@@ -88,3 +88,13 @@ closed_at: ""
 - 즉시 next: `sfs review --gate 4` round 2 (ADR §18 ops appendix 추가 후).
 - Gate 4 PASS 후: `sfs retro [--close]` → sprint close.
 - 다음 sprint plan seed: ADR 0007 의 §14 PR 분할 4단계 + §15 의무 6개 + §13 security regression 6 행을 입력으로 새 brainstorm.
+
+## §8. Next Cycle — Division Activation Recommendations
+
+<!-- solon:division-recommendations:start -->
+- detected: project_size=small (144 tracked files), domains=0, last_review=partial, infra_signals=3, ui_signals=2
+- recommended action format: update `.sfs-local/divisions.yaml` + record why in `.sfs-local/decisions/<NNNN>-activate-<division>.md`
+- recommend: `qa` activate (light) — regression smoke + AC checks; triggers: review!=pass or medium+ codebase
+- consider: `infra` activate (light) — deploy/observability/rollback checklist; triggers: infra files present or large codebase
+- generated_at: 2026-05-09T21:23:53+09:00 (auto) — edit outside the marker block to preserve manual notes
+<!-- solon:division-recommendations:end -->
