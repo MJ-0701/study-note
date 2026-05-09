@@ -110,4 +110,37 @@ describe("get_chunks tool — safe path leak regression (Gate 6 F2)", () => {
     assert.equal(out.chunks[0]?.sourcePdfPath, "passwd-like.pdf");
     assert.ok(!JSON.stringify(out).includes("/etc/"));
   });
+
+  it("strips Windows backslash path + drive letter (Gate 6 round 2 F3)", async () => {
+    const retrieval = makeRetrievalStub([
+      { ord: 0, corpusId: "x", sourcePdfPath: "C:\\Users\\mj\\private\\windows-file.pdf", text: "t", score: 1 }
+    ]);
+    const out = await executeGetChunks(retrieval, { subject: "digital-engineering", query: "x" });
+    assert.equal(out.chunks[0]?.sourcePdfPath, "windows-file.pdf");
+    assert.ok(!JSON.stringify(out).includes("Users"));
+    assert.ok(!JSON.stringify(out).includes("private"));
+    assert.ok(!JSON.stringify(out).includes("C:"));
+  });
+
+  it("strips mixed-separator paths", async () => {
+    const retrieval = makeRetrievalStub([
+      { ord: 0, corpusId: "x", sourcePdfPath: "D:/data\\nested/leak.pdf", text: "t", score: 1 }
+    ]);
+    const out = await executeGetChunks(retrieval, { subject: "digital-engineering", query: "x" });
+    assert.equal(out.chunks[0]?.sourcePdfPath, "leak.pdf");
+  });
+});
+
+describe("get_chunks tool — non-string query (Gate 6 round 2 F1)", () => {
+  it("rejects number/null query as InvalidParams (not TypeError)", async () => {
+    const retrieval = makeRetrievalStub([]);
+    await assert.rejects(
+      () => executeGetChunks(retrieval, { subject: "digital-engineering", query: 42 as never }),
+      (err) => err instanceof McpError && err.code === -32602 && /query.*string/.test(err.message)
+    );
+    await assert.rejects(
+      () => executeGetChunks(retrieval, { subject: "digital-engineering", query: null as never }),
+      (err) => err instanceof McpError && err.code === -32602 && /query.*string/.test(err.message)
+    );
+  });
 });

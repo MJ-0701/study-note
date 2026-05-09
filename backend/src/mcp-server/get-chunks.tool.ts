@@ -11,7 +11,6 @@
 //   safe path: sourcePdfPath = basename(corpus.sourcePdfPath) — 절대 경로 노출 0
 
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
-import { basename } from "node:path";
 import type { RetrievalService, RetrievedChunk } from "../persona/services/retrieval.service";
 
 export const GET_CHUNKS_TOOL_NAME = "get_chunks";
@@ -75,7 +74,13 @@ export async function executeGetChunks(
       field: "subject"
     });
   }
-  const query = (input.query ?? "").trim();
+  if (typeof input.query !== "string") {
+    throw new McpError(ErrorCode.InvalidParams, "query: must be a string", {
+      errorCode: "INVALID_INPUT",
+      field: "query"
+    });
+  }
+  const query = input.query.trim();
   if (query.length < 1 || query.length > 2000) {
     throw new McpError(ErrorCode.InvalidParams, "query: must be 1..2000 chars after trim", {
       errorCode: "INVALID_INPUT",
@@ -95,10 +100,14 @@ export async function executeGetChunks(
     retrieved = await retrieval.retrieveTopK({ subject: input.subject, queryText: query, k });
   } catch (err) {
     // sprint-2 Gate 6 round 1 F1 — DO NOT leak err.message over MCP wire (DB/config/path leak risk).
-    // local stderr log 만, MCP wire 는 generic message only.
-    process.stderr.write(
-      `[get_chunks] retrieval failure: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`
-    );
+    // round 2 F2 — stderr 도 opt-in only. default = generic, env `STUDY_NOTE_MCP_VERBOSE_ERRORS=1` 일 때만 detail.
+    if (process.env.STUDY_NOTE_MCP_VERBOSE_ERRORS === "1") {
+      process.stderr.write(
+        `[get_chunks] retrieval failure (verbose opt-in): ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`
+      );
+    } else {
+      process.stderr.write("[get_chunks] retrieval failure (set STUDY_NOTE_MCP_VERBOSE_ERRORS=1 for detail)\n");
+    }
     throw new McpError(
       ErrorCode.InternalError,
       "retrieval failure",
@@ -116,13 +125,19 @@ export async function executeGetChunks(
   return { chunks, retrievedCount: chunks.length };
 }
 
-/** Strict basename-only policy: scheme strip 후 basename, 절대 경로 0 leak.
- *  sprint-2 Gate 6 round 1 F2 — `smoke:///abs/path/file.pdf` 같은 input 도 basename 만. */
+/** Strict basename-only policy: scheme strip + posix/windows separator 둘 다, 절대 경로 0 leak.
+ *  Gate 6 round 1 F2 — `smoke:///abs/path/file.pdf` 같은 input.
+ *  Gate 6 round 2 F3 — Windows `C:\\Users\\mj\\private\\file.pdf` 같은 input. */
 function safeBasename(p: string): string {
   if (!p) return "<unknown>";
   // strip any URL-like scheme (smoke://, file://, http://, etc.)
-  const stripped = p.replace(/^[a-z][a-z0-9+.-]*:\/+/i, "");
-  return basename(stripped);
+  const noScheme = p.replace(/^[a-z][a-z0-9+.-]*:\/+/i, "");
+  // strip Windows drive letter prefix (C:, D:)
+  const noDrive = noScheme.replace(/^[a-z]:[\\/]+/i, "");
+  // last component after either / or \
+  const parts = noDrive.split(/[\\/]+/);
+  const last = parts[parts.length - 1] ?? noDrive;
+  return last.length > 0 ? last : "<unknown>";
 }
 
 /** MCP tool registration handler — McpServer.registerTool 의 callback. */
