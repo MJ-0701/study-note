@@ -122,10 +122,13 @@ describe("ConversationService", () => {
       turn
     );
     const result = await service.appendTurn(VALID_CONVERSATION_ID, {
-      query: "현재 질문"
+      query: "현재 질문",
+      mode: "real",
+      agent: "gemini-cli"
     });
 
     assert.match(JSON.stringify(capturedInput), /previousTurns/);
+    assert.match(JSON.stringify(capturedInput), /"requestAgent":"gemini-cli"/);
     assert.equal(result.sources[0]?.sourcePdfPath, "de.pdf");
     assert.ok(!JSON.stringify(prisma.createdTurns).includes("/Users/mj/private"));
   });

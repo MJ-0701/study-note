@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { ClaudeCliProvider } from "../../providers/claude-cli.provider";
+import { GeminiCliProvider } from "../../providers/gemini-cli.provider";
+import { LlmAgentRegistry } from "../../providers/llm-agent.registry";
 import { PersonaTurnService } from "../persona-turn.service";
 import { PersonaService } from "../persona.service";
 import type { RetrievalService, RetrievedChunk } from "../retrieval.service";
@@ -13,7 +15,9 @@ function makeRetrieval(chunks: RetrievedChunk[]): Pick<RetrievalService, "retrie
 
 const FIXTURE_ENV_KEYS = [
   "STUDY_NOTE_LLM_FIXTURE",
-  "STUDY_NOTE_LLM_REAL_OPT_IN"
+  "STUDY_NOTE_LLM_REAL_OPT_IN",
+  "STUDY_NOTE_LLM_AGENT",
+  "STUDY_NOTE_LLM_PROVIDER"
 ] as const;
 
 let savedEnv: Record<string, string | undefined> = {};
@@ -43,7 +47,11 @@ function buildService(chunks: RetrievedChunk[]): PersonaTurnService {
   const provider = new ClaudeCliProvider(() => {
     throw new Error("real spawn must not run when fixture branch is taken");
   });
-  return new PersonaTurnService(persona, retrieval as RetrievalService, provider);
+  const gemini = new GeminiCliProvider(() => {
+    throw new Error("real spawn must not run when fixture branch is taken");
+  });
+  const registry = new LlmAgentRegistry(provider, gemini);
+  return new PersonaTurnService(persona, retrieval as RetrievalService, registry);
 }
 
 function buildServiceWithSpawnTracker(chunks: RetrievedChunk[]): {
@@ -58,7 +66,9 @@ function buildServiceWithSpawnTracker(chunks: RetrievedChunk[]): {
     throw new Error("provider.generate (real spawn) must not be reached on this branch");
   }) as unknown as typeof import("node:child_process").spawn;
   const provider = new ClaudeCliProvider(trackedSpawn);
-  const service = new PersonaTurnService(persona, retrieval as RetrievalService, provider);
+  const gemini = new GeminiCliProvider(trackedSpawn);
+  const registry = new LlmAgentRegistry(provider, gemini);
+  const service = new PersonaTurnService(persona, retrieval as RetrievalService, registry);
   return { service, spawnCalls: () => calls };
 }
 
@@ -174,7 +184,7 @@ describe("PersonaTurnService", () => {
     const persona = new PersonaService();
     const retrieval = makeRetrieval(chunks) as RetrievalService;
     let capturedPreviousTurns: unknown;
-    const provider = {
+    const registry = {
       generateFixture(input: { previousTurns?: unknown }, _ctx: unknown) {
         capturedPreviousTurns = input.previousTurns;
         return {
@@ -186,8 +196,8 @@ describe("PersonaTurnService", () => {
       async generate() {
         throw new Error("real generate must not run in fixture test");
       }
-    } as unknown as ClaudeCliProvider;
-    const service = new PersonaTurnService(persona, retrieval, provider);
+    } as unknown as LlmAgentRegistry;
+    const service = new PersonaTurnService(persona, retrieval, registry);
 
     const result = await service.execute({
       subject: "digital-engineering",
@@ -208,5 +218,51 @@ describe("PersonaTurnService", () => {
       { queryText: "q4", responseText: "a4" }
     ]);
     assert.equal(result.sources[0]?.sourcePdfPath, "de.pdf");
+  });
+
+  it("routes real mode through the requested Gemini agent adapter", async () => {
+    delete process.env.STUDY_NOTE_LLM_FIXTURE;
+    process.env.STUDY_NOTE_LLM_REAL_OPT_IN = "1";
+    const chunks: RetrievedChunk[] = [
+      {
+        ord: 0,
+        corpusId: "cmovexample0001abcd",
+        sourcePdfPath: "/Users/mj/private/de.pdf",
+        text: "반가산기는 ...",
+        score: 0.91
+      }
+    ];
+    const persona = new PersonaService();
+    const retrieval = makeRetrieval(chunks) as RetrievalService;
+    let capturedAgent: unknown;
+    let capturedUserMessage: unknown;
+    const registry = {
+      generateFixture() {
+        throw new Error("fixture must not run in requested real Gemini path");
+      },
+      async generate(agent: unknown, input: { userMessage?: unknown }) {
+        capturedAgent = agent;
+        capturedUserMessage = input.userMessage;
+        return {
+          text: "Gemini real answer",
+          provider: "gemini-cli",
+          modelName: "gemini-cli@unspecified"
+        };
+      }
+    } as unknown as LlmAgentRegistry;
+    const service = new PersonaTurnService(persona, retrieval, registry);
+
+    const result = await service.execute({
+      subject: "digital-engineering",
+      queryText: "현재 질문",
+      k: 1,
+      requestMode: "real",
+      requestAgent: "gemini-cli"
+    });
+
+    assert.equal(capturedAgent, "gemini-cli");
+    assert.equal(capturedUserMessage, "현재 질문");
+    assert.equal(result.provider, "gemini-cli");
+    assert.match(result.response, /^\[디공이\]/);
   });
 });

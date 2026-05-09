@@ -181,6 +181,10 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
       () => assertSafeClaudeArgs(["-p", "--permission-mode", "bypassPermissions"]),
       /unsafe Claude CLI permission mode/
     );
+    assert.throws(
+      () => assertSafeClaudeArgs(["-p", "--permission-mode=bypassPermissions"]),
+      /unsafe Claude CLI permission mode/
+    );
     assert.doesNotThrow(() => assertSafeClaudeArgs(["-p"]));
   });
 

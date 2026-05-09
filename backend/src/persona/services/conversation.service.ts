@@ -160,6 +160,7 @@ export class ConversationService {
       queryText: dto.query,
       k: dto.k ?? 5,
       requestMode: dto.mode,
+      requestAgent: dto.agent,
       conversationId,
       previousTurns
     });
@@ -193,7 +194,8 @@ export class ConversationService {
     return this.appendTurn(conversation.id, {
       query: dto.query,
       k: dto.k,
-      mode: dto.mode
+      mode: dto.mode,
+      agent: dto.agent
     });
   }
 }

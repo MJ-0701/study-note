@@ -9,6 +9,7 @@ import {
   createConversation,
   fetchConversation,
   PersonaTurnApiError,
+  type Agent,
   type PersonaTurnResult
 } from "./api/personaTurns";
 
@@ -23,6 +24,7 @@ type ChatTurn = PersonaTurnResult & {
 
 export function App() {
   const [mode, setMode] = useState<Mode>("fixture");
+  const [agent, setAgent] = useState<Agent>("gemini-cli");
   const [consentDelayActive, setConsentDelayActive] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(() =>
     window.localStorage.getItem(CONVERSATION_STORAGE_KEY)
@@ -118,7 +120,8 @@ export function App() {
         conversationId: activeConversationId,
         query: input.query,
         k: input.k,
-        mode
+        mode,
+        agent
       });
       if (!next.conversationId || !next.turnId || !next.createdAt) {
         throw new Error("대화 응답 metadata 누락");
@@ -145,6 +148,7 @@ export function App() {
   }
 
   const externalDisabled = consentDelayActive || isSubmitting || historyLoading;
+  const agentLabel = agent === "gemini-cli" ? "Gemini CLI" : "Claude CLI";
   const externalDisabledLabel = isSubmitting
     ? mode === "real"
       ? "응답 생성 중... (~30초)"
@@ -176,7 +180,32 @@ export function App() {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
         <ModeToggle mode={mode} onChange={setMode} disabled={isSubmitting} />
-        <ConsentBanner visible={mode === "real"} delayActive={consentDelayActive} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <label htmlFor="agent" style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>
+            Real agent
+          </label>
+          <select
+            id="agent"
+            value={agent}
+            onChange={(e) => {
+              setAgent(e.target.value as Agent);
+              setError(null);
+            }}
+            disabled={isSubmitting || mode !== "real"}
+            style={{
+              padding: "6px 10px",
+              fontSize: 13,
+              color: mode === "real" ? "#1f2937" : "#9ca3af",
+              background: "#ffffff",
+              border: "1px solid #d1d5db",
+              borderRadius: 6
+            }}
+          >
+            <option value="gemini-cli">Gemini CLI</option>
+            <option value="claude-cli">Claude CLI</option>
+          </select>
+        </div>
+        <ConsentBanner visible={mode === "real"} delayActive={consentDelayActive} agent={agent} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 13, color: "#6b7280" }}>
             {conversationId ? `현재 대화 ${conversationId.slice(0, 8)}...` : "새 대화 준비"}
@@ -242,7 +271,7 @@ export function App() {
           }}
         >
           {mode === "real"
-            ? "Claude 응답 생성 중... 보통 30~60초 걸려요."
+            ? `${agentLabel} 응답 생성 중... 보통 30~60초 걸려요.`
             : "응답 생성 중..."}
         </section>
       )}

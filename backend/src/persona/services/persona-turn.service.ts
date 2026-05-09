@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { basename } from "node:path";
-import { ClaudeCliProvider, resolveProviderMode } from "../providers/claude-cli.provider";
+import { LlmAgentRegistry } from "../providers/llm-agent.registry";
+import type { LlmAgentId } from "../providers/llm-provider.port";
+import { resolveLlmAgent, resolveProviderMode } from "../providers/llm-routing";
 import { PersonaService } from "./persona.service";
 import { RetrievalService, RetrievedChunk } from "./retrieval.service";
 
@@ -25,6 +27,8 @@ export interface PersonaTurnInput {
   k: number;
   /** sprint-5 D-S5-3 b additive — HTTP body 의 mode flag 가 routing priority lock. */
   requestMode?: "fixture" | "real";
+  /** real mode 에서 사용할 user-owned LLM Agent adapter. 미지정 시 env/default routing. */
+  requestAgent?: LlmAgentId;
   /** sprint-1 multi-turn — last N=3 previous turns only. */
   previousTurns?: PreviousTurn[];
   conversationId?: string;
@@ -58,7 +62,7 @@ export class PersonaTurnService {
   constructor(
     private readonly persona: PersonaService,
     private readonly retrieval: RetrievalService,
-    private readonly provider: ClaudeCliProvider
+    private readonly agentRegistry: LlmAgentRegistry
   ) {}
 
   async execute(input: PersonaTurnInput): Promise<PersonaTurnResult> {
@@ -85,22 +89,26 @@ export class PersonaTurnService {
       // real provider is allowed to fabricate teaching. Force a deterministic
       // refusal at the service layer so cloud send is never reached and the
       // "출처 없는 임의 teaching 금지" rule holds across providers.
-      llmResult = this.provider.generateFixture(
+      llmResult = this.agentRegistry.generateFixture(
         { systemPrompt, userMessage: queryText, previousTurns },
         { retrievalCount: 0, queryText, k }
       );
     } else if (mode === "fixture") {
-      llmResult = this.provider.generateFixture(
+      llmResult = this.agentRegistry.generateFixture(
         { systemPrompt, userMessage: queryText, previousTurns, retrievedChunks },
         { retrievalCount: chunks.length, queryText, k }
       );
     } else {
-      llmResult = await this.provider.generate({
-        systemPrompt,
-        userMessage: queryText,
-        previousTurns,
-        retrievedChunks
-      });
+      const agent = resolveLlmAgent(process.env, input.requestAgent);
+      llmResult = await this.agentRegistry.generate(
+        agent,
+        {
+          systemPrompt,
+          userMessage: queryText,
+          previousTurns,
+          retrievedChunks
+        }
+      );
     }
 
     const response = this.formatResponse({

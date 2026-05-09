@@ -11,6 +11,12 @@ export interface LlmGenerateInput {
   retrievedChunks?: ReadonlyArray<{ ord: number; text: string }>;
 }
 
+export const LLM_AGENT_IDS = ["claude-cli", "gemini-cli"] as const;
+
+export type LlmAgentId = (typeof LLM_AGENT_IDS)[number];
+
+export type LlmProviderMode = "fixture" | "real";
+
 export interface LlmGenerateResult {
   /** Raw model response text. PersonaTurnService formatter wraps this with
    *  invariant cues (persona name, provider banner, sources). */

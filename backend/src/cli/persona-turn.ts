@@ -1,12 +1,19 @@
 import { NestFactory } from "@nestjs/core";
 import { PersonaModule } from "../persona/persona.module";
-import { resolveProviderMode } from "../persona/providers/claude-cli.provider";
+import type { LlmAgentId } from "../persona/providers/llm-provider.port";
+import {
+  isLlmAgentId,
+  llmAgentLabel,
+  resolveLlmAgent,
+  resolveProviderMode
+} from "../persona/providers/llm-routing";
 import { PersonaTurnService } from "../persona/services/persona-turn.service";
 
 interface CliArgs {
   subject: string;
   query: string;
   k: number;
+  agent?: LlmAgentId;
 }
 
 const SUBJECT_DEFAULT = "digital-engineering";
@@ -16,6 +23,7 @@ function parseArgs(argv: string[]): CliArgs {
   let subject = SUBJECT_DEFAULT;
   let query: string | undefined;
   let k = K_DEFAULT;
+  let agent: LlmAgentId | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
@@ -31,24 +39,36 @@ function parseArgs(argv: string[]): CliArgs {
       k = Number.parseInt(argv[++i], 10);
     } else if (token.startsWith("--k=")) {
       k = Number.parseInt(token.slice("--k=".length), 10);
+    } else if (token === "--agent" && i + 1 < argv.length) {
+      const value = argv[++i];
+      if (!isLlmAgentId(value)) throw new Error(`unsupported --agent: ${value}`);
+      agent = value;
+    } else if (token.startsWith("--agent=")) {
+      const value = token.slice("--agent=".length);
+      if (!isLlmAgentId(value)) throw new Error(`unsupported --agent: ${value}`);
+      agent = value;
     }
   }
 
   if (!query) {
     throw new Error(
-      "usage: node backend/dist/cli/persona-turn.js --subject <slug> --query <text> [--k <int>]"
+      "usage: node backend/dist/cli/persona-turn.js --subject <slug> --query <text> [--k <int>] [--agent claude-cli|gemini-cli]"
     );
   }
   if (!Number.isFinite(k) || k < 1) {
     throw new Error(`--k must be a positive integer, got ${k}`);
   }
-  return { subject, query, k };
+  return { subject, query, k, agent };
 }
 
-function emitConsentBannerIfRealMode(): Promise<void> {
+function emitConsentBannerIfRealMode(agent: LlmAgentId | undefined): Promise<void> {
   if (resolveProviderMode() !== "real") return Promise.resolve();
+  const selectedAgent = resolveLlmAgent(process.env, agent);
+  const label = llmAgentLabel(selectedAgent);
+  const operator =
+    selectedAgent === "gemini-cli" ? "Google Gemini" : "Claude/Anthropic";
   const banner =
-    "[디공이] real-mode (provider=claude-cli) — 본 turn 의 질문 + retrieved PDF chunks 가 Claude CLI 를 통해 Anthropic API 로 송신됩니다. multi-turn HTTP API 에서는 직전 최대 3개 대화 turn 도 함께 송신될 수 있습니다. 송신 안 함이면 Ctrl+C 후 STUDY_NOTE_LLM_FIXTURE=1 로 재실행. (1초 후 진행)";
+    `[디공이] real-mode (agent=${selectedAgent}) — 본 turn 의 질문 + retrieved PDF chunks 가 ${label} 를 통해 ${operator} 로 송신됩니다. multi-turn HTTP API 에서는 직전 최대 3개 대화 turn 도 함께 송신될 수 있습니다. 송신 안 함이면 Ctrl+C 후 STUDY_NOTE_LLM_FIXTURE=1 로 재실행. (1초 후 진행)`;
   process.stderr.write(`${banner}\n`);
   const delayMs = Number.parseInt(
     process.env.STUDY_NOTE_LLM_CONSENT_DELAY_MS ?? "1000",
@@ -71,7 +91,7 @@ function preflightDatabaseUrl(): void {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   preflightDatabaseUrl();
-  await emitConsentBannerIfRealMode();
+  await emitConsentBannerIfRealMode(args.agent);
 
   const app = await NestFactory.createApplicationContext(PersonaModule, {
     logger: false,
@@ -82,7 +102,8 @@ async function main(): Promise<void> {
     const result = await turn.execute({
       subject: args.subject,
       queryText: args.query,
-      k: args.k
+      k: args.k,
+      requestAgent: args.agent
     });
 
     process.stdout.write(`${result.response}\n\n`);

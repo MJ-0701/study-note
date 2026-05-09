@@ -1,5 +1,8 @@
 // Conversation/Turn HTTP DTO: multi-turn 디공이 대화 API 입력 검증.
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
+import { LLM_AGENT_IDS, type LlmAgentId } from "../providers/llm-provider.port";
+
+const LLM_AGENT_VALUES = [...LLM_AGENT_IDS];
 
 export class CreateConversationRequestDto {
   @IsString()
@@ -23,4 +26,8 @@ export class AppendConversationTurnRequestDto {
   @IsOptional()
   @IsIn(["fixture", "real"])
   mode?: "fixture" | "real";
+
+  @IsOptional()
+  @IsIn(LLM_AGENT_VALUES)
+  agent?: LlmAgentId;
 }

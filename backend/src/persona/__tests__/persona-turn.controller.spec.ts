@@ -18,12 +18,13 @@ describe("PersonaTurnRequestDto validation (AC3)", () => {
     assert.equal(errors[0]?.property, "subject");
   });
 
-  it("accepts valid {subject, query, k, mode}", async () => {
+  it("accepts valid {subject, query, k, mode, agent}", async () => {
     const dto = plainToInstance(PersonaTurnRequestDto, {
       subject: "digital-engineering",
       query: "반가산기",
       k: 3,
-      mode: "fixture"
+      mode: "fixture",
+      agent: "gemini-cli"
     });
     const errors = await validate(dto);
     assert.equal(errors.length, 0, `expected 0 errors, got: ${JSON.stringify(errors)}`);
@@ -38,6 +39,17 @@ describe("PersonaTurnRequestDto validation (AC3)", () => {
     const errors = await validate(dto);
     assert.ok(errors.length > 0);
     assert.equal(errors[0]?.property, "mode");
+  });
+
+  it("rejects agent outside supported CLI adapters", async () => {
+    const dto = plainToInstance(PersonaTurnRequestDto, {
+      subject: "digital-engineering",
+      query: "test",
+      agent: "claude-only"
+    });
+    const errors = await validate(dto);
+    assert.ok(errors.length > 0);
+    assert.equal(errors[0]?.property, "agent");
   });
 });
 
@@ -72,7 +84,8 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
       subject: "digital-engineering",
       query: "반가산기",
       k: 3,
-      mode: "real"
+      mode: "real",
+      agent: "gemini-cli"
     });
     const result = await controller.run(dto);
 

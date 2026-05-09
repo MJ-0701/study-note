@@ -4,6 +4,8 @@
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "http://127.0.0.1:3001";
 
+export type Agent = "claude-cli" | "gemini-cli";
+
 export interface PersonaTurnSource {
   ord: number;
   corpusId: string;
@@ -47,6 +49,7 @@ export interface PersonaTurnSubmit {
   query: string;
   k?: number;
   mode?: "fixture" | "real";
+  agent?: Agent;
 }
 
 export interface ConversationSummary {
@@ -94,6 +97,7 @@ export async function appendConversationTurn(input: {
   query: string;
   k?: number;
   mode?: "fixture" | "real";
+  agent?: Agent;
 }): Promise<PersonaTurnResult> {
   const res = await fetch(
     `${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(input.conversationId)}/turns`,
@@ -103,7 +107,8 @@ export async function appendConversationTurn(input: {
       body: JSON.stringify({
         query: input.query,
         k: input.k,
-        mode: input.mode
+        mode: input.mode,
+        agent: input.agent
       })
     }
   );

@@ -40,6 +40,16 @@ describe("Conversation DTO validation", () => {
     assert.ok(errors.length > 0);
     assert.equal(errors[0]?.property, "mode");
   });
+
+  it("rejects invalid agent adapter", async () => {
+    const dto = plainToInstance(AppendConversationTurnRequestDto, {
+      query: "반가산기",
+      agent: "claude-only"
+    });
+    const errors = await validate(dto);
+    assert.ok(errors.length > 0);
+    assert.equal(errors[0]?.property, "agent");
+  });
 });
 
 describe("ConversationController", () => {
