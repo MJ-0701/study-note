@@ -26,7 +26,7 @@ project document surface.
 Default entry:
 - `sfs status`
 - current sprint `report.md` when one exists
-- `docs/<workspace>/<yyyyMMdd>/` for shared adoption or handoff summaries
+- `docs/solon/<english-workspace>/<yyyyMMdd>/` for shared adoption or handoff summaries
 - expand to private workbench/logs only when the routed context needs evidence
 
 Project overview refresh:
@@ -47,7 +47,11 @@ Do not show a question/recommendation-only choice table. When multiple options
 exist, show every viable option with its plain-language meaning and consequence,
 then mark the recommendation as the default. If that is too much for one view,
 ask one decision at a time instead of hiding alternatives.
+Never ask the user to confirm a compact option bundle such as `A/A/A/C/C`, and
+never answer "show the recommendation again" with only option labels or only
+the recommended row. Re-present the decision in plain language and use a natural
+confirmation phrase such as `권장안 그대로 확정`, not a label bundle.
 Keep only what must remain: `.sfs-local/` is private local workbench state,
-shared handoff/history docs live under `docs/<workspace>/<yyyyMMdd>/`,
+shared handoff/history docs live under `docs/solon/<english-workspace>/<yyyyMMdd>/`,
 project-wide Solon reference docs may live under `docs/solon/`, and step docs
 are created lazily.
