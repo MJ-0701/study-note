@@ -5,8 +5,8 @@ import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
 const require = createRequire(import.meta.url);
 const { NestFactory } = require("@nestjs/core");
-const { CorpusModule } = require("../apps/api/dist/corpus/corpus.module.js");
-const { IngestService } = require("../apps/api/dist/corpus/services/ingest.service.js");
+const { CorpusModule } = require("../packages/corpus/dist/corpus.module.js");
+const { IngestService } = require("../packages/corpus/dist/services/ingest.service.js");
 
 const SUBJECT = "digital-engineering";
 const QUERY = process.env.AC13_QUERY ?? "반가산기 핵심만 간단히";

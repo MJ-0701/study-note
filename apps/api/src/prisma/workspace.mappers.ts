@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type {
   AnnotationSnapshotRecord,
   PdfInkStroke,
@@ -79,10 +80,10 @@ export function toAnnotationSnapshotRecord(
 export function toAnnotationPayload(input: {
   stickyNotes: PdfStickyNote[];
   inkStrokes: PdfInkStroke[];
-}): Record<string, unknown> {
+}): Prisma.InputJsonValue {
   return {
-    stickyNotes: input.stickyNotes as unknown[],
-    inkStrokes: input.inkStrokes as unknown[]
+    stickyNotes: input.stickyNotes as unknown as Prisma.InputJsonArray,
+    inkStrokes: input.inkStrokes as unknown as Prisma.InputJsonArray
   };
 }
 

@@ -64,7 +64,9 @@ try {
       ...process.env,
       PORT: String(backendPort),
       DATABASE_URL: smokeDb.databaseUrl,
-      SESSION_TOKEN_PEPPER: smokeDb.sessionTokenPepper
+      SESSION_TOKEN_PEPPER: smokeDb.sessionTokenPepper,
+      // sprint-2 plan §3 AC10(d) — backend 의 startup-time fail-closed (main.ts) 가 STORAGE_PROVIDER 검증.
+      STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });

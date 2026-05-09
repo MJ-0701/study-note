@@ -332,6 +332,8 @@ function startBackend(port, db) {
       PORT: String(port),
       DATABASE_URL: db.databaseUrl,
       SESSION_TOKEN_PEPPER: db.sessionTokenPepper,
+      // sprint-2 plan §3 AC10(d) — backend 의 startup-time fail-closed (main.ts) 가 STORAGE_PROVIDER 검증.
+      STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local",
       PDF_UPLOAD_MAX_BYTES: "4096"
     },
     stdio: ["ignore", "ignore", "pipe"]

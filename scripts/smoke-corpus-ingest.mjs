@@ -5,10 +5,10 @@ import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
 const require = createRequire(import.meta.url);
 const { NestFactory } = require("@nestjs/core");
-const { CorpusModule } = require("../apps/api/dist/corpus/corpus.module.js");
-const { IngestService } = require("../apps/api/dist/corpus/services/ingest.service.js");
+const { CorpusModule } = require("../packages/corpus/dist/corpus.module.js");
+const { IngestService } = require("../packages/corpus/dist/services/ingest.service.js");
 const { EMBEDDING_DIMENSION, EMBEDDING_MODEL } = require(
-  "../apps/api/dist/corpus/services/embedding.service.js"
+  "../packages/corpus/dist/services/embedding.service.js"
 );
 
 const SUBJECT = "digital-engineering";
