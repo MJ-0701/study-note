@@ -3,6 +3,8 @@ export interface LlmGenerateInput {
   /** Raw user query (no `User question:` label, no chunks). The provider
    *  is responsible for adding the label exactly once. */
   userMessage: string;
+  /** Previous turns are untrusted user/model transcript data, not instructions. */
+  previousTurns?: ReadonlyArray<{ queryText: string; responseText: string }>;
   /** Optional retrieved PDF chunks. When provided, the provider must place
    *  them BEFORE the final `User question:` line so the model sees the
    *  citations as context (sprint-3 R3 contract). */

@@ -10,12 +10,24 @@ function pdfBasename(p: string): string {
   return basename(p);
 }
 
+function sourceLabel(p: string): string {
+  return pdfBasename(p);
+}
+
+export interface PreviousTurn {
+  queryText: string;
+  responseText: string;
+}
+
 export interface PersonaTurnInput {
   subject: string;
   queryText: string;
   k: number;
   /** sprint-5 D-S5-3 b additive — HTTP body 의 mode flag 가 routing priority lock. */
   requestMode?: "fixture" | "real";
+  /** sprint-1 multi-turn — last N=3 previous turns only. */
+  previousTurns?: PreviousTurn[];
+  conversationId?: string;
 }
 
 export interface PersonaTurnSource {
@@ -36,6 +48,9 @@ export interface PersonaTurnResult {
   modelName: string;
   retrievalCount: number;
   isFallback: boolean;
+  conversationId?: string;
+  turnId?: string;
+  createdAt?: string;
 }
 
 @Injectable()
@@ -61,6 +76,7 @@ export class PersonaTurnService {
 
     const systemPrompt = this.persona.systemPromptFor(archetype);
     const retrievedChunks = chunks.map((c) => ({ ord: c.ord, text: c.text }));
+    const previousTurns = (input.previousTurns ?? []).slice(-3);
 
     const mode = resolveProviderMode(process.env, requestMode);
     let llmResult;
@@ -70,18 +86,19 @@ export class PersonaTurnService {
       // refusal at the service layer so cloud send is never reached and the
       // "출처 없는 임의 teaching 금지" rule holds across providers.
       llmResult = this.provider.generateFixture(
-        { systemPrompt, userMessage: queryText },
+        { systemPrompt, userMessage: queryText, previousTurns },
         { retrievalCount: 0, queryText, k }
       );
     } else if (mode === "fixture") {
       llmResult = this.provider.generateFixture(
-        { systemPrompt, userMessage: queryText, retrievedChunks },
+        { systemPrompt, userMessage: queryText, previousTurns, retrievedChunks },
         { retrievalCount: chunks.length, queryText, k }
       );
     } else {
       llmResult = await this.provider.generate({
         systemPrompt,
         userMessage: queryText,
+        previousTurns,
         retrievedChunks
       });
     }
@@ -104,7 +121,7 @@ export class PersonaTurnService {
       sources: chunks.map((c) => ({
         ord: c.ord,
         corpusId: c.corpusId,
-        sourcePdfPath: c.sourcePdfPath,
+        sourcePdfPath: sourceLabel(c.sourcePdfPath),
         score: c.score
       })),
       provider: llmResult.provider,

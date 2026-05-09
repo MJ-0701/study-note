@@ -22,6 +22,9 @@ export interface PersonaTurnResult {
   modelName: string;
   retrievalCount: number;
   isFallback: boolean;
+  conversationId?: string;
+  turnId?: string;
+  createdAt?: string;
 }
 
 export interface BackendErrorResponse {
@@ -46,6 +49,67 @@ export interface PersonaTurnSubmit {
   mode?: "fixture" | "real";
 }
 
+export interface ConversationSummary {
+  id: string;
+  subject: string;
+  personaName: string;
+  createdAt: string;
+}
+
+export interface ConversationTurn {
+  turnId: string;
+  conversationId: string;
+  subject: string;
+  query: string;
+  k: number;
+  response: string;
+  sources: PersonaTurnSource[];
+  provider: string;
+  modelName: string;
+  retrievalCount: number;
+  isFallback: boolean;
+  createdAt: string;
+}
+
+export interface ConversationHistory extends ConversationSummary {
+  turns: ConversationTurn[];
+}
+
+export async function createConversation(subject: string): Promise<ConversationSummary> {
+  const res = await fetch(`${BACKEND_BASE}/api/v1/conversations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject })
+  });
+  return parseJsonResponse<ConversationSummary>(res);
+}
+
+export async function fetchConversation(id: string): Promise<ConversationHistory> {
+  const res = await fetch(`${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(id)}`);
+  return parseJsonResponse<ConversationHistory>(res);
+}
+
+export async function appendConversationTurn(input: {
+  conversationId: string;
+  query: string;
+  k?: number;
+  mode?: "fixture" | "real";
+}): Promise<PersonaTurnResult> {
+  const res = await fetch(
+    `${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(input.conversationId)}/turns`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: input.query,
+        k: input.k,
+        mode: input.mode
+      })
+    }
+  );
+  return parseJsonResponse<PersonaTurnResult>(res);
+}
+
 export async function submitPersonaTurn(input: PersonaTurnSubmit): Promise<PersonaTurnResult> {
   const res = await fetch(`${BACKEND_BASE}/api/v1/persona-turns`, {
     method: "POST",
@@ -53,6 +117,10 @@ export async function submitPersonaTurn(input: PersonaTurnSubmit): Promise<Perso
     body: JSON.stringify(input)
   });
 
+  return parseJsonResponse<PersonaTurnResult>(res);
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let body: BackendErrorResponse | undefined;
     try {
@@ -63,5 +131,5 @@ export async function submitPersonaTurn(input: PersonaTurnSubmit): Promise<Perso
     throw new PersonaTurnApiError(res.status, body, `HTTP ${res.status}`);
   }
 
-  return (await res.json()) as PersonaTurnResult;
+  return (await res.json()) as T;
 }

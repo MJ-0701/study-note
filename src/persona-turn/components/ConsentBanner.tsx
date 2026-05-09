@@ -25,7 +25,8 @@ export function ConsentBanner({ visible, delayActive }: ConsentBannerProps) {
       }}
     >
       <strong>Claude 호출 활성</strong> — 질문 + PDF chunk 가 Claude CLI 를 통해 Anthropic API 로 송신됩니다.
-      송신 원치 않으시면 위 모드를 데모로 되돌리세요.
+      이어지는 대화에서는 직전 최대 3개 질문/응답도 함께 전송될 수 있습니다. 송신 원치 않으시면
+      위 모드를 데모로 되돌리세요.
       {delayActive && <span style={{ fontWeight: 600, marginLeft: 4 }}>(1초 후 진행)</span>}
     </section>
   );

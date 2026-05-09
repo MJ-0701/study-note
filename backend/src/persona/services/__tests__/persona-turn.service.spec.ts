@@ -160,4 +160,53 @@ describe("PersonaTurnService", () => {
     assert.match(result.response, /npm run ingest:pdf/);
     assert.match(result.response, /FIXTURE:/);
   });
+
+  it("passes only the last 3 previous turns to provider input", async () => {
+    const chunks: RetrievedChunk[] = [
+      {
+        ord: 0,
+        corpusId: "cmovexample0001abcd",
+        sourcePdfPath: "/Users/mj/private/de.pdf",
+        text: "반가산기는 ...",
+        score: 0.91
+      }
+    ];
+    const persona = new PersonaService();
+    const retrieval = makeRetrieval(chunks) as RetrievalService;
+    let capturedPreviousTurns: unknown;
+    const provider = {
+      generateFixture(input: { previousTurns?: unknown }, _ctx: unknown) {
+        capturedPreviousTurns = input.previousTurns;
+        return {
+          text: "FIXTURE: previous turns captured",
+          provider: "claude-cli-fixture",
+          modelName: "claude-cli@stub-fixture"
+        };
+      },
+      async generate() {
+        throw new Error("real generate must not run in fixture test");
+      }
+    } as unknown as ClaudeCliProvider;
+    const service = new PersonaTurnService(persona, retrieval, provider);
+
+    const result = await service.execute({
+      subject: "digital-engineering",
+      queryText: "현재 질문",
+      k: 1,
+      requestMode: "fixture",
+      previousTurns: [
+        { queryText: "q1", responseText: "a1" },
+        { queryText: "q2", responseText: "a2" },
+        { queryText: "q3", responseText: "a3" },
+        { queryText: "q4", responseText: "a4" }
+      ]
+    });
+
+    assert.deepEqual(capturedPreviousTurns, [
+      { queryText: "q2", responseText: "a2" },
+      { queryText: "q3", responseText: "a3" },
+      { queryText: "q4", responseText: "a4" }
+    ]);
+    assert.equal(result.sources[0]?.sourcePdfPath, "de.pdf");
+  });
 });

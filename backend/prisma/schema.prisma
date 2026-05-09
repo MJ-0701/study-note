@@ -95,3 +95,34 @@ model Chunk {
   @@unique([corpusId, ord])
   @@index([corpusId])
 }
+
+model Conversation {
+  id          String   @id @default(cuid())
+  subject     String
+  personaName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  turns Turn[]
+
+  @@index([subject, createdAt])
+}
+
+model Turn {
+  id             String   @id @default(cuid())
+  conversationId String
+  subject        String
+  query          String   @db.Text
+  k              Int
+  response       String   @db.LongText
+  sources        Json
+  provider       String
+  modelName      String
+  retrievalCount Int
+  isFallback     Boolean
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}

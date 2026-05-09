@@ -4,7 +4,7 @@ import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import { PersonaTurnRequestDto } from "../dto/persona-turn-request.dto";
 import { PersonaTurnController } from "../persona-turn.controller";
-import type { PersonaTurnResult, PersonaTurnService } from "../services/persona-turn.service";
+import type { ConversationService, PersonaTurnHttpResult } from "../services/conversation.service";
 
 // sprint-5 plan §3 AC4 — persona-turn controller 단위 테스트 (validation + happy path).
 // HTTP transport (NestApplicationContext + supertest) 대신 controller 메서드를 직접 호출
@@ -42,8 +42,8 @@ describe("PersonaTurnRequestDto validation (AC3)", () => {
 });
 
 describe("PersonaTurnController.run (AC4 happy path)", () => {
-  it("delegates to PersonaTurnService.execute with correct shape + propagates result", async () => {
-    const stubResult: PersonaTurnResult = {
+  it("delegates to ConversationService.runStandalone + propagates additive result", async () => {
+    const stubResult: PersonaTurnHttpResult = {
       personaName: "디공이",
       subject: "digital-engineering",
       query: "반가산기",
@@ -53,16 +53,19 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
       provider: "claude-cli-fixture",
       modelName: "claude-cli@stub-fixture",
       retrievalCount: 0,
-      isFallback: true
+      isFallback: true,
+      conversationId: "cmulti0000000000000000000",
+      turnId: "cmulti0000000000000000001",
+      createdAt: "2026-05-09T00:00:00.000Z"
     };
 
-    let capturedInput: unknown;
+    let capturedInput: PersonaTurnRequestDto | undefined;
     const fakeService = {
-      async execute(input: unknown) {
-        capturedInput = input;
+      async runStandalone(dto: PersonaTurnRequestDto) {
+        capturedInput = dto;
         return stubResult;
       }
-    } as unknown as PersonaTurnService;
+    } as unknown as ConversationService;
 
     const controller = new PersonaTurnController(fakeService);
     const dto = plainToInstance(PersonaTurnRequestDto, {
@@ -73,23 +76,18 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
     });
     const result = await controller.run(dto);
 
-    assert.deepEqual(capturedInput, {
-      subject: "digital-engineering",
-      queryText: "반가산기",
-      k: 3,
-      requestMode: "real"
-    });
+    assert.equal(capturedInput, dto);
     assert.equal(result, stubResult);
   });
 
-  it("defaults k to 5 when omitted", async () => {
-    let capturedInput: { k: number } | undefined;
+  it("preserves omitted k for compatibility wrapper to default downstream", async () => {
+    let capturedInput: PersonaTurnRequestDto | undefined;
     const fakeService = {
-      async execute(input: { k: number }) {
-        capturedInput = input;
-        return { k: input.k } as unknown as PersonaTurnResult;
+      async runStandalone(dto: PersonaTurnRequestDto) {
+        capturedInput = dto;
+        return { k: dto.k ?? 5 } as unknown as PersonaTurnHttpResult;
       }
-    } as unknown as PersonaTurnService;
+    } as unknown as ConversationService;
 
     const controller = new PersonaTurnController(fakeService);
     const dto = plainToInstance(PersonaTurnRequestDto, {
@@ -97,6 +95,6 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
       query: "test"
     });
     await controller.run(dto);
-    assert.equal(capturedInput?.k, 5);
+    assert.equal(capturedInput?.k, undefined);
   });
 });

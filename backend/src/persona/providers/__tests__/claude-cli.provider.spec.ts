@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   ClaudeCliProvider,
+  assertSafeClaudeArgs,
+  buildClaudeCliStdin,
   buildFixtureRawResponse,
   resolveProviderMode
 } from "../claude-cli.provider";
@@ -138,7 +140,7 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
     });
 
     assert.equal(captured.command, "claude");
-    assert.deepEqual(captured.args, ["-p", "--dangerously-skip-permissions"]);
+    assert.deepEqual(captured.args, ["-p"]);
     assert.match(mockChild.stdin.written, /system prompt body/);
     assert.match(mockChild.stdin.written, /User question: 반가산기/);
     // Provider is the SOLE owner of the "User question:" label — caller (PersonaTurnService)
@@ -153,11 +155,11 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
     assert.equal(result.provider, "claude-cli");
   });
 
-  it("throws when child exits non-zero, embedding first stderr line", async () => {
+  it("throws when child exits non-zero with redacted stderr summary", async () => {
     const mockChild = makeMockChild();
     const spawnFn = (() => {
       setImmediate(() => {
-        mockChild.stderr.emit("data", "Error: rate limit\nadditional detail");
+        mockChild.stderr.emit("data", "Error: rate limit at /Users/mj/private-note.txt\nadditional detail");
         mockChild.emit("close", 7);
       });
       return mockChild as unknown as ReturnType<typeof import("node:child_process").spawn>;
@@ -166,8 +168,20 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
     const provider = new ClaudeCliProvider(spawnFn, 5_000);
     await assert.rejects(
       () => provider.generate({ systemPrompt: "s", userMessage: "u" }),
-      /claude CLI exited 7\. stderr: Error: rate limit/
+      /claude CLI exited 7\. stderr: Error: rate limit at <path-redacted>/
     );
+  });
+
+  it("rejects dangerous permission bypass args for backend real mode", () => {
+    assert.throws(
+      () => assertSafeClaudeArgs(["-p", "--dangerously-skip-permissions"]),
+      /unsafe Claude CLI permission mode/
+    );
+    assert.throws(
+      () => assertSafeClaudeArgs(["-p", "--permission-mode", "bypassPermissions"]),
+      /unsafe Claude CLI permission mode/
+    );
+    assert.doesNotThrow(() => assertSafeClaudeArgs(["-p"]));
   });
 
   it("stdin payload places chunks BEFORE User question, with query as the final line (R3 contract)", async () => {
@@ -192,11 +206,13 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
 
     const written = mockChild.stdin.written;
     const chunkPos = written.indexOf("chunk[0]:");
+    const untrustedPos = written.indexOf("UNTRUSTED_CONTEXT_START");
     const userQuestionPos = written.indexOf("User question:");
+    assert.ok(untrustedPos >= 0, "stdin must delimit retrieved chunks as untrusted context");
     assert.ok(chunkPos >= 0, "stdin must contain chunk[0]: marker");
     assert.ok(userQuestionPos >= 0, "stdin must contain User question: label");
     assert.ok(
-      chunkPos < userQuestionPos,
+      untrustedPos < chunkPos && chunkPos < userQuestionPos,
       `chunks must appear BEFORE User question:; got chunkPos=${chunkPos}, userQuestionPos=${userQuestionPos}`
     );
     // User question: line must contain ONLY the raw query, not the chunks
@@ -223,8 +239,32 @@ describe("ClaudeCliProvider real-mode (mocked spawn)", () => {
 
     const written = mockChild.stdin.written;
     assert.ok(!/Retrieved PDF chunks:/.test(written), "no chunk block expected");
+    assert.ok(!/UNTRUSTED_CONTEXT_START/.test(written), "no untrusted context block expected");
     assert.ok(!/chunk\[/.test(written), "no chunk[ marker expected");
     assert.match(written, /User question: raw query/);
+  });
+
+  it("delimits previous turns and chunks before final User question", () => {
+    const stdin = buildClaudeCliStdin({
+      systemPrompt: "system",
+      userMessage: "현재 질문",
+      previousTurns: [
+        { queryText: "이전 질문", responseText: "이전 답변" }
+      ],
+      retrievedChunks: [{ ord: 2, text: "PDF text" }]
+    });
+
+    const untrustedStart = stdin.indexOf("UNTRUSTED_CONTEXT_START");
+    const prevPos = stdin.indexOf("turn[1].user: 이전 질문");
+    const chunkPos = stdin.indexOf("chunk[2]: PDF text");
+    const untrustedEnd = stdin.indexOf("UNTRUSTED_CONTEXT_END");
+    const questionPos = stdin.indexOf("User question: 현재 질문");
+
+    assert.ok(untrustedStart >= 0);
+    assert.ok(untrustedStart < prevPos);
+    assert.ok(prevPos < chunkPos);
+    assert.ok(chunkPos < untrustedEnd);
+    assert.ok(untrustedEnd < questionPos);
   });
 
   it("throws on timeout and SIGKILL the child", async () => {
