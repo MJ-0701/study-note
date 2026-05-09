@@ -1,4 +1,4 @@
-import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "../domain/workspace.types";
+import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
 import type { Readable } from "node:stream";
 
 export interface UploadIntent {

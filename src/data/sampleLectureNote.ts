@@ -1,4 +1,4 @@
-import type { StudyNotebook, SubjectNote } from "../domain/lectureNote";
+import type { StudyNotebook, SubjectNote } from "@study-note/domain";
 
 const digitalEngineering: SubjectNote = {
   id: "digital-engineering",

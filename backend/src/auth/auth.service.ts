@@ -1,5 +1,5 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
-import type { UserProfile } from "../domain/workspace.types";
+import type { UserProfile } from "@study-note/domain";
 import { SessionsService } from "./sessions.service";
 import { UsersService } from "./users.service";
 

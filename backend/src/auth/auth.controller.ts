@@ -7,7 +7,7 @@ import {
   Req,
   UseGuards
 } from "@nestjs/common";
-import type { UserProfile } from "../domain/workspace.types";
+import type { UserProfile } from "@study-note/domain";
 import { AuthService } from "./auth.service";
 import { getBearerToken, SessionAuthGuard } from "./session-auth.guard";
 

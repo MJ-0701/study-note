@@ -23,6 +23,10 @@ export interface PdfStickyNote {
   anchor: NormalizedPoint;
   blocks: PdfStickyNoteBlock[];
   updatedAt: string;
+  materialId?: string;
+  ownerUserId?: string;
+  page?: number;
+  createdAt?: string;
 }
 
 export interface PdfInkStroke {
@@ -32,6 +36,31 @@ export interface PdfInkStroke {
   width: number;
   points: PdfInkPoint[];
   createdAt: string;
+  strokeId?: string;
+}
+
+export interface PdfMaterialRecord {
+  id: string;
+  ownerId: string;
+  subjectId: string;
+  classDate: string;
+  fileName: string;
+  fileSize: number;
+  pageCount: number;
+  contentType: string;
+  storageKey: string;
+  uploadStatus: "pending" | "uploaded";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnnotationSnapshotRecord {
+  materialId: string;
+  ownerId: string;
+  schemaVersion: 1;
+  stickyNotes: PdfStickyNote[];
+  inkStrokes: PdfInkStroke[];
+  savedAt: string;
 }
 
 export interface PdfMaterialDraft {

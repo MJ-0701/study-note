@@ -24,12 +24,12 @@ import {
   type StudyNotebook,
   type SubjectNote,
   type WeekNote
-} from "./domain/lectureNote";
+} from "@study-note/domain";
 import {
   applyWeekNoteImport,
   sanitizeWeekNoteImportPayload,
   validateWeekNoteImportPayload
-} from "./domain/lectureNoteImport";
+} from "@study-note/domain";
 import {
   createInkStroke,
   createPdfMaterialFromBackend,
@@ -45,7 +45,7 @@ import {
   type PdfWorkspaceTool,
   type StickyNoteBlockKind,
   type SubjectPdfWorkspace
-} from "./domain/pdfWorkspace";
+} from "@study-note/domain";
 import "./styles.css";
 
 type Route =

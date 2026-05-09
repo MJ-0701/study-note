@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { UserProfile } from "../domain/workspace.types";
+import type { UserProfile } from "@study-note/domain";
 import { PrismaService } from "../prisma/prisma.service";
 import { toUserProfile } from "../prisma/workspace.mappers";
 

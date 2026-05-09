@@ -11,7 +11,7 @@ import {
   StreamableFile,
   UseGuards
 } from "@nestjs/common";
-import type { UserProfile } from "../domain/workspace.types";
+import type { UserProfile } from "@study-note/domain";
 import { SessionAuthGuard } from "../auth/session-auth.guard";
 import { MaterialsService, parseAnnotationBody, parseUploadIntentBody } from "./materials.service";
 

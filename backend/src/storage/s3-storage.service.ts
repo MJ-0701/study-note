@@ -1,7 +1,7 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Injectable } from "@nestjs/common";
 import { Readable } from "node:stream";
-import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "../domain/workspace.types";
+import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
 import type {
   DownloadIntent,
   ExportBundle,

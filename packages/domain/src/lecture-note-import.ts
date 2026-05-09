@@ -7,7 +7,7 @@ import {
   type StudyNotebook,
   type SubjectNote,
   type WeekNote
-} from "./lectureNote";
+} from "./lecture-note";
 
 export interface WeekNoteImportPayload {
   schemaVersion: "study-note.week-note.v1";

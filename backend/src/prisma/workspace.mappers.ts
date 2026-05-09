@@ -10,7 +10,7 @@ import type {
   PdfMaterialRecord,
   PdfStickyNote,
   UserProfile
-} from "../domain/workspace.types";
+} from "@study-note/domain";
 
 export function toUserProfile(user: User): UserProfile {
   return {

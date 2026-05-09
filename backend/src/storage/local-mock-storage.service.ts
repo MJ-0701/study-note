@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Readable } from "node:stream";
-import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "../domain/workspace.types";
+import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
 import type {
   DownloadIntent,
   ExportBundle,

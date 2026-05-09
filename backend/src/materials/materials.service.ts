@@ -12,7 +12,7 @@ import type {
   PdfInkStroke,
   PdfMaterialRecord,
   PdfStickyNote
-} from "../domain/workspace.types";
+} from "@study-note/domain";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   toAnnotationPayload,
