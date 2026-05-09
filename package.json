@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.10.0"
+  },
+  "packageManager": "pnpm@11.0.9",
+  "prisma": {
+    "schema": "backend/prisma/schema.prisma"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:backend": "npm run prisma:migrate:deploy && npm run prisma:seed && npm run build:backend && node --env-file-if-exists=.env backend/dist/main.js",

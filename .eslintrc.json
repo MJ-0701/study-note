@@ -1,0 +1,11 @@
+{
+  "root": true,
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "backend/dist",
+    "apps/*/dist",
+    "packages/*/dist",
+    ".sfs-local"
+  ]
+}
