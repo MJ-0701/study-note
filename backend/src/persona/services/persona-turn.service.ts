@@ -14,6 +14,8 @@ export interface PersonaTurnInput {
   subject: string;
   queryText: string;
   k: number;
+  /** sprint-5 D-S5-3 b additive — HTTP body 의 mode flag 가 routing priority lock. */
+  requestMode?: "fixture" | "real";
 }
 
 export interface PersonaTurnSource {
@@ -45,7 +47,7 @@ export class PersonaTurnService {
   ) {}
 
   async execute(input: PersonaTurnInput): Promise<PersonaTurnResult> {
-    const { subject, queryText, k } = input;
+    const { subject, queryText, k, requestMode } = input;
 
     const archetype = this.persona.archetypeFor(subject);
     if (!archetype) {
@@ -60,7 +62,7 @@ export class PersonaTurnService {
     const systemPrompt = this.persona.systemPromptFor(archetype);
     const retrievedChunks = chunks.map((c) => ({ ord: c.ord, text: c.text }));
 
-    const mode = resolveProviderMode();
+    const mode = resolveProviderMode(process.env, requestMode);
     let llmResult;
     if (isFallback) {
       // ADR 0004 (b) invariant — when retrieval is empty, neither fixture nor

@@ -78,6 +78,23 @@ describe("resolveProviderMode (routing rule)", () => {
   it("neither set → fixture (default, no Anthropic send)", () => {
     assert.equal(resolveProviderMode({} as NodeJS.ProcessEnv), "fixture");
   });
+  it("requestMode wins over env (sprint-5 D-S5-3 b priority lock — AC4)", () => {
+    // requestMode = real → env 의 FIXTURE=1 무시하고 real
+    assert.equal(
+      resolveProviderMode({ STUDY_NOTE_LLM_FIXTURE: "1" } as NodeJS.ProcessEnv, "real"),
+      "real"
+    );
+    // requestMode = fixture → env 의 REAL_OPT_IN=1 무시하고 fixture
+    assert.equal(
+      resolveProviderMode({ STUDY_NOTE_LLM_REAL_OPT_IN: "1" } as NodeJS.ProcessEnv, "fixture"),
+      "fixture"
+    );
+    // requestMode 미지정 시 sprint-3 routing 정확 회귀
+    assert.equal(
+      resolveProviderMode({ STUDY_NOTE_LLM_REAL_OPT_IN: "1" } as NodeJS.ProcessEnv, undefined),
+      "real"
+    );
+  });
 });
 
 describe("buildFixtureRawResponse", () => {

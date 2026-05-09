@@ -6,7 +6,7 @@ import {
   LlmProvider
 } from "./llm-provider.port";
 
-export const CLAUDE_CLI_DEFAULT_TIMEOUT_MS = 30_000;
+export const CLAUDE_CLI_DEFAULT_TIMEOUT_MS = 90_000;
 const CLAUDE_CLI_COMMAND = "claude";
 const CLAUDE_CLI_ARGS = ["-p", "--dangerously-skip-permissions"];
 
@@ -19,12 +19,21 @@ export interface FixtureContext {
 }
 
 /**
- * Provider routing rule (plan §1.5.4 / R7 SSoT):
- *   1) STUDY_NOTE_LLM_FIXTURE=1            → fixture (top precedence).
- *   2) STUDY_NOTE_LLM_REAL_OPT_IN=1 (and !1) → real Claude CLI subprocess.
- *   3) neither set                          → fixture (default — Anthropic 송신 0).
+ * Provider routing rule (plan §1.5.4 / R7 SSoT + sprint-5 D-S5-3 b additive):
+ *   1) requestMode (sprint-5 HTTP body field)  → 명시 lock (top precedence)
+ *   2) STUDY_NOTE_LLM_FIXTURE=1                → fixture
+ *   3) STUDY_NOTE_LLM_REAL_OPT_IN=1            → real Claude CLI subprocess
+ *   4) neither                                 → fixture (default — Anthropic 송신 0)
+ *
+ * sprint-5 가 signature 를 *additive* 확장. 기존 호출 `resolveProviderMode()` =
+ * `resolveProviderMode(undefined, undefined)` 와 동일 동작 (sprint-3 spec 4 case 회귀 PASS).
+ * sprint-5 신규 spec 1 case = priority lock.
  */
-export function resolveProviderMode(env = process.env): "fixture" | "real" {
+export function resolveProviderMode(
+  env: NodeJS.ProcessEnv = process.env,
+  requestMode?: "fixture" | "real"
+): "fixture" | "real" {
+  if (requestMode === "fixture" || requestMode === "real") return requestMode;
   if (env.STUDY_NOTE_LLM_FIXTURE === "1") return "fixture";
   if (env.STUDY_NOTE_LLM_REAL_OPT_IN === "1") return "real";
   return "fixture";

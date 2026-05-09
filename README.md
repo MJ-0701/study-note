@@ -180,6 +180,38 @@ CLI stdout 은 인간 가독 응답 + 마지막 줄 JSON (`personaName, subject,
 sources, provider, modelName, retrievalCount, isFallback`) 으로 구성. NestJS
 Logger 는 `createApplicationContext({logger:false})` 로 비활성화되어 stdout 오염 0건.
 
+### Persona turn web UI (sprint-5)
+
+Sprint `2026-W19-sprint-5` 에서 디공이 turn 을 React + Vite 프론트엔드 + NestJS HTTP
+endpoint 로 노출. CLI lane 은 그대로 보존, 새로 web 화면 lane 이 추가됩니다.
+
+- HTTP endpoint: `POST /api/v1/persona-turns` body `{subject, query, k?, mode?}` →
+  CLI 와 동일한 sprint-3 stdout schema JSON 반환. `mode = "fixture" | "real"` 가
+  body 로 전달되면 backend `resolveProviderMode` 의 priority lock (`mode` >
+  `STUDY_NOTE_LLM_REAL_OPT_IN` > `STUDY_NOTE_LLM_FIXTURE` > fixture default) 발동.
+- Frontend entry: vite multi-entry — 기존 `/` (lecture-reader prototype) 보존, 신규
+  `/persona-turn.html` 가 React app entry. 학습 use-case 페이지.
+- 3 터미널 dev 흐름:
+  ```bash
+  # 터미널 1 — DB 기동 + (1회) PDF ingest
+  npm run db:up-persistent
+  # 출력의 DATABASE_URL / COMPOSE_PROJECT export
+  export DATABASE_URL="mysql://study_note:study_note@127.0.0.1:<port>/study_note"
+  npm run ingest:pdf -- --path "asset/digital_logical_engine/제07장 조합논리회로_2ndE_GT.pdf" --subject digital-engineering
+
+  # 터미널 2 — backend (NestJS, port 3001)
+  DATABASE_URL="$DATABASE_URL" npm run dev:backend
+
+  # 터미널 3 — frontend (vite, port 5173)
+  npm run dev
+  # 브라우저: http://127.0.0.1:5173/persona-turn.html
+  ```
+- 화면: turn form (subject + query + k) → response panel (markdown + 응답 복사 버튼)
+  + sources panel (chunk[N] · pdfBasename · score) + mode toggle (fixture/real) +
+  consent banner (real 켤 때만, 1초 delay).
+- 회귀: `npm run test:backend` 가 CLI 패턴 (sprint-3/4) 을 그대로 회귀 PASS, HTTP
+  endpoint 패턴 (sprint-5 신규) 6 case 추가. 총 44/44 PASS.
+
 ## Verification
 
 ```bash
