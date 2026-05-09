@@ -1,55 +1,44 @@
 ---
-phase: report
-status: final
+phase: retro
+gate_number: 7
+gate_label: "Gate 7 (Retro)"
+gate_id: G5
 sprint_id: "2026-W19-sprint-2"
 workspace: "provider-id-contract-cleanup-mcp-agent-bridge-first-tool-resource-slice"
 handoff_dir: "docs/solon/provider-id-contract-cleanup-mcp-agent-bridge-first-tool-resource-slice/20260509"
 goal: "provider id contract cleanup + MCP agent bridge first tool/resource slice"
-created_at: "2026-05-09T16:21:51+09:00"
+created_at: ""
 last_touched_at: "2026-05-09T17:26:14+09:00"
-closed_at: "2026-05-09T17:26:14+09:00"
+closed_at: 2026-05-09T17:26:14+09:00
 ---
 
-# 보고서
+# 회고
 
 > 이 문서는 사용자의 native/workspace 언어로 작성한다.
 
-## 1. 결과
-
-- 목표:
-- 상태: done / partial / stopped
-- 판정:
-- 한 줄 결과:
-
-## 2. 완료한 것
+## 1. 계속할 것
 
 -
 
-## 3. 결정
+## 2. 문제
 
 -
 
-## 4. 검증
-
-- 명령/체크:
-- 결과:
-- 수동 확인:
-
-## 5. 위험 / 후속
-
-- 위험:
-- 후속:
-
-## 6. 남긴 것 / 접은 것
-
-- 남김:
-- private archive:
-
-## 7. 다음
+## 3. 시도할 것
 
 -
 
-## §8. Next Cycle — Division Activation Recommendations
+## 4. 이어갈 것
+
+-
+
+## 5. 종료 체크
+
+- [ ] report 가 최신이다
+- [ ] review 조치가 완료 또는 이월됐다
+- [ ] workbench 가 접혔다
+
+## §6. 다음 cycle 본부 활성 추천 (auto)
 
 <!-- solon:division-recommendations:start -->
 - detected: project_size=small (141 tracked files), domains=0, last_review=pass, infra_signals=3, ui_signals=2
