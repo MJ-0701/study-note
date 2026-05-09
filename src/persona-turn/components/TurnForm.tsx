@@ -1,13 +1,10 @@
 import { type FormEvent, useState } from "react";
 
-// sprint-5 S2 — turn form (AC6). subject select + query textarea + k input + submit
-// button. submit disabled rule (plan AC6 lock):
+// sprint-5 — turn form (Gate 6 round 2 polish: submitting state lifted to App,
+// onFormChange callback for stale-clear). plan AC6 disabled rule:
 //   (a) required (subject || query) 비어있으면 disabled
-//   (b) submit in-flight 동안 disabled + label "전송 중..."
-//   (c) real-mode consent delay 동안 disabled (S5 에서 mode toggle 결합)
-//
-// S2 단계의 submit 은 mock — 1초 fake delay 후 onSubmit({subject, query, k, mode:'fixture'})
-// 호출. 실제 backend wire 는 S3 부터.
+//   (b) submit in-flight (App 의 isSubmitting → externalDisabled) 동안 disabled
+//   (c) real consent delay (App 의 consentDelayActive → externalDisabled) 동안 disabled
 
 export interface TurnFormSubmitInput {
   subject: string;
@@ -17,43 +14,54 @@ export interface TurnFormSubmitInput {
 }
 
 export interface TurnFormProps {
-  /**
-   * 부모가 결정. S2 = mock (1s delay), S3+ = HTTP fetch.
-   */
   onSubmit: (input: TurnFormSubmitInput) => Promise<void>;
   /**
-   * external disable 트리거 — 예: real consent delay 중 (S5).
+   * any input change → 부모가 stale result/error clear (Gate 6 round 1 finding 1).
+   */
+  onFormChange?: () => void;
+  /**
+   * 부모가 lift 한 submit in-flight state. true 면 모든 input + button disabled.
+   */
+  submitting?: boolean;
+  /**
+   * 외부 disable trigger — consent delay / 부모 결정.
    */
   externalDisabled?: boolean;
   externalDisabledLabel?: string;
 }
 
-const SUBJECTS = [
-  { value: "digital-engineering", label: "디지털공학개론 (디공이)" }
-];
+const SUBJECTS = [{ value: "digital-engineering", label: "디지털공학개론 (디공이)" }];
 
-export function TurnForm({ onSubmit, externalDisabled, externalDisabledLabel }: TurnFormProps) {
+export function TurnForm({
+  onSubmit,
+  onFormChange,
+  submitting,
+  externalDisabled,
+  externalDisabledLabel
+}: TurnFormProps) {
   const [subject, setSubject] = useState<string>("digital-engineering");
   const [query, setQuery] = useState<string>("");
   const [k, setK] = useState<number>(5);
-  const [submitting, setSubmitting] = useState<boolean>(false);
 
   const requiredEmpty = subject.trim().length === 0 || query.trim().length === 0;
-  const disabled = requiredEmpty || submitting || Boolean(externalDisabled);
+  const inputsDisabled = Boolean(submitting);
+  const disabled = requiredEmpty || inputsDisabled || Boolean(externalDisabled);
 
   let buttonLabel = "응답 받기";
-  if (submitting) buttonLabel = "전송 중...";
-  else if (externalDisabled && externalDisabledLabel) buttonLabel = externalDisabledLabel;
+  if (submitting) {
+    buttonLabel = externalDisabledLabel ?? "전송 중...";
+  } else if (externalDisabled && externalDisabledLabel) {
+    buttonLabel = externalDisabledLabel;
+  }
+
+  function notifyChange() {
+    onFormChange?.();
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (disabled) return;
-    setSubmitting(true);
-    try {
-      await onSubmit({ subject, query: query.trim(), k });
-    } finally {
-      setSubmitting(false);
-    }
+    await onSubmit({ subject, query: query.trim(), k });
   }
 
   return (
@@ -76,8 +84,11 @@ export function TurnForm({ onSubmit, externalDisabled, externalDisabledLabel }: 
         <select
           id="subject"
           value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          disabled={submitting}
+          onChange={(e) => {
+            setSubject(e.target.value);
+            notifyChange();
+          }}
+          disabled={inputsDisabled}
           style={inputStyle}
         >
           {SUBJECTS.map((s) => (
@@ -86,7 +97,6 @@ export function TurnForm({ onSubmit, externalDisabled, externalDisabledLabel }: 
             </option>
           ))}
         </select>
-        <p style={hintStyle}>sprint-5 = 디지털공학개론 1과목. 4 페르소나 확장은 sprint-6+.</p>
       </div>
 
       <div style={fieldStyle}>
@@ -96,17 +106,20 @@ export function TurnForm({ onSubmit, externalDisabled, externalDisabledLabel }: 
         <textarea
           id="query"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            notifyChange();
+          }}
           placeholder="예: 반가산기 진리표/식 핵심"
           rows={3}
-          disabled={submitting}
+          disabled={inputsDisabled}
           style={{ ...inputStyle, fontFamily: "inherit", resize: "vertical" }}
         />
       </div>
 
       <div style={fieldStyle}>
         <label htmlFor="k" style={labelStyle}>
-          retrieval k <span style={{ color: "#9ca3af", fontWeight: 400 }}>(default 5)</span>
+          출처 chunk 갯수 <span style={{ color: "#9ca3af", fontWeight: 400 }}>(default 5)</span>
         </label>
         <input
           id="k"
@@ -114,11 +127,13 @@ export function TurnForm({ onSubmit, externalDisabled, externalDisabledLabel }: 
           min={1}
           max={20}
           value={k}
-          onChange={(e) => setK(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
-          disabled={submitting}
+          onChange={(e) => {
+            setK(Math.max(1, Number.parseInt(e.target.value, 10) || 1));
+            notifyChange();
+          }}
+          disabled={inputsDisabled}
           style={{ ...inputStyle, width: 80 }}
         />
-        <p style={hintStyle}>sources panel 카드 갯수 = 이 k 값과 동일.</p>
       </div>
 
       <button

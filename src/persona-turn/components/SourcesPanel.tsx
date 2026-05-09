@@ -58,11 +58,8 @@ export function SourcesPanel({ sources }: SourcesPanelProps) {
         }}
       >
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#374151" }}>
-          출처 chunk · {sources.length}건
+          출처 · {sources.length}건
         </h2>
-        <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6b7280" }}>
-          chunk 본문 인용은 응답 markdown 안에 포함됨 (real Claude 응답 패턴).
-        </p>
       </header>
 
       <ul

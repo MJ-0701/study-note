@@ -25,7 +25,7 @@ export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
       }}
     >
       <legend style={{ padding: "0 6px", fontSize: 13, fontWeight: 600, color: "#374151" }}>
-        provider 모드
+        응답 모드
       </legend>
 
       <label style={radioLabelStyle(mode === "fixture", disabled)}>
@@ -38,7 +38,7 @@ export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
           disabled={disabled}
           style={{ marginRight: 6 }}
         />
-        fixture <span style={{ color: "#9ca3af", fontSize: 12 }}>(default, Anthropic 송신 0)</span>
+        데모 <span style={{ color: "#9ca3af", fontSize: 12 }}>(외부 API 호출 없음)</span>
       </label>
 
       <label style={radioLabelStyle(mode === "real", disabled)}>
@@ -51,7 +51,7 @@ export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
           disabled={disabled}
           style={{ marginRight: 6 }}
         />
-        real <span style={{ color: "#dc2626", fontSize: 12 }}>(Claude CLI subprocess, opt-in)</span>
+        Claude 호출 <span style={{ color: "#dc2626", fontSize: 12 }}>(실제 답변, ~30초)</span>
       </label>
     </fieldset>
   );

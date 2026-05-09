@@ -191,16 +191,16 @@ endpoint 로 노출. CLI lane 은 그대로 보존, 새로 web 화면 lane 이 �
   `STUDY_NOTE_LLM_REAL_OPT_IN` > `STUDY_NOTE_LLM_FIXTURE` > fixture default) 발동.
 - Frontend entry: vite multi-entry — 기존 `/` (lecture-reader prototype) 보존, 신규
   `/persona-turn.html` 가 React app entry. 학습 use-case 페이지.
-- 3 터미널 dev 흐름:
+- 3 터미널 dev 흐름 (`db:up-persistent` 가 `.env` 자동 갱신 → 이후 명령은 export 0):
   ```bash
-  # 터미널 1 — DB 기동 + (1회) PDF ingest
+  # 터미널 1 — DB 기동 (.env 자동 write: DATABASE_URL / COMPOSE_PROJECT / SESSION_TOKEN_PEPPER / PORT / HOST / STUDY_NOTE_LLM_TIMEOUT_MS)
   npm run db:up-persistent
-  # 출력의 DATABASE_URL / COMPOSE_PROJECT export
-  export DATABASE_URL="mysql://study_note:study_note@127.0.0.1:<port>/study_note"
+
+  # 터미널 1 — (1회) PDF ingest, .env 자동 load
   npm run ingest:pdf -- --path "asset/digital_logical_engine/제07장 조합논리회로_2ndE_GT.pdf" --subject digital-engineering
 
-  # 터미널 2 — backend (NestJS, port 3001)
-  DATABASE_URL="$DATABASE_URL" npm run dev:backend
+  # 터미널 2 — backend (NestJS, port 3001), .env 자동 load
+  npm run dev:backend
 
   # 터미널 3 — frontend (vite, port 5173)
   npm run dev

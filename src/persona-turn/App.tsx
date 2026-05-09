@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TurnForm, type TurnFormSubmitInput } from "./components/TurnForm";
 import { ResponsePanel } from "./components/ResponsePanel";
 import { SourcesPanel } from "./components/SourcesPanel";
@@ -10,18 +10,16 @@ import {
   type PersonaTurnResult
 } from "./api/personaTurns";
 
-// sprint-5 S5 — mode toggle + consent banner UI + real opt-in. backend 의 D-S5-3 (b)
-// `resolveProviderMode(env, requestMode?)` priority lock 발동 (HTTP body `mode` 필드 전달).
-
 const CONSENT_DELAY_MS = 1000;
 
 export function App() {
   const [mode, setMode] = useState<Mode>("fixture");
   const [consentDelayActive, setConsentDelayActive] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<PersonaTurnResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // mode → real 변경 시 1초 consent delay 발동 (CLI stderr banner 1초 delay 와 동일 invariant).
+  // mode → real 변경 시 1초 consent delay (CLI stderr banner 와 동일 invariant).
   useEffect(() => {
     if (mode !== "real") {
       setConsentDelayActive(false);
@@ -32,9 +30,22 @@ export function App() {
     return () => clearTimeout(t);
   }, [mode]);
 
+  // mode 변경 시 stale result/error clear (Gate 6 round 1 finding 1).
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+  }, [mode]);
+
+  // form input change (subject/query/k) 시 stale result/error clear.
+  const handleFormChange = useCallback(() => {
+    setResult(null);
+    setError(null);
+  }, []);
+
   async function handleSubmit(input: TurnFormSubmitInput) {
     setError(null);
     setResult(null);
+    setIsSubmitting(true);
     try {
       const next = await submitPersonaTurn({
         subject: input.subject,
@@ -51,8 +62,17 @@ export function App() {
       } else {
         setError(String(err));
       }
+    } finally {
+      setIsSubmitting(false);
     }
   }
+
+  const externalDisabled = consentDelayActive || isSubmitting;
+  const externalDisabledLabel = isSubmitting
+    ? mode === "real"
+      ? "응답 생성 중... (~30초)"
+      : "응답 생성 중..."
+    : "1초 후 진행...";
 
   return (
     <main
@@ -70,20 +90,22 @@ export function App() {
       <header style={{ borderBottom: "1px solid #e5e7eb", paddingBottom: 16, marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>디공이 turn</h1>
         <p style={{ margin: "8px 0 0", color: "#6b7280", fontSize: 14 }}>
-          sprint-5 S5 — mode toggle + consent banner + real opt-in. real 모드 켜면
-          Claude CLI 호출 (Anthropic 송신 발생).
+          디지털공학개론 페르소나 (디공이) 와 1 turn 대화. 응답은 강의자료 PDF chunk 를
+          인용해 시험 우선순위로 짚어줍니다.
         </p>
       </header>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
-        <ModeToggle mode={mode} onChange={setMode} />
+        <ModeToggle mode={mode} onChange={setMode} disabled={isSubmitting} />
         <ConsentBanner visible={mode === "real"} delayActive={consentDelayActive} />
       </div>
 
       <TurnForm
         onSubmit={handleSubmit}
-        externalDisabled={consentDelayActive}
-        externalDisabledLabel="consent delay..."
+        onFormChange={handleFormChange}
+        submitting={isSubmitting}
+        externalDisabled={externalDisabled}
+        externalDisabledLabel={externalDisabledLabel}
       />
 
       {error && (
@@ -104,7 +126,28 @@ export function App() {
         </section>
       )}
 
-      {result && (
+      {isSubmitting && (
+        <section
+          aria-label="응답 생성 중"
+          aria-live="polite"
+          style={{
+            marginTop: 24,
+            padding: 24,
+            border: "1px dashed #d1d5db",
+            borderRadius: 8,
+            background: "#f9fafb",
+            color: "#6b7280",
+            fontSize: 14,
+            textAlign: "center"
+          }}
+        >
+          {mode === "real"
+            ? "Claude 응답 생성 중... 보통 30~60초 걸려요."
+            : "응답 생성 중..."}
+        </section>
+      )}
+
+      {result && !isSubmitting && (
         <>
           <ResponsePanel responseText={result.response} />
           <SourcesPanel sources={result.sources} />

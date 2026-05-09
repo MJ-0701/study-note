@@ -1,0 +1,114 @@
+/* sprint-5 Gate 6 round 3 patch (codex AC7 markdown visual evidence finding).
+ * marked + DOMPurify 의 변환 결과는 정상이지만 browser default 만으로는 표/heading 이
+ * plain text 처럼 보임 → ResponsePanel 의 .response-markdown 안 elements 명시 style. */
+
+.response-markdown h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 1.5em 0 0.5em;
+  color: #111827;
+}
+.response-markdown h2 {
+  font-size: 19px;
+  font-weight: 700;
+  margin: 1.4em 0 0.5em;
+  color: #111827;
+}
+.response-markdown h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 1.2em 0 0.5em;
+  color: #1f2937;
+}
+.response-markdown h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 1em 0 0.4em;
+  color: #1f2937;
+}
+
+.response-markdown p {
+  margin: 0.7em 0;
+}
+
+.response-markdown strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.response-markdown em {
+  font-style: italic;
+}
+
+.response-markdown ul,
+.response-markdown ol {
+  padding-left: 1.5em;
+  margin: 0.7em 0;
+}
+
+.response-markdown li {
+  margin: 0.3em 0;
+}
+
+.response-markdown blockquote {
+  border-left: 4px solid #d1d5db;
+  padding: 4px 12px;
+  margin: 0.8em 0;
+  color: #4b5563;
+  background: #f9fafb;
+}
+
+.response-markdown code {
+  background: #f3f4f6;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  color: #be185d;
+}
+
+.response-markdown pre {
+  background: #f9fafb;
+  padding: 12px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.8em 0;
+  border: 1px solid #e5e7eb;
+}
+
+.response-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.response-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 14px;
+}
+
+.response-markdown th,
+.response-markdown td {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.response-markdown th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.response-markdown hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 1em 0;
+}
+
+.response-markdown a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
