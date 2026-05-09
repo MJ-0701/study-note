@@ -69,7 +69,11 @@ if (subcommand === "up") {
       `SESSION_TOKEN_PEPPER=${db.sessionTokenPepper}`,
       `PORT=3001`,
       `HOST=0.0.0.0`,
-      `STUDY_NOTE_LLM_TIMEOUT_MS=120000`
+      `STUDY_NOTE_LLM_TIMEOUT_MS=120000`,
+      // sprint-2 round 4 plan §3 AC10(d) — storage provider fail-closed 가 require 하므로
+      // dev UX 보존을 위해 db:up-persistent 가 default `local` 을 inject.
+      // sprint user 가 docker-compose 로 가면 `STORAGE_PROVIDER=s3` (localstack) 으로 override.
+      `STORAGE_PROVIDER=local`
     ].join("\n") +
     preservedUserEnv +
     "\n";

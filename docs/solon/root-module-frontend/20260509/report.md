@@ -25,7 +25,7 @@ closed_at: "2026-05-09T21:23:53+09:00"
 - **plan.md** (round 1~5 진화). R1~R8 → R9~R12 (round 2 security 흡수) → S7/S8 코드 변경 슬라이스 (round 4 PII 정리 + db-persistent 보존) → AC10 (e) property-based 재작성 (round 4) → AC10 grep 정책 갱신 (round 5 docs 포함). self-CPO round 5 PASS.
 - **Gate 3 (Plan) review chain**: round 1·2·3·4 partial → round 5 **PASS**. codex CPO (gpt-5.5 xhigh, security lens auto-locked). round 별 finding 모두 plan.md §7 self-CPO 표에 1:1 인계.
 - **ADR 0007** 작성: `docs/solon/decisions/0007-module-architecture-redistribution.md` (320 줄, §1~§17). AC1~AC12 모두 ADR §3~§13 에 매핑, §14 PR 분할 / §15 다음 sprint 의무 / §16 self-CPO mini-check / §17 references.
-- **S7 PII fixture 정리** (8 파일 commit-ready): `docker-compose.yml` (env interpolation), `.env.example` (dummy), `backend/prisma/seed.mjs` (fallback dummy), `README.md` / `backend/README.md` (PII 행 정리), `scripts/smoke-backend-contract.mjs` (env-driven SEED + SECOND user), `scripts/smoke-pdf-workspace.mjs` (env-driven SEED user). 검증: `git grep -nE "채명정|20264514|jack2718|soongsil\.ac\.kr" -- ':!.sfs-local'` = no match.
+- **S7 PII fixture 정리** (8 파일 commit-ready): `docker-compose.yml` (env interpolation), `.env.example` (dummy), `backend/prisma/seed.mjs` (fallback dummy), `README.md` / `backend/README.md` (PII 행 정리), `scripts/smoke-backend-contract.mjs` (env-driven SEED + SECOND user), `scripts/smoke-pdf-workspace.mjs` (env-driven SEED user). 검증: sprint-1 plan AC10 (e) 의 grep 명령 (정규식 SoT = `plan.md` AC10 (e) 또는 ADR 0007 §11 (e), 본 report 안에 인라이닝하지 않음 — 자기-grep 회피) = no match.
 - **S8 db-persistent .env 보존**: `scripts/db-persistent.mjs` 가 `.env` overwrite 시 사용자 정의 `STUDY_NOTE_*` 환경변수를 read-and-merge 로 보존. 사용자 `.env` 에 STUDY_NOTE_DEV_USER_EMAIL / STUDY_NOTE_SECOND_USER_EMAIL (alias 형태로 User.email @unique 충돌 회피) 추가.
 - **Gate 4 (Design) review round 1**: codex CPO ops lens partial — ADR design 자체는 acceptable, ops 측면 (rollback / recovery / observability / blast radius / deploy / env matrix) minimum assumption 미명시.
 
@@ -45,7 +45,7 @@ closed_at: "2026-05-09T21:23:53+09:00"
 ## 4. 검증
 
 - 명령 / 체크:
-  - `git grep -nE "채명정|20264514|jack2718|soongsil\.ac\.kr" -- ':!.sfs-local'` (round 5 갱신 후) = **no match** (2026-05-09 21:45 KST).
+  - sprint-1 plan AC10 (e) 의 grep 명령 (round 5 갱신 후, 정규식 SoT = `plan.md` AC10 (e) 또는 ADR 0007 §11 (e), 본 report 인라이닝 회피) = **no match** (2026-05-09 21:45 KST).
   - smoke-backend-contract `SECOND_USER_NAME`/`STUDENT_NUMBER` env-driven 정렬: line 8-9 + 267-268 모두 통과.
   - Gate 3 review round 5 codex CPO 본인 환경에서 동일 grep 실행 → no matches (independent verification).
   - plan.md §7 self-CPO mini-check round 5 = PASS (9 행 모두 통과).
