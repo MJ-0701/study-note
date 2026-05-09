@@ -94,9 +94,14 @@ export async function executeGetChunks(
   try {
     retrieved = await retrieval.retrieveTopK({ subject: input.subject, queryText: query, k });
   } catch (err) {
+    // sprint-2 Gate 6 round 1 F1 — DO NOT leak err.message over MCP wire (DB/config/path leak risk).
+    // local stderr log 만, MCP wire 는 generic message only.
+    process.stderr.write(
+      `[get_chunks] retrieval failure: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`
+    );
     throw new McpError(
       ErrorCode.InternalError,
-      err instanceof Error ? err.message : "retrieval failure",
+      "retrieval failure",
       { errorCode: "RETRIEVAL_FAILED" }
     );
   }
@@ -111,11 +116,13 @@ export async function executeGetChunks(
   return { chunks, retrievedCount: chunks.length };
 }
 
-/** sprint-1 conversation.service 와 동일 safe-path policy: basename only, 절대 경로 0. */
+/** Strict basename-only policy: scheme strip 후 basename, 절대 경로 0 leak.
+ *  sprint-2 Gate 6 round 1 F2 — `smoke:///abs/path/file.pdf` 같은 input 도 basename 만. */
 function safeBasename(p: string): string {
   if (!p) return "<unknown>";
-  if (p.startsWith("smoke://")) return p.replace("smoke://", "");
-  return basename(p);
+  // strip any URL-like scheme (smoke://, file://, http://, etc.)
+  const stripped = p.replace(/^[a-z][a-z0-9+.-]*:\/+/i, "");
+  return basename(stripped);
 }
 
 /** MCP tool registration handler — McpServer.registerTool 의 callback. */

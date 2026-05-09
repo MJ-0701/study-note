@@ -244,6 +244,20 @@ Claude Desktop / Cursor 같은 MCP client 가 본 backend 의 corpus retrieval �
 등록 후 Claude Desktop 재시작 → 디공이 turn (또는 다른 chat) 에서 `@study-note` 도구
 호출 → tool call paste evidence (sprint-2 AC7).
 
+#### Security note (sprint-2 Gate 6 round 1 F3 carry — local stdio MCP trust boundary)
+
+이 first slice 는 *로컬 stdio* 만 (network listener 0). 그러나 Claude Desktop 의 MCP
+config 에 등록된 *모든 MCP client* 가 `get_chunks` 호출 가능 — corpus chunk 텍스트는
+사용자 PDF 본문이라 *untrusted content* (prompt injection 가능). 즉:
+
+- DB 자격증명 (`DATABASE_URL`) 은 위 config 의 `env` 안에만, repo 에는 commit 0.
+- 반환되는 `sourcePdfPath` 는 항상 basename 만 (절대 경로 노출 0, scheme strip).
+- 반환되는 `text` 는 *user-untrusted* — LLM client (Claude Desktop) 가 system prompt
+  level 명령으로 신뢰하지 않도록 주의.
+- 내부 retrieval 오류 메시지는 MCP wire 에 redact ("retrieval failure" generic only),
+  detail 은 `mcp-server` 프로세스 stderr 에만.
+- HTTP/SSE transport (sprint-3+) 도입 시 별도 인증 + rate limit 정책 필요.
+
 ## Verification
 
 ```bash

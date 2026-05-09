@@ -72,17 +72,42 @@ describe("get_chunks tool — empty corpus (AC6 success with empty chunks)", () 
 });
 
 describe("get_chunks tool — retrieval throw (AC6 InternalError + RETRIEVAL_FAILED)", () => {
-  it("wraps retrieval error as McpError(InternalError) with errorCode", async () => {
-    const retrieval = makeRetrievalThrow(new Error("DB down"));
+  it("wraps retrieval error as McpError(InternalError) with errorCode and REDACTS internal message (Gate 6 F1)", async () => {
+    // Gate 6 round 1 F1 — internal exception text must NOT leak over MCP wire.
+    const retrieval = makeRetrievalThrow(new Error("DB down: connection refused 127.0.0.1:33999 secret-creds"));
     await assert.rejects(
       () => executeGetChunks(retrieval, { subject: "digital-engineering", query: "x" }),
       (err) => {
         if (!(err instanceof McpError)) return false;
         if (err.code !== -32603) return false;
-        if (!/DB down/.test(err.message)) return false;
+        // Wire message MUST be generic "retrieval failure" — no DB/config/path leak.
+        // McpError 가 "MCP error -32603: <msg>" prefix 자동 추가 → endsWith check.
+        if (!err.message.endsWith(": retrieval failure")) return false;
+        if (/secret-creds|127\.0\.0\.1|connection refused/.test(err.message)) return false;
         const data = err.data as { errorCode?: string } | undefined;
         return data?.errorCode === "RETRIEVAL_FAILED";
       }
     );
+  });
+});
+
+describe("get_chunks tool — safe path leak regression (Gate 6 F2)", () => {
+  it("strips smoke:///abs/path/file.pdf scheme + returns basename only (no abs path leak)", async () => {
+    const retrieval = makeRetrievalStub([
+      { ord: 0, corpusId: "x", sourcePdfPath: "smoke:///Users/mj/private/leaked.pdf", text: "t", score: 1 }
+    ]);
+    const out = await executeGetChunks(retrieval, { subject: "digital-engineering", query: "x" });
+    assert.equal(out.chunks[0]?.sourcePdfPath, "leaked.pdf");
+    assert.ok(!JSON.stringify(out).includes("/Users/mj/private"));
+    assert.ok(!JSON.stringify(out).includes("smoke://"));
+  });
+
+  it("strips file:// scheme similarly", async () => {
+    const retrieval = makeRetrievalStub([
+      { ord: 0, corpusId: "x", sourcePdfPath: "file:///etc/passwd-like.pdf", text: "t", score: 1 }
+    ]);
+    const out = await executeGetChunks(retrieval, { subject: "digital-engineering", query: "x" });
+    assert.equal(out.chunks[0]?.sourcePdfPath, "passwd-like.pdf");
+    assert.ok(!JSON.stringify(out).includes("/etc/"));
   });
 });
