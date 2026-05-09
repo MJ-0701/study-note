@@ -12,7 +12,8 @@ apps/*/dist/
 packages/*/dist/
 infra/.env
 infra/.env.local
-localstack/cache/
+infra/localstack/cache/
+
 
 
 

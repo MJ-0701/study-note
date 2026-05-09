@@ -41,8 +41,8 @@ services:
 
   be-service:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ..
+      dockerfile: apps/api/Dockerfile
     container_name: be-service
     depends_on:
       db-service:
@@ -53,7 +53,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - DATABASE_URL=mysql://study_note:study_note@db-service:3306/study_note
-      - STORAGE_PROVIDER=local
+      - STORAGE_PROVIDER=${STORAGE_PROVIDER:-local}
       - SESSION_TOKEN_PEPPER=${SESSION_TOKEN_PEPPER:-change-me-local-session-pepper}
       - STUDY_NOTE_DEV_USER_NAME=${STUDY_NOTE_DEV_USER_NAME:-Dev User}
       - STUDY_NOTE_DEV_STUDENT_NUMBER=${STUDY_NOTE_DEV_STUDENT_NUMBER:-20260001}
@@ -71,8 +71,8 @@ services:
 
   fe-service:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: apps/web/Dockerfile
     container_name: fe-service
     depends_on:
       - be-service
