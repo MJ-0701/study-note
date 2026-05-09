@@ -26,7 +26,7 @@ project document surface.
 Default entry:
 - `sfs status`
 - current sprint `report.md` when one exists
-- `docs/solon/` for shared adoption or handoff summaries
+- `docs/<workspace>/<yyyyMMdd>/` for shared adoption or handoff summaries
 - expand to private workbench/logs only when the routed context needs evidence
 
 Project overview refresh:
@@ -43,5 +43,11 @@ Decision questions must be self-contained: before any `Q1`, `D1`, or option
 id, explain in plain user language what is being decided, why it matters, the
 recommended default, and what each option changes. Labels are cross-references,
 not the explanation.
+Do not show a question/recommendation-only choice table. When multiple options
+exist, show every viable option with its plain-language meaning and consequence,
+then mark the recommendation as the default. If that is too much for one view,
+ask one decision at a time instead of hiding alternatives.
 Keep only what must remain: `.sfs-local/` is private local workbench state,
-shared durable docs live under `docs/solon/`, and step docs are created lazily.
+shared handoff/history docs live under `docs/<workspace>/<yyyyMMdd>/`,
+project-wide Solon reference docs may live under `docs/solon/`, and step docs
+are created lazily.
