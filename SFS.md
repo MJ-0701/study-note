@@ -51,7 +51,18 @@ Never ask the user to confirm a compact option bundle such as `A/A/A/C/C`, and
 never answer "show the recommendation again" with only option labels or only
 the recommended row. Re-present the decision in plain language and use a natural
 confirmation phrase such as `권장안 그대로 확정`, not a label bundle.
-Keep only what must remain: `.sfs-local/` is private local workbench state,
-shared handoff/history docs live under `docs/solon/<english-workspace>/<yyyyMMdd>/`,
-project-wide Solon reference docs may live under `docs/solon/`, and step docs
-are created lazily.
+When review returns partial/fail for a deterministic low-risk issue, complete
+the loop instead of asking the user to request the next review: patch grep
+scope, stale evidence, missing AC/file mapping, evidence path typos, and bounded
+wording/document consistency in the same cycle, verify, then run the same-gate
+review again. Ask the user only for product judgment: scope, architecture,
+public contract, security/privacy/data-loss, cost/latency/model policy,
+destructive behavior, or changed AC meaning.
+Keep only what must remain: `.sfs-local/` is private active workbench state,
+not durable history. `events.jsonl` stays visible only for the current sprint
+ledger; stale/orphan events should be removed or archived by `sfs upgrade` /
+`sfs tidy --all --apply`. Shared handoff/history docs live under
+`docs/solon/<english-workspace>/<yyyyMMdd>/`, project-wide Solon reference docs
+may live under `docs/solon/`, and step docs are created lazily. Repeated cleanup
+evidence is date-bundled under
+`.sfs-local/archives/adopt/surface-cleanup/<yyyyMMdd>/surface-cleanup.tar.gz`.
