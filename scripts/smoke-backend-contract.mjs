@@ -3,6 +3,11 @@ import { createHmac, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
+const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
+const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
+const SECOND_USER_NAME = process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer";
+const SECOND_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002";
+
 let baseUrl;
 let server;
 let restartServer;
@@ -33,7 +38,7 @@ try {
     request("/auth/login", {
       method: "POST",
       body: {
-        name: "채명정",
+        name: SEED_USER_NAME,
         studentNumber: "00000000"
       }
     }),
@@ -52,16 +57,16 @@ try {
   const login = await requestJson("/auth/login", {
     method: "POST",
     body: {
-      name: "채명정",
-      studentNumber: "20264514"
+      name: SEED_USER_NAME,
+      studentNumber: SEED_USER_STUDENT_NUMBER
     }
   });
   const token = login.token;
 
   if (
     !token ||
-    login.user?.displayName !== "채명정" ||
-    login.user?.studentNumber !== "20264514"
+    login.user?.displayName !== SEED_USER_NAME ||
+    login.user?.studentNumber !== SEED_USER_STUDENT_NUMBER
   ) {
     throw new Error("valid login did not return the dev user");
   }
@@ -259,8 +264,8 @@ try {
   const secondLogin = await requestJson("/auth/login", {
     method: "POST",
     body: {
-      name: "Ownership Reviewer",
-      studentNumber: "20260000"
+      name: SECOND_USER_NAME,
+      studentNumber: SECOND_USER_STUDENT_NUMBER
     }
   });
   await assertStatus("cross-user material access is denied", () =>

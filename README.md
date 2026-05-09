@@ -99,11 +99,12 @@ Frontend:
 npm run dev
 ```
 
-기본 개발 계정은 `.env.example`에 정의되어 있습니다.
+기본 개발 계정은 `.env.example`에 정의되어 있습니다 (placeholder). 실제 사용 시
+`.env` (git ignored) 에 본인의 이름·학번·이메일을 채워 주입하세요.
 
 ```text
-이름: 채명정
-학번: 20264514
+이름: Dev User
+학번: 20260001
 ```
 
 ### Corpus ingest CLI (sprint-2)

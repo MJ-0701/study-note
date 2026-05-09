@@ -12,14 +12,14 @@ const subjects = [
 const users = [
   {
     id: "user-dev-1",
-    displayName: process.env.STUDY_NOTE_DEV_USER_NAME ?? "채명정",
-    studentNumber: process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20264514",
-    email: process.env.STUDY_NOTE_DEV_USER_EMAIL ?? "student@example.com"
+    displayName: process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User",
+    studentNumber: process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001",
+    email: process.env.STUDY_NOTE_DEV_USER_EMAIL ?? "dev1@example.com"
   },
   {
     id: "user-dev-2",
-    displayName: process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Ownership Reviewer",
-    studentNumber: process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260000",
+    displayName: process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer",
+    studentNumber: process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002",
     email: process.env.STUDY_NOTE_SECOND_USER_EMAIL ?? "reviewer@example.com"
   }
 ];

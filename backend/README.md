@@ -20,7 +20,7 @@ NestJS backend boundary for the PDF workspace prototype.
 
 ## v1 Boundaries
 
-- Auth is name + student number for a private local MVP. The default seed user is `채명정` / `20264514`; real DB-backed user enrollment is deferred.
+- Auth is name + student number for a private local MVP. The default seed user is the placeholder `Dev User` / `20260001` (override via `STUDY_NOTE_DEV_USER_*` env vars); real DB-backed user enrollment is deferred.
 - `GET /api/me` is the frontend session revalidation boundary and must be called before rendering a stored-session workspace.
 - Runtime persistence uses Prisma + MySQL for users, sessions, PDF material metadata, and annotation snapshots.
 - Session rows store `tokenHash`; raw bearer tokens must not be stored in MySQL.
