@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
-const composeFile = resolve("apps/api/prisma/docker-compose.smoke.yml");
+const composeFile = resolve("packages/persistence/prisma/docker-compose.smoke.yml");
 const sessionTokenPepper = "study-note-smoke-session-pepper";
 
 export async function prepareSmokeDatabase(label) {

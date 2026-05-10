@@ -105,7 +105,7 @@ export class IngestService {
     }
 
     this.logger.log(`persisting corpus + ${chunks.length} chunks`);
-    const corpus = await this.prisma.$transaction(async (tx: PrismaService) => {
+    const corpus = await this.prisma.$transaction(async (tx) => {
       const created = await tx.corpus.create({
         data: { subject, sourcePdfPath: sourceLabel, contentHash }
       });

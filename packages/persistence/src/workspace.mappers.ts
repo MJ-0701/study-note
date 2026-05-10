@@ -12,6 +12,7 @@ type UserRow = {
   displayName: string;
   studentNumber: string;
   email: string | null;
+  role: "NORMAL" | "ADMIN" | "MASTER";
 };
 
 type PdfMaterialRow = {
@@ -41,8 +42,13 @@ export function toUserProfile(user: UserRow): UserProfile {
     id: user.id,
     displayName: user.displayName,
     studentNumber: user.studentNumber,
-    ...(user.email ? { email: user.email } : {})
+    ...(user.email ? { email: user.email } : {}),
+    role: normalizeUserRole(user.role)
   };
+}
+
+function normalizeUserRole(role: UserRow["role"]): UserProfile["role"] {
+  return role.toLowerCase() as UserProfile["role"];
 }
 
 export function toPdfMaterialRecord(material: PdfMaterialRow): PdfMaterialRecord {

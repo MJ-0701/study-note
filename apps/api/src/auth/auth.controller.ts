@@ -8,8 +8,7 @@ import {
   UseGuards
 } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
-import { AuthService } from "./auth.service";
-import { getBearerToken, SessionAuthGuard } from "./session-auth.guard";
+import { AuthService, getBearerToken, SessionAuthGuard } from "@study-note/auth";
 
 @Controller()
 export class AuthController {

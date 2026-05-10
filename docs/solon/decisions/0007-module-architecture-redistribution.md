@@ -147,10 +147,10 @@ Dockerfile 은 각 `apps/*` 가 자기 빌드 컨텍스트로 소유. `infra/doc
 | `backend/src/app.module.ts` | `apps/api/src/app.module.ts` | move | api Nest module root |
 | `backend/src/health.controller.ts` | `apps/api/src/health.controller.ts` | move | api |
 | `backend/src/materials/*` | `apps/api/src/materials/*` | move | api |
-| `backend/src/auth/*` | `apps/api/src/auth/*` (다음 sprint 우선순위 3차에 `packages/auth` 추출) | move | api |
-| `backend/src/corpus/*` | `apps/api/src/corpus/*` (다음 sprint 우선순위 2차에 `packages/corpus` 추출) | move | api + cli + mcp |
-| `backend/src/persona/*` | `apps/api/src/persona/*` (다음 sprint 우선순위 2차에 `packages/persona-engine` 추출) | move | api + cli |
-| `backend/src/storage/*` | `apps/api/src/storage/*` (다음 sprint 우선순위 2차에 `packages/storage` 추출) | move | api + cli |
+| `backend/src/auth/*` | `apps/api/src/auth/*` (본 sprint 3차 추출) | move | api |
+| `backend/src/corpus/*` | `apps/api/src/corpus/*` (sprint-2 2차 추출) | move | api + cli + mcp |
+| `backend/src/persona/*` | `apps/api/src/persona/*` (sprint-2 2차 추출) | move | api + cli |
+| `backend/src/storage/*` | `apps/api/src/storage/*` (본 sprint 3차 추출) | move | api + cli |
 | `backend/src/prisma/*` | `apps/api/src/prisma/*` (§8 잠정, 다음 sprint 에 `packages/persistence` 추출 결정) | move | api + cli + mcp |
 | `backend/src/domain/workspace.types.ts` | `packages/domain/src/pdf-workspace.ts` (frontend 중복과 통합) | move + merge | api + mcp + cli + web |
 | `backend/src/cli/ingest-pdf.ts` | `apps/cli/src/ingest-pdf.ts` | move | cli |
@@ -192,24 +192,24 @@ Dockerfile 은 각 `apps/*` 가 자기 빌드 컨텍스트로 소유. `infra/doc
 
 선택지 둘:
 
-- **A. `apps/api/prisma/` 잠정** (defer-to-next-sprint 추출): 본 sprint 에서 schema/migrations/seed 를 `apps/api/prisma/` 아래에 이동만. `apps/cli` 와 `apps/mcp` 는 `apps/api` 의 prisma client 를 import (workspace 의존) 또는 schema path 를 명시 참조. 다음 sprint 의 `packages/persistence` 추출 결정 (§9 우선순위 2차) 에서 `packages/persistence/prisma/` 로 이동.
-- **B. 본 sprint 에 `packages/persistence/prisma/` lock**: 본 sprint 가 schema/migrations/seed 를 `packages/persistence/prisma/` 로 한 번에 이동. `apps/api`, `apps/cli`, `apps/mcp` 는 모두 `packages/persistence` 의 client export 를 import. `packages/persistence` 의 다른 책임 (repository wrapper, transaction helper) 은 다음 sprint.
+- **A. `apps/api/prisma/` 잠정** (defer-to-next-sprint 추출): 본 sprint 에서 schema/migrations/seed 를 `apps/api/prisma/` 아래에 이동만. `apps/cli` 와 `apps/mcp` 는 `apps/api` 의 prisma client 를 import (workspace 의존) 또는 schema path 를 명시 참조. 다음 sprint 에 `packages/persistence` 로 추출.
+- **B. 본 sprint 에 `packages/persistence/prisma/` lock**: 본 sprint 가 schema/migrations/seed 를 `packages/persistence/prisma/` 로 한 번에 이동. `apps/api`, `apps/cli`, `apps/mcp` 는 모두 `packages/persistence` 의 client export 를 import. `packages/persistence` 는 persistence 레이어의 책임을 가지며 schema/mappers/export 를 보유.
 
-**선택: A (defer-to-next-sprint)**.
+**선택: B (this sprint lock)**.
 
-근거 — §9 의 layer packages 우선순위 표에서 `persistence` 가 2차 (다음 sprint 1차 추출 후 그 다음 슬라이스) 다. 본 sprint 에서 schema 만 미리 `packages/persistence` 로 옮기면 `packages/persistence` 가 도면에는 명시되지만 본 ADR 의 "후보 = 도면 박스만" 일관성과 충돌. trigger rule = "다음 sprint 의 `packages/persistence` 추출 슬라이스 (§9 우선순위 2차) 에서 schema/migrations/seed 를 `packages/persistence/prisma/` 로 일괄 이동, 그 시점에 client export shape 도 함께 결정".
+근거 — §9 의 layer packages 우선순위 표에서 `persistence` 가 3차 추출 슬롯이며 sprint-4 에 실제 추출 완료 상태다. 본 sprint 종료 시점 기준 trigger rule 은 `schema/migrations/seed` 의 `packages/persistence/prisma/` lock 과 `@study-note/persistence` client export 의 API 고정이다.
 
 ## 9. Backend layer packages 후보 우선순위 (R7, AC7)
 
-§3 의 도면에 등장한 5 후보 모듈의 추출 우선순위. 본 sprint 는 도면 박스만, 실제 추출은 다음 sprint 부터.
+§3 의 도면에 등장한 5 후보 모듈의 추출 우선순위. persistence·storage·auth 는 sprint-4 에 추출 완료되어 다음 sprint 에는 관리 및 운영 이관만 검토.
 
 | 후보 | 추출 우선순위 | 추출 기준 (어느 surface 가 공유하는가) | 다음 sprint 의무 여부 |
 |---|---|---|---|
-| `packages/persistence` | 2차 | `apps/api` (Nest controllers), `apps/cli` (ingest-pdf, persona-turn), `apps/mcp` (get-chunks). 셋 다 같은 prisma schema 를 본다. | 의무 (§8 의 schema 위치 lock 시점) |
-| `packages/storage` | 2차 | `apps/api` (materials controller), `apps/cli` (ingest-pdf 의 PDF 업로드). 두 surface 가 storage abstraction 공유. | 의무 |
+| `packages/persistence` | 3차 | `apps/api` (Nest controllers), `apps/cli` (ingest-pdf, persona-turn), `apps/mcp` (get-chunks). 셋 다 같은 prisma schema 를 본다. | 완료 — sprint-4 이행 |
+| `packages/storage` | 3차 | `apps/api` (materials controller), `apps/cli` (ingest-pdf 의 PDF 업로드). 두 surface 가 storage abstraction 공유. | 완료 — sprint-4 이행 |
 | `packages/persona-engine` | 2차 | `apps/api` (persona-turn controller), `apps/cli` (persona-turn). 같은 persona response 합성 로직. | 의무 |
 | `packages/corpus` | 2차 | `apps/api` (질의응답), `apps/mcp` (get_chunks tool), `apps/cli` (ingest-pdf). 세 surface 가 chunk/embedding 공유. | 의무 |
-| `packages/auth` | 3차 | 현재 `apps/api` 만 사용 (web 전용 session). `apps/mcp` 가 향후 인증을 가질 가능성 (별 ADR). | 선택 (다음 sprint 가 아닌 그 다음 sprint 또는 이후) |
+| `packages/auth` | 3차 | 현재 `apps/api` 만 사용 (web 전용 session). `apps/mcp` 가 향후 인증을 가질 가능성 (별 ADR). | 완료 — sprint-4 이행 |
 
 총 5 행 (AC7 정확 매칭). 1차 = `packages/domain` 은 §3 / §5 에서 본 ADR 가 lock (다음 sprint 의 첫 추출).
 
@@ -292,8 +292,8 @@ PR 사이 working tree 가 깨지지 않도록 각 PR 끝에 빌드/smoke 통과
 
 1. **운영 형상 ADR 작성** (별 ADR, ADR 0001 운영 형상 절 supersede). Q5 lock — Azure + DigitalOcean 분리 배포의 구체 service 매핑, secret manager 채널, prod-grade DB / S3 / CDN 결정. 본 ADR 0007 의 §11 (a), §12 의 production 가용 컬럼이 그 ADR 의 입력. 작성 시점 = 실제 배포 임박 시.
 2. **pnpm hoisting × native 모듈 호환성 smoke 1회**. 다음 sprint 의 첫 슬라이스 (위 §14 PR 1 또는 PR 2 시작 시점) 에서 `pnpm install` 후 `onnxruntime-node` / `@xenova/transformers` / `pdf-parse` 모듈이 정상 로드되는지 corpus/persona/pdf smoke 1회. 깨지면 `.npmrc` 의 `public-hoist-pattern` 또는 `shamefully-hoist=true` 같은 옵션으로 hoist 정책 조정. 위험 R2 mitigation.
-3. **Layer packages 추출 우선순위 적용**. §9 표대로: 1차 = `packages/domain` (다음 sprint 첫 PR), 2차 = `persistence` / `storage` / `persona-engine` / `corpus` (다음 sprint 또는 그 다음), 3차 = `auth` (이후 sprint).
-4. **Prisma schema 위치 lock 시점에 §8 결정 적용**. defer-to-next-sprint default 채택 — `packages/persistence` 추출 슬라이스에서 schema/migrations/seed 를 `apps/api/prisma/` (잠정) → `packages/persistence/prisma/` 로 일괄 이동. client export shape 도 그 시점에 결정.
+3. **Layer packages 추출 우선순위 적용**. §9 표대로: 1차 = `packages/domain`, 2차 = `corpus` / `persona-engine`, 3차 = `persistence` / `storage` / `auth` (본 sprint 완료).
+4. **Prisma schema lock 반영**. §8 에서 `B (this sprint lock)` 확정되었고 `packages/persistence/prisma/` 에 schema/migrations/seed, client export, 그리고 `apps/api` import 경로가 모두 정합적으로 반영됨.
 5. **영향 path 표 (§7) 의 모든 path patch + smoke 통과**. 39 행의 path 변경이 다음 sprint 의 measurable deliverable.
 6. **Security regression mapping (§13) 의 6 행을 다음 sprint AC 로 등재**. next-AC-sec-1 ~ next-AC-sec-6 의 ID 를 다음 sprint plan 이 lock.
 7. **운영 ADR 작성 시점에 stack 후보의 장단점 표 + 사용자 환경 (학생 Student Pack + Azure + DigitalOcean) 권장 default 제시 의무** (사용자 라운드 7 컨펌). 비교 대상 = deploy host (Azure App Service vs DigitalOcean Droplet vs DigitalOcean App Platform), observability stack (Datadog vs Azure Monitor vs Sentry vs OpenTelemetry self-host), secret manager (Azure Key Vault vs DigitalOcean App Platform env binding), DB managed service (Azure Database for MySQL vs DigitalOcean Managed MySQL), CDN/static (Azure Static Web Apps vs DigitalOcean Spaces). 비용 ceiling + 학생 Pack 크레딧 + 본인 학습 가치 측면을 모두 가중치로.
@@ -307,7 +307,7 @@ PR 사이 working tree 가 깨지지 않도록 각 PR 끝에 빌드/smoke 통과
 | AC3 (R3 SoT migration) | §5 표 | 행 15 ≥ 12. 중복 4종 (`PdfStickyNote`, `PdfStickyNoteBlock`, `PdfInkPoint`, `PdfInkStroke`) 의 invariant 차이 컬럼 비-empty. |
 | AC4 (R4 컨테이너 분산) | §6 표 + redis 미도입 노트 | 행 6 정확. redis 미도입 명시 1줄. |
 | AC5 (R5 영향 path) | §7 표 | 행 39 ≥ 30. `scripts/*.mjs` 10개 모두 등장. |
-| AC6 (R6 Prisma 위치 결정) | §8 단락 | "선택: A (defer-to-next-sprint)" 명시 + trigger rule 명시. |
+| AC6 (R6 Prisma 위치 결정) | §8 단락 | "선택: B (this sprint lock)" + schema/migrations/seed lock + `@study-note/persistence` client export 고정 명시. |
 | AC7 (R7 layer packages 우선순위) | §9 표 | 행 5 정확. 우선순위 컬럼 (1차/2차/3차) 모두 채움. |
 | AC8 (R8 ADR 자체) | frontmatter + 본 ADR 전체 | frontmatter 6 키 (phase / decision_id / sprint_id / status / gate / related_*) + 본문에 ADR 0001 supersede 분리 (§1 + §2 D8 + §15 #1) + 운영 형상 = Azure + DigitalOcean 가정 (§1 + §11 (a) + §12) + 후속 운영 ADR 의무 (§15 #1) + brainstorm §7 위험 R1~R5 단락 (§5 R1, §15 #2 R2, §14 R3, §1 + §15 #1 R4, §9 R5) 등장. |
 | AC9 (R9 threat model) | §10 표 | 행 6 정확. mitigation 컬럼 비-empty. |

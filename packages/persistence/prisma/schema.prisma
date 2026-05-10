@@ -12,9 +12,16 @@ model User {
   displayName   String
   studentNumber String        @unique
   email         String?       @unique
+  role          Role          @default(NORMAL)
   createdAt     DateTime      @default(now())
   sessions      Session[]
   materials     PdfMaterial[]
+}
+
+enum Role {
+  MASTER
+  ADMIN
+  NORMAL
 }
 
 model Session {

@@ -4,18 +4,21 @@
   "private": true,
   "type": "commonjs",
   "prisma": {
-    "schema": "prisma/schema.prisma"
+    "schema": "../../packages/persistence/prisma/schema.prisma"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
-    "prisma:seed": "node prisma/seed.mjs"
+    "prisma:generate": "prisma generate --schema ../../packages/persistence/prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema ../../packages/persistence/prisma/schema.prisma",
+    "prisma:seed": "node ../../packages/persistence/prisma/seed.mjs"
   },
   "dependencies": {
     "@study-note/corpus": "workspace:*",
     "@study-note/domain": "workspace:*",
     "@study-note/persona-engine": "workspace:*",
+    "@study-note/auth": "workspace:*",
+    "@study-note/persistence": "workspace:*",
+    "@study-note/storage": "workspace:*",
     "@aws-sdk/client-s3": "^3.1041.0",
     "@nestjs/common": "^11.1.19",
     "@nestjs/core": "^11.1.19",

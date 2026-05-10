@@ -9,6 +9,9 @@ const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
 const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
 const SECOND_USER_NAME = process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer";
 const SECOND_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002";
+const NORMAL_USER_NAME = "Smoke Normal User";
+const NORMAL_USER_STUDENT_NUMBER = "20260003";
+const NORMAL_USER_EMAIL = "smoke-normal-user@example.com";
 
 let baseUrl;
 let server;
@@ -79,6 +82,41 @@ try {
   if (me.user?.id !== login.user.id) {
     throw new Error("/me did not return the current user");
   }
+
+  await assertStatus("admin route rejects unauthenticated", () =>
+    request("/v1/admin/users"),
+    401
+  );
+  console.log("admin route rejects unauthenticated");
+
+  await prisma.user.upsert({
+    where: { studentNumber: NORMAL_USER_STUDENT_NUMBER },
+    update: {
+      displayName: NORMAL_USER_NAME,
+      email: NORMAL_USER_EMAIL,
+      role: "NORMAL"
+    },
+    create: {
+      id: "user-smoke-normal-1",
+      displayName: NORMAL_USER_NAME,
+      studentNumber: NORMAL_USER_STUDENT_NUMBER,
+      email: NORMAL_USER_EMAIL,
+      role: "NORMAL"
+    }
+  });
+
+  const normalLogin = await requestJson("/auth/login", {
+    method: "POST",
+    body: {
+      name: NORMAL_USER_NAME,
+      studentNumber: NORMAL_USER_STUDENT_NUMBER
+    }
+  });
+  await assertStatus("admin route rejects normal user", () =>
+    request("/v1/admin/users", { token: normalLogin.token }),
+    403
+  );
+  console.log("admin route rejects normal user");
 
   const samplePdf = Buffer.from("%PDF-1.4\n% smoke PDF\n%%EOF\n");
   const uploadIntent = await requestJson("/materials/upload-intent", {
@@ -348,6 +386,30 @@ try {
       studentNumber: SECOND_USER_STUDENT_NUMBER
     }
   });
+
+  // master token was revoked by logout at line 373 — re-login for admin route check.
+  const masterReloginForAdmin = await requestJson("/auth/login", {
+    method: "POST",
+    body: {
+      name: SEED_USER_NAME,
+      studentNumber: SEED_USER_STUDENT_NUMBER
+    }
+  });
+  const masterAdminUsers = await requestJson("/v1/admin/users", {
+    token: masterReloginForAdmin.token
+  });
+  if (!Array.isArray(masterAdminUsers.users)) {
+    throw new Error("master role did not receive users list");
+  }
+  console.log("admin route accepts master user");
+  const adminUsers = await requestJson("/v1/admin/users", {
+    token: secondLogin.token
+  });
+  if (!Array.isArray(adminUsers.users)) {
+    throw new Error("admin role did not receive users list");
+  }
+  console.log("admin route accepts admin user");
+
   await assertStatus("cross-user material access is denied", () =>
     request(`/materials/${materialId}`, { token: secondLogin.token }),
     404
@@ -406,7 +468,7 @@ try {
 function startBackend(port, db) {
   baseUrl = `http://127.0.0.1:${port}/api`;
 
-  return spawn("node", ["apps/api/dist/main.js"], {
+  const child = spawn("node", ["apps/api/dist/main.js"], {
     env: {
       ...process.env,
       PORT: String(port),
@@ -416,8 +478,11 @@ function startBackend(port, db) {
       STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local",
       PDF_UPLOAD_MAX_BYTES: "4096"
     },
-    stdio: ["ignore", "ignore", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"]
   });
+  child.stdout.on("data", (c) => process.stderr.write(`[backend stdout] ${c}`));
+  child.stderr.on("data", (c) => process.stderr.write(`[backend stderr] ${c}`));
+  return child;
 }
 
 async function requestJson(path, options = {}) {

@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { createHmac, randomBytes } from "node:crypto";
-import { PrismaService } from "../prisma/prisma.service";
+import { PrismaService } from "@study-note/persistence";
 
 interface SessionRecord {
   token: string;

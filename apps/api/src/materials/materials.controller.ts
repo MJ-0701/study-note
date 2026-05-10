@@ -12,7 +12,7 @@ import {
   UseGuards
 } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
-import { SessionAuthGuard } from "../auth/session-auth.guard";
+import { SessionAuthGuard } from "@study-note/auth";
 import { MaterialsService, parseAnnotationBody, parseUploadIntentBody } from "./materials.service";
 
 interface AuthenticatedRequest {

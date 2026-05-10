@@ -8,7 +8,7 @@
   },
   "packageManager": "pnpm@11.0.9",
   "prisma": {
-    "schema": "apps/api/prisma/schema.prisma"
+    "schema": "packages/persistence/prisma/schema.prisma"
   },
   "scripts": {
     "dev": "pnpm --filter @study-note/web dev",

@@ -13,13 +13,8 @@ import type {
   PdfMaterialRecord,
   PdfStickyNote
 } from "@study-note/domain";
-import { PrismaService } from "../prisma/prisma.service";
-import {
-  toAnnotationPayload,
-  toAnnotationSnapshotRecord,
-  toPdfMaterialRecord
-} from "../prisma/workspace.mappers";
-import { StoragePort } from "../storage/storage.port";
+import { PrismaService, toAnnotationPayload, toAnnotationSnapshotRecord, toPdfMaterialRecord } from "@study-note/persistence";
+import { StoragePort } from "@study-note/storage";
 
 interface CreateUploadIntentInput {
   subjectId: string;

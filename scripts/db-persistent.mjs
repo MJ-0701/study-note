@@ -21,7 +21,7 @@ import { prepareSmokeDatabase } from "./smoke-db.mjs";
  *   node scripts/db-persistent.mjs down "$COMPOSE_PROJECT"
  */
 
-const composeFile = resolve("apps/api/prisma/docker-compose.smoke.yml");
+const composeFile = resolve("packages/persistence/prisma/docker-compose.smoke.yml");
 const subcommand = process.argv[2] ?? "up";
 
 if (subcommand === "up") {

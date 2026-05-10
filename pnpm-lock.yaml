@@ -112,15 +112,24 @@ importers:
       '@prisma/client':
         specifier: ^6.19.3
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@study-note/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@study-note/corpus':
         specifier: workspace:*
         version: link:../../packages/corpus
       '@study-note/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@study-note/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
       '@study-note/persona-engine':
         specifier: workspace:*
         version: link:../../packages/persona-engine
+      '@study-note/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@xenova/transformers':
         specifier: ^2.17.2
         version: 2.17.2
@@ -259,6 +268,31 @@ importers:
         specifier: ^7.1.12
         version: 7.3.3(@types/node@25.6.2)(jiti@2.7.0)
 
+  packages/auth:
+    dependencies:
+      '@nestjs/common':
+        specifier: ^11.1.19
+        version: 11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: ^11.1.19
+        version: 11.1.19(@nestjs/common@11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.1.19)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@study-note/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@study-note/persistence':
+        specifier: workspace:*
+        version: link:../persistence
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/corpus:
     dependencies:
       '@nestjs/common':
@@ -296,6 +330,31 @@ importers:
 
   packages/domain: {}
 
+  packages/persistence:
+    dependencies:
+      '@nestjs/common':
+        specifier: ^11.1.19
+        version: 11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@prisma/client':
+        specifier: ^6.19.3
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      '@study-note/domain':
+        specifier: workspace:*
+        version: link:../domain
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.2
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/persona-engine:
     dependencies:
       '@nestjs/common':
@@ -325,6 +384,28 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/storage:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1041.0
+        version: 3.1045.0
+      '@nestjs/common':
+        specifier: ^11.1.19
+        version: 11.1.19(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@study-note/domain':
+        specifier: workspace:*
+        version: link:../domain
+      reflect-metadata:
+        specifier: ^0.2.2
+        version: 0.2.2
     devDependencies:
       '@types/node':
         specifier: ^25.6.0

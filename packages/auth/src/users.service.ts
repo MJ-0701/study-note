@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
-import { PrismaService } from "../prisma/prisma.service";
-import { toUserProfile } from "../prisma/workspace.mappers";
+import { PrismaService, toUserProfile } from "@study-note/persistence";
 
 @Injectable()
 export class UsersService {
@@ -29,5 +28,15 @@ export class UsersService {
     });
 
     return user ? toUserProfile(user) : undefined;
+  }
+
+  async listAll(): Promise<UserProfile[]> {
+    const users = await this.prisma.user.findMany({
+      orderBy: {
+        createdAt: "desc"
+      }
+    });
+
+    return users.map(toUserProfile);
   }
 }
