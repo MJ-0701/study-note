@@ -4,6 +4,7 @@ import { ResponsePanel } from "./components/ResponsePanel";
 import { SourcesPanel } from "./components/SourcesPanel";
 import { ModeToggle, type Mode } from "./components/ModeToggle";
 import { ConsentBanner } from "./components/ConsentBanner";
+import { PersonaSidebar } from "./components/PersonaSidebar";
 import {
   appendConversationTurn,
   createConversation,
@@ -158,6 +159,8 @@ export function App() {
     : "1초 후 진행...";
 
   return (
+    <div className="app-shell">
+    <PersonaSidebar activeSubjectId="digital-engineering" />
     <main
       style={{
         fontFamily:
@@ -313,5 +316,6 @@ export function App() {
         </section>
       ))}
     </main>
+    </div>
   );
 }

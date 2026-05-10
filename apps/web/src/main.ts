@@ -1440,7 +1440,10 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
       <div class="sidebar-group">
         <p class="group-label">과목 공부</p>
         <nav>
-          ${studyNotebook.subjects.map((subject) => `<a href="${subjectPath(subject)}">${subject.title}</a>`).join("")}
+          ${studyNotebook.subjects.map((subject) => `
+            <a href="${subjectPath(subject)}">${subject.title}</a>
+            ${renderPersonaSubLink(subject.id)}
+          `).join("")}
         </nav>
       </div>
       ${renderClassSchedule()}
@@ -1453,6 +1456,26 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
       </details>
     </aside>
   `;
+}
+
+const PERSONA_BY_SUBJECT: Record<string, { nick: string; active: boolean }> = {
+  "digital-engineering": { nick: "디공이", active: true },
+  "information-communication": { nick: "정통이", active: false },
+  "c-language": { nick: "씨랭이", active: false },
+  "computer-introduction": { nick: "컴론이", active: false }
+};
+
+const PERSONA_SUB_BASE = "padding-left:24px;font-size:13px";
+const PERSONA_SUB_DISABLED = `${PERSONA_SUB_BASE};opacity:0.45;cursor:not-allowed;pointer-events:none`;
+const PERSONA_SUB_ACTIVE = `${PERSONA_SUB_BASE};color:#3b6ef5`;
+
+function renderPersonaSubLink(subjectId: string): string {
+  const p = PERSONA_BY_SUBJECT[subjectId];
+  if (!p) return "";
+  if (p.active) {
+    return `<a style="${PERSONA_SUB_ACTIVE}" href="/persona-turn.html?subject=${subjectId}">↳ ${p.nick} 호출</a>`;
+  }
+  return `<a style="${PERSONA_SUB_DISABLED}" aria-disabled="true" tabindex="-1">↳ ${p.nick} 호출 (준비 중)</a>`;
 }
 
 function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
@@ -1469,6 +1492,7 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
         <nav>
           <a class="${route.name === "subject" ? "active" : ""}" href="${subjectPath(subject)}">과목 총정리</a>
           <a class="${route.name === "pdf-workspace" ? "active" : ""}" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간</a>
+          ${renderPersonaSubLink(subject.id)}
           ${subject.weekNotes.map((week) => `
             <a class="${route.name === "week" && route.weekId === week.id ? "active" : ""}" href="${weekPath(subject, week)}">${week.label}</a>
           `).join("")}
@@ -1479,7 +1503,10 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
         <p class="group-label">다른 과목</p>
         <nav>
           <a href="#/">전체 현황</a>
-          ${notebook.subjects.map((item) => `<a class="${item.id === subject.id && route.name === "subject" ? "active" : ""}" href="${subjectPath(item)}">${item.title}</a>`).join("")}
+          ${notebook.subjects.map((item) => `
+            <a class="${item.id === subject.id && route.name === "subject" ? "active" : ""}" href="${subjectPath(item)}">${item.title}</a>
+            ${renderPersonaSubLink(item.id)}
+          `).join("")}
         </nav>
       </div>
       <details class="sidebar-details" ${route.name === "subject-intake" ? "open" : ""}>
