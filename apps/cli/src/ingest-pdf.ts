@@ -1,6 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { CorpusModule, IngestService } from "@study-note/corpus";
+import { isAbsolute } from "node:path";
 
 interface CliArgs {
   path: string;
@@ -41,7 +42,20 @@ function parseArgs(argv: string[]): CliArgs {
       "usage: node apps/cli/dist/ingest-pdf.js --path <pdf-path> [--subject <subject-slug>]"
     );
   }
+  pdfPath = validatePath(pdfPath);
   return { path: pdfPath, subject };
+}
+
+function validatePath(rawPath: string): string {
+  if (isAbsolute(rawPath)) {
+    throw new Error("invalid path: absolute path not allowed, use relative path");
+  }
+
+  if (rawPath.includes("..")) {
+    throw new Error("invalid path: path traversal (..) not allowed");
+  }
+
+  return rawPath;
 }
 
 async function main(): Promise<void> {

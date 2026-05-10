@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
@@ -101,6 +103,53 @@ try {
     throw new Error("upload intent did not return a pending backend upload target");
   }
 
+  const intentFileSizeRejectSamples = [0, 1, 4];
+  for (const rejectedFileSize of intentFileSizeRejectSamples) {
+    const rejectedCountBefore = await prisma.pdfMaterial.count({
+      where: {
+        ownerId: login.user.id,
+        fileSize: rejectedFileSize
+      }
+    });
+
+    await assertStatus(`intent rejects fileSize=${rejectedFileSize}`, () =>
+      request("/materials/upload-intent", {
+        method: "POST",
+        token,
+        body: {
+          subjectId: "digital-engineering",
+          classDate: "2026-05-02",
+          fileName: "sample-lecture.pdf",
+          fileSize: rejectedFileSize,
+          pageCount: 3,
+          contentType: "application/pdf"
+        }
+      }),
+    400
+    );
+
+    const rejectedCountAfter = await prisma.pdfMaterial.count({
+      where: {
+        ownerId: login.user.id,
+        fileSize: rejectedFileSize
+      }
+    });
+
+    if (rejectedCountAfter !== rejectedCountBefore) {
+      throw new Error(`intent with fileSize=${rejectedFileSize} created a PdfMaterial row`);
+    }
+
+    if (rejectedFileSize === 0) {
+      console.log("- intent rejects fileSize=0");
+    }
+    if (rejectedFileSize === 1) {
+      console.log("- intent rejects fileSize=1");
+    }
+    if (rejectedFileSize === 4) {
+      console.log("- intent rejects fileSize=4");
+    }
+  }
+
   await assertStatus("pending materials cannot be downloaded", () =>
     request(`/materials/${materialId}/download`, { token }),
     409
@@ -123,6 +172,37 @@ try {
     }),
     400
   );
+
+  await assertStatus("corrupted PDF magic (%PDFx) rejected", () =>
+    requestBinary(`/materials/${materialId}/file`, {
+      method: "PUT",
+      token,
+      body: Buffer.from("%PDFx fake content"),
+      contentType: "application/pdf"
+    }),
+    400
+  );
+  console.log("- corrupted PDF magic (%PDFx) rejected");
+
+  const storagePath = join(process.cwd(), "local-materials", login.user.id, materialId);
+  if (fs.existsSync(storagePath)) {
+    throw new Error("rejected put wrote to storage path in local mock");
+  }
+  console.log("- rejected PUT does not write to storage");
+
+  const stillPendingMaterial = await prisma.pdfMaterial.findUnique({
+    where: {
+      id: materialId
+    },
+    select: {
+      uploadStatus: true
+    }
+  });
+
+  if (stillPendingMaterial?.uploadStatus !== "pending") {
+    throw new Error("rejected put changed uploadStatus away from pending");
+  }
+  console.log("- rejected PUT preserves pending status");
 
   const uploadResponse = await requestBinary(`/materials/${materialId}/file`, {
     method: "PUT",

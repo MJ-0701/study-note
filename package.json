@@ -20,6 +20,7 @@
     "prisma:migrate:deploy": "pnpm --filter @study-note/api prisma:migrate:deploy",
     "prisma:seed": "pnpm --filter @study-note/api prisma:seed",
     "smoke:backend": "pnpm --filter @study-note/api build && node scripts/smoke-backend-contract.mjs",
+    "smoke:cli-path": "pnpm --filter @study-note/cli build && node scripts/smoke-cli-path.mjs",
     "smoke:s3-storage": "pnpm --filter @study-note/api build && node scripts/smoke-s3-storage.mjs",
     "smoke:s3-real": "pnpm --filter @study-note/api build && node scripts/smoke-real-s3-storage.mjs",
     "smoke:pdf-workspace": "pnpm --filter @study-note/api build && node scripts/smoke-pdf-workspace.mjs",

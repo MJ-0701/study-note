@@ -262,15 +262,16 @@ Dockerfile 은 각 `apps/*` 가 자기 빌드 컨텍스트로 소유. `infra/doc
 ## 13. Security regression mapping (R12, AC12)
 
 다음 sprint 의 마이그레이션 AC 가 검증해야 할 보안 regression set. 본 sprint 는 매핑 명세까지, 실제 검증은 다음 sprint smoke.
+본 sprint-3 commit (TBD) 에서 이전 보류 의무를 종료하고 §13 보안 regression 6행을 활성화한다.
 
 | regression case | 영향 surface | 다음 sprint AC ID (잠정) | 검증 방법 |
 |---|---|---|---|
-| auth boundary (unauthenticated request 가 401 받는지) | `apps/api` | next-AC-sec-1 | `smoke-backend-contract` 의 "unauthenticated materials are rejected" + "unauthenticated /me is rejected" assertions (이미 존재, path 갱신 후 재실행) |
-| cross-user material access (user2 가 user1 의 material 에 접근 시 401/404) | `apps/api` | next-AC-sec-2 | `smoke-backend-contract` 의 cross-user 테스트 (S7 round 4 fix 로 SECOND_USER_NAME/STUDENT_NUMBER env-driven 정렬됨) |
-| raw bearer token persistence (DB 에 raw token 이 저장 안 되는지) | `apps/api` + `packages/persistence` | next-AC-sec-3 | `smoke-backend-contract` 의 `assertRawTokenIsNotPersisted` (이미 존재) |
-| upload validation (oversized / non-PDF MIME / 잘못된 magic bytes 거부) | `apps/api` | next-AC-sec-4 | `smoke-backend-contract` upload negative case (`PDF_UPLOAD_MAX_BYTES` 초과, content-type mismatch) — 다음 sprint 에 보강 필요 |
-| S3 config 실패 (S3_ENDPOINT 잘못 / 권한 없음 시 graceful fail) | `apps/api` + `packages/storage` | next-AC-sec-5 | `smoke-s3-storage` / `smoke-real-s3-storage` (이미 존재, path 갱신 후 재실행) |
-| CLI path traversal / 외부 파일 접근 | `apps/cli` | next-AC-sec-6 | `smoke-pdf-workspace` 의 cli ingest-pdf path validation (`safeBasename` 검증, 이미 존재) + cli args 의 절대 경로 거부 negative case 추가 |
+| auth boundary (unauthenticated request 가 401 받는지) | `apps/api` | next-AC-sec-1 | must-pass — `smoke-backend-contract` 의 "unauthenticated materials are rejected" + "unauthenticated /me is rejected" assertions (이미 존재, path 갱신 후 재실행) |
+| cross-user material access (user2 가 user1 의 material 에 접근 시 401/404) | `apps/api` | next-AC-sec-2 | must-pass — `smoke-backend-contract` 의 cross-user 테스트 (S7 round 4 fix 로 SECOND_USER_NAME/STUDENT_NUMBER env-driven 정렬됨) |
+| raw bearer token persistence (DB 에 raw token 이 저장 안 되는지) | `apps/api` + `packages/persistence` | next-AC-sec-3 | must-pass — `smoke-backend-contract` 의 `assertRawTokenIsNotPersisted` (이미 존재) |
+| upload validation (oversized / non-PDF MIME / 잘못된 magic bytes 거부) | `apps/api` | next-AC-sec-4 | must-pass — `smoke-backend-contract` upload negative case (`PDF_UPLOAD_MAX_BYTES` 초과, content-type mismatch, `%PDF-` 첫 5 bytes 검증, fileSize 하한, fail-closed 보장) |
+| S3 config 실패 (S3_ENDPOINT 잘못 / 권한 없음 시 graceful fail) | `apps/api` + `packages/storage` | next-AC-sec-5 | must-pass — `smoke-s3-storage` / `smoke-real-s3-storage` (이미 존재, path 갱신 후 재실행) |
+| CLI path traversal / 외부 파일 접근 | `apps/cli` | next-AC-sec-6 | must-pass — `smoke-cli-path` 및 `smoke-pdf-workspace`의 cli ingest-pdf path validation (`safeBasename` 검증, 이미 존재) + cli args 의 절대 경로 거부 negative case 추가 |
 
 총 6 행 (AC12 minimum 6 정확 매칭). 6 keyword (auth boundary, cross-user, raw-token, upload validation, S3 config, CLI path) 모두 첫 컬럼에 등장.
 

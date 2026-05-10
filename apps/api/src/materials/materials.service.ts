@@ -6,7 +6,7 @@ import {
   NotFoundException
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
 import type {
   AnnotationSnapshotRecord,
   PdfInkStroke,
@@ -53,8 +53,7 @@ export class MaterialsService {
     const now = new Date().toISOString();
     const materialId = randomUUID();
     const fileName = requirePdfFileName(input.fileName);
-    const fileSize = requirePositiveNumber(input.fileSize, "fileSize");
-    requireAllowedFileSize(fileSize);
+    const fileSize = requirePdfUploadFileSize(input.fileSize);
     const material = await this.prisma.pdfMaterial.create({
       data: {
         id: materialId,
@@ -100,8 +99,16 @@ export class MaterialsService {
       throw new BadRequestException("contentLength must match material fileSize");
     }
 
+    const { prefix, body } = await readPdfLeadingBytes(input.body, PDF_MAGIC_PREFIX.length);
+    if (!prefix.equals(PDF_MAGIC_PREFIX)) {
+      throw new BadRequestException({
+        errorCode: "VALIDATION_ERROR",
+        errorMessage: "PDF file body must start with %PDF-"
+      });
+    }
+
     await this.storage.putObject(material, {
-      body: input.body,
+      body: Readable.from(body),
       contentType,
       contentLength,
       maxBytes
@@ -333,6 +340,36 @@ function requireAllowedFileSize(fileSize: number): void {
   if (fileSize > maxBytes) {
     throw new BadRequestException(`fileSize exceeds ${maxBytes} bytes`);
   }
+}
+
+function requirePdfUploadFileSize(fileSize: number): number {
+  if (!Number.isFinite(fileSize) || fileSize < 5) {
+    throw new BadRequestException({
+      errorCode: "VALIDATION_ERROR",
+      errorMessage: "fileSize must be at least 5 bytes for PDF magic check"
+    });
+  }
+
+  requireAllowedFileSize(fileSize);
+  return fileSize;
+}
+
+const PDF_MAGIC_PREFIX = Buffer.from("%PDF-");
+
+async function readPdfLeadingBytes(
+  stream: Readable,
+  byteCount: number
+): Promise<{ prefix: Buffer; body: Buffer }> {
+  // sprint-3 round 5 fix: body 전체를 buffer 로 read (max contentLength 가 이미 검증됨,
+  // PDF_UPLOAD_MAX_BYTES 보호). prefix 는 첫 byteCount bytes, body 는 전체 (storage 에 그대로
+  // 저장). 이전 PassThrough split 패턴은 storage 에 prefix 가 빠져 download mismatch 발생.
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const body = Buffer.concat(chunks);
+  const prefix = body.subarray(0, byteCount);
+  return { prefix, body };
 }
 
 function getMaxPdfUploadBytes(): number {
