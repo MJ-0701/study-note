@@ -1614,6 +1614,7 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
             .join("")}
         </nav>
       </details>
+      ${renderAdminLink()}
     </aside>
   `;
 }
