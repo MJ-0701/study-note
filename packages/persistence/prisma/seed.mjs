@@ -15,14 +15,24 @@ const users = [
     displayName: process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User",
     studentNumber: process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001",
     email: process.env.STUDY_NOTE_DEV_USER_EMAIL ?? "dev1@example.com",
-    role: "MASTER"
+    role: "MASTER",
+    devUserFlag: true
   },
   {
     id: "user-dev-2",
     displayName: process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer",
     studentNumber: process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002",
     email: process.env.STUDY_NOTE_SECOND_USER_EMAIL ?? "reviewer@example.com",
-    role: "ADMIN"
+    role: "ADMIN",
+    devUserFlag: true
+  },
+  {
+    id: "user-dev-3",
+    displayName: process.env.STUDY_NOTE_THIRD_USER_NAME ?? "Plain User",
+    studentNumber: process.env.STUDY_NOTE_THIRD_STUDENT_NUMBER ?? "20269998",
+    email: process.env.STUDY_NOTE_THIRD_USER_EMAIL ?? "plain@example.com",
+    role: "NORMAL",
+    devUserFlag: false
   }
 ];
 
@@ -42,9 +52,17 @@ try {
         displayName: user.displayName,
         studentNumber: user.studentNumber,
         email: user.email,
-        role: user.role
+        role: user.role,
+        devUserFlag: user.devUserFlag
       },
-      create: user
+      create: {
+        id: user.id,
+        displayName: user.displayName,
+        studentNumber: user.studentNumber,
+        email: user.email,
+        role: user.role,
+        devUserFlag: user.devUserFlag
+      }
     });
   }
 

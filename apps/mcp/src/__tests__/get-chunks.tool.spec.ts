@@ -30,7 +30,7 @@ describe("get_chunks tool — happy path (AC6 success)", () => {
     assert.ok(!JSON.stringify(out).includes("/Users/mj/private"));
 
     // handler wrapper → CallToolResult { content: [{ type: "text", text: JSON }] }
-    const handler = makeGetChunksHandler(retrieval);
+    const handler = makeGetChunksHandler(retrieval, "ctest000000000000000000000");
     const result = await handler({ subject: "digital-engineering", query: "반가산기", k: 2 });
     assert.equal(result.content[0]?.type, "text");
     assert.match(result.content[0]?.text ?? "", /"chunks":/);

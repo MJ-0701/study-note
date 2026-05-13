@@ -16,7 +16,14 @@ const subDisabled: CSSProperties = {
   pointerEvents: "none"
 };
 
-export function PersonaSidebar({ activeSubjectId }: { activeSubjectId?: string }) {
+export function PersonaSidebar({
+  activeSubjectId,
+  role
+}: {
+  activeSubjectId?: string;
+  role?: "master" | "admin" | "normal";
+}) {
+  const showAdmin = role === "master" || role === "admin";
   return (
     <aside className="sidebar" aria-label="학습 내비게이션">
       <a className="wordmark" href="/">study-note</a>
@@ -48,6 +55,27 @@ export function PersonaSidebar({ activeSubjectId }: { activeSubjectId?: string }
           ))}
         </nav>
       </div>
+      <div className="sidebar-group">
+        <p className="group-label">🧩 MCP 연동</p>
+        <nav>
+          <a
+            href="/onboarding-mcp.html"
+            aria-label="MCP 연동 설정 가이드"
+          >
+            MCP 설정 가이드
+          </a>
+        </nav>
+      </div>
+      {showAdmin && (
+        <div className="sidebar-group">
+          <p className="group-label">🛡️ 관리자</p>
+          <nav>
+            <a href="/admin.html" aria-label="관리자 대시보드">
+              사용자 관리
+            </a>
+          </nav>
+        </div>
+      )}
     </aside>
   );
 }

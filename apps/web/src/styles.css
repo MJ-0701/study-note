@@ -150,6 +150,33 @@ code,
   border-color: rgba(38, 122, 69, 0.3);
 }
 
+/* slice-3: auth tab toggle (login / sign-up) */
+.auth-tabs {
+  border-bottom: 1px solid var(--ds-rule);
+  display: flex;
+  gap: 0;
+}
+
+.auth-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex: 1;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  font-weight: 400;
+  margin-bottom: -1px;
+  padding: 8px 0;
+}
+
+.auth-tab.is-active {
+  border-bottom-color: #3b6ef5;
+  color: #3b6ef5;
+  font-weight: 600;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(220px, var(--ds-sidebar-w)) minmax(0, 1fr);

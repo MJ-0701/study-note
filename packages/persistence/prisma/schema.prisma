@@ -13,9 +13,12 @@ model User {
   studentNumber String        @unique
   email         String?       @unique
   role          Role          @default(NORMAL)
+  devUserFlag   Boolean       @default(false)
+  reviewedAt    DateTime?
   createdAt     DateTime      @default(now())
   sessions      Session[]
   materials     PdfMaterial[]
+  conversations Conversation[]
 }
 
 enum Role {
@@ -105,14 +108,17 @@ model Chunk {
 
 model Conversation {
   id          String   @id @default(cuid())
+  ownerId     String
   subject     String
   personaName String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   turns Turn[]
 
   @@index([subject, createdAt])
+  @@index([ownerId])
 }
 
 model Turn {

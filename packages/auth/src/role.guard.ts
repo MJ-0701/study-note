@@ -17,9 +17,11 @@ export class RoleGuard implements CanActivate {
     if (!required || required.length === 0) return true;
     const req = ctx.switchToHttp().getRequest();
     const userRole = req.user?.role;
-    if (!userRole) throw new ForbiddenException("user role missing");
+    if (!userRole) {
+      throw new ForbiddenException({ errorCode: "FORBIDDEN_ROLE", errorMessage: "role required" });
+    }
     if (!required.includes(userRole as UserRole)) {
-      throw new ForbiddenException(`role ${userRole} not in [${required.join(",")}]`);
+      throw new ForbiddenException({ errorCode: "FORBIDDEN_ROLE", errorMessage: `role ${userRole} not authorized` });
     }
     return true;
   }

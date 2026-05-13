@@ -140,9 +140,17 @@ function safeBasename(p: string): string {
   return last.length > 0 ? last : "<unknown>";
 }
 
-/** MCP tool registration handler — McpServer.registerTool 의 callback. */
-export function makeGetChunksHandler(retrieval: Pick<RetrievalService, "retrieveTopK">) {
+/** MCP tool registration handler — McpServer.registerTool 의 callback.
+ *  ownerId: resolved at start-time by resolveOwnerOrExit. Defensive guard for runtime null. */
+export function makeGetChunksHandler(
+  retrieval: Pick<RetrievalService, "retrieveTopK">,
+  ownerId: string
+) {
   return async (args: GetChunksInput) => {
+    // Defensive runtime fail-closed (ownerId should always be non-empty after start-time validate)
+    if (!ownerId) {
+      throw new McpError(ErrorCode.InternalError, "owner not resolved", { errorCode: "OWNER_UNRESOLVED" });
+    }
     const out = await executeGetChunks(retrieval, args);
     return {
       content: [

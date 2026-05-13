@@ -1,0 +1,316 @@
+/* admin dashboard styles — reuses --ds-* tokens from ../styles.css (global). */
+
+.admin-page {
+  font-family: var(--ds-font-sans);
+  color: var(--ds-fg);
+  background: var(--ds-bg);
+  min-height: 100vh;
+  padding: var(--ds-space-lg) var(--ds-space-md);
+}
+
+.admin-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.admin-header {
+  border-bottom: 1px solid var(--ds-rule);
+  margin-bottom: var(--ds-space-lg);
+  padding-bottom: var(--ds-space-md);
+  display: flex;
+  align-items: baseline;
+  gap: var(--ds-space-md);
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.admin-header h1 {
+  font-size: var(--ds-fs-h2);
+  font-weight: 700;
+  margin: 0;
+}
+
+.admin-meta {
+  font-size: var(--ds-fs-meta);
+  color: var(--ds-fg-soft);
+}
+
+/* Unreviewed badge */
+.unreviewed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ds-warn-soft);
+  border: 1px solid rgba(165, 90, 0, 0.35);
+  border-radius: 20px;
+  color: var(--ds-warn);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  padding: 4px 12px;
+  margin-bottom: var(--ds-space-md);
+}
+
+.unreviewed-badge-count {
+  background: var(--ds-warn);
+  color: #fff;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Status messages */
+.admin-status {
+  display: grid;
+  place-content: center;
+  min-height: 40vh;
+  text-align: center;
+  gap: var(--ds-space-sm);
+}
+
+.admin-status-title {
+  font-size: var(--ds-fs-h3);
+  font-weight: 600;
+  margin: 0;
+}
+
+.admin-status-body {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  margin: 0;
+}
+
+/* Table wrapper */
+.admin-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table th {
+  background: var(--ds-bg-soft);
+  border-bottom: 1px solid var(--ds-rule);
+  color: var(--ds-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-table td {
+  border-bottom: 1px solid var(--ds-rule);
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tr:hover td {
+  background: var(--ds-bg-soft);
+}
+
+/* Role badge */
+.role-badge {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.role-badge.master {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.role-badge.admin {
+  background: var(--ds-accent-soft);
+  color: var(--ds-accent);
+  border: 1px solid rgba(59, 110, 245, 0.3);
+}
+
+.role-badge.normal {
+  background: var(--ds-bg-soft);
+  color: var(--ds-fg-soft);
+  border: 1px solid var(--ds-rule);
+}
+
+/* devUserFlag badge */
+.flag-badge {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+
+.flag-badge.active {
+  background: var(--ds-success-soft);
+  color: var(--ds-success);
+  border: 1px solid rgba(38, 122, 69, 0.3);
+}
+
+.flag-badge.rejected {
+  background: var(--ds-warn-soft);
+  color: var(--ds-warn);
+  border: 1px solid rgba(165, 90, 0, 0.35);
+}
+
+/* reviewedAt badge */
+.review-badge {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+
+.review-badge.reviewed {
+  background: var(--ds-bg-soft);
+  color: var(--ds-fg-soft);
+  border: 1px solid var(--ds-rule);
+}
+
+.review-badge.unreviewed {
+  background: var(--ds-warn-soft);
+  color: var(--ds-warn);
+  border: 1px solid rgba(165, 90, 0, 0.35);
+}
+
+/* Actions cell */
+.actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 280px;
+}
+
+/* Action buttons */
+.action-btn {
+  border-radius: 5px;
+  border: 1px solid var(--ds-rule);
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  min-height: 30px;
+  padding: 4px 10px;
+  transition: background 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--ds-bg-soft);
+}
+
+.action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.action-btn.primary {
+  background: var(--ds-accent);
+  border-color: var(--ds-accent);
+  color: #fff;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  background: #2d5de0;
+  border-color: #2d5de0;
+}
+
+.action-btn.danger {
+  border-color: rgba(165, 90, 0, 0.5);
+  color: var(--ds-warn);
+}
+
+.action-btn.danger:hover:not(:disabled) {
+  background: var(--ds-warn-soft);
+}
+
+/* Role select in actions */
+.role-select {
+  border: 1px solid var(--ds-rule);
+  border-radius: 5px;
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: 12px;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.role-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Per-row inline error */
+.row-error {
+  color: var(--ds-warn);
+  font-size: 11px;
+  margin-top: 4px;
+  width: 100%;
+}
+
+/* Global error banner */
+.admin-error-banner {
+  background: var(--ds-warn-soft);
+  border: 1px solid rgba(165, 90, 0, 0.35);
+  border-radius: 8px;
+  color: var(--ds-warn);
+  font-size: var(--ds-fs-meta);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  margin-bottom: var(--ds-space-md);
+}
+
+/* Refresh button */
+.admin-refresh-btn {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  font-weight: 500;
+  min-height: 32px;
+  padding: 4px 12px;
+}
+
+.admin-refresh-btn:hover {
+  background: var(--ds-bg-soft);
+}
+
+@media (max-width: 700px) {
+  .admin-page {
+    padding: var(--ds-space-md) var(--ds-space-sm);
+  }
+
+  .actions-cell {
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

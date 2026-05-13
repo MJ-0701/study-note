@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 RUN corepack enable
@@ -10,7 +10,7 @@ COPY apps/cli ./apps/cli
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @study-note/cli build
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -21,7 +21,7 @@ COPY packages ./packages
 COPY apps/cli/package.json ./apps/cli/package.json
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/apps/cli/dist ./dist
+COPY --from=builder /app/apps/cli/dist ./apps/cli/dist
 RUN cat <<'EOS' > /usr/local/bin/study-note-cli && chmod +x /usr/local/bin/study-note-cli
 #!/bin/sh
 set -eu
@@ -31,10 +31,10 @@ if [ "$#" -gt 0 ]; then
 fi
 case "$command" in
   ingest-pdf)
-    exec node dist/ingest-pdf.js "$@"
+    exec node apps/cli/dist/ingest-pdf.js "$@"
     ;;
   persona-turn)
-    exec node dist/persona-turn.js "$@"
+    exec node apps/cli/dist/persona-turn.js "$@"
     ;;
   *)
     echo "usage: ingest-pdf|persona-turn [args...]" >&2

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 RUN corepack enable
@@ -10,7 +10,7 @@ COPY apps/mcp ./apps/mcp
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @study-note/mcp build
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -21,5 +21,5 @@ COPY packages ./packages
 COPY apps/mcp/package.json ./apps/mcp/package.json
 RUN pnpm install --frozen-lockfile --prod
 
-COPY --from=builder /app/apps/mcp/dist ./dist
-CMD ["node", "dist/index.js"]
+COPY --from=builder /app/apps/mcp/dist ./apps/mcp/dist
+CMD ["node", "apps/mcp/dist/index.js"]

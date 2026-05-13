@@ -5,9 +5,9 @@ NestJS backend boundary for the PDF workspace prototype.
 ## Route Contract
 
 - `GET /api/health`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/me`
+- `POST /api/v1/auth/sign-in` — body `{studentNumber, name}` → 200 `{userId,studentNumber,name,role}` + `Set-Cookie: study_note_session` (HttpOnly, Secure, SameSite=Lax, no Max-Age)
+- `POST /api/v1/auth/sign-out` — clears session cookie; 200 `{ok:true}`
+- `GET /api/v1/auth/me` — cookie session → 200 `{userId,studentNumber,name,role}`; 401 if not signed in
 - `POST /api/materials/upload-intent`
 - `PUT /api/materials/:materialId/file`
 - `GET /api/materials/:materialId/file`
@@ -18,12 +18,22 @@ NestJS backend boundary for the PDF workspace prototype.
 - `GET /api/materials/:materialId/annotation`
 - `GET /api/materials/:materialId/export-bundle`
 
+> **Removed** (slice-2): `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me` — replaced by the `v1/auth/*` routes above.
+
 ## v1 Boundaries
 
-- Auth is name + student number for a private local MVP. The default seed user is the placeholder `Dev User` / `20260001` (override via `STUDY_NOTE_DEV_USER_*` env vars); real DB-backed user enrollment is deferred.
-- `GET /api/me` is the frontend session revalidation boundary and must be called before rendering a stored-session workspace.
+- Auth is name + student number for a private local MVP (`User.devUserFlag=true` allowlist).
+  Only users with `devUserFlag=true` may sign in. Set `STUDY_NOTE_AUTH_DEV_ENABLED=false` to
+  disable all auth routes (HTTP 503) — intended for production deployments before OAuth/MFA.
+- Session token is stored in an **httpOnly cookie** (`study_note_session`). Token is never in the
+  response body. Cookie spec: `Secure; SameSite=Lax; Path=/; no Max-Age` (browser-close expiry).
+  The browser must send `credentials: "include"` (or equivalent) on all API requests.
+- `GET /api/v1/auth/me` is the frontend session revalidation boundary. Called on every app boot
+  with `credentials: "include"`; 401 means not signed in (clear in-memory state, show login).
+- Session rows store `tokenHash`; raw session tokens must not be stored in MySQL or logged.
+- PII policy: student numbers logged as `****{last4}`, names as `{first char}**`. Session cookie
+  value is never logged.
 - Runtime persistence uses Prisma + MySQL for users, sessions, PDF material metadata, and annotation snapshots.
-- Session rows store `tokenHash`; raw bearer tokens must not be stored in MySQL.
 - Storage uses `StoragePort`. `STORAGE_PROVIDER=local` is the default local/mock path; `STORAGE_PROVIDER=s3` enables private S3-backed PDF object storage.
 - Upload status is stored on `PdfMaterial`: new upload intents start as `pending`, and successful backend proxy upload changes the material to `uploaded`.
 - Browser clients do not upload directly to S3 in this MVP. They upload PDF bytes to `PUT /api/materials/:materialId/file`; the backend writes the object to S3 after session and ownership checks.

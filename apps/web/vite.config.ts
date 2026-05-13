@@ -15,7 +15,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),
-        "persona-turn": resolve(__dirname, "persona-turn.html")
+        "persona-turn": resolve(__dirname, "persona-turn.html"),
+        "onboarding-mcp": resolve(__dirname, "onboarding-mcp.html"),
+        admin: resolve(__dirname, "admin.html")
       }
     }
   }

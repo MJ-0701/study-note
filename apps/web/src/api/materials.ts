@@ -46,12 +46,14 @@ export class MaterialApiError extends Error {
   }
 }
 
+// slice-2: token parameter removed — auth is now via httpOnly cookie (F2).
+// All fetch calls use credentials: "include" so the browser sends the cookie.
+
 export async function createMaterialUploadIntent(
   apiBaseUrl: string,
-  token: string,
   input: MaterialUploadIntentInput
 ): Promise<MaterialUploadIntent> {
-  return fetchJson<MaterialUploadIntent>(apiBaseUrl, "/materials/upload-intent", token, {
+  return fetchJson<MaterialUploadIntent>(apiBaseUrl, "/materials/upload-intent", {
     method: "POST",
     headers: {
       "content-type": "application/json"
@@ -62,14 +64,12 @@ export async function createMaterialUploadIntent(
 
 export async function uploadMaterialFile(
   apiBaseUrl: string,
-  token: string,
   uploadUrl: string,
   file: File
 ): Promise<PdfMaterialRecord> {
   const payload = await fetchJson<{ material: PdfMaterialRecord }>(
     apiBaseUrl,
     uploadUrl,
-    token,
     {
       method: "PUT",
       headers: {
@@ -83,13 +83,11 @@ export async function uploadMaterialFile(
 }
 
 export async function listPdfMaterials(
-  apiBaseUrl: string,
-  token: string
+  apiBaseUrl: string
 ): Promise<PdfMaterialRecord[]> {
   const payload = await fetchJson<{ materials: PdfMaterialRecord[] }>(
     apiBaseUrl,
-    "/materials",
-    token
+    "/materials"
   );
 
   return payload.materials;
@@ -97,13 +95,12 @@ export async function listPdfMaterials(
 
 export async function fetchPdfMaterialFile(
   apiBaseUrl: string,
-  token: string,
   materialId: string
 ): Promise<Blob> {
   const response = await fetch(
     resolveApiUrl(apiBaseUrl, `/materials/${encodeURIComponent(materialId)}/file`),
     {
-      headers: withAuthorization(undefined, token)
+      credentials: "include"
     }
   );
 
@@ -117,12 +114,11 @@ export async function fetchPdfMaterialFile(
 async function fetchJson<T>(
   apiBaseUrl: string,
   path: string,
-  token: string,
   init: RequestInit = {}
 ): Promise<T> {
   const response = await fetch(resolveApiUrl(apiBaseUrl, path), {
     ...init,
-    headers: withAuthorization(init.headers, token)
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -130,12 +126,6 @@ async function fetchJson<T>(
   }
 
   return response.json() as Promise<T>;
-}
-
-function withAuthorization(headers: HeadersInit | undefined, token: string): Headers {
-  const nextHeaders = new Headers(headers);
-  nextHeaders.set("authorization", `Bearer ${token}`);
-  return nextHeaders;
 }
 
 function resolveApiUrl(apiBaseUrl: string, path: string): string {

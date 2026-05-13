@@ -92,8 +92,13 @@ export class ConversationService {
       });
     }
 
+    // slice-5: ownerId hardcoded to seeded dev user per ADR 0003 (local-only
+    // single-tenant). Proper req.user.id wiring on conversation routes is
+    // tracked in sprint-1 handoff cleanup (SessionAuthGuard + auth slice-2
+    // follow-up).
     const conversation = await this.prisma.conversation.create({
       data: {
+        ownerId: "user-dev-1",
         subject: dto.subject,
         personaName: archetype.name
       }

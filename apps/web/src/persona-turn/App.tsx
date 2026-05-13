@@ -4,6 +4,7 @@ import { ResponsePanel } from "./components/ResponsePanel";
 import { SourcesPanel } from "./components/SourcesPanel";
 import { ModeToggle, type Mode } from "./components/ModeToggle";
 import { ConsentBanner } from "./components/ConsentBanner";
+import { MCPOnboardingGate } from "./components/MCPOnboardingGate";
 import { PersonaSidebar } from "./components/PersonaSidebar";
 import {
   appendConversationTurn,
@@ -16,12 +17,29 @@ import {
 
 const CONSENT_DELAY_MS = 1000;
 const CONVERSATION_STORAGE_KEY = "study-note.personaTurn.conversationId";
+const BACKEND_BASE =
+  (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
 type ChatTurn = PersonaTurnResult & {
   conversationId: string;
   turnId: string;
   createdAt: string;
 };
+
+type UserRole = "master" | "admin" | "normal";
+
+interface AuthUser {
+  userId: string;
+  studentNumber: string;
+  name: string;
+  role: UserRole;
+}
+
+type AuthState = "checking" | "signed-in" | "signed-out";
+
+function isUserRole(r: string): r is UserRole {
+  return r === "master" || r === "admin" || r === "normal";
+}
 
 export function App() {
   const [mode, setMode] = useState<Mode>("fixture");
@@ -34,6 +52,46 @@ export function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Auth state
+  const [authState, setAuthState] = useState<AuthState>("checking");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authFormName, setAuthFormName] = useState("");
+  const [authFormStudentNumber, setAuthFormStudentNumber] = useState("");
+  const [authFormSubmitting, setAuthFormSubmitting] = useState(false);
+  const [authFormError, setAuthFormError] = useState<string | null>(null);
+
+  // Boot: fetch /me to check auth
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${BACKEND_BASE}/api/v1/auth/me`, { credentials: "include" })
+      .then(async (res) => {
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json() as { userId: string; studentNumber: string; name: string; role: string };
+          if (
+            typeof data.userId === "string" &&
+            typeof data.studentNumber === "string" &&
+            typeof data.name === "string" &&
+            isUserRole(data.role)
+          ) {
+            setAuthUser({ userId: data.userId, studentNumber: data.studentNumber, name: data.name, role: data.role });
+            setAuthState("signed-in");
+          } else {
+            setAuthState("signed-out");
+          }
+        } else {
+          // 401 = no cookie, 503 = auth disabled
+          setAuthState("signed-out");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAuthState("signed-out");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // mode → real 변경 시 1초 consent delay (CLI stderr banner 와 동일 invariant).
   useEffect(() => {
@@ -148,6 +206,129 @@ export function App() {
     setError(null);
   }
 
+  async function handleSignIn(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthFormError(null);
+    setAuthFormSubmitting(true);
+    try {
+      const res = await fetch(`${BACKEND_BASE}/api/v1/auth/sign-in`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: authFormName.trim(), studentNumber: authFormStudentNumber.trim() })
+      });
+      if (res.ok) {
+        const data = await res.json() as { userId: string; studentNumber: string; name: string; role: string };
+        if (isUserRole(data.role)) {
+          setAuthUser({ userId: data.userId, studentNumber: data.studentNumber, name: data.name, role: data.role });
+          setAuthState("signed-in");
+          setAuthFormName("");
+          setAuthFormStudentNumber("");
+        } else {
+          setAuthFormError("서버 응답 형식 오류 — role 값이 유효하지 않습니다.");
+        }
+      } else {
+        const body = await res.json().catch(() => ({})) as { errorCode?: string; errorMessage?: string };
+        setAuthFormError(body.errorMessage ?? `오류 ${res.status}`);
+      }
+    } catch {
+      setAuthFormError("네트워크 오류 — backend 가 떠있는지 확인하세요.");
+    } finally {
+      setAuthFormSubmitting(false);
+    }
+  }
+
+  // Auth loading
+  if (authState === "checking") {
+    return (
+      <div className="login-screen">
+        <div className="login-panel">
+          <p style={{ color: "#6b7280", fontSize: 14, textAlign: "center", margin: 0 }}>
+            인증 확인 중...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not signed in — sign-in form only; sign-up redirects to home
+  if (authState === "signed-out") {
+    return (
+      <div className="login-screen">
+        <div className="login-panel">
+          <h1 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 4px", color: "#111827" }}>
+            study-note
+          </h1>
+          <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 20px" }}>
+            페르소나 대화 · 강의 자료 기반
+          </p>
+
+          {/* Sign-in form */}
+          <form
+            className="login-form"
+            onSubmit={handleSignIn}
+          >
+            <label>
+              <span>학번 (8자리)</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="username"
+                placeholder="20XXXXXX"
+                value={authFormStudentNumber}
+                onChange={(e) => setAuthFormStudentNumber(e.target.value)}
+                required
+                disabled={authFormSubmitting}
+                aria-label="학번"
+              />
+            </label>
+            <label>
+              <span>이름</span>
+              <input
+                type="text"
+                autoComplete="name"
+                placeholder="홍길동"
+                value={authFormName}
+                onChange={(e) => setAuthFormName(e.target.value)}
+                required
+                disabled={authFormSubmitting}
+                aria-label="이름"
+              />
+            </label>
+
+            {authFormError && (
+              <div
+                className="login-feedback is-error"
+                role="alert"
+                aria-live="polite"
+                style={{ fontSize: 13 }}
+              >
+                {authFormError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={authFormSubmitting}
+              className="inline-action"
+              style={{ marginTop: 4 }}
+            >
+              {authFormSubmitting ? "로그인 중..." : "로그인"}
+            </button>
+          </form>
+
+          {/* Sign-up redirect — slice-3: sign-up is handled at home (/) */}
+          <p style={{ fontSize: 13, color: "#6b7280", margin: "16px 0 0", textAlign: "center" }}>
+            회원가입은 홈(/) 에서 진행하세요.{" "}
+            <a href="/" style={{ color: "#3b6ef5", textDecoration: "underline" }}>
+              홈으로 이동
+            </a>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const externalDisabled = consentDelayActive || isSubmitting || historyLoading;
   const agentLabel = agent === "gemini-cli" ? "Gemini CLI" : "Claude CLI";
   const externalDisabledLabel = isSubmitting
@@ -160,7 +341,11 @@ export function App() {
 
   return (
     <div className="app-shell">
-    <PersonaSidebar activeSubjectId="digital-engineering" />
+    <MCPOnboardingGate />
+    <PersonaSidebar
+      activeSubjectId="digital-engineering"
+      role={authUser?.role}
+    />
     <main
       style={{
         fontFamily:
@@ -179,6 +364,11 @@ export function App() {
           디지털공학개론 페르소나와 이어서 질문하고 답할 수 있습니다. 응답은 강의자료
           출처를 바탕으로 시험 우선순위부터 짚어줍니다.
         </p>
+        {authUser && (
+          <p style={{ margin: "6px 0 0", color: "#9ca3af", fontSize: 13 }}>
+            {authUser.name} ({authUser.studentNumber}) · {authUser.role}
+          </p>
+        )}
       </header>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
@@ -315,6 +505,17 @@ export function App() {
           <SourcesPanel sources={turn.sources} />
         </section>
       ))}
+
+      <footer style={{ marginTop: 32, paddingTop: 12, borderTop: "1px solid #e5e7eb", fontSize: 12, color: "#6b7280" }}>
+        Bedrock + 자체 API key 등록은 본 sprint 미지원 (이중 과금 회피). 자세히 보기 →{" "}
+        <a
+          href="/onboarding-mcp.html"
+          aria-label="MCP 연동 설정 가이드 보기"
+          style={{ color: "#6b7280", textDecoration: "underline" }}
+        >
+          MCP 연동 설정 가이드
+        </a>
+      </footer>
     </main>
     </div>
   );

@@ -2,7 +2,7 @@
 // CORS 는 backend `enableCors({origin:true})` 로 5173↔3001 cross-origin 허용 (plan K6).
 
 const BACKEND_BASE =
-  (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "http://127.0.0.1:3001";
+  (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
 /**
  * sprint-2 AC3 — single-source agent enum. backend `LLM_AGENT_IDS` (canonical source

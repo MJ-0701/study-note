@@ -81,18 +81,21 @@ interface QuickNote {
   primaryLabel?: string;
 }
 
+// slice-2: AuthSession now mirrors the /v1/auth/me response shape.
+// token is no longer stored in JS (F2 — httpOnly cookie only).
 interface AuthSession {
-  token: string;
-  expiresAt: string;
   user: {
     id: string;
     displayName: string;
     studentNumber: string;
+    role: string;
     email?: string;
   };
 }
 
 type AuthBootState = "checking" | "ready";
+
+type AuthMode = "login" | "signup";
 
 type LoginFeedback =
   | {
@@ -103,12 +106,15 @@ type LoginFeedback =
   | undefined;
 
 const notebookStorageKey = "study-note.notebook.v2";
-const authSessionStorageKey = "study-note.auth-session.v1";
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:3001/api";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
 let notebook = loadStoredNotebook();
 let pdfWorkspaceStore = loadPdfWorkspaceStore();
-let authSession = loadAuthSession();
-let authBootState: AuthBootState = authSession ? "checking" : "ready";
+// slice-2: auth state is in-memory only (F2 — no localStorage for session).
+// Rehydrated on app boot via GET /v1/auth/me with cookie.
+let authSession: AuthSession | undefined;
+let authBootState: AuthBootState = "checking";
+// slice-3 (sign-up UX): current auth form tab ("login" | "signup").
+let authMode: AuthMode = "login";
 const activePdfObjectUrls = new Map<string, string>();
 const activePdfObjectUrlMaterialIds = new Map<string, string>();
 const activePdfPreviewLoads = new Set<string>();
@@ -144,9 +150,8 @@ document.addEventListener("pointercancel", handleDocumentPointerUp);
 window.addEventListener("hashchange", renderApp);
 renderApp();
 
-if (authSession) {
-  void revalidateStoredSession();
-}
+// slice-2: always rehydrate from server — cookie carries the session token.
+void revalidateStoredSession();
 
 function loadStoredNotebook(): StudyNotebook {
   const stored = window.localStorage.getItem(notebookStorageKey);
@@ -191,34 +196,11 @@ function saveNotebook(nextNotebook: StudyNotebook): void {
   window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
 }
 
-function loadAuthSession(): AuthSession | undefined {
-  const stored = window.localStorage.getItem(authSessionStorageKey);
-
-  if (!stored) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as unknown;
-
-    if (isAuthSession(parsed)) {
-      return parsed;
-    }
-  } catch {
-    // Invalid session payloads are cleared below.
-  }
-
-  window.localStorage.removeItem(authSessionStorageKey);
-  return undefined;
-}
-
-function saveAuthSession(nextSession: AuthSession): void {
-  window.localStorage.setItem(authSessionStorageKey, JSON.stringify(nextSession));
-}
+// slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
+// Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
 
 function clearAuthSession(): void {
   authSession = undefined;
-  window.localStorage.removeItem(authSessionStorageKey);
   revokeAllPdfObjectUrls();
 }
 
@@ -254,78 +236,86 @@ function revokeAllPdfObjectUrls(): void {
 }
 
 async function revalidateStoredSession(): Promise<void> {
-  const session = authSession;
-
-  if (!session) {
-    authBootState = "ready";
-    renderApp();
-    return;
-  }
-
   try {
-    const response = await fetch(`${apiBaseUrl}/me`, {
-      headers: {
-        authorization: `Bearer ${session.token}`
-      }
+    // slice-2: cookie-based session rehydration — credentials:include sends the
+    // httpOnly study_note_session cookie. No localStorage fallback (F2).
+    const response = await fetch(`${apiBaseUrl}/v1/auth/me`, {
+      credentials: "include"
     });
 
     if (!response.ok) {
-      throw new Error("stored session rejected");
+      // 401 = no valid cookie; 503 = auth disabled. Either way: not signed in.
+      authBootState = "ready";
+      renderApp();
+      return;
     }
 
-    const payload = (await response.json()) as { user?: unknown };
+    const payload = (await response.json()) as unknown;
 
-    if (!isAuthUser(payload.user)) {
-      throw new Error("stored session returned an invalid user profile");
+    if (!isAuthMeResponse(payload)) {
+      authBootState = "ready";
+      renderApp();
+      return;
     }
 
-    authSession = {
-      ...session,
-      user: payload.user
-    };
-    saveAuthSession(authSession);
+    authSession = meResponseToSession(payload);
     await restoreUploadedPdfMaterialsForSession(authSession);
     loginFeedback = undefined;
   } catch {
-    clearAuthSession();
-    loginFeedback = {
-      kind: "error",
-      title: "세션을 다시 확인하지 못했습니다.",
-      detail: "저장된 로그인 정보가 만료되었습니다. 이름과 학번으로 다시 로그인하세요."
-    };
+    // Network error — treat as not signed in (don't show error on cold load)
+    authSession = undefined;
   } finally {
     authBootState = "ready";
     renderApp();
   }
 }
 
-function isAuthSession(value: unknown): value is AuthSession {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+// slice-2: /v1/auth/me response shape — {userId, studentNumber, name, role}
+interface AuthMeResponse {
+  userId: string;
+  studentNumber: string;
+  name: string;
+  role: string;
+}
 
-  const candidate = value as Partial<AuthSession>;
-
+function isAuthMeResponse(value: unknown): value is AuthMeResponse {
+  if (!value || typeof value !== "object") return false;
+  const c = value as Partial<AuthMeResponse>;
   return (
-    typeof candidate.token === "string" &&
-    typeof candidate.expiresAt === "string" &&
-    new Date(candidate.expiresAt).getTime() > Date.now() &&
-    isAuthUser(candidate.user)
+    typeof c.userId === "string" &&
+    typeof c.studentNumber === "string" &&
+    typeof c.name === "string" &&
+    typeof c.role === "string"
   );
 }
 
-function isAuthUser(value: unknown): value is AuthSession["user"] {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+function meResponseToSession(resp: AuthMeResponse): AuthSession {
+  return {
+    user: {
+      id: resp.userId,
+      displayName: resp.name,
+      studentNumber: resp.studentNumber,
+      role: resp.role
+    }
+  };
+}
 
-  const candidate = value as Partial<AuthSession["user"]>;
+// sign-in response shape — same as /me but returned on POST sign-in
+interface AuthSignInResponse {
+  userId: string;
+  studentNumber: string;
+  name: string;
+  role: string;
+}
 
+function isAuthSignInResponse(value: unknown): value is AuthSignInResponse {
+  if (!value || typeof value !== "object") return false;
+  const c = value as Partial<AuthSignInResponse>;
   return (
-    typeof candidate.id === "string" &&
-    typeof candidate.displayName === "string" &&
-    typeof candidate.studentNumber === "string" &&
-    (candidate.email === undefined || typeof candidate.email === "string")
+    typeof c.userId === "string" &&
+    typeof c.studentNumber === "string" &&
+    typeof c.name === "string" &&
+    typeof c.role === "string"
   );
 }
 
@@ -430,8 +420,29 @@ function handleDocumentClick(event: MouseEvent): void {
 
   const quickNoteButton = target.closest<HTMLButtonElement>("[data-action]");
 
+  // slice-3: auth tab switch — clears fields (re-render rebuilds inputs) + feedback.
+  if (quickNoteButton?.dataset.action === "auth-tab-login") {
+    authMode = "login";
+    loginFeedback = undefined;
+    renderApp();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "auth-tab-signup") {
+    authMode = "signup";
+    loginFeedback = undefined;
+    renderApp();
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "logout") {
+    // slice-2: call sign-out API to clear cookie; fire-and-forget (idempotent)
+    void fetch(`${apiBaseUrl}/v1/auth/sign-out`, {
+      method: "POST",
+      credentials: "include"
+    });
     clearAuthSession();
+    authMode = "login";
     loginFeedback = {
       kind: "success",
       title: "로그아웃했습니다.",
@@ -577,7 +588,13 @@ function handleDocumentClick(event: MouseEvent): void {
 async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
   const target = event.target;
 
-  if (!(target instanceof HTMLFormElement) || target.dataset.action !== "login") {
+  if (!(target instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const action = target.dataset.action;
+
+  if (action !== "login" && action !== "signup") {
     return;
   }
 
@@ -591,45 +608,88 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     loginFeedback = {
       kind: "error",
       title: "이름과 학번을 입력하세요.",
-      detail: "시험 대비 자료는 로그인 후 볼 수 있습니다."
+      detail: action === "login"
+        ? "시험 대비 자료는 로그인 후 볼 수 있습니다."
+        : "이름과 학번을 모두 입력해야 가입할 수 있습니다."
     };
     renderApp();
     return;
   }
 
+  if (action === "login") {
+    try {
+      // slice-2: migrated to /v1/auth/sign-in; credentials:include for cookie receipt.
+      const response = await fetch(`${apiBaseUrl}/v1/auth/sign-in`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({ name, studentNumber })
+      });
+
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { errorCode?: string; errorMessage?: string };
+        throw new Error(body.errorMessage ?? "이름 또는 학번이 올바르지 않습니다.");
+      }
+
+      const payload = (await response.json()) as unknown;
+
+      if (!isAuthSignInResponse(payload)) {
+        throw new Error("로그인 응답 형식이 올바르지 않습니다.");
+      }
+
+      const session = meResponseToSession(payload as AuthMeResponse);
+      authSession = session;
+      authBootState = "ready";
+      // F2: no localStorage — session lives in httpOnly cookie + in-memory only
+      await restoreUploadedPdfMaterialsForSession(session);
+      loginFeedback = undefined;
+      renderApp();
+    } catch (error) {
+      loginFeedback = {
+        kind: "error",
+        title: "로그인하지 못했습니다.",
+        detail:
+          error instanceof Error
+            ? error.message
+            : "백엔드 서버 상태와 계정을 확인하세요."
+      };
+      renderApp();
+    }
+    return;
+  }
+
+  // action === "signup"
+  // slice-3: sign-up from lecture-reader home. On success, re-call /me to populate
+  // full session (including PDF restore) via revalidateStoredSession().
   try {
-    const response = await fetch(`${apiBaseUrl}/auth/login`, {
+    const response = await fetch(`${apiBaseUrl}/v1/auth/sign-up`, {
       method: "POST",
       headers: {
         "content-type": "application/json"
       },
+      credentials: "include",
       body: JSON.stringify({ name, studentNumber })
     });
 
     if (!response.ok) {
-      throw new Error("이름 또는 학번이 올바르지 않습니다.");
+      const body = (await response.json().catch(() => ({}))) as { errorCode?: string; errorMessage?: string };
+      throw new Error(body.errorMessage ?? `가입에 실패했습니다. (${String(response.status)})`);
     }
 
-    const session = (await response.json()) as unknown;
-
-    if (!isAuthSession(session)) {
-      throw new Error("로그인 응답 형식이 올바르지 않습니다.");
-    }
-
-    authSession = session;
-    authBootState = "ready";
-    saveAuthSession(session);
-    await restoreUploadedPdfMaterialsForSession(session);
+    // Server sets cookie on 200. Re-validate via /me to populate session + PDF restore.
     loginFeedback = undefined;
-    renderApp();
+    authMode = "login";
+    await revalidateStoredSession();
   } catch (error) {
     loginFeedback = {
       kind: "error",
-      title: "로그인하지 못했습니다.",
+      title: "회원가입에 실패했습니다.",
       detail:
         error instanceof Error
           ? error.message
-          : "백엔드 서버 상태와 계정을 확인하세요."
+          : "백엔드 서버 상태를 확인하세요."
     };
     renderApp();
   }
@@ -812,7 +872,7 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 
   try {
     const pageCount = estimatePdfPageCount(await file.arrayBuffer());
-    const intent = await createMaterialUploadIntent(apiBaseUrl, session.token, {
+    const intent = await createMaterialUploadIntent(apiBaseUrl, {
       subjectId,
       classDate: getPdfMaterialClassDate(subjectId),
       fileName: file.name,
@@ -830,7 +890,6 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 
     const uploadedMaterial = await uploadMaterialFile(
       apiBaseUrl,
-      session.token,
       intent.upload.uploadUrl,
       file
     );
@@ -840,7 +899,7 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       material: createPdfMaterialFromBackend(uploadedMaterial, workspace.material)
     }));
 
-    await loadPdfPreviewFromBackend(subjectId, uploadedMaterial, session, {
+    await loadPdfPreviewFromBackend(subjectId, uploadedMaterial, {
       force: true,
       silent: true
     });
@@ -866,10 +925,10 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 }
 
 async function restoreUploadedPdfMaterialsForSession(
-  session: AuthSession
+  _session: AuthSession
 ): Promise<void> {
   try {
-    const materials = await listPdfMaterials(apiBaseUrl, session.token);
+    const materials = await listPdfMaterials(apiBaseUrl);
     const latestBySubject = new Map<string, PdfMaterialRecord>();
 
     materials
@@ -907,7 +966,7 @@ function ensurePdfPreviewForWorkspace(subjectId: string): void {
     return;
   }
 
-  void loadPdfPreviewFromBackend(subjectId, material, session, {
+  void loadPdfPreviewFromBackend(subjectId, material, {
     force: false,
     silent: false
   });
@@ -916,7 +975,6 @@ function ensurePdfPreviewForWorkspace(subjectId: string): void {
 async function loadPdfPreviewFromBackend(
   subjectId: string,
   material: { backendMaterialId?: string; fileName: string },
-  session: AuthSession,
   options: { force: boolean; silent: boolean }
 ): Promise<void> {
   const materialId = material.backendMaterialId;
@@ -950,7 +1008,7 @@ async function loadPdfPreviewFromBackend(
   activePdfPreviewLoads.add(loadKey);
 
   try {
-    const blob = await fetchPdfMaterialFile(apiBaseUrl, session.token, materialId);
+    const blob = await fetchPdfMaterialFile(apiBaseUrl, materialId);
     setActivePdfObjectUrl(subjectId, materialId, URL.createObjectURL(blob));
   } catch (error) {
     if (handleMaterialAuthError(error)) {
@@ -1385,13 +1443,32 @@ function renderShell(sidebar: string, mainContent: string, crumb: string): strin
 }
 
 function renderLoginPage(): string {
+  const isLogin = authMode === "login";
   return `
     <main class="login-screen" data-login-screen="true">
       <section class="login-panel" aria-labelledby="login-title">
         <p class="meta">PRIVATE STUDY WORKSPACE</p>
-        <h1 id="login-title">study-note 로그인</h1>
+        <h1 id="login-title">study-note</h1>
         <p class="lede">강의 PDF와 필기 데이터는 사용자별 작업공간에서 관리됩니다.</p>
-        <form class="login-form" data-action="login">
+
+        <div class="auth-tabs" role="tablist" aria-label="인증 방식 선택">
+          <button
+            class="auth-tab${isLogin ? " is-active" : ""}"
+            type="button"
+            role="tab"
+            aria-selected="${isLogin ? "true" : "false"}"
+            data-action="auth-tab-login"
+          >로그인</button>
+          <button
+            class="auth-tab${!isLogin ? " is-active" : ""}"
+            type="button"
+            role="tab"
+            aria-selected="${!isLogin ? "true" : "false"}"
+            data-action="auth-tab-signup"
+          >회원가입</button>
+        </div>
+
+        <form class="login-form" data-action="${isLogin ? "login" : "signup"}">
           <label>
             <span>이름</span>
             <input name="name" autocomplete="name" required />
@@ -1400,7 +1477,9 @@ function renderLoginPage(): string {
             <span>학번</span>
             <input name="studentNumber" inputmode="numeric" autocomplete="off" required />
           </label>
-          <button class="primary-action" type="submit">로그인</button>
+          <button class="primary-action" type="submit">
+            ${isLogin ? "로그인" : "회원가입"}
+          </button>
         </form>
         ${
           loginFeedback

@@ -10,7 +10,7 @@ services:
       MYSQL_PASSWORD: study_note
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
@@ -24,7 +24,7 @@ services:
     image: localstack/localstack
     container_name: s3-service
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
     environment:
       - SERVICES=s3
       - DEBUG=1
@@ -48,7 +48,7 @@ services:
       db-service:
         condition: service_healthy
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       - PORT=3000
       - HOST=0.0.0.0
@@ -77,7 +77,7 @@ services:
     depends_on:
       - be-service
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
     networks:
       - study-note-net
     healthcheck:

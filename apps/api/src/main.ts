@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { BadRequestException, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 
 async function bootstrap() {
   // sprint-2 round 4 finding F1 — startup-time fail-closed (lazy throw 만으로는 misconfigured
@@ -20,6 +21,9 @@ async function bootstrap() {
   }
 
   const app = await NestFactory.create(AppModule, { logger: ["error", "warn", "log"] });
+  // slice-2: global exception filter — maps all HttpExceptions to {errorCode, errorMessage}
+  // per CLAUDE.md API convention.
+  app.useGlobalFilters(new ApiExceptionFilter());
   app.setGlobalPrefix("api");
   // sprint-2 plan §5.1 + §3 AC10(b) — CORS allowlist (prod 의 cloud 도메인은 별 운영 ADR 책임).
   // dev allowlist default = vite (5173) + docker-compose web (80). 추가 origin 은 env 로 inject.

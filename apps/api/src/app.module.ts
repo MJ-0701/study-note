@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { CorpusModule } from "@study-note/corpus";
 import { PersonaModule } from "@study-note/persona-engine";
 import { AuthController } from "./auth/auth.controller";
-import { AdminController } from "./admin/admin.controller";
+import { AdminModule } from "./admin/admin.module";
 import {
   AuthService,
   RoleGuard,
@@ -19,11 +19,10 @@ import { PrismaModule } from "@study-note/persistence";
 import { createStorageProvider, StoragePort } from "@study-note/storage";
 
 @Module({
-  imports: [PrismaModule, CorpusModule, PersonaModule],
+  imports: [PrismaModule, CorpusModule, PersonaModule, AdminModule],
   controllers: [
     AuthController,
     HealthController,
-    AdminController,
     MaterialsController,
     PersonaTurnController,
     ConversationController
