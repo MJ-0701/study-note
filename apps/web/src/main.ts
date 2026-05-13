@@ -1533,7 +1533,21 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
           ${studyNotebook.subjects.map((subject) => `<a href="${subjectIntakePath(subject)}">${subject.title} 자료 넣기</a>`).join("")}
         </nav>
       </details>
+      ${renderAdminLink()}
     </aside>
+  `;
+}
+
+function renderAdminLink(): string {
+  const role = authSession?.user.role;
+  if (role !== "master" && role !== "admin") return "";
+  return `
+    <div class="sidebar-group">
+      <p class="group-label">🛡️ 관리자</p>
+      <nav>
+        <a href="/admin.html" aria-label="관리자 대시보드">사용자 관리</a>
+      </nav>
+    </div>
   `;
 }
 
