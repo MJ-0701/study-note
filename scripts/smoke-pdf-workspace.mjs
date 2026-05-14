@@ -418,6 +418,25 @@ function resolveChromePath() {
       }
     }
   }
+  if (process.platform === "linux") {
+    // PR #7 Codex P1 — Linux runner (CI / dev) 분기. Debian/Ubuntu/Arch 의 일반적
+    // chrome / chromium binary 후보. `which`-style PATH lookup 도 시도.
+    const candidates = [
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/snap/bin/chromium",
+      "/opt/google/chrome/chrome"
+    ];
+    for (const candidate of candidates) {
+      try {
+        if (statSync(candidate).isFile()) return candidate;
+      } catch {
+        // not found, try next
+      }
+    }
+  }
   throw new Error(
     "Chrome executable not found. Set CHROME_PATH env to override (e.g. CHROME_PATH=/path/to/chrome)."
   );
