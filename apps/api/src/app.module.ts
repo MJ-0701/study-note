@@ -3,13 +3,7 @@ import { CorpusModule } from "@study-note/corpus";
 import { PersonaModule } from "@study-note/persona-engine";
 import { AuthController } from "./auth/auth.controller";
 import { AdminModule } from "./admin/admin.module";
-import {
-  AuthService,
-  RoleGuard,
-  SessionAuthGuard,
-  SessionsService,
-  UsersService
-} from "@study-note/auth";
+import { AuthModule } from "@study-note/auth";
 import { HealthController } from "./health.controller";
 import { MaterialsController } from "./materials/materials.controller";
 import { MaterialsService } from "./materials/materials.service";
@@ -19,7 +13,7 @@ import { PrismaModule } from "@study-note/persistence";
 import { createStorageProvider, StoragePort } from "@study-note/storage";
 
 @Module({
-  imports: [PrismaModule, CorpusModule, PersonaModule, AdminModule],
+  imports: [PrismaModule, AuthModule, CorpusModule, PersonaModule, AdminModule],
   controllers: [
     AuthController,
     HealthController,
@@ -28,11 +22,6 @@ import { createStorageProvider, StoragePort } from "@study-note/storage";
     ConversationController
   ],
   providers: [
-    AuthService,
-    SessionAuthGuard,
-    RoleGuard,
-    SessionsService,
-    UsersService,
     MaterialsService,
     {
       provide: StoragePort,
