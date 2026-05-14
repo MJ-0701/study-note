@@ -1,11 +1,11 @@
-// Discover all *.spec.js under backend/dist/**/__tests__ and exec node --test.
+// Discover all *.spec.js under apps/api/dist/**/__tests__ and exec node --test.
 // Plain glob via fs.readdir recursive — node 22+ has node:test runner CLI but
 // its glob is platform-flaky on macOS, so we collect paths manually.
 import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { spawn } from "node:child_process";
 
-const ROOT = "backend/dist";
+const ROOT = "apps/api/dist";
 
 async function findSpecs(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -27,7 +27,7 @@ async function findSpecs(dir) {
 
 const specs = await findSpecs(ROOT);
 if (specs.length === 0) {
-  console.log("(no spec files found under backend/dist)");
+  console.log("(no spec files found under apps/api/dist)");
   process.exit(0);
 }
 

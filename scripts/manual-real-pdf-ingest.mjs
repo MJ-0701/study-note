@@ -93,7 +93,7 @@ try {
 async function runIngest(env) {
   const child = spawn(
     "node",
-    ["backend/dist/cli/ingest-pdf.js", "--path", pdfPath, "--subject", subject],
+    ["apps/cli/dist/ingest-pdf.js", "--path", pdfPath, "--subject", subject],
     { env, stdio: ["ignore", "pipe", "pipe"] }
   );
 

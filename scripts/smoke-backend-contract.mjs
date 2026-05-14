@@ -1,7 +1,17 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
+import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { prepareSmokeDatabase } from "./smoke-db.mjs";
+
+const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
+const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
+const SECOND_USER_NAME = process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer";
+const SECOND_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002";
+const NORMAL_USER_NAME = "Smoke Normal User";
+const NORMAL_USER_STUDENT_NUMBER = "20260003";
+const NORMAL_USER_EMAIL = "smoke-normal-user@example.com";
 
 let baseUrl;
 let server;
@@ -33,7 +43,7 @@ try {
     request("/auth/login", {
       method: "POST",
       body: {
-        name: "채명정",
+        name: SEED_USER_NAME,
         studentNumber: "00000000"
       }
     }),
@@ -52,16 +62,16 @@ try {
   const login = await requestJson("/auth/login", {
     method: "POST",
     body: {
-      name: "채명정",
-      studentNumber: "20264514"
+      name: SEED_USER_NAME,
+      studentNumber: SEED_USER_STUDENT_NUMBER
     }
   });
   const token = login.token;
 
   if (
     !token ||
-    login.user?.displayName !== "채명정" ||
-    login.user?.studentNumber !== "20264514"
+    login.user?.displayName !== SEED_USER_NAME ||
+    login.user?.studentNumber !== SEED_USER_STUDENT_NUMBER
   ) {
     throw new Error("valid login did not return the dev user");
   }
@@ -72,6 +82,41 @@ try {
   if (me.user?.id !== login.user.id) {
     throw new Error("/me did not return the current user");
   }
+
+  await assertStatus("admin route rejects unauthenticated", () =>
+    request("/v1/admin/users"),
+    401
+  );
+  console.log("admin route rejects unauthenticated");
+
+  await prisma.user.upsert({
+    where: { studentNumber: NORMAL_USER_STUDENT_NUMBER },
+    update: {
+      displayName: NORMAL_USER_NAME,
+      email: NORMAL_USER_EMAIL,
+      role: "NORMAL"
+    },
+    create: {
+      id: "user-smoke-normal-1",
+      displayName: NORMAL_USER_NAME,
+      studentNumber: NORMAL_USER_STUDENT_NUMBER,
+      email: NORMAL_USER_EMAIL,
+      role: "NORMAL"
+    }
+  });
+
+  const normalLogin = await requestJson("/auth/login", {
+    method: "POST",
+    body: {
+      name: NORMAL_USER_NAME,
+      studentNumber: NORMAL_USER_STUDENT_NUMBER
+    }
+  });
+  await assertStatus("admin route rejects normal user", () =>
+    request("/v1/admin/users", { token: normalLogin.token }),
+    403
+  );
+  console.log("admin route rejects normal user");
 
   const samplePdf = Buffer.from("%PDF-1.4\n% smoke PDF\n%%EOF\n");
   const uploadIntent = await requestJson("/materials/upload-intent", {
@@ -96,6 +141,53 @@ try {
     throw new Error("upload intent did not return a pending backend upload target");
   }
 
+  const intentFileSizeRejectSamples = [0, 1, 4];
+  for (const rejectedFileSize of intentFileSizeRejectSamples) {
+    const rejectedCountBefore = await prisma.pdfMaterial.count({
+      where: {
+        ownerId: login.user.id,
+        fileSize: rejectedFileSize
+      }
+    });
+
+    await assertStatus(`intent rejects fileSize=${rejectedFileSize}`, () =>
+      request("/materials/upload-intent", {
+        method: "POST",
+        token,
+        body: {
+          subjectId: "digital-engineering",
+          classDate: "2026-05-02",
+          fileName: "sample-lecture.pdf",
+          fileSize: rejectedFileSize,
+          pageCount: 3,
+          contentType: "application/pdf"
+        }
+      }),
+    400
+    );
+
+    const rejectedCountAfter = await prisma.pdfMaterial.count({
+      where: {
+        ownerId: login.user.id,
+        fileSize: rejectedFileSize
+      }
+    });
+
+    if (rejectedCountAfter !== rejectedCountBefore) {
+      throw new Error(`intent with fileSize=${rejectedFileSize} created a PdfMaterial row`);
+    }
+
+    if (rejectedFileSize === 0) {
+      console.log("- intent rejects fileSize=0");
+    }
+    if (rejectedFileSize === 1) {
+      console.log("- intent rejects fileSize=1");
+    }
+    if (rejectedFileSize === 4) {
+      console.log("- intent rejects fileSize=4");
+    }
+  }
+
   await assertStatus("pending materials cannot be downloaded", () =>
     request(`/materials/${materialId}/download`, { token }),
     409
@@ -118,6 +210,37 @@ try {
     }),
     400
   );
+
+  await assertStatus("corrupted PDF magic (%PDFx) rejected", () =>
+    requestBinary(`/materials/${materialId}/file`, {
+      method: "PUT",
+      token,
+      body: Buffer.from("%PDFx fake content"),
+      contentType: "application/pdf"
+    }),
+    400
+  );
+  console.log("- corrupted PDF magic (%PDFx) rejected");
+
+  const storagePath = join(process.cwd(), "local-materials", login.user.id, materialId);
+  if (fs.existsSync(storagePath)) {
+    throw new Error("rejected put wrote to storage path in local mock");
+  }
+  console.log("- rejected PUT does not write to storage");
+
+  const stillPendingMaterial = await prisma.pdfMaterial.findUnique({
+    where: {
+      id: materialId
+    },
+    select: {
+      uploadStatus: true
+    }
+  });
+
+  if (stillPendingMaterial?.uploadStatus !== "pending") {
+    throw new Error("rejected put changed uploadStatus away from pending");
+  }
+  console.log("- rejected PUT preserves pending status");
 
   const uploadResponse = await requestBinary(`/materials/${materialId}/file`, {
     method: "PUT",
@@ -259,10 +382,34 @@ try {
   const secondLogin = await requestJson("/auth/login", {
     method: "POST",
     body: {
-      name: "Ownership Reviewer",
-      studentNumber: "20260000"
+      name: SECOND_USER_NAME,
+      studentNumber: SECOND_USER_STUDENT_NUMBER
     }
   });
+
+  // master token was revoked by logout at line 373 — re-login for admin route check.
+  const masterReloginForAdmin = await requestJson("/auth/login", {
+    method: "POST",
+    body: {
+      name: SEED_USER_NAME,
+      studentNumber: SEED_USER_STUDENT_NUMBER
+    }
+  });
+  const masterAdminUsers = await requestJson("/v1/admin/users", {
+    token: masterReloginForAdmin.token
+  });
+  if (!Array.isArray(masterAdminUsers.users)) {
+    throw new Error("master role did not receive users list");
+  }
+  console.log("admin route accepts master user");
+  const adminUsers = await requestJson("/v1/admin/users", {
+    token: secondLogin.token
+  });
+  if (!Array.isArray(adminUsers.users)) {
+    throw new Error("admin role did not receive users list");
+  }
+  console.log("admin route accepts admin user");
+
   await assertStatus("cross-user material access is denied", () =>
     request(`/materials/${materialId}`, { token: secondLogin.token }),
     404
@@ -321,16 +468,21 @@ try {
 function startBackend(port, db) {
   baseUrl = `http://127.0.0.1:${port}/api`;
 
-  return spawn("node", ["backend/dist/main.js"], {
+  const child = spawn("node", ["apps/api/dist/main.js"], {
     env: {
       ...process.env,
       PORT: String(port),
       DATABASE_URL: db.databaseUrl,
       SESSION_TOKEN_PEPPER: db.sessionTokenPepper,
+      // sprint-2 plan §3 AC10(d) — backend 의 startup-time fail-closed (main.ts) 가 STORAGE_PROVIDER 검증.
+      STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local",
       PDF_UPLOAD_MAX_BYTES: "4096"
     },
-    stdio: ["ignore", "ignore", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"]
   });
+  child.stdout.on("data", (c) => process.stderr.write(`[backend stdout] ${c}`));
+  child.stderr.on("data", (c) => process.stderr.write(`[backend stderr] ${c}`));
+  return child;
 }
 
 async function requestJson(path, options = {}) {

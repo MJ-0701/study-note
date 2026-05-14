@@ -9,6 +9,10 @@
 | History inject | 직전 최대 3개 Turn 의 user query + persona response 를 provider prompt 의 untrusted context 로 넣는 행위. | full history, summary memory, hidden instruction |
 | Anonymous session | 로그인 없이 browser localStorage 에 Conversation id 만 보관하는 local MVP session. | security boundary, multi-user ownership |
 | Chat-style state | 기존 `/persona-turn.html` 안에서 질문/응답이 누적 표시되는 frontend 상태. | 신규 product route, streaming chat, multi-persona room |
+| LLM Agent | 사용자가 보유/로그인한 CLI 또는 agent runtime. Claude CLI, Gemini CLI, Codex CLI, Ollama, Grok, Cursor 등이 동등 후보이다. | Claude 전용 provider, 앱 내부 persona 구현체 |
+| Agent adapter registry | `PersonaTurnService` 와 concrete CLI provider 사이의 선택/호출 경계. fixture, claude-cli, gemini-cli 등 adapter 를 같은 contract 로 라우팅한다. | business logic, persona prompt 저장소 |
+| MCP agent bridge | 향후 MCP server/client surface 로 agent 들이 디공이 tool/resource 를 호출하게 하는 통합 방향. | 특정 provider, 단일 subprocess wrapper |
+| Evidence transcript | real agent UX 검증용 turn 요약과 안전 metadata. raw prompt/chunk/path/stderr 는 보관하지 않는다. | full provider log, 사용자 비밀 원문 |
 
 ## Security terms
 

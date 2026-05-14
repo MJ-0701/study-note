@@ -1,0 +1,231 @@
+/* slice-4: onboarding-mcp page 전용 스타일.
+   신규 색 도입 X — CSS 변수는 styles.css (global) 에서 상속.
+   code block + copy button + section layout 을 추가한다. */
+
+.onboarding-page {
+  font-family: var(--ds-font-sans);
+  color: var(--ds-fg);
+  background: var(--ds-bg);
+  min-height: 100vh;
+  padding: var(--ds-space-lg) var(--ds-space-md);
+}
+
+.onboarding-inner {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.onboarding-header {
+  border-bottom: 1px solid var(--ds-rule);
+  margin-bottom: var(--ds-space-lg);
+  padding-bottom: var(--ds-space-md);
+}
+
+.onboarding-header h1 {
+  font-size: var(--ds-fs-display);
+  font-weight: 600;
+  line-height: var(--ds-lh-display);
+  margin: 0 0 var(--ds-space-xs);
+}
+
+.onboarding-subtitle {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-h3);
+  margin: 0 0 var(--ds-space-md);
+}
+
+.onboarding-intro {
+  color: var(--ds-fg-soft);
+  line-height: var(--ds-lh-body);
+  margin: 0;
+  max-width: 68ch;
+}
+
+.onboarding-section {
+  border-top: 1px solid var(--ds-rule);
+  margin-top: var(--ds-space-lg);
+  padding-top: var(--ds-space-lg);
+}
+
+.onboarding-section h2 {
+  font-size: var(--ds-fs-h2);
+  font-weight: 600;
+  margin: 0 0 var(--ds-space-md);
+}
+
+.onboarding-section h3 {
+  font-size: var(--ds-fs-h3);
+  font-weight: 600;
+  margin: var(--ds-space-md) 0 var(--ds-space-xs);
+}
+
+.step-list {
+  counter-reset: step;
+  display: grid;
+  gap: var(--ds-space-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step-list li {
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  counter-increment: step;
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  position: relative;
+}
+
+.step-list li::before {
+  background: var(--ds-accent);
+  border-radius: 50%;
+  color: #fff;
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  height: 22px;
+  margin-right: var(--ds-space-xs);
+  min-width: 22px;
+  vertical-align: middle;
+}
+
+.prereq-list {
+  display: grid;
+  gap: var(--ds-space-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.prereq-list li {
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  padding: var(--ds-space-sm) var(--ds-space-md);
+}
+
+.code-block-wrapper {
+  margin: var(--ds-space-md) 0;
+  position: relative;
+}
+
+.code-block-wrapper pre {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  color: var(--ds-fg);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-code);
+  line-height: 1.6;
+  margin: 0;
+  overflow-x: auto;
+  padding: var(--ds-space-md);
+  padding-right: 80px;
+  white-space: pre;
+}
+
+.copy-button {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 32px;
+  padding: 4px 10px;
+  position: absolute;
+  right: var(--ds-space-xs);
+  top: var(--ds-space-xs);
+  transition: background 120ms ease;
+  white-space: nowrap;
+}
+
+.copy-button:hover {
+  background: var(--ds-accent-soft);
+}
+
+.copy-button.copied {
+  color: var(--ds-success);
+  border-color: rgba(38, 122, 69, 0.3);
+}
+
+.trouble-list {
+  display: grid;
+  gap: var(--ds-space-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trouble-list li {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  padding: var(--ds-space-md);
+}
+
+.trouble-list li strong {
+  color: var(--ds-fg);
+  display: block;
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-fs-code);
+  margin-bottom: var(--ds-space-xs);
+}
+
+.unsupported-note {
+  background: var(--ds-warn-soft);
+  border: 1px solid rgba(165, 90, 0, 0.35);
+  border-radius: 8px;
+  color: var(--ds-warn);
+  margin-top: var(--ds-space-lg);
+  padding: var(--ds-space-md);
+}
+
+.unsupported-note p {
+  margin: 0 0 var(--ds-space-xs);
+}
+
+.unsupported-note p:last-child {
+  margin: 0;
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+}
+
+.onboarding-footer {
+  border-top: 1px solid var(--ds-rule);
+  margin-top: var(--ds-space-lg);
+  padding-top: var(--ds-space-md);
+}
+
+.back-link {
+  color: var(--ds-accent);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .onboarding-page {
+    padding: var(--ds-space-md) var(--ds-space-sm);
+  }
+
+  .code-block-wrapper pre {
+    padding-right: var(--ds-space-md);
+  }
+
+  .copy-button {
+    position: static;
+    display: block;
+    margin-top: var(--ds-space-xs);
+    width: 100%;
+  }
+}

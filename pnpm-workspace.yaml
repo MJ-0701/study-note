@@ -1,0 +1,17 @@
+packages:
+  - "apps/*"
+  - "infra"
+  - "packages/*"
+# sprint-2 PR 1 — pnpm 11 의 보안 룰이 ignored builds 를 default 로 차단.
+# 본 프로젝트는 신뢰 deps (Nest / Prisma / esbuild / onnxruntime-node / sharp / protobufjs) 만 사용,
+# 모두 build script 승인. plan §3 AC5 (native 모듈 hoisting smoke) 가 require 하는 native binary build.
+allowBuilds:
+  "@nestjs/core": true
+  "@prisma/client": true
+  "@prisma/engines": true
+  esbuild: true
+  onnxruntime-node: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+

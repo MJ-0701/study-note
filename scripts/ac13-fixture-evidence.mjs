@@ -5,8 +5,8 @@ import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
 const require = createRequire(import.meta.url);
 const { NestFactory } = require("@nestjs/core");
-const { CorpusModule } = require("../backend/dist/corpus/corpus.module.js");
-const { IngestService } = require("../backend/dist/corpus/services/ingest.service.js");
+const { CorpusModule } = require("../packages/corpus/dist/corpus.module.js");
+const { IngestService } = require("../packages/corpus/dist/services/ingest.service.js");
 
 const SUBJECT = "digital-engineering";
 const QUERY = process.env.AC13_QUERY ?? "반가산기 핵심만 간단히";
@@ -96,7 +96,7 @@ try {
 async function runCli(env, args) {
   const child = spawn(
     "node",
-    ["backend/dist/cli/persona-turn.js", ...args],
+    ["apps/cli/dist/persona-turn.js", ...args],
     { env, stdio: ["ignore", "pipe", "pipe"] }
   );
   let stdout = "";

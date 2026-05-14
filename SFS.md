@@ -26,14 +26,17 @@ project document surface.
 Default entry:
 - `sfs status`
 - current sprint `report.md` when one exists
-- `docs/<workspace>/<yyyyMMdd>/` for shared adoption or handoff summaries
+- `docs/solon/<english-workspace>/<yyyyMMdd>/` for shared adoption or handoff summaries
 - expand to private workbench/logs only when the routed context needs evidence
 
 Project overview refresh:
 - `sfs profile` updates only this file's `## 프로젝트 개요` section.
 
 Never paraphrase bash adapter output. Bash-first commands may still surface one
-compact Next action after verbatim output. Never hardcode external private docsets.
+compact Next action after verbatim output. Compact output is quality-preserving only:
+never compress evidence, risk warnings, decisions, source links/paths, or
+raw-source traceability. If compactness would weaken quality, use full clarity.
+Never hardcode external private docsets.
 In Solon reports, show gates as `Gate N (Name)`, not naked ids. Use gate
 numbers 1..7 for new CLI examples; legacy ids remain compatibility-only.
 Solon reports should feel like compact console dashboards, not flat bullet
@@ -47,7 +50,29 @@ Do not show a question/recommendation-only choice table. When multiple options
 exist, show every viable option with its plain-language meaning and consequence,
 then mark the recommendation as the default. If that is too much for one view,
 ask one decision at a time instead of hiding alternatives.
-Keep only what must remain: `.sfs-local/` is private local workbench state,
-shared handoff/history docs live under `docs/<workspace>/<yyyyMMdd>/`,
-project-wide Solon reference docs may live under `docs/solon/`, and step docs
-are created lazily.
+Never ask the user to confirm a compact option bundle such as `A/A/A/C/C`, and
+never answer "show the recommendation again" with only option labels or only
+the recommended row. Re-present the decision in plain language and use a natural
+confirmation phrase such as `권장안 그대로 확정`, not a label bundle.
+When review returns partial/fail for a deterministic low-risk issue, complete
+the loop instead of asking the user to request the next review: patch grep
+scope, stale evidence, missing AC/file mapping, evidence path typos, and bounded
+wording/document consistency in the same cycle, verify, then run the same-gate
+review again. Ask the user only for product judgment: scope, architecture,
+public contract, security/privacy/data-loss, cost/latency/model policy,
+destructive behavior, or changed AC meaning.
+For Solon commit grouping, guide users to the SFS command surface:
+`sfs commit plan` and `sfs commit apply --group <name>` (Codex may use
+`$sfs commit ...`; Claude slash routing may use `/sfs commit ...`). `sfs commit
+apply` commits and pushes the current branch by default in user projects; use
+`--no-push` only for local sandbox/release testing or offline work. Do not tell
+users to use a host-local `/commit` skill for SFS work; `/commit` is not the
+portable SFS workflow command.
+Keep only what must remain: `.sfs-local/` is private active workbench state,
+not durable history. `events.jsonl` stays visible only for the current sprint
+ledger; stale/orphan events should be removed or archived by `sfs upgrade` /
+`sfs tidy --all --apply`. Shared handoff/history docs live under
+`docs/solon/<english-workspace>/<yyyyMMdd>/`, project-wide Solon reference docs
+may live under `docs/solon/`, and step docs are created lazily. Repeated cleanup
+evidence is date-bundled under
+`.sfs-local/archives/adopt/surface-cleanup/<yyyyMMdd>/surface-cleanup.tar.gz`.

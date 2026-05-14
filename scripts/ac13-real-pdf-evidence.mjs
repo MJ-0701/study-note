@@ -6,8 +6,8 @@ import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
 const require = createRequire(import.meta.url);
 const { NestFactory } = require("@nestjs/core");
-const { CorpusModule } = require("../backend/dist/corpus/corpus.module.js");
-const { IngestService } = require("../backend/dist/corpus/services/ingest.service.js");
+const { CorpusModule } = require("../packages/corpus/dist/corpus.module.js");
+const { IngestService } = require("../packages/corpus/dist/services/ingest.service.js");
 
 /**
  * Sprint-4 AC4 + AC5 — real-PDF evidence harness.
@@ -16,7 +16,7 @@ const { IngestService } = require("../backend/dist/corpus/services/ingest.servic
  *   1. ephemeral docker MySQL (prepareSmokeDatabase)
  *   2. IngestService.execute({pdfPath: real PDF, subject}) — sprint-2 full pipeline
  *   3. for each anchor query (3 locked strings): persona-turn CLI subprocess in
- *      REAL mode → consent banner / response / JSON capture + assert
+ *      REAL LLM Agent mode → consent banner / response / JSON capture + assert
  *   4. summary + smokeDb.stop()
  *
  * Locked anchor queries (plan §3 AC4):
@@ -29,6 +29,7 @@ const { IngestService } = require("../backend/dist/corpus/services/ingest.servic
 
 const SUBJECT = "digital-engineering";
 const K = 3;
+const REAL_AGENT = process.env.STUDY_NOTE_LLM_AGENT ?? "claude-cli";
 const PDF_PATH_REL = "asset/digital_logical_engine/제07장 조합논리회로_2ndE_GT.pdf";
 const PDF_PATH_ABS = resolve(PDF_PATH_REL);
 
@@ -112,6 +113,7 @@ try {
     ...process.env,
     DATABASE_URL: smokeDb.databaseUrl,
     SESSION_TOKEN_PEPPER: smokeDb.sessionTokenPepper,
+    STUDY_NOTE_LLM_AGENT: REAL_AGENT,
     STUDY_NOTE_LLM_REAL_OPT_IN: "1",
     STUDY_NOTE_LLM_TIMEOUT_MS: process.env.STUDY_NOTE_LLM_TIMEOUT_MS ?? "120000"
   };
@@ -128,7 +130,9 @@ try {
       "--query",
       a.query,
       "--k",
-      String(K)
+      String(K),
+      "--agent",
+      REAL_AGENT
     ]);
 
     process.stdout.write(`--- ${a.label} STDERR (consent banner + diagnostics) ---\n`);
@@ -149,8 +153,8 @@ try {
       [parsed.personaName === "디공이", `personaName must be 디공이, got ${parsed.personaName}`],
       [parsed.subject === SUBJECT, `subject mismatch: ${parsed.subject}`],
       [parsed.query === a.query, `query mismatch: ${parsed.query} != ${a.query}`],
-      [parsed.provider === "claude-cli", `provider must be claude-cli (real), got ${parsed.provider}`],
-      [parsed.modelName !== "claude-cli@stub-fixture", `modelName indicates fixture, got ${parsed.modelName}`],
+      [parsed.provider === REAL_AGENT, `provider must be ${REAL_AGENT} (real), got ${parsed.provider}`],
+      [!/stub-fixture/.test(parsed.modelName), `modelName indicates fixture, got ${parsed.modelName}`],
       [parsed.isFallback === false, `isFallback must be false (real chunk path), got ${parsed.isFallback}`],
       [Array.isArray(parsed.sources) && parsed.sources.length === K, `sources.length must be ${K}, got ${parsed.sources?.length}`],
       [parsed.retrievalCount === parsed.sources.length, `retrievalCount mismatch: ${parsed.retrievalCount} != ${parsed.sources.length}`]
@@ -215,7 +219,7 @@ try {
 async function runCli(env, args) {
   const child = spawn(
     "node",
-    ["backend/dist/cli/persona-turn.js", ...args],
+    ["apps/cli/dist/persona-turn.js", ...args],
     { env, stdio: ["ignore", "pipe", "pipe"] }
   );
   let stdout = "";

@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
-import { createStorageProvider } from "../backend/dist/storage/storage.provider.js";
-import { S3StorageService } from "../backend/dist/storage/s3-storage.service.js";
+import { createStorageProvider } from "../apps/api/dist/storage/storage.provider.js";
+import { S3StorageService } from "../apps/api/dist/storage/s3-storage.service.js";
 
 const samplePdf = Buffer.from("%PDF-1.4\n% mocked s3 smoke\n%%EOF\n");
 const material = {

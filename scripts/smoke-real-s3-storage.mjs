@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { S3StorageService } from "../backend/dist/storage/s3-storage.service.js";
+import { S3StorageService } from "../apps/api/dist/storage/s3-storage.service.js";
 
 if (process.env.RUN_REAL_S3_SMOKE !== "1") {
   console.log("Real S3 smoke skipped: set RUN_REAL_S3_SMOKE=1 to opt in");

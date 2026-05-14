@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  displayName   String
+  studentNumber String        @unique
+  email         String?       @unique
+  role          Role          @default(NORMAL)
+  devUserFlag   Boolean       @default(false)
+  reviewedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  sessions      Session[]
+  materials     PdfMaterial[]
+  conversations Conversation[]
+}
+
+enum Role {
+  MASTER
+  ADMIN
+  NORMAL
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Subject {
+  id        String        @id
+  title     String
+  createdAt DateTime      @default(now())
+  materials PdfMaterial[]
+}
+
+model PdfMaterial {
+  id          String               @id @default(cuid())
+  ownerId     String
+  subjectId   String
+  classDate   String
+  fileName    String
+  fileSize    Int
+  pageCount   Int
+  contentType String
+  storageKey  String
+  uploadStatus String              @default("pending")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  owner       User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  subject     Subject              @relation(fields: [subjectId], references: [id])
+  annotation  AnnotationSnapshot?
+
+  @@index([ownerId, subjectId, classDate])
+  @@index([subjectId])
+}
+
+model AnnotationSnapshot {
+  id            String      @id @default(cuid())
+  materialId    String      @unique
+  ownerId       String
+  schemaVersion Int
+  payload       Json
+  savedAt       DateTime    @default(now())
+  material      PdfMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+model Corpus {
+  id            String   @id @default(cuid())
+  subject       String
+  sourcePdfPath String   @db.Text
+  contentHash   String   @unique
+  createdAt     DateTime @default(now())
+
+  chunks Chunk[]
+
+  @@index([subject])
+}
+
+model Chunk {
+  id        String   @id @default(cuid())
+  corpusId  String
+  ord       Int
+  text      String   @db.Text
+  charCount Int
+  embedding Bytes?
+  modelName String
+  createdAt DateTime @default(now())
+
+  corpus Corpus @relation(fields: [corpusId], references: [id], onDelete: Cascade)
+
+  @@unique([corpusId, ord])
+  @@index([corpusId])
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  ownerId     String
+  subject     String
+  personaName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  turns Turn[]
+
+  @@index([subject, createdAt])
+  @@index([ownerId])
+}
+
+model Turn {
+  id             String   @id @default(cuid())
+  conversationId String
+  subject        String
+  query          String   @db.Text
+  k              Int
+  response       String   @db.LongText
+  sources        Json
+  provider       String
+  modelName      String
+  retrievalCount Int
+  isFallback     Boolean
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}

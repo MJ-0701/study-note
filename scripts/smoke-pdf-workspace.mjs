@@ -15,6 +15,9 @@ const subjectId = "digital-engineering";
 const storageKey = "study-note.pdf-workspaces.v1";
 const authStorageKey = "study-note.auth-session.v1";
 
+const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
+const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
+
 const tempRoot = await mkdtemp(join(tmpdir(), "study-note-pdf-smoke-"));
 const userDataDir = join(tempRoot, "chrome");
 const samplePdfPath = join(tempRoot, "sample-lecture.pdf");
@@ -56,12 +59,14 @@ let cdp;
 
 try {
   smokeDb = await prepareSmokeDatabase("pdf-workspace");
-  backendServer = spawn("node", ["backend/dist/main.js"], {
+  backendServer = spawn("node", ["apps/api/dist/main.js"], {
     env: {
       ...process.env,
       PORT: String(backendPort),
       DATABASE_URL: smokeDb.databaseUrl,
-      SESSION_TOKEN_PEPPER: smokeDb.sessionTokenPepper
+      SESSION_TOKEN_PEPPER: smokeDb.sessionTokenPepper,
+      // sprint-2 plan §3 AC10(d) — backend 의 startup-time fail-closed (main.ts) 가 STORAGE_PROVIDER 검증.
+      STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local"
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -105,22 +110,22 @@ try {
     "login-first gate renders"
   );
 
-  await submitLogin("채명정", "00000000");
+  await submitLogin(SEED_USER_NAME, "00000000");
   await waitFor(() => evaluate(`{
     return Boolean(document.querySelector('[data-login-screen]')) &&
       document.body.innerText.includes('로그인하지 못했습니다') &&
       !localStorage.getItem('${authStorageKey}');
   }`));
 
-  await submitLogin("채명정", "20264514");
+  await submitLogin(SEED_USER_NAME, SEED_USER_STUDENT_NUMBER);
   await waitFor(() => evaluate("Boolean(document.querySelector('[data-pdf-annotation-surface]'))"));
   await assertEval(`{
     const raw = localStorage.getItem('${authStorageKey}');
     const session = raw ? JSON.parse(raw) : {};
     return Boolean(
       session.token &&
-      session.user?.displayName === '채명정' &&
-      session.user?.studentNumber === '20264514'
+      session.user?.displayName === ${JSON.stringify(SEED_USER_NAME)} &&
+      session.user?.studentNumber === ${JSON.stringify(SEED_USER_STUDENT_NUMBER)}
     );
   }`, "frontend login form stores backend auth session");
 
@@ -135,8 +140,8 @@ try {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       user: {
         id: 'user-dev-1',
-        displayName: '채명정',
-        studentNumber: '20264514'
+        displayName: ${JSON.stringify(SEED_USER_NAME)},
+        studentNumber: ${JSON.stringify(SEED_USER_STUDENT_NUMBER)}
       }
     }));
     return true;
@@ -167,8 +172,8 @@ try {
     const session = raw ? JSON.parse(raw) : {};
     return Boolean(
       session.token &&
-      session.user?.displayName === '채명정' &&
-      session.user?.studentNumber === '20264514'
+      session.user?.displayName === ${JSON.stringify(SEED_USER_NAME)} &&
+      session.user?.studentNumber === ${JSON.stringify(SEED_USER_STUDENT_NUMBER)}
     );
   }`, "stored valid session revalidates through /api/me before workspace render");
 

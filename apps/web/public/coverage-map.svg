@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80">
+  <path d="M50 30h20M110 30h20M170 30h20" fill="none" stroke="#6b7280" stroke-width="1" stroke-linecap="round"/>
+  <path d="M66 27l4 3-4 3M126 27l4 3-4 3M186 27l4 3-4 3" fill="none" stroke="#6b7280" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/>
+  <g stroke="#3b6ef5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="22" y="16" width="16" height="22" rx="1"/>
+    <path d="M26 22h8M26 27h8M26 32h4"/>
+  </g>
+  <text x="30" y="58" font-family="sans-serif" font-size="7" fill="#6b7280" text-anchor="middle">PDF Document</text>
+  <g stroke="#3b6ef5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M82 30l6-6h10v12H88l-6-6z"/>
+    <circle cx="92" cy="30" r="1" fill="#3b6ef5" stroke="none"/>
+  </g>
+  <text x="90" y="58" font-family="sans-serif" font-size="7" fill="#6b7280" text-anchor="middle">Keywords</text>
+  <g stroke="#3b6ef5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="150" cy="28" r="5"/>
+    <circle cx="141" cy="20" r="2.5"/>
+    <circle cx="159" cy="20" r="2.5"/>
+    <path d="M144 23l2 2M156 23l-2 2" stroke-width="1"/>
+  </g>
+  <text x="150" y="58" font-family="sans-serif" font-size="7" fill="#6b7280" text-anchor="middle">Core Concepts</text>
+  <g stroke="#3b6ef5" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="202" y="16" width="16" height="22" rx="1"/>
+    <path d="M206 23l2 2 4-4M206 32l2 2 4-4" stroke-width="1.2"/>
+  </g>
+  <text x="210" y="58" font-family="sans-serif" font-size="7" fill="#6b7280" text-anchor="middle">Practice Problems</text>
+</svg>
