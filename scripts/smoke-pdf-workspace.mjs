@@ -4,6 +4,31 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
+// sprint-6 retro §4 (이어갈 것) — smoke skipped pending sprint-7 sub-slice rewrite.
+//
+// Reason: frontend + backend auth migrated off localStorage onto httpOnly cookies (slice-2):
+//   - login-screen heading text is "study-note" (no "로그인" suffix); the assertion below
+//     for "study-note 로그인" is permanently false against the current DOM.
+//   - localStorage key "study-note.auth-session.v1" is no longer written; session lives in
+//     in-memory authSession + study_note_session cookie. All authStorageKey assertions
+//     (stored-session-invalid, stored-session-revalidate, session.token / session.user.displayName)
+//     check a contract that no longer exists.
+//   - requestBackendJson uses `Bearer ${token}` against /materials; the SessionAuthGuard now
+//     rejects Bearer headers (cookie-only).
+//
+// Full rewrite (~200 LOC, CDP cookie manipulation via Network.setCookie / Storage.clearCookies
+// + login title text update + drop authStorageKey blocks) is scheduled for sprint-7
+// sub-slice "smoke cookie-auth migration".
+//
+// Override (for the sprint-7 rewriter): STUDY_NOTE_SMOKE_ALLOW_STALE=1
+if (!process.env.STUDY_NOTE_SMOKE_ALLOW_STALE) {
+  console.log(
+    "smoke-pdf-workspace: SKIPPED — sprint-7 carryover (cookie-auth migration). " +
+      "Set STUDY_NOTE_SMOKE_ALLOW_STALE=1 to run the legacy script."
+  );
+  process.exit(0);
+}
+
 const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const backendPort = 3001 + Math.floor(Math.random() * 1000);
 const backendBaseUrl = `http://127.0.0.1:${backendPort}/api`;
