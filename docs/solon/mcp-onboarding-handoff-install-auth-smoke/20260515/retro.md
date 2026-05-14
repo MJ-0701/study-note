@@ -8,8 +8,8 @@ workspace: "mcp-onboarding-handoff-install-auth-smoke"
 handoff_dir: "docs/solon/mcp-onboarding-handoff-install-auth-smoke/20260515"
 goal: "MCP onboarding handoff α — install/auth/smoke 연결"
 created_at: ""
-last_touched_at: "2026-05-15T00:08:26+09:00"
-closed_at: ""
+last_touched_at: "2026-05-15T00:17:45+09:00"
+closed_at: 2026-05-15T00:17:45+09:00
 ---
 
 # 회고
@@ -95,3 +95,13 @@ closed_at: ""
   본 retro 의 §4 (이어갈 것) 가 carryover 표면.
 - [ ] workbench 가 접혔다 — `sfs retro` close adapter 가 review.md 부재로 exit 8.
   본 retro 는 `--draft` 산출물이며, close 는 Mac 측 다음 세션에서 수행 후보.
+
+## §6. 다음 cycle 본부 활성 추천 (auto)
+
+<!-- solon:division-recommendations:start -->
+- detected: project_size=small (255 tracked files), domains=0, last_review=partial, infra_signals=5, ui_signals=12
+- recommended action format: update `.sfs-local/divisions.yaml` + record why in `.sfs-local/decisions/<NNNN>-activate-<division>.md`
+- recommend: `qa` activate (light) — regression smoke + AC checks; triggers: review!=pass or medium+ codebase
+- consider: `infra` activate (light) — deploy/observability/rollback checklist; triggers: infra files present or large codebase
+- generated_at: 2026-05-15T00:17:45+09:00 (auto) — edit outside the marker block to preserve manual notes
+<!-- solon:division-recommendations:end -->
