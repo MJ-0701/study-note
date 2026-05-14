@@ -10,6 +10,6 @@ Seed user-dev-3 has devUserFlag=false, blocking sign-in via auth allowlist. Smok
 
 **How to apply:** Any smoke that needs a normal-role session must call POST /v1/auth/sign-up with a unique studentNumber not already seeded, then use the resulting cookie. Count assertions on the admin user list must account for the additional signed-up user.
 
-PrismaModule is @Global() — AdminModule does NOT need to declare PrismaService. It does need to redeclare AuthService, SessionAuthGuard, RoleGuard, UsersService, SessionsService because there is no AuthModule to import from.
+PrismaModule is @Global() — AdminModule does NOT need to declare PrismaService. From sprint 2026-W20-sprint-4, AuthModule exists at packages/auth/src/auth.module.ts and exports all 5 auth providers. AdminModule and AppModule import AuthModule instead of redeclaring providers individually.
 
 Audit log requires fetching the old value before update (read → update → log pattern). Race condition is acceptable for single-master local-only operation.

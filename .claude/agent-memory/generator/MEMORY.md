@@ -4,3 +4,4 @@
 - [slice-2 auth migration build constraints](project_slice2_constraints.md) — @types/express not in @study-note/api; inline minimal types pattern
 - [slice-3 admin API build constraints](project_slice3_constraints.md) — user-dev-3 devUserFlag=false blocks sign-in; smoke uses sign-up for normal cookie; PrismaModule @Global so no re-declare needed; AdminModule redeclares auth chain
 - [slice-4 web UI build constraints](project_slice4_constraints.md) — persona-turn had no auth before slice-4; admin role API is lowercase; smoke-persona-turn is API-only not browser
+- [slice-5 audit log smoke constraints](project_slice5_constraints.md) — Nest Logger → stdout; use pii-redaction's startBackend for log capture; per-line actor= check required; 1-case lock on cannot-modify-master
