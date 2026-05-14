@@ -94,12 +94,15 @@ function npmCommand() {
 }
 
 async function run(command, args, options = {}) {
+  // Node 18+ 보안 패치로 Windows 에서 .cmd/.bat 파일은 shell: true 없이 spawn 불가 (EINVAL).
+  // npmCommand() 가 win32 에서 "npm.cmd" 를 리턴하므로 shell 옵션이 필요하다.
   const child = spawn(command, args, {
     env: {
       ...process.env,
       ...options.env
     },
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
+    shell: process.platform === "win32"
   });
   let stdout = "";
   let stderr = "";
