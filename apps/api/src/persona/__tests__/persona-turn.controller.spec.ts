@@ -76,7 +76,7 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
 
     let capturedInput: PersonaTurnRequestDto | undefined;
     const fakeService = {
-      async runStandalone(dto: PersonaTurnRequestDto) {
+      async runStandalone(dto: PersonaTurnRequestDto, _ownerId: string) {
         capturedInput = dto;
         return stubResult;
       }
@@ -90,7 +90,8 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
       mode: "real",
       agent: "gemini-cli"
     });
-    const result = await controller.run(dto);
+    const fakeReq = { user: { id: "user-test", displayName: "test", studentNumber: "00000000", role: "normal" as const } };
+    const result = await controller.run(dto, fakeReq);
 
     assert.equal(capturedInput, dto);
     assert.equal(result, stubResult);
@@ -99,7 +100,7 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
   it("preserves omitted k for compatibility wrapper to default downstream", async () => {
     let capturedInput: PersonaTurnRequestDto | undefined;
     const fakeService = {
-      async runStandalone(dto: PersonaTurnRequestDto) {
+      async runStandalone(dto: PersonaTurnRequestDto, _ownerId: string) {
         capturedInput = dto;
         return { k: dto.k ?? 5 } as unknown as PersonaTurnHttpResult;
       }
@@ -110,7 +111,8 @@ describe("PersonaTurnController.run (AC4 happy path)", () => {
       subject: "digital-engineering",
       query: "test"
     });
-    await controller.run(dto);
+    const fakeReq = { user: { id: "user-test", displayName: "test", studentNumber: "00000000", role: "normal" as const } };
+    await controller.run(dto, fakeReq);
     assert.equal(capturedInput?.k, undefined);
   });
 });

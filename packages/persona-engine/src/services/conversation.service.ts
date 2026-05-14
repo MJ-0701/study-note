@@ -83,7 +83,10 @@ export class ConversationService {
     private readonly turn: PersonaTurnService
   ) {}
 
-  async create(dto: CreateConversationRequestDto): Promise<ConversationSummaryResponse> {
+  async create(
+    dto: CreateConversationRequestDto,
+    ownerId: string
+  ): Promise<ConversationSummaryResponse> {
     const archetype = this.persona.archetypeFor(dto.subject);
     if (!archetype) {
       throw new BadRequestException({
@@ -92,13 +95,11 @@ export class ConversationService {
       });
     }
 
-    // slice-5: ownerId hardcoded to seeded dev user per ADR 0003 (local-only
-    // single-tenant). Proper req.user.id wiring on conversation routes is
-    // tracked in sprint-1 handoff cleanup (SessionAuthGuard + auth slice-2
-    // follow-up).
+    // codex PR review 적용 — ownerId 를 인증 사용자 (req.user.id) 에서 derive.
+    // 이전 hardcode "user-dev-1" 제거 (sprint-2 handoff #6 carry).
     const conversation = await this.prisma.conversation.create({
       data: {
-        ownerId: "user-dev-1",
+        ownerId,
         subject: dto.subject,
         personaName: archetype.name
       }
@@ -111,10 +112,14 @@ export class ConversationService {
     };
   }
 
-  async history(conversationId: string): Promise<ConversationHistoryResponse> {
+  async history(
+    conversationId: string,
+    ownerId: string
+  ): Promise<ConversationHistoryResponse> {
     assertConversationId(conversationId);
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
+    // codex PR review 적용 — owner scoping. 다른 ownerId 가 conversation ID 알아도 미접근.
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, ownerId },
       include: { turns: { orderBy: { createdAt: "asc" } } }
     });
     if (!conversation) throw notFound();
@@ -143,11 +148,13 @@ export class ConversationService {
 
   async appendTurn(
     conversationId: string,
-    dto: AppendConversationTurnRequestDto
+    dto: AppendConversationTurnRequestDto,
+    ownerId: string
   ): Promise<PersonaTurnHttpResult> {
     assertConversationId(conversationId);
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId }
+    // codex PR review 적용 — owner scoping. cross-user append 차단.
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id: conversationId, ownerId }
     });
     if (!conversation) throw notFound();
 
@@ -194,13 +201,16 @@ export class ConversationService {
     };
   }
 
-  async runStandalone(dto: PersonaTurnRequestDto): Promise<PersonaTurnHttpResult> {
-    const conversation = await this.create({ subject: dto.subject });
+  async runStandalone(
+    dto: PersonaTurnRequestDto,
+    ownerId: string
+  ): Promise<PersonaTurnHttpResult> {
+    const conversation = await this.create({ subject: dto.subject }, ownerId);
     return this.appendTurn(conversation.id, {
       query: dto.query,
       k: dto.k,
       mode: dto.mode,
       agent: dto.agent
-    });
+    }, ownerId);
   }
 }

@@ -77,34 +77,35 @@ describe("ConversationController", () => {
 
     const calls: string[] = [];
     const fakeService = {
-      async create(dto: CreateConversationRequestDto) {
-        calls.push(`create:${dto.subject}`);
+      async create(dto: CreateConversationRequestDto, ownerId: string) {
+        calls.push(`create:${dto.subject}:${ownerId}`);
         return created;
       },
-      async appendTurn(id: string, dto: AppendConversationTurnRequestDto) {
-        calls.push(`append:${id}:${dto.query}`);
+      async appendTurn(id: string, dto: AppendConversationTurnRequestDto, ownerId: string) {
+        calls.push(`append:${id}:${dto.query}:${ownerId}`);
         return appended;
       },
-      async history(id: string) {
-        calls.push(`history:${id}`);
+      async history(id: string, ownerId: string) {
+        calls.push(`history:${id}:${ownerId}`);
         return history;
       }
     } as unknown as ConversationService;
 
     const controller = new ConversationController(fakeService);
+    const fakeReq = { user: { id: "user-test", displayName: "test", studentNumber: "00000000", role: "normal" as const } };
     assert.equal(
-      await controller.create({ subject: "digital-engineering" }),
+      await controller.create({ subject: "digital-engineering" }, fakeReq),
       created
     );
     assert.equal(
-      await controller.appendTurn(created.id, { query: "반가산기" }),
+      await controller.appendTurn(created.id, { query: "반가산기" }, fakeReq),
       appended
     );
-    assert.equal(await controller.history(created.id), history);
+    assert.equal(await controller.history(created.id, fakeReq), history);
     assert.deepEqual(calls, [
-      "create:digital-engineering",
-      "append:cmulti0000000000000000000:반가산기",
-      "history:cmulti0000000000000000000"
+      "create:digital-engineering:user-test",
+      "append:cmulti0000000000000000000:반가산기:user-test",
+      "history:cmulti0000000000000000000:user-test"
     ]);
   });
 });

@@ -22,7 +22,7 @@ function makePrismaStub() {
           createdAt: new Date("2026-05-09T00:00:00.000Z")
         };
       },
-      async findUnique(args: { where: { id: string }; include?: unknown }) {
+      async findFirst(args: { where: { id: string; ownerId?: string }; include?: unknown }) {
         if (args.where.id !== VALID_CONVERSATION_ID) return null;
         if (args.include) {
           return {
@@ -69,7 +69,7 @@ describe("ConversationService", () => {
     );
 
     await assert.rejects(
-      () => service.history("not-a-cuid"),
+      () => service.history("not-a-cuid", "user-test"),
       (err) => err instanceof BadRequestException
     );
   });
@@ -83,7 +83,7 @@ describe("ConversationService", () => {
     );
 
     await assert.rejects(
-      () => service.history("cmulti0000000000000009999"),
+      () => service.history("cmulti0000000000000009999", "user-test"),
       (err) => err instanceof NotFoundException
     );
   });
@@ -125,7 +125,7 @@ describe("ConversationService", () => {
       query: "현재 질문",
       mode: "real",
       agent: "gemini-cli"
-    });
+    }, "user-test");
 
     assert.match(JSON.stringify(capturedInput), /previousTurns/);
     assert.match(JSON.stringify(capturedInput), /"requestAgent":"gemini-cli"/);
@@ -151,7 +151,7 @@ describe("ConversationService", () => {
     };
     const prismaWithTurn = {
       conversation: {
-        async findUnique(args: { where: { id: string }; include?: unknown }) {
+        async findFirst(args: { where: { id: string; ownerId?: string }; include?: unknown }) {
           if (args.where.id !== VALID_CONVERSATION_ID) return null;
           if (args.include) {
             return {
@@ -173,7 +173,7 @@ describe("ConversationService", () => {
       {} as unknown as PersonaTurnService
     );
 
-    const result = await service.history(VALID_CONVERSATION_ID);
+    const result = await service.history(VALID_CONVERSATION_ID, "user-test");
     assert.equal(result.turns.length, 1);
     // sprint-2 invariant: stored string provider/modelName 그대로 통과 (Q5=A backward compat)
     assert.equal(result.turns[0]?.provider, "claude-cli-fixture");
