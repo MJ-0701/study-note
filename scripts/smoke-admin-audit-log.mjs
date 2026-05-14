@@ -149,13 +149,35 @@ function startBackend(port, db, logCollector) {
     stdio: ["ignore", "pipe", "pipe"]
   });
 
-  function collect(chunk) {
-    const lines = chunk.toString().split("\n");
-    logCollector.push(...lines);
+  // codex P1 fix — chunk boundary 가 arbitrary 라 partial line 누락 위험.
+  // stdout / stderr 별 buffer 유지하고 "\n" 만나면 complete line 만 push.
+  let stdoutBuf = "";
+  let stderrBuf = "";
+  function makeCollector(getBuf, setBuf) {
+    return (chunk) => {
+      const next = getBuf() + chunk.toString();
+      const parts = next.split("\n");
+      // 마지막 partial 은 buffer 에 retain
+      setBuf(parts.pop() ?? "");
+      for (const line of parts) {
+        logCollector.push(line);
+      }
+    };
+  }
+  function flushBuf(getBuf, setBuf) {
+    const tail = getBuf();
+    if (tail) {
+      logCollector.push(tail);
+      setBuf("");
+    }
   }
 
-  child.stdout.on("data", collect);
-  child.stderr.on("data", collect);
+  child.stdout.on("data", makeCollector(() => stdoutBuf, (v) => { stdoutBuf = v; }));
+  child.stderr.on("data", makeCollector(() => stderrBuf, (v) => { stderrBuf = v; }));
+  child.on("close", () => {
+    flushBuf(() => stdoutBuf, (v) => { stdoutBuf = v; });
+    flushBuf(() => stderrBuf, (v) => { stderrBuf = v; });
+  });
   return child;
 }
 
