@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "@study-note/persistence";
 
 /** Admin-facing user row — 7 fields per §5.3. role is lowercase per UserProfile convention. */
@@ -56,9 +56,17 @@ export class AdminService {
   async updateRole(
     id: string,
     newRole: "MASTER" | "ADMIN" | "NORMAL",
-    actorId: string
+    actorId: string,
+    actorRole: string
   ): Promise<AdminUserRecord> {
     const before = await this.findOrThrow(id);
+    // admin 은 master role 사용자의 role 변경 금지 (권한 위계 보호 — 사용자 lock).
+    if (actorRole === "admin" && before.role.toLowerCase() === "master") {
+      throw new ForbiddenException({
+        errorCode: "CANNOT_MODIFY_MASTER",
+        errorMessage: "admin cannot modify master"
+      });
+    }
     const updated = await this.prisma.user.update({
       where: { id },
       data: { role: newRole }

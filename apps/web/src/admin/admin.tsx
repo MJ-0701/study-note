@@ -293,6 +293,7 @@ function AdminApp() {
     <div className="admin-page">
       <div className="admin-inner">
         <header className="admin-header">
+          <a className="admin-home-link" href="/" aria-label="홈으로 돌아가기">← 홈</a>
           <h1>관리자 대시보드</h1>
           <span className="admin-meta">
             {viewer!.name} ({viewer!.studentNumber}) · {viewerRole}

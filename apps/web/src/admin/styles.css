@@ -35,6 +35,21 @@
   color: var(--ds-fg-soft);
 }
 
+.admin-home-link {
+  font-size: var(--ds-fs-meta);
+  color: var(--ds-accent, #3b6ef5);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.admin-home-link:hover,
+.admin-home-link:focus {
+  background-color: var(--ds-rule, #e5e7eb);
+  text-decoration: underline;
+}
+
 /* Unreviewed badge */
 .unreviewed-badge {
   display: inline-flex;

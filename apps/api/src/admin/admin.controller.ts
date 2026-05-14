@@ -88,7 +88,7 @@ export class AdminController {
       });
     }
 
-    const updated = await this.adminService.updateRole(targetId, newRole, actor.id);
+    const updated = await this.adminService.updateRole(targetId, newRole, actor.id, actor.role);
     return toWebResponse(updated);
   }
 
