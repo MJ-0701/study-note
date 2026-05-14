@@ -350,6 +350,14 @@ function AdminApp() {
                   const err = rowError[u.id] ?? null;
                   const selectedRole = rowRoleSelect[u.id] ?? u.role.toUpperCase();
                   const options = roleOptions(viewerRole);
+                  // 권한 위계 보호: admin viewer 는 master row 변경 X (backend 도 CANNOT_MODIFY_MASTER 거부).
+                  const lockedByHierarchy = viewerRole === "admin" && u.role === "master";
+                  const rowLocked = isSelf || lockedByHierarchy;
+                  const lockTitle = isSelf
+                    ? "본인 row 변경 X"
+                    : lockedByHierarchy
+                      ? "admin 권한으로 master 변경 X"
+                      : undefined;
 
                   return (
                     <tr key={u.id}>
@@ -370,9 +378,9 @@ function AdminApp() {
                             onChange={(e) =>
                               setRowRoleSelect((prev) => ({ ...prev, [u.id]: e.target.value }))
                             }
-                            disabled={busy || isSelf}
+                            disabled={busy || rowLocked}
                             aria-label={`${u.displayName} role 선택`}
-                            title={isSelf ? "본인 row 변경 X" : undefined}
+                            title={lockTitle}
                           >
                             {options.map((opt) => (
                               <option key={opt.value} value={opt.value}>
@@ -384,9 +392,9 @@ function AdminApp() {
                             type="button"
                             className="action-btn primary"
                             onClick={() => handleRoleChange(u.id)}
-                            disabled={busy || isSelf}
+                            disabled={busy || rowLocked}
                             aria-label={`${u.displayName} 등업 적용`}
-                            title={isSelf ? "본인 row 변경 X" : "등업"}
+                            title={lockTitle ?? "등업"}
                           >
                             등업
                           </button>
@@ -397,13 +405,13 @@ function AdminApp() {
                               type="button"
                               className={`action-btn ${u.devUserFlag ? "danger" : ""}`}
                               onClick={() => handleFlagToggle(u.id, u.devUserFlag)}
-                              disabled={busy || isSelf}
+                              disabled={busy || rowLocked}
                               aria-label={
                                 u.devUserFlag
                                   ? `${u.displayName} 반려`
                                   : `${u.displayName} 재활성`
                               }
-                              title={isSelf ? "본인 row 변경 X" : u.devUserFlag ? "반려" : "재활성"}
+                              title={lockTitle ?? (u.devUserFlag ? "반려" : "재활성")}
                             >
                               {u.devUserFlag ? "반려" : "재활성"}
                             </button>
@@ -424,9 +432,9 @@ function AdminApp() {
                             type="button"
                             className="action-btn"
                             onClick={() => handleReview(u.id)}
-                            disabled={busy || isSelf}
+                            disabled={busy || rowLocked}
                             aria-label={`${u.displayName} review 완료 표시`}
-                            title={isSelf ? "본인 row 변경 X" : "review 완료 표시"}
+                            title={lockTitle ?? "review 완료 표시"}
                           >
                             review
                           </button>
