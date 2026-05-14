@@ -1,29 +1,49 @@
-// slice-4: MCP first-time onboarding gate modal.
-// 조건: localStorage "study-note.mcp.onboarding-shown" === null + 본인 sign-in 완료.
-// 본인 sign-in 여부는 GET /api/v1/auth/me (credentials: "include") 로 자체 확인.
-// 닫기 (X / "나중에" / "이미 완료" / "지금 설정 안내 보기") 모두 localStorage flag set.
+// sprint-7 slice-1 — MCP first-time onboarding gate modal (3 버튼 + dismiss state machine).
+//
+// sprint-1 slice-4 의 단일 localStorage flag 모델을 plan §3 AC2 lock 대로 재설계:
+//   - "이미 설정 완료" → localStorage 영구 dismiss
+//   - "나중에" / Escape / X / 배경 클릭 → sessionStorage 임시 dismiss (새 탭/세션 재표시)
+//   - "지금 안내 보기" → /onboarding-mcp.html#trouble 이동, storage 미변경
+//
+// invariant: gate 의 영구 dismiss 는 "이미 설정 완료" 명시 클릭만 가능.
+// MCP 설정 미완료 사용자가 안내 페이지 클릭만으로 gate 를 영구 숨길 수 없다.
+//
 // a11y: role="dialog" + aria-modal + aria-labelledby + Escape 닫기 + 첫 focus = 첫 button.
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  applyDismiss,
+  isGateDismissed,
+  type GateStores,
+  type StorageLike
+} from "./gate-state";
 
-const LS_KEY = "study-note.mcp.onboarding-shown";
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
 type AuthBootState = "loading" | "ready" | "unauthenticated" | "error";
 
-function isAlreadyShown(): boolean {
+function safeStorage(kind: "local" | "session"): StorageLike {
+  // SSR / iframe / privacy mode 에서 storage 차단 시 in-memory fallback.
+  // 차단된 환경의 gate 는 매 새로고침 마다 표시되지만, 사용자 명시 "완료"
+  // 클릭이 같은 페이지 라이프사이클 내에서는 효과 있다.
+  const fallback = new Map<string, string>();
   try {
-    return localStorage.getItem(LS_KEY) !== null;
+    const target = kind === "local" ? window.localStorage : window.sessionStorage;
+    // probe — Safari private mode 등은 setItem 시 throw.
+    const probeKey = `__study_note_probe_${kind}__`;
+    target.setItem(probeKey, "1");
+    target.removeItem(probeKey);
+    return target;
   } catch {
-    return true; // storage blocked → skip modal
-  }
-}
-
-function markShown(): void {
-  try {
-    localStorage.setItem(LS_KEY, "true");
-  } catch {
-    // storage blocked — ignore
+    return {
+      getItem: (k) => (fallback.has(k) ? fallback.get(k)! : null),
+      setItem: (k, v) => {
+        fallback.set(k, v);
+      },
+      removeItem: (k) => {
+        fallback.delete(k);
+      }
+    };
   }
 }
 
@@ -31,11 +51,20 @@ export function MCPOnboardingGate() {
   const [authBoot, setAuthBoot] = useState<AuthBootState>("loading");
   const [open, setOpen] = useState(false);
   const firstButtonRef = useRef<HTMLButtonElement>(null);
+  const storesRef = useRef<GateStores | null>(null);
 
-  // /me 호출로 sign-in 상태 확인
+  if (storesRef.current === null) {
+    storesRef.current = {
+      local: safeStorage("local"),
+      session: safeStorage("session")
+    };
+  }
+
+  // /me 호출로 sign-in 상태 확인 + dismiss state 평가.
   useEffect(() => {
-    if (isAlreadyShown()) {
-      setAuthBoot("unauthenticated"); // skip — 이미 표시됨
+    const stores = storesRef.current!;
+    if (isGateDismissed(stores)) {
+      setAuthBoot("unauthenticated"); // skip — 이미 dismiss 상태
       return;
     }
     let cancelled = false;
@@ -57,38 +86,50 @@ export function MCPOnboardingGate() {
     };
   }, []);
 
-  // 첫 버튼에 focus
   useEffect(() => {
     if (open && firstButtonRef.current) {
       firstButtonRef.current.focus();
     }
   }, [open]);
 
-  // Escape 키로 닫기
+  const handleExternalClose = useCallback(() => {
+    const stores = storesRef.current;
+    if (stores) applyDismiss(stores, "external-close");
+    setOpen(false);
+  }, []);
+
+  const handleDeferred = useCallback(() => {
+    const stores = storesRef.current;
+    if (stores) applyDismiss(stores, "deferred");
+    setOpen(false);
+  }, []);
+
+  const handleCompleted = useCallback(() => {
+    const stores = storesRef.current;
+    if (stores) applyDismiss(stores, "completed");
+    setOpen(false);
+  }, []);
+
+  const handleGoToGuide = useCallback(() => {
+    const stores = storesRef.current;
+    if (stores) applyDismiss(stores, "guide");
+    setOpen(false);
+    window.location.href = "/onboarding-mcp.html#trouble";
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape" && open) {
-        handleClose();
+        handleExternalClose();
       }
     },
-    [open] // eslint-disable-line react-hooks/exhaustive-deps
+    [open, handleExternalClose]
   );
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
-
-  function handleClose() {
-    markShown();
-    setOpen(false);
-  }
-
-  function handleGoToGuide() {
-    markShown();
-    setOpen(false);
-    window.location.href = "/onboarding-mcp.html";
-  }
 
   if (!open || authBoot !== "ready") return null;
 
@@ -97,7 +138,7 @@ export function MCPOnboardingGate() {
       {/* 배경 오버레이 */}
       <div
         aria-hidden="true"
-        onClick={handleClose}
+        onClick={handleExternalClose}
         style={{
           position: "fixed",
           inset: 0,
@@ -111,6 +152,7 @@ export function MCPOnboardingGate() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="mcp-gate-title"
+        data-mcp-onboarding-gate="true"
         style={{
           position: "fixed",
           top: "50%",
@@ -126,12 +168,13 @@ export function MCPOnboardingGate() {
           padding: "28px 28px 24px"
         }}
       >
-        {/* 닫기 버튼 (X) */}
+        {/* 닫기 버튼 (X) — 외부 close 와 동일 액션 */}
         <button
           ref={firstButtonRef}
           type="button"
           aria-label="모달 닫기"
-          onClick={handleClose}
+          onClick={handleExternalClose}
+          data-mcp-gate-action="external-close"
           style={{
             position: "absolute",
             top: 16,
@@ -152,7 +195,6 @@ export function MCPOnboardingGate() {
           ×
         </button>
 
-        {/* 제목 (spec §4.2) */}
         <h2
           id="mcp-gate-title"
           style={{ fontSize: 18, fontWeight: 700, margin: "0 0 12px", color: "#111827" }}
@@ -160,7 +202,6 @@ export function MCPOnboardingGate() {
           🎓 더 똑똑한 페르소나 호출을 위해
         </h2>
 
-        {/* 본문 (spec §4.2 verbatim) */}
         <p style={{ margin: "0 0 12px", color: "#374151", fontSize: 14, lineHeight: 1.65 }}>
           study-note 의 강의 자료 + 페르소나 prompt 를 본인 Claude Desktop / Cursor 에 연결할 수
           있어요.
@@ -184,14 +225,15 @@ export function MCPOnboardingGate() {
         </ul>
 
         <p style={{ margin: "0 0 20px", color: "#374151", fontSize: 14, lineHeight: 1.65 }}>
-          5~10분이면 끝나요. 가이드를 따라가시면 됩니다.
+          5~10분이면 끝나요. 아래에서 선택해주세요.
         </p>
 
-        {/* 버튼 영역 */}
+        {/* 3 버튼 — plan §3 AC2 lock */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
             type="button"
             onClick={handleGoToGuide}
+            data-mcp-gate-action="guide"
             style={{
               background: "#3b6ef5",
               border: "1px solid #3b6ef5",
@@ -203,14 +245,35 @@ export function MCPOnboardingGate() {
               fontWeight: 600,
               minHeight: 44,
               padding: "10px 16px",
-              flex: "1 1 auto"
+              flex: "1 1 100%"
             }}
           >
-            지금 설정 안내 보기
+            지금 안내 보기
           </button>
           <button
             type="button"
-            onClick={handleClose}
+            onClick={handleCompleted}
+            data-mcp-gate-action="completed"
+            style={{
+              background: "#ffffff",
+              border: "1px solid #c7d2fe",
+              borderRadius: 8,
+              color: "#3730a3",
+              cursor: "pointer",
+              font: "inherit",
+              fontSize: 14,
+              fontWeight: 500,
+              minHeight: 44,
+              padding: "10px 14px",
+              flex: "1 1 calc(50% - 5px)"
+            }}
+          >
+            이미 설정 완료
+          </button>
+          <button
+            type="button"
+            onClick={handleDeferred}
+            data-mcp-gate-action="deferred"
             style={{
               background: "#f9fafb",
               border: "1px solid #e5e7eb",
@@ -221,7 +284,8 @@ export function MCPOnboardingGate() {
               fontSize: 14,
               fontWeight: 500,
               minHeight: 44,
-              padding: "10px 14px"
+              padding: "10px 14px",
+              flex: "1 1 calc(50% - 5px)"
             }}
           >
             나중에

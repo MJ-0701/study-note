@@ -11,5 +11,6 @@
     "types": ["vite/client"],
     "noEmit": true
   },
-  "include": ["src", "../../packages/domain/src/**/*.ts"]
+  "include": ["src", "../../packages/domain/src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
 }
