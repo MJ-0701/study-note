@@ -1,35 +1,31 @@
+/**
+ * smoke-pdf-workspace.mjs — AC5: cookie-auth frontend + CDP smoke.
+ *
+ * slice-4 rewrite (sprint-7 carryover): frontend 의 localStorage 기반 authSession 검증
+ * 블록을 전부 제거하고, slice-2 의 httpOnly cookie 흐름을 CDP `Network.getCookies` /
+ * `Network.setCookie` / `Network.clearBrowserCookies` 로 검증한다.
+ *
+ * AC5:
+ *   - 로그인 텍스트는 `<h1 id="login-title">study-note</h1>` (구 'study-note 로그인' 폐기)
+ *   - authStorageKey ('study-note.auth-session.v1') 검증 블록 전체 제거
+ *   - 백엔드 fetch 는 Bearer 헤더 제거 → CDP 가 추출한 cookie 헤더 사용
+ *
+ * AC5-amend (frontend session security):
+ *   - sign-in 후에도 localStorage 의 'study-note.auth-session.v1' 키가 없음
+ *   - `document.cookie` 에서 'study_note_session' 키 미접근 (HttpOnly 검증)
+ *   - CDP `Network.getCookies` → cookie row 의 httpOnly===true && sameSite!=='None'
+ */
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { prepareSmokeDatabase } from "./smoke-db.mjs";
 
-// sprint-6 retro §4 (이어갈 것) — smoke skipped pending sprint-7 sub-slice rewrite.
-//
-// Reason: frontend + backend auth migrated off localStorage onto httpOnly cookies (slice-2):
-//   - login-screen heading text is "study-note" (no "로그인" suffix); the assertion below
-//     for "study-note 로그인" is permanently false against the current DOM.
-//   - localStorage key "study-note.auth-session.v1" is no longer written; session lives in
-//     in-memory authSession + study_note_session cookie. All authStorageKey assertions
-//     (stored-session-invalid, stored-session-revalidate, session.token / session.user.displayName)
-//     check a contract that no longer exists.
-//   - requestBackendJson uses `Bearer ${token}` against /materials; the SessionAuthGuard now
-//     rejects Bearer headers (cookie-only).
-//
-// Full rewrite (~200 LOC, CDP cookie manipulation via Network.setCookie / Storage.clearCookies
-// + login title text update + drop authStorageKey blocks) is scheduled for sprint-7
-// sub-slice "smoke cookie-auth migration".
-//
-// Override (for the sprint-7 rewriter): STUDY_NOTE_SMOKE_ALLOW_STALE=1
-if (!process.env.STUDY_NOTE_SMOKE_ALLOW_STALE) {
-  console.log(
-    "smoke-pdf-workspace: SKIPPED — sprint-7 carryover (cookie-auth migration). " +
-      "Set STUDY_NOTE_SMOKE_ALLOW_STALE=1 to run the legacy script."
-  );
-  process.exit(0);
-}
+const AUTH_LEGACY_LOCALSTORAGE_KEY = "study-note.auth-session.v1";
+const SESSION_COOKIE_NAME = "study_note_session";
 
-const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const chromePath = resolveChromePath();
 const backendPort = 3001 + Math.floor(Math.random() * 1000);
 const backendBaseUrl = `http://127.0.0.1:${backendPort}/api`;
 const vitePort = 5173 + Math.floor(Math.random() * 1000);
@@ -38,7 +34,6 @@ const appUrl = `${viteBaseUrl}/#/subjects/digital-engineering/pdf-workspace`;
 const remotePort = 9223 + Math.floor(Math.random() * 1000);
 const subjectId = "digital-engineering";
 const storageKey = "study-note.pdf-workspaces.v1";
-const authStorageKey = "study-note.auth-session.v1";
 
 const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
 const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
@@ -63,7 +58,9 @@ const viteServer = spawn(
       BROWSER: "none",
       VITE_API_BASE_URL: backendBaseUrl
     },
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
+    // Node 18+ Windows: .cmd 파일은 shell: true 없이 spawn 불가 (smoke-db.mjs 와 동일).
+    shell: process.platform === "win32"
   }
 );
 viteServer.stdout.on("data", (chunk) => viteLogs.push(String(chunk)));
@@ -90,8 +87,9 @@ try {
       PORT: String(backendPort),
       DATABASE_URL: smokeDb.databaseUrl,
       SESSION_TOKEN_PEPPER: smokeDb.sessionTokenPepper,
-      // sprint-2 plan §3 AC10(d) — backend 의 startup-time fail-closed (main.ts) 가 STORAGE_PROVIDER 검증.
-      STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local"
+      STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local",
+      // vite 가 random port 라 default CORS allowlist (5173) 와 mismatch — origin 명시 주입.
+      CORS_ALLOWED_ORIGINS: viteBaseUrl
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -128,88 +126,83 @@ try {
   await cdp.send("Page.enable");
   await cdp.send("DOM.enable");
   await cdp.send("Runtime.enable");
+  await cdp.send("Network.enable");
   await cdp.send("Page.navigate", { url: appUrl });
   await waitFor(() => evaluate("Boolean(document.querySelector('[data-login-screen]'))"));
   await assertEval(
-    "document.body.innerText.includes('study-note 로그인')",
-    "login-first gate renders"
+    `document.getElementById('login-title')?.textContent?.trim() === 'study-note'`,
+    "login-first gate renders with new heading 'study-note'"
   );
 
   await submitLogin(SEED_USER_NAME, "00000000");
   await waitFor(() => evaluate(`{
     return Boolean(document.querySelector('[data-login-screen]')) &&
       document.body.innerText.includes('로그인하지 못했습니다') &&
-      !localStorage.getItem('${authStorageKey}');
+      !localStorage.getItem('${AUTH_LEGACY_LOCALSTORAGE_KEY}');
   }`));
+
+  // Verify no session cookie was set after a failed sign-in.
+  {
+    const cookies = await getCookies();
+    if (cookies.some((c) => c.name === SESSION_COOKIE_NAME)) {
+      throw new Error("session cookie present after failed sign-in");
+    }
+  }
 
   await submitLogin(SEED_USER_NAME, SEED_USER_STUDENT_NUMBER);
   await waitFor(() => evaluate("Boolean(document.querySelector('[data-pdf-annotation-surface]'))"));
   await assertEval(`{
-    const raw = localStorage.getItem('${authStorageKey}');
-    const session = raw ? JSON.parse(raw) : {};
-    return Boolean(
-      session.token &&
-      session.user?.displayName === ${JSON.stringify(SEED_USER_NAME)} &&
-      session.user?.studentNumber === ${JSON.stringify(SEED_USER_STUDENT_NUMBER)}
-    );
-  }`, "frontend login form stores backend auth session");
-
-  await assertEval(`{
     return document.body.innerText.includes('디지털공학개론 PDF 필기');
   }`, "valid backend login enters PDF workspace");
 
-  const validSession = await evaluate(`localStorage.getItem('${authStorageKey}')`);
-  await evaluate(`{
-    localStorage.setItem('${authStorageKey}', JSON.stringify({
-      token: 'invalid-smoke-token',
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-      user: {
-        id: 'user-dev-1',
-        displayName: ${JSON.stringify(SEED_USER_NAME)},
-        studentNumber: ${JSON.stringify(SEED_USER_STUDENT_NUMBER)}
-      }
-    }));
-    return true;
-  }`);
+  // ─── AC5-amend: frontend session security checks ───────────────────
+  await assertEval(
+    `localStorage.getItem('${AUTH_LEGACY_LOCALSTORAGE_KEY}') === null`,
+    "legacy authStorageKey is NOT written to localStorage after sign-in"
+  );
+  await assertEval(
+    `!document.cookie.split(';').some(p => p.trim().startsWith('${SESSION_COOKIE_NAME}='))`,
+    "HttpOnly: document.cookie cannot read study_note_session from JS"
+  );
+  {
+    const cookies = await getCookies();
+    const sessionCookie = cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+    if (!sessionCookie) {
+      throw new Error("CDP Network.getCookies did not return session cookie");
+    }
+    if (sessionCookie.httpOnly !== true) {
+      throw new Error(`session cookie httpOnly must be true, got ${sessionCookie.httpOnly}`);
+    }
+    if (sessionCookie.sameSite === "None") {
+      throw new Error("session cookie sameSite must not be 'None'");
+    }
+    console.log(`  ✓ CDP getCookies: ${SESSION_COOKIE_NAME} httpOnly=true sameSite=${sessionCookie.sameSite ?? "(unset → Lax)"}`);
+  }
+
+  // ─── Cookie cleared via CDP → reload → /v1/auth/me 401 → login screen ──
+  await cdp.send("Network.clearBrowserCookies");
+  await cdp.send("Page.reload", { ignoreCache: true });
+  await waitFor(() => evaluate(`Boolean(document.querySelector('[data-login-screen]'))`));
+  await assertEval(
+    `document.getElementById('login-title')?.textContent?.trim() === 'study-note'`,
+    "cleared cookie redirects to login screen on reload (cookie-only session)"
+  );
+
+  // Re-sign in for the remainder of the test.
+  await submitLogin(SEED_USER_NAME, SEED_USER_STUDENT_NUMBER);
+  await waitFor(() => evaluate("Boolean(document.querySelector('[data-pdf-annotation-surface]'))"));
+
+  // ─── Valid cookie persists across reload → /v1/auth/me 200 → workspace ──
   await cdp.send("Page.reload", { ignoreCache: true });
   await waitFor(() => evaluate(`{
-    return Boolean(document.querySelector('[data-login-screen]')) &&
-      document.body.innerText.includes('세션을 다시 확인하지 못했습니다') &&
-      !localStorage.getItem('${authStorageKey}');
+    return Boolean(document.querySelector('[data-pdf-annotation-surface]')) &&
+      document.body.innerText.includes('디지털공학개론 PDF 필기');
   }`));
-
-  await evaluate(`{
-    const session = JSON.parse(${JSON.stringify(validSession)});
-    localStorage.setItem('${authStorageKey}', JSON.stringify({
-      ...session,
-      user: {
-        id: 'stale-user-id',
-        displayName: 'Stale Stored User',
-        studentNumber: '00000000'
-      }
-    }));
-    return true;
-  }`);
-  await cdp.send("Page.reload", { ignoreCache: true });
-  await waitFor(() => evaluate("Boolean(document.querySelector('[data-pdf-annotation-surface]'))"));
-  await assertEval(`{
-    const raw = localStorage.getItem('${authStorageKey}');
-    const session = raw ? JSON.parse(raw) : {};
-    return Boolean(
-      session.token &&
-      session.user?.displayName === ${JSON.stringify(SEED_USER_NAME)} &&
-      session.user?.studentNumber === ${JSON.stringify(SEED_USER_STUDENT_NUMBER)}
-    );
-  }`, "stored valid session revalidates through /api/me before workspace render");
-
   await assertEval(
-    "document.body.innerText.includes('디지털공학개론 PDF 필기')",
-    "PDF workspace route renders"
+    `document.body.innerText.includes('디지털공학개론 PDF 필기')`,
+    "valid cookie revalidates through /v1/auth/me before workspace render"
   );
 
-  const revalidatedSession = JSON.parse(
-    await evaluate(`localStorage.getItem('${authStorageKey}')`)
-  );
   await setFileInput(samplePdfPath);
   await waitFor(() => evaluate(`{
     const raw = localStorage.getItem('${storageKey}');
@@ -231,7 +224,7 @@ try {
     const data = raw ? JSON.parse(raw) : {};
     return data.workspaces?.['${subjectId}']?.material;
   }`);
-  const materials = await requestBackendJson("/materials", revalidatedSession.token);
+  const materials = await requestBackendJsonWithBrowserCookie("/materials");
   if (
     !materials.materials?.some(
       (material) =>
@@ -385,13 +378,13 @@ try {
   }
 
   console.log("PDF workspace smoke passed");
-  console.log("- login-first gate renders before workspace access");
-  console.log("- frontend login form rejects invalid name/student number and enters workspace with backend auth");
-  console.log("- invalid stored session is cleared before workspace access");
-  console.log("- valid stored session revalidates through /api/me before workspace access");
-  console.log("- route renders");
+  console.log("- login-first gate renders with 'study-note' heading (no '로그인' suffix)");
+  console.log("- frontend login form rejects invalid name/student number without setting cookie");
+  console.log("- valid sign-in enters PDF workspace; no localStorage authSession, HttpOnly cookie only");
+  console.log("- cleared cookie redirects to login screen on reload");
+  console.log("- valid cookie revalidates through /v1/auth/me before workspace access");
   console.log("- backend PDF upload/download renders Blob iframe preview");
-  console.log("- backend material list restores latest uploaded PDF after reload");
+  console.log("- backend material list (via CDP-extracted cookie) restores latest uploaded PDF");
   console.log("- unauthenticated PDF file download is rejected");
   console.log("- sticky note persists after reload");
   console.log("- pen stroke persists after reload");
@@ -404,6 +397,49 @@ try {
   backendServer?.kill("SIGTERM");
   await smokeDb?.stop();
   await removeTempRoot();
+}
+
+function resolveChromePath() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+  if (process.platform === "darwin") {
+    return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+  }
+  if (process.platform === "win32") {
+    const candidates = [
+      `${process.env["ProgramFiles"] ?? "C:\\Program Files"}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)"}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${process.env["LOCALAPPDATA"] ?? ""}\\Google\\Chrome\\Application\\chrome.exe`
+    ];
+    for (const candidate of candidates) {
+      try {
+        if (statSync(candidate).isFile()) return candidate;
+      } catch {
+        // not found, try next
+      }
+    }
+  }
+  if (process.platform === "linux") {
+    // PR #7 Codex P1 — Linux runner (CI / dev) 분기. Debian/Ubuntu/Arch 의 일반적
+    // chrome / chromium binary 후보. `which`-style PATH lookup 도 시도.
+    const candidates = [
+      "/usr/bin/google-chrome",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/snap/bin/chromium",
+      "/opt/google/chrome/chrome"
+    ];
+    for (const candidate of candidates) {
+      try {
+        if (statSync(candidate).isFile()) return candidate;
+      } catch {
+        // not found, try next
+      }
+    }
+  }
+  throw new Error(
+    "Chrome executable not found. Set CHROME_PATH env to override (e.g. CHROME_PATH=/path/to/chrome)."
+  );
 }
 
 function createSamplePdf() {
@@ -428,12 +464,12 @@ endobj
 endobj
 xref
 0 6
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000241 00000 n 
-0000000361 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000241 00000 n
+0000000361 00000 n
 trailer
 << /Root 1 0 R /Size 6 >>
 startxref
@@ -536,6 +572,7 @@ async function assertEval(expression, label) {
   if (!ok) {
     throw new Error(`Smoke assertion failed: ${label}`);
   }
+  console.log(`  ✓ ${label}`);
 }
 
 async function assertBackendStatus(label, request, expectedStatus) {
@@ -548,11 +585,19 @@ async function assertBackendStatus(label, request, expectedStatus) {
   }
 }
 
-async function requestBackendJson(path, token) {
+async function getCookies() {
+  const result = await cdp.send("Network.getCookies", {});
+  return result.cookies ?? [];
+}
+
+async function requestBackendJsonWithBrowserCookie(path) {
+  const cookies = await getCookies();
+  const sessionCookie = cookies.find((c) => c.name === SESSION_COOKIE_NAME);
+  if (!sessionCookie) {
+    throw new Error(`expected ${SESSION_COOKIE_NAME} cookie in browser to call ${path}`);
+  }
   const response = await fetch(`${backendBaseUrl}${path}`, {
-    headers: {
-      authorization: `Bearer ${token}`
-    }
+    headers: { cookie: `${SESSION_COOKIE_NAME}=${sessionCookie.value}` }
   });
 
   if (!response.ok) {

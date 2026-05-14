@@ -5,6 +5,7 @@ import { SourcesPanel } from "./components/SourcesPanel";
 import { ModeToggle, type Mode } from "./components/ModeToggle";
 import { ConsentBanner } from "./components/ConsentBanner";
 import { MCPOnboardingGate } from "./components/MCPOnboardingGate";
+import { MCPDisconnectedCard, isMcpDisconnectedError } from "./components/MCPDisconnectedCard";
 import { PersonaSidebar } from "./components/PersonaSidebar";
 import {
   appendConversationTurn,
@@ -52,6 +53,8 @@ export function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // plan §3 AC2-amend — persona-turn API 의 503 AUTH_DEV_DISABLED 매핑.
+  const [mcpDisconnected, setMcpDisconnected] = useState(false);
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>("checking");
@@ -104,9 +107,10 @@ export function App() {
     return () => clearTimeout(t);
   }, [mode]);
 
-  // mode 변경 시 stale error 만 clear. 대화 history 는 mode 전환과 독립이다.
+  // mode 변경 시 stale error / mcpDisconnected clear. 대화 history 는 mode 전환과 독립이다.
   useEffect(() => {
     setError(null);
+    setMcpDisconnected(false);
   }, [mode]);
 
   useEffect(() => {
@@ -159,13 +163,15 @@ export function App() {
     };
   }, [conversationId]);
 
-  // form input change (subject/query/k) 시 stale error clear.
+  // form input change (subject/query/k) 시 stale error / mcpDisconnected clear.
   const handleFormChange = useCallback(() => {
     setError(null);
+    setMcpDisconnected(false);
   }, []);
 
   async function handleSubmit(input: TurnFormSubmitInput) {
     setError(null);
+    setMcpDisconnected(false);
     setIsSubmitting(true);
     try {
       let activeConversationId = conversationId;
@@ -188,7 +194,13 @@ export function App() {
       setMessages((prev) => [...prev, next as ChatTurn]);
     } catch (err) {
       if (err instanceof PersonaTurnApiError) {
-        setError(`${err.errorCode}: ${err.message}`);
+        // plan §3 AC2-amend — 503 AUTH_DEV_DISABLED 만 MCP 미연결 카드로 매핑.
+        // 그 외 4xx/5xx (401 SESSION_REQUIRED 포함) 는 기존 일반 오류 카드 유지.
+        if (isMcpDisconnectedError({ status: err.status, errorCode: err.errorCode })) {
+          setMcpDisconnected(true);
+        } else {
+          setError(`${err.errorCode}: ${err.message}`);
+        }
       } else if (err instanceof TypeError) {
         setError("네트워크 오류 — backend 가 떠있는지 확인 (npm run dev:backend).");
       } else {
@@ -429,6 +441,8 @@ export function App() {
         externalDisabled={externalDisabled}
         externalDisabledLabel={externalDisabledLabel}
       />
+
+      {mcpDisconnected && <MCPDisconnectedCard />}
 
       {error && (
         <section
