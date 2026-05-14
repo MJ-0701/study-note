@@ -44,6 +44,8 @@
     "smoke:mcp-fail-closed": "pnpm --filter @study-note/corpus build && pnpm --filter @study-note/mcp build && node scripts/smoke-mcp-fail-closed.mjs",
     "smoke:mcp-env-validate": "pnpm --filter @study-note/corpus build && pnpm --filter @study-note/mcp build && node scripts/smoke-mcp-env-validate.mjs",
     "smoke:mcp-persona-prompt": "pnpm --filter @study-note/corpus build && pnpm --filter @study-note/mcp build && node scripts/smoke-mcp-persona-prompt.mjs",
+    "smoke:admin-audit-log": "pnpm --filter @study-note/api build && node scripts/smoke-admin-audit-log.mjs",
+    "smoke:admin-cannot-modify-master": "pnpm --filter @study-note/api build && node scripts/smoke-admin-cannot-modify-master.mjs",
     "smoke:admin-users-list": "pnpm --filter @study-note/api build && node scripts/smoke-admin-users-list.mjs",
     "smoke:admin-role-promote": "pnpm --filter @study-note/api build && node scripts/smoke-admin-role-promote.mjs",
     "smoke:admin-reject": "pnpm --filter @study-note/api build && node scripts/smoke-admin-reject.mjs",

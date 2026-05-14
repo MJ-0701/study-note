@@ -162,13 +162,35 @@ function startBackend(port, db, logCollector) {
     stdio: ["ignore", "pipe", "pipe"]
   });
 
-  function collect(chunk) {
-    const lines = chunk.toString().split("\n");
-    logCollector.push(...lines);
+  // chunk boundary 처리 — stdout/stderr chunk 가 arbitrary boundary 라
+  // 한 줄이 두 chunk 에 split 가능. 각자 buffer 유지하고 "\n" complete line
+  // 만 push, 마지막 partial 은 buffer 에 retain. (codex PR #5 P1 fix 패턴 동일.)
+  let stdoutBuf = "";
+  let stderrBuf = "";
+  function makeCollector(getBuf, setBuf) {
+    return (chunk) => {
+      const next = getBuf() + chunk.toString();
+      const parts = next.split("\n");
+      setBuf(parts.pop() ?? "");
+      for (const line of parts) {
+        logCollector.push(line);
+      }
+    };
+  }
+  function flushBuf(getBuf, setBuf) {
+    const tail = getBuf();
+    if (tail) {
+      logCollector.push(tail);
+      setBuf("");
+    }
   }
 
-  child.stdout.on("data", collect);
-  child.stderr.on("data", collect);
+  child.stdout.on("data", makeCollector(() => stdoutBuf, (v) => { stdoutBuf = v; }));
+  child.stderr.on("data", makeCollector(() => stderrBuf, (v) => { stderrBuf = v; }));
+  child.on("close", () => {
+    flushBuf(() => stdoutBuf, (v) => { stdoutBuf = v; });
+    flushBuf(() => stderrBuf, (v) => { stderrBuf = v; });
+  });
   return child;
 }
 
