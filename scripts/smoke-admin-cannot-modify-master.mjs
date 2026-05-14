@@ -17,7 +17,10 @@ let baseUrl = process.env.STUDY_NOTE_API_BASE;
 
 try {
   if (!baseUrl) {
-    if (!process.env.DATABASE_URL && !process.env.SESSION_TOKEN_PEPPER) {
+    // codex PR #5 P2 fix — 둘 중 하나라도 missing 이면 self-bootstrap.
+    // 이전 && 는 partial env (DATABASE_URL 만 있고 PEPPER 없음) 환경에서
+    // prepareSmokeDatabase 건너뛰고 missing-value error 로 false-negative.
+    if (!process.env.DATABASE_URL || !process.env.SESSION_TOKEN_PEPPER) {
       smokeDb = await prepareSmokeDatabase("admin-cannot-modify-master");
     }
     const db = smokeDb ?? {

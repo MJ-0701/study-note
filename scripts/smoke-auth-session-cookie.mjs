@@ -23,7 +23,7 @@ let baseUrl = process.env.STUDY_NOTE_API_BASE;
 
 try {
   if (!baseUrl) {
-    if (!process.env.DATABASE_URL && !process.env.SESSION_TOKEN_PEPPER) {
+    if (!process.env.DATABASE_URL || !process.env.SESSION_TOKEN_PEPPER) {
       smokeDb = await prepareSmokeDatabase("auth-session-cookie");
     }
     const db = smokeDb ?? {

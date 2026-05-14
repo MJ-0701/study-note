@@ -25,7 +25,7 @@ let baseUrl = process.env.STUDY_NOTE_API_BASE;
 try {
   if (!baseUrl) {
     // Check required env when we need to spawn
-    if (!process.env.DATABASE_URL && !process.env.SESSION_TOKEN_PEPPER) {
+    if (!process.env.DATABASE_URL || !process.env.SESSION_TOKEN_PEPPER) {
       smokeDb = await prepareSmokeDatabase("auth-signin");
     }
     const db = smokeDb ?? {
