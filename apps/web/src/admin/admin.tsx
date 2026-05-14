@@ -1,6 +1,6 @@
 // admin.tsx — 관리자 대시보드 React entry.
 // Mount on #admin-root.
-import { StrictMode, useCallback, useEffect, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import "./styles.css";
@@ -9,6 +9,32 @@ const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
 type UserRole = "master" | "admin" | "normal";
+
+type RoleFilter = "all" | "master" | "admin" | "normal";
+type FlagFilter = "all" | "active" | "rejected";
+type ReviewFilter = "all" | "reviewed" | "unreviewed";
+type PageSize = 10 | 20 | 50;
+
+function asRoleFilter(v: string): RoleFilter {
+  if (v === "master" || v === "admin" || v === "normal") return v;
+  return "all";
+}
+
+function asFlagFilter(v: string): FlagFilter {
+  if (v === "active" || v === "rejected") return v;
+  return "all";
+}
+
+function asReviewFilter(v: string): ReviewFilter {
+  if (v === "reviewed" || v === "unreviewed") return v;
+  return "all";
+}
+
+function asPageSize(v: string): PageSize {
+  if (v === "10") return 10;
+  if (v === "50") return 50;
+  return 20;
+}
 
 interface AuthUser {
   userId: string;
@@ -97,6 +123,14 @@ function AdminApp() {
   // Per-row role select state
   const [rowRoleSelect, setRowRoleSelect] = useState<Record<string, string>>({});
 
+  // Filter / search / pagination state
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [flagFilter, setFlagFilter] = useState<FlagFilter>("all");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
+  const [searchQ, setSearchQ] = useState<string>("");
+  const [pageSize, setPageSize] = useState<PageSize>(20);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
   // Boot: fetch /me
   useEffect(() => {
     fetch(`${BACKEND_BASE}/api/v1/auth/me`, { credentials: "include" })
@@ -158,6 +192,11 @@ function AdminApp() {
   useEffect(() => {
     if (bootState === "ready") fetchUsers();
   }, [bootState, fetchUsers]);
+
+  // Reset currentPage to 1 when filters/search/pageSize change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [roleFilter, flagFilter, reviewFilter, searchQ, pageSize]);
 
   function setRowBusy(id: string, busy: boolean) {
     setRowLoading((prev) => ({ ...prev, [id]: busy }));
@@ -286,6 +325,7 @@ function AdminApp() {
   }
 
   // Dashboard
+  // unreviewedCount always computed from raw users (filter-independent)
   const unreviewedCount = users.filter((u) => u.reviewedAt === null).length;
   const viewerRole = viewer!.role;
 
@@ -325,144 +365,376 @@ function AdminApp() {
           </button>
         </div>
 
+        {/* Toolbar */}
+        <div className="admin-toolbar" role="search" aria-label="사용자 필터 및 검색">
+          <label className="admin-toolbar-item">
+            <span className="admin-toolbar-label">Role</span>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(asRoleFilter(e.target.value))}
+              aria-label="Role 필터"
+            >
+              <option value="all">all</option>
+              <option value="master">master</option>
+              <option value="admin">admin</option>
+              <option value="normal">normal</option>
+            </select>
+          </label>
+
+          <label className="admin-toolbar-item">
+            <span className="admin-toolbar-label">Flag</span>
+            <select
+              value={flagFilter}
+              onChange={(e) => setFlagFilter(asFlagFilter(e.target.value))}
+              aria-label="devUserFlag 필터"
+            >
+              <option value="all">all</option>
+              <option value="active">active</option>
+              <option value="rejected">rejected</option>
+            </select>
+          </label>
+
+          <label className="admin-toolbar-item">
+            <span className="admin-toolbar-label">Review</span>
+            <select
+              value={reviewFilter}
+              onChange={(e) => setReviewFilter(asReviewFilter(e.target.value))}
+              aria-label="review 상태 필터"
+            >
+              <option value="all">all</option>
+              <option value="reviewed">reviewed</option>
+              <option value="unreviewed">unreviewed</option>
+            </select>
+          </label>
+
+          <label className="admin-toolbar-item admin-toolbar-search">
+            <span className="admin-toolbar-label">Search</span>
+            <input
+              type="search"
+              placeholder="학번 또는 이름"
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              aria-label="학번 또는 이름 검색"
+            />
+          </label>
+
+          <label className="admin-toolbar-item">
+            <span className="admin-toolbar-label">PageSize</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(asPageSize(e.target.value))}
+              aria-label="페이지 크기"
+            >
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </label>
+        </div>
+
         {listLoading && users.length === 0 ? (
           <div className="admin-status" style={{ minHeight: "20vh" }}>
             <p className="admin-status-body">목록 불러오는 중...</p>
           </div>
         ) : (
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th scope="col">학번</th>
-                  <th scope="col">이름</th>
-                  <th scope="col">role</th>
-                  <th scope="col">devUserFlag</th>
-                  <th scope="col">reviewedAt</th>
-                  <th scope="col">가입일</th>
-                  <th scope="col">액션</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const isSelf = viewer!.userId === u.id;
-                  const busy = !!rowLoading[u.id];
-                  const err = rowError[u.id] ?? null;
-                  const selectedRole = rowRoleSelect[u.id] ?? u.role.toUpperCase();
-                  const options = roleOptions(viewerRole);
-                  // 권한 위계 보호: admin viewer 는 master row 변경 X (backend 도 CANNOT_MODIFY_MASTER 거부).
-                  const lockedByHierarchy = viewerRole === "admin" && u.role === "master";
-                  const rowLocked = isSelf || lockedByHierarchy;
-                  const lockTitle = isSelf
-                    ? "본인 row 변경 X"
-                    : lockedByHierarchy
-                      ? "admin 권한으로 master 변경 X"
-                      : undefined;
-
-                  return (
-                    <tr key={u.id}>
-                      <td>{u.studentNumber}</td>
-                      <td>{u.displayName}</td>
-                      <td><RoleBadge role={u.role} /></td>
-                      <td><FlagBadge active={u.devUserFlag} /></td>
-                      <td><ReviewBadge reviewedAt={u.reviewedAt} /></td>
-                      <td style={{ whiteSpace: "nowrap", fontSize: 12, color: "var(--ds-fg-soft)" }}>
-                        {formatDate(u.createdAt)}
-                      </td>
-                      <td>
-                        <div className="actions-cell">
-                          {/* 등업: role select + apply button */}
-                          <select
-                            className="role-select"
-                            value={selectedRole}
-                            onChange={(e) =>
-                              setRowRoleSelect((prev) => ({ ...prev, [u.id]: e.target.value }))
-                            }
-                            disabled={busy || rowLocked}
-                            aria-label={`${u.displayName} role 선택`}
-                            title={lockTitle}
-                          >
-                            {options.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="action-btn primary"
-                            onClick={() => handleRoleChange(u.id)}
-                            disabled={busy || rowLocked}
-                            aria-label={`${u.displayName} 등업 적용`}
-                            title={lockTitle ?? "등업"}
-                          >
-                            등업
-                          </button>
-
-                          {/* 반려/재활성 toggle — master only */}
-                          {viewerRole === "master" ? (
-                            <button
-                              type="button"
-                              className={`action-btn ${u.devUserFlag ? "danger" : ""}`}
-                              onClick={() => handleFlagToggle(u.id, u.devUserFlag)}
-                              disabled={busy || rowLocked}
-                              aria-label={
-                                u.devUserFlag
-                                  ? `${u.displayName} 반려`
-                                  : `${u.displayName} 재활성`
-                              }
-                              title={lockTitle ?? (u.devUserFlag ? "반려" : "재활성")}
-                            >
-                              {u.devUserFlag ? "반려" : "재활성"}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="action-btn danger"
-                              disabled
-                              aria-label={`${u.displayName} 반려 (master 권한 필요)`}
-                              title="master 권한 필요"
-                            >
-                              반려
-                            </button>
-                          )}
-
-                          {/* review 버튼 — master/admin */}
-                          <button
-                            type="button"
-                            className="action-btn"
-                            onClick={() => handleReview(u.id)}
-                            disabled={busy || rowLocked}
-                            aria-label={`${u.displayName} review 완료 표시`}
-                            title={lockTitle ?? "review 완료 표시"}
-                          >
-                            review
-                          </button>
-
-                          {/* Per-row error */}
-                          {err && (
-                            <span className="row-error" role="alert">
-                              {err}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {users.length === 0 && !listLoading && (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", color: "var(--ds-muted)", padding: "24px 12px" }}>
-                      사용자가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <FilteredTable
+            users={users}
+            listLoading={listLoading}
+            roleFilter={roleFilter}
+            flagFilter={flagFilter}
+            reviewFilter={reviewFilter}
+            searchQ={searchQ}
+            pageSize={pageSize}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            viewer={viewer!}
+            viewerRole={viewerRole}
+            rowLoading={rowLoading}
+            rowError={rowError}
+            rowRoleSelect={rowRoleSelect}
+            setRowRoleSelect={setRowRoleSelect}
+            handleRoleChange={handleRoleChange}
+            handleFlagToggle={handleFlagToggle}
+            handleReview={handleReview}
+          />
         )}
       </div>
     </div>
+  );
+}
+
+interface FilteredTableProps {
+  users: AdminUser[];
+  listLoading: boolean;
+  roleFilter: RoleFilter;
+  flagFilter: FlagFilter;
+  reviewFilter: ReviewFilter;
+  searchQ: string;
+  pageSize: PageSize;
+  currentPage: number;
+  setCurrentPage: (p: number) => void;
+  viewer: AuthUser;
+  viewerRole: UserRole;
+  rowLoading: Record<string, boolean>;
+  rowError: Record<string, string | null>;
+  rowRoleSelect: Record<string, string>;
+  setRowRoleSelect: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  handleRoleChange: (id: string) => void;
+  handleFlagToggle: (id: string, currentFlag: boolean) => void;
+  handleReview: (id: string) => void;
+}
+
+function FilteredTable({
+  users,
+  listLoading,
+  roleFilter,
+  flagFilter,
+  reviewFilter,
+  searchQ,
+  pageSize,
+  currentPage,
+  setCurrentPage,
+  viewer,
+  viewerRole,
+  rowLoading,
+  rowError,
+  rowRoleSelect,
+  setRowRoleSelect,
+  handleRoleChange,
+  handleFlagToggle,
+  handleReview
+}: FilteredTableProps) {
+  // Pipeline: filter → search → split into pages
+  const filteredUsers = useMemo(() => {
+    let result = users;
+
+    // Role filter
+    if (roleFilter !== "all") {
+      result = result.filter((u) => u.role === roleFilter);
+    }
+
+    // Flag filter: "active" → devUserFlag true, "rejected" → devUserFlag false
+    if (flagFilter !== "all") {
+      const wantActive = flagFilter === "active";
+      result = result.filter((u) => u.devUserFlag === wantActive);
+    }
+
+    // Review filter
+    if (reviewFilter !== "all") {
+      const wantReviewed = reviewFilter === "reviewed";
+      result = result.filter((u) => wantReviewed ? u.reviewedAt !== null : u.reviewedAt === null);
+    }
+
+    // Search: case-insensitive substring match on studentNumber OR displayName
+    const q = searchQ.trim().toLowerCase();
+    if (q !== "") {
+      result = result.filter(
+        (u) =>
+          u.studentNumber.toLowerCase().includes(q) ||
+          u.displayName.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [users, roleFilter, flagFilter, reviewFilter, searchQ]);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredUsers.length / pageSize)),
+    [filteredUsers.length, pageSize]
+  );
+
+  // Clamp currentPage if filteredUsers shrinks
+  const safePage = Math.min(currentPage, totalPages);
+
+  const pagedUsers = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [filteredUsers, safePage, pageSize]);
+
+  const isEmpty = filteredUsers.length === 0;
+  const isRawEmpty = users.length === 0;
+
+  return (
+    <>
+      <div className="admin-table-wrapper">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">학번</th>
+              <th scope="col">이름</th>
+              <th scope="col">role</th>
+              <th scope="col">devUserFlag</th>
+              <th scope="col">reviewedAt</th>
+              <th scope="col">가입일</th>
+              <th scope="col">액션</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagedUsers.map((u) => {
+              const isSelf = viewer.userId === u.id;
+              const busy = !!rowLoading[u.id];
+              const err = rowError[u.id] ?? null;
+              const selectedRole = rowRoleSelect[u.id] ?? u.role.toUpperCase();
+              const options = roleOptions(viewerRole);
+              // 권한 위계 보호: admin viewer 는 master row 변경 X (backend 도 CANNOT_MODIFY_MASTER 거부).
+              const lockedByHierarchy = viewerRole === "admin" && u.role === "master";
+              const rowLocked = isSelf || lockedByHierarchy;
+              const lockTitle = isSelf
+                ? "본인 row 변경 X"
+                : lockedByHierarchy
+                  ? "admin 권한으로 master 변경 X"
+                  : undefined;
+
+              return (
+                <tr key={u.id}>
+                  <td>{u.studentNumber}</td>
+                  <td>{u.displayName}</td>
+                  <td><RoleBadge role={u.role} /></td>
+                  <td><FlagBadge active={u.devUserFlag} /></td>
+                  <td><ReviewBadge reviewedAt={u.reviewedAt} /></td>
+                  <td style={{ whiteSpace: "nowrap", fontSize: 12, color: "var(--ds-fg-soft)" }}>
+                    {formatDate(u.createdAt)}
+                  </td>
+                  <td>
+                    <div className="actions-cell">
+                      {/* 등업: role select + apply button */}
+                      <select
+                        className="role-select"
+                        value={selectedRole}
+                        onChange={(e) =>
+                          setRowRoleSelect((prev) => ({ ...prev, [u.id]: e.target.value }))
+                        }
+                        disabled={busy || rowLocked}
+                        aria-label={`${u.displayName} role 선택`}
+                        title={lockTitle}
+                      >
+                        {options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="action-btn primary"
+                        onClick={() => handleRoleChange(u.id)}
+                        disabled={busy || rowLocked}
+                        aria-label={`${u.displayName} 등업 적용`}
+                        title={lockTitle ?? "등업"}
+                      >
+                        등업
+                      </button>
+
+                      {/* 반려/재활성 toggle — master only */}
+                      {viewerRole === "master" ? (
+                        <button
+                          type="button"
+                          className={`action-btn ${u.devUserFlag ? "danger" : ""}`}
+                          onClick={() => handleFlagToggle(u.id, u.devUserFlag)}
+                          disabled={busy || rowLocked}
+                          aria-label={
+                            u.devUserFlag
+                              ? `${u.displayName} 반려`
+                              : `${u.displayName} 재활성`
+                          }
+                          title={lockTitle ?? (u.devUserFlag ? "반려" : "재활성")}
+                        >
+                          {u.devUserFlag ? "반려" : "재활성"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="action-btn danger"
+                          disabled
+                          aria-label={`${u.displayName} 반려 (master 권한 필요)`}
+                          title="master 권한 필요"
+                        >
+                          반려
+                        </button>
+                      )}
+
+                      {/* review 버튼 — master/admin */}
+                      <button
+                        type="button"
+                        className="action-btn"
+                        onClick={() => handleReview(u.id)}
+                        disabled={busy || rowLocked}
+                        aria-label={`${u.displayName} review 완료 표시`}
+                        title={lockTitle ?? "review 완료 표시"}
+                      >
+                        review
+                      </button>
+
+                      {/* Per-row error */}
+                      {err && (
+                        <span className="row-error" role="alert">
+                          {err}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {isEmpty && !listLoading && (
+              <tr>
+                <td colSpan={7} style={{ textAlign: "center", color: "var(--ds-muted)", padding: "24px 12px" }}>
+                  {isRawEmpty
+                    ? "사용자가 없습니다."
+                    : "조건에 맞는 사용자가 없습니다."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination — hidden when 0 results */}
+      {!isEmpty && (
+        <div className="admin-pagination" role="navigation" aria-label="페이지 네비게이션">
+          <button
+            type="button"
+            className="admin-pagination-btn"
+            onClick={() => setCurrentPage(Math.max(1, safePage - 1))}
+            disabled={safePage === 1}
+            aria-label="이전 페이지"
+          >
+            &#8249; Prev
+          </button>
+
+          {totalPages <= 5 ? (
+            // Numbered buttons for ≤ 5 pages
+            Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={`admin-pagination-btn${p === safePage ? " active" : ""}`}
+                onClick={() => setCurrentPage(p)}
+                aria-label={`페이지 ${p}`}
+                aria-current={p === safePage ? "page" : undefined}
+              >
+                {p}
+              </button>
+            ))
+          ) : (
+            // Simple prev/next + page indicator for > 5 pages
+            <span className="admin-pagination-info">
+              Page {safePage} of {totalPages}
+            </span>
+          )}
+
+          <button
+            type="button"
+            className="admin-pagination-btn"
+            onClick={() => setCurrentPage(Math.min(totalPages, safePage + 1))}
+            disabled={safePage === totalPages}
+            aria-label="다음 페이지"
+          >
+            Next &#8250;
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

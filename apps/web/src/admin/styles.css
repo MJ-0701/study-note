@@ -318,6 +318,108 @@
   background: var(--ds-bg-soft);
 }
 
+/* Toolbar */
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: var(--ds-space-md);
+  padding: var(--ds-space-sm) var(--ds-space-md);
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+}
+
+.admin-toolbar-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.admin-toolbar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ds-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-toolbar select,
+.admin-toolbar input[type="search"] {
+  border: 1px solid var(--ds-rule);
+  border-radius: 5px;
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: 12px;
+  min-height: 30px;
+  padding: 4px 8px;
+}
+
+.admin-toolbar select:focus,
+.admin-toolbar input[type="search"]:focus {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 1px;
+}
+
+.admin-toolbar-search {
+  flex: 1 1 160px;
+  min-width: 160px;
+}
+
+.admin-toolbar-search input[type="search"] {
+  width: 100%;
+}
+
+/* Pagination */
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: var(--ds-space-md);
+}
+
+.admin-pagination-btn {
+  border-radius: 5px;
+  border: 1px solid var(--ds-rule);
+  background: var(--ds-bg);
+  color: var(--ds-fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  min-height: 28px;
+  padding: 3px 9px;
+  transition: background 120ms ease, color 120ms ease;
+  white-space: nowrap;
+}
+
+.admin-pagination-btn:hover:not(:disabled) {
+  background: var(--ds-bg-soft);
+}
+
+.admin-pagination-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.admin-pagination-btn.active {
+  background: var(--ds-accent);
+  border-color: var(--ds-accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.admin-pagination-info {
+  font-size: 13px;
+  color: var(--ds-fg-soft);
+  padding: 0 4px;
+}
+
 @media (max-width: 700px) {
   .admin-page {
     padding: var(--ds-space-md) var(--ds-space-sm);
@@ -327,5 +429,19 @@
     min-width: 0;
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .admin-toolbar {
+    gap: 8px;
+    padding: var(--ds-space-sm);
+  }
+
+  .admin-toolbar-item {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 120px;
+  }
+
+  .admin-toolbar-search {
+    flex: 1 1 100%;
   }
 }
