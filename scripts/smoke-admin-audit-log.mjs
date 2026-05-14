@@ -8,6 +8,16 @@
  *   master sign-in → sign-up new dev user → master PUT role/dev-user-flag/review
  *   → stdout+stderr captured → 3 audit log lines with actor= asserted
  *
+ * NOTE: STUDY_NOTE_API_BASE env is intentionally NOT respected here — this test
+ * MUST spawn its own API child to capture NestJS Logger stdout for audit line
+ * assertion. Targeting a prestarted (외부 hosted) API would lose the stdout
+ * pipe and prevent log capture. Same pattern as smoke-auth-pii-redaction and
+ * smoke-auth-dev-disable. Codex PR #5 P2 finding documented here.
+ *
+ * Prerequisites:
+ *   DATABASE_URL and SESSION_TOKEN_PEPPER must be set, OR self-bootstrap via
+ *   prepareSmokeDatabase when either env is missing.
+ *
  * Exit 0 = all 3 lines emitted with actor=. Exit 1 = any missing.
  */
 import { spawn } from "node:child_process";
