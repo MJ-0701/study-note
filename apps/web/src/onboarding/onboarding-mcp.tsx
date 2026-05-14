@@ -1,10 +1,21 @@
 // slice-4: onboarding-mcp page.
 // React entry — /onboarding-mcp.html 에 mount.
 // §4.3 copy text verbatim.
-import { StrictMode, useRef, useState } from "react";
+//
+// sprint-7 slice-2 추가:
+//   - S1/S2/S3 secret-handling 카피 (plan §3 AC2-amend2 / §4.1 lock) — JSON snippet
+//     인접 영역에 명시.
+//   - `id="trouble"` anchor — MCPDisconnectedCard 의 `/onboarding-mcp.html#trouble`
+//     deep-link target.
+import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import "./styles.css";
+import {
+  S1_LOCAL_ONLY,
+  S2_DO_NOT_COMMIT,
+  S3_LEAST_PRIVILEGE
+} from "./secret-handling-copy";
 
 const JSON_SNIPPET = `{
   "mcpServers": {
@@ -56,6 +67,19 @@ function CodeBlock({ code }: { code: string }) {
 }
 
 function OnboardingPage() {
+  // sprint-7 slice-2 — `/onboarding-mcp.html#trouble` deep-link 시 트러블슈팅 섹션으로
+  // 스크롤. React StrictMode 의 double-render + 브라우저 hash anchor 가 race 할 수 있어
+  // useEffect 로 명시.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const target = document.getElementById(hash);
+    if (target) {
+      target.scrollIntoView({ behavior: "auto", block: "start" });
+    }
+  }, []);
+
   return (
     <div className="onboarding-page">
       <div className="onboarding-inner">
@@ -126,6 +150,39 @@ function OnboardingPage() {
             </li>
           </ol>
           <CodeBlock code={JSON_SNIPPET} />
+
+          {/* sprint-7 slice-2 — secret-handling 안내 (plan §3 AC2-amend2 / §4.1 S1/S2/S3 lock).
+              JSON snippet 인접 노출 — 사용자가 DATABASE_URL 채우기 직전/직후에 본다. */}
+          <aside
+            className="secret-handling-notice"
+            role="note"
+            aria-label="비밀 정보 취급 안내"
+            data-secret-handling-notice="true"
+            style={{
+              marginTop: 12,
+              padding: 12,
+              border: "1px solid #fed7aa",
+              borderRadius: 8,
+              background: "#fff7ed",
+              color: "#7c2d12",
+              fontSize: 13,
+              lineHeight: 1.65
+            }}
+          >
+            <strong style={{ display: "block", marginBottom: 6 }}>
+              ⚠ 비밀 정보 취급 안내
+            </strong>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <li data-secret-handling-id="S1">{S1_LOCAL_ONLY}</li>
+              <li data-secret-handling-id="S2" style={{ marginTop: 4 }}>
+                {S2_DO_NOT_COMMIT}
+              </li>
+              <li data-secret-handling-id="S3" style={{ marginTop: 4 }}>
+                {S3_LEAST_PRIVILEGE}
+              </li>
+            </ul>
+          </aside>
+
           <ol className="step-list" start={4} style={{ marginTop: "var(--ds-space-sm)" }} aria-label="Claude Desktop 추가 단계">
             <li>Claude Desktop 을 재시작합니다.</li>
             <li>
@@ -156,7 +213,13 @@ function OnboardingPage() {
         </section>
 
         {/* ── 5. 트러블슈팅 ── */}
-        <section className="onboarding-section" aria-labelledby="section-trouble">
+        {/* sprint-7 slice-2 — `id="trouble"` = MCPDisconnectedCard 의 deep-link target.
+            `section-trouble` 도 backward-compat 유지 (aria-labelledby 가 h2 의 id 참조). */}
+        <section
+          id="trouble"
+          className="onboarding-section"
+          aria-labelledby="section-trouble"
+        >
           <h2 id="section-trouble">트러블슈팅</h2>
           <ul className="trouble-list">
             <li>

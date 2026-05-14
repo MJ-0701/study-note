@@ -129,3 +129,80 @@ slice-3 시 `smoke-mcp-onboarding` 와 별도 lane 으로 `smoke-mcp-gate-design
   미도입 상태 → 사용자 manual UAT 로 이월.
 - slice-2 가 onboarding-mcp.tsx 의 `#trouble` anchor 보강 필요 (현재 `id="section-trouble"`
   존재; slice-2 시 `id="trouble"` alias 또는 deep-link target 명세).
+
+---
+
+# slice-2 implement — onboarding S1/S2/S3 카피 + #trouble anchor
+
+## 6. slice-2 산출물
+
+### 6.1 신규
+
+- `apps/web/src/onboarding/secret-handling-copy.ts` — S1_LOCAL_ONLY /
+  S2_DO_NOT_COMMIT / S3_LEAST_PRIVILEGE const + `SECRET_HANDLING_COPY` 묶음. React
+  의존 없는 string 모듈로 spec 가 import 가능.
+- `apps/web/src/onboarding/secret-handling-copy.spec.ts` — 6 case node:test.
+  (1) 3 const substring lock + 묶음 동일성, (2) onboarding-mcp.tsx 가 import + 식별자
+  사용, (3) `id="trouble"` (또는 동등 anchor) 존재 — source 파일 직접 read 로 검증.
+
+### 6.2 수정
+
+- `apps/web/src/onboarding/onboarding-mcp.tsx`:
+  - `S1_LOCAL_ONLY / S2_DO_NOT_COMMIT / S3_LEAST_PRIVILEGE` import.
+  - Claude Desktop 섹션의 CodeBlock 직후에 `aside.secret-handling-notice` 노출 — 3
+    `<li data-secret-handling-id="S1|S2|S3">` 로 카피 mount.
+  - 트러블슈팅 `<section>` 에 `id="trouble"` 추가 (기존 `aria-labelledby="section-trouble"`
+    backward-compat 유지).
+  - `useEffect` 로 `location.hash` 기반 `scrollIntoView` 처리 (StrictMode race 회피 — plan
+    §6 R-4 mitigation).
+- `package.json` — `test:web-onboarding-copy` script 추가.
+
+### 6.3 design 단계 micro 결정 (plan §5.4)
+
+| 결정 | 값 | 근거 |
+|:--|:--|:--|
+| S1/S2/S3 카피 위치 | Claude Desktop 섹션 CodeBlock 직후 (aside `secret-handling-notice`) | 사용자가 JSON snippet 채우기 직전/직후에 보는 시점 — plan §3 AC2-amend2 "JSON snippet 인접 영역" lock. Cursor 섹션은 "위 스니펫 동일" 안내라 1회 노출로 충분. |
+| `#trouble` anchor 방식 | `<section id="trouble" aria-labelledby="section-trouble">` (h2 의 기존 id 유지) | section 자체에 id 부여 → URL fragment 가 section 시작점으로 스크롤. h2 id 변경 시 a11y label reference 깨질 위험 회피. |
+| hash anchor scroll fallback | `useEffect` + `getElementById(hash).scrollIntoView` | 브라우저 default 가 React mount 전에 발화하면 정확한 좌표로 못 도달; SSR 미사용이지만 React StrictMode 의 mount/unmount cycle 이 layout 을 재산정 — 명시 scroll 안전. |
+| copy spec runner | `node --experimental-strip-types --test` (gate-state.spec.ts 와 동일 pattern) | gate-state 와 일관된 test pattern. fs.readFile 로 source tsx 직접 inspect. |
+
+## 7. slice-2 AC ↔ 산출물 ↔ 증거
+
+| AC | 산출물 | 증거 |
+|:--|:--|:--|
+| AC2-amend2 (S1/S2/S3 카피 measurable) | `secret-handling-copy.ts` + onboarding-mcp.tsx 의 `aside.secret-handling-notice` | `pnpm test:web-onboarding-copy` → 6/6 pass (§8.1 로그). substring lock + source import 검증. |
+| R2 (#trouble anchor) | onboarding-mcp.tsx 의 `<section id="trouble">` | spec 의 "trouble anchor" describe block (1 case) + source grep `id="trouble"`. |
+
+## 8. slice-2 검증 evidence
+
+### 8.1 `pnpm test:web-onboarding-copy` 결과 (6/6 pass)
+
+```
+▶ secret-handling-copy (plan §3 AC2-amend2 / §4.1 S1/S2/S3)
+  ▶ const presence + substring lock
+    ✔ S1 = local-only 카피 (Claude Desktop / Cursor stdio 명시)
+    ✔ S2 = do-not-commit 카피 (DATABASE_URL 명시 + commit/push/공유 금지)
+    ✔ S3 = least-privilege 카피 (dev 전용 role + master/superuser 회피)
+    ✔ SECRET_HANDLING_COPY 묶음 = S1/S2/S3 3-key map
+  ▶ onboarding-mcp.tsx renders S1/S2/S3
+    ✔ source 파일이 SECRET_HANDLING_COPY import + 3 substring 모두 노출
+  ▶ trouble anchor (plan implement.md §5 후속)
+    ✔ onboarding-mcp.tsx 의 트러블슈팅 섹션이 id="trouble" 또는 동등 anchor 노출
+ℹ tests 6
+ℹ pass 6
+ℹ fail 0
+```
+
+### 8.2 회귀 (gate spec + web build)
+
+- `pnpm test:web-gate` → 12/12 pass 유지.
+- `pnpm --filter @study-note/web build` → tsc + vite 통과 (onboarding-mcp 번들 8.78 kB,
+  slice-1 대비 +1.32 kB = S1/S2/S3 카피 + scrollIntoView useEffect 분량 일치).
+
+## 9. slice-2 한계 / 후속
+
+- `<aside>` 의 시각 evidence (실제 사용자가 본 화면) 는 CDP smoke 미도입으로 manual UAT.
+- Cursor 섹션 자체에는 S1/S2/S3 카피 미반복 — 사용자가 Claude Desktop 섹션 안내문을
+  follow 하리라는 가정. 안내문이 "위 스니펫 동일" 로 명시되어 있어 사용자 시선이 위로 향함.
+  Cursor 섹션 inline 반복 vs 1회 노출 의 UX trade-off 는 retro 시 사용자 manual UAT 결과로
+  재평가.
