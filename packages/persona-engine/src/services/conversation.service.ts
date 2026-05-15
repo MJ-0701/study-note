@@ -86,11 +86,14 @@ function safeSourceLabel(p: string): string {
 }
 
 // sprint-8 slice-1 — derivedTitle 의 PII redact + truncate.
-// 1) `\d{8}` (학번) 및 `[a-f0-9]{32,}` (세션 토큰 hex) 매치를 `[redacted]` 로 치환.
+// 1) hex 토큰 (32자+ `[a-f0-9]`) 우선 + 학번 (`\d{8}`) 단일 alternation 매치 →
+//    `[redacted]` 로 치환. PR #8 P2 fix: 순차 replace (학번→hex) 가 hex 안의
+//    8자리 digit run 을 먼저 가르고 leak 시키는 버그 → 단일 regex 로 일괄 처리.
+//    alternation 좌측 hex 우선이라 `12345678abcdef...` 같은 hex 토큰은 전체가
+//    한 번에 redact (학번 분리 X).
 // 2) trim 후 40자 초과면 39자 + `…` 로 축약.
 // 3) empty / nullish input → `(빈 대화)` placeholder (AC1).
-const STUDENT_NUMBER_RE = /\d{8}/g;
-const HEX_TOKEN_RE = /[a-f0-9]{32,}/gi;
+const PII_REDACT_RE = /[a-f0-9]{32,}|\d{8}/gi;
 const MAX_TITLE_LEN = 40;
 const EMPTY_TITLE_PLACEHOLDER = "(빈 대화)";
 
@@ -98,9 +101,7 @@ export function deriveTitleFromQuery(query: string | null | undefined): string {
   if (!query) return EMPTY_TITLE_PLACEHOLDER;
   const trimmed = query.trim();
   if (trimmed.length === 0) return EMPTY_TITLE_PLACEHOLDER;
-  const redacted = trimmed
-    .replace(STUDENT_NUMBER_RE, "[redacted]")
-    .replace(HEX_TOKEN_RE, "[redacted]");
+  const redacted = trimmed.replace(PII_REDACT_RE, "[redacted]");
   if (redacted.length <= MAX_TITLE_LEN) return redacted;
   return `${redacted.slice(0, MAX_TITLE_LEN - 1)}…`;
 }

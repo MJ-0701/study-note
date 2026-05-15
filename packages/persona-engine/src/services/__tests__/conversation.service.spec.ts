@@ -181,6 +181,19 @@ describe("ConversationService", () => {
       assert.ok(!/\d{8}/.test(out));
       assert.ok(!/[a-f0-9]{32,}/i.test(out));
     });
+
+    // PR #8 P2 회귀 가드 — hex 토큰이 8자리 digit run 으로 시작하면 순차 replace
+    // (학번→hex) 가 hex 를 먼저 split 해 partial leak 시키던 버그. 단일 alternation
+    // regex (hex 좌측 우선) 로 전체 hex 가 한 번에 redact 돼야 한다.
+    it("hex 토큰이 8자리 digit run 으로 시작해도 partial leak 없음 (P2 회귀 가드)", () => {
+      const tokenStartsWithDigits = "12345678abcdef0987654321cafebabe";
+      const out = deriveTitleFromQuery(`token ${tokenStartsWithDigits} 봐줘`);
+      // hex 토큰 substring 이 절대 그대로 남으면 안 됨 — abcdef 같은 일부도 미노출.
+      assert.ok(!out.includes("abcdef"), `hex 토큰 partial leak: ${out}`);
+      assert.ok(!/[a-f0-9]{32,}/i.test(out));
+      assert.ok(!/\d{8}/.test(out));
+      assert.ok(out.includes("[redacted]"));
+    });
   });
 
   describe("list() (sprint-8 slice-1, AC1)", () => {

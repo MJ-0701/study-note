@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TurnForm, type TurnFormSubmitInput } from "./components/TurnForm";
 import { ResponsePanel } from "./components/ResponsePanel";
 import { SourcesPanel } from "./components/SourcesPanel";
@@ -73,6 +73,14 @@ export function App() {
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   // sprint-8 slice-3 AC3 — URL 의 stale conversationId (backend 404) 안내 카드.
   const [conversationNotFound, setConversationNotFound] = useState(false);
+  // PR #8 P1 fix — handleSubmit 가 in-flight 인 동안 사용자가 sidebar 로 다른
+  // conversation 으로 전환하면 late response 가 잘못된 conversation 의 UI 에
+  // append 될 race. ref 로 live activeId 추적 → response 도착 시점에 일치 안 하면
+  // discard. ref 사용 이유: state closure 가 handleSubmit 의 try 안에서 stale.
+  const liveConversationIdRef = useRef<string | null>(conversationId);
+  useEffect(() => {
+    liveConversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>("checking");
@@ -263,6 +271,17 @@ export function App() {
       });
       if (!next.conversationId || !next.turnId || !next.createdAt) {
         throw new Error("대화 응답 metadata 누락");
+      }
+      // PR #8 P1 fix — turn 이 in-flight 인 동안 사용자가 sidebar 클릭으로 다른
+      // conversation 으로 전환했으면 본 응답은 더 이상 활성 화면에 해당 X. discard.
+      // backend 가 응답에 conversationId 를 실어 보내므로 그것을 진실의 단일 source
+      // 로 사용 — closure 의 activeConversationId 도, ref 도 동시 비교.
+      if (
+        next.conversationId !== liveConversationIdRef.current &&
+        next.conversationId !== activeConversationId
+      ) {
+        // 활성 화면이 바뀌었음. 새 화면은 자체 useEffect 가 history 를 다시 load 함.
+        return;
       }
       setMessages((prev) => [...prev, next as ChatTurn]);
       // sprint-8 slice-3 — 새 conversation 생성 직후 sidebar list 갱신.
