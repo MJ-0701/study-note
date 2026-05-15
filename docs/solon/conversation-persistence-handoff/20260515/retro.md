@@ -98,11 +98,47 @@ closed_at: 2026-05-15T15:31:26+09:00
 
 - [x] report 가 최신이다 — `docs/solon/conversation-persistence-handoff/20260515/report.md`
       (sfs retro close adapter 자동 생성).
-- [x] review 조치가 완료 또는 이월됐다 — G6 partial-accepted (sprint-7 패턴
-      그대로); F1/F2 evidence packaging + F3 runtime profile = artifact 무관, retro
-      §4 이어갈 것 으로 이월.
+- [x] review 조치가 완료 또는 이월됐다 — G6 **PASS (user waived)** — §6 참조.
 - [x] workbench 가 접혔다 — sprint-8 closed_at = 2026-05-15T15:31:26+09:00
       (`sfs retro` close adapter 출력).
+
+## 6. G6 PASS — user waiver (audit trail)
+
+**근거**: 0.6.87 `cpo-evaluator.md` 의 명시 허용 — "PASS unless SFS review records
+that verdict **or the user waives the gate**".
+
+**시점**: 2026-05-15
+
+**진행 요약**:
+- G6 1차 cross-CPO (codex executor) verdict = partial. findings:
+  - F1/F2 = evidence bundle truncation (단일 implement.md 360 lines → reviewer 가
+    slice-2 header 이후를 못 봤다고 오인).
+  - F3 = reviewer-runtime profile metadata (`gpt-5.5` xhigh) 부재 — artifact 무관.
+- evidence rework (commit `237e5d1`):
+  - implement.md → slice 별 file split (각 ≤ 140 lines, bundle truncation 회피).
+  - `pnpm smoke:conversation-list` 실행 output 명시 embed (index §3.1, 7 시나리오
+    모두 통과 + "Conversation list smoke passed").
+  - PR #8 P1+P2 fix evidence 별 file (`implement-pr-p1-p2-fix.md`).
+  - AC ↔ slice ↔ 산출물 + 검증 종합 표 (index §2 / §3.2 / §3.3).
+- G6 재실행 시도 → sprint-8 close 된 상태라 `sfs review --gate 6` 가 "no active
+  sprint" 거부. `sfs` 가 closed sprint reopen 명령 미제공.
+
+**실제 product defect 평가**: 0건.
+- backend LIST endpoint (`ConversationController.list` + `ConversationService.list`)
+  spec 16/16 + smoke 7 시나리오 (a-g) 통과.
+- frontend (sidebar / URL routing / 404 안내) — spec 7 + 9 통과 + tsc + vite 빌드.
+- PR #8 Codex bot 발견 P1 (turn submit race) + P2 (derivedTitle redact 순서) fix
+  push 완료 (`2591132`). spec 회귀 가드 1 case 추가, 16/16 통과.
+- 전체 회귀 0: backend 11/11 + persona-engine 16/16 + web 4 spec 모두 통과.
+
+**waiver 후 권한**: main merge 진행 가능 (사용자 명시 의향).
+
+**후속 sprint 의 자동화 후보** (재발 방지):
+- implement.md slice 별 file split 을 sprint-9 시작 시 plan §5.2 의 산출물 명세에
+  처음부터 강제 (sprint-7 retro §3 의 "evidence 보일러플레이트 plan 단계 작성"
+  연장선).
+- `sfs review --gate 6` 의 closed-sprint reopen path 가능성 검토 (solon-product
+  upstream feature 요청 후보).
 
 ## §6. 다음 cycle 본부 활성 추천 (auto)
 
