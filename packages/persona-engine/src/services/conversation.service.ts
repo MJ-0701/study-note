@@ -2,7 +2,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { basename } from "node:path";
 import { PrismaService } from "@study-note/corpus";
-import { AppendConversationTurnRequestDto, CreateConversationRequestDto } from "../dto/conversation.dto";
+import {
+  AppendConversationTurnRequestDto,
+  CreateConversationRequestDto,
+  ListConversationsQueryDto
+} from "../dto/conversation.dto";
 import { PersonaTurnRequestDto } from "../dto/persona-turn-request.dto";
 import {
   PersonaTurnResult,
@@ -40,6 +44,19 @@ export interface ConversationHistoryResponse extends ConversationSummaryResponse
   turns: ConversationTurnResponse[];
 }
 
+// sprint-8 slice-1 — GET /v1/conversations response item.
+// derivedTitle = 첫 Turn query 의 40자 truncate + PII redact (학번 / 토큰 hex).
+// turnCount = Prisma `_count: { turns: true }` 단일 호출 (N+1 회피, plan §6 R-4).
+export interface ConversationListItem {
+  id: string;
+  subject: string;
+  personaName: string;
+  derivedTitle: string;
+  createdAt: string;
+  updatedAt: string;
+  turnCount: number;
+}
+
 export type PersonaTurnHttpResult = PersonaTurnResult & {
   conversationId: string;
   turnId: string;
@@ -66,6 +83,26 @@ function safeSourceLabel(p: string): string {
   if (!p) return "<unknown>";
   if (p.startsWith("smoke://")) return p.replace("smoke://", "");
   return basename(p);
+}
+
+// sprint-8 slice-1 — derivedTitle 의 PII redact + truncate.
+// 1) `\d{8}` (학번) 및 `[a-f0-9]{32,}` (세션 토큰 hex) 매치를 `[redacted]` 로 치환.
+// 2) trim 후 40자 초과면 39자 + `…` 로 축약.
+// 3) empty / nullish input → `(빈 대화)` placeholder (AC1).
+const STUDENT_NUMBER_RE = /\d{8}/g;
+const HEX_TOKEN_RE = /[a-f0-9]{32,}/gi;
+const MAX_TITLE_LEN = 40;
+const EMPTY_TITLE_PLACEHOLDER = "(빈 대화)";
+
+export function deriveTitleFromQuery(query: string | null | undefined): string {
+  if (!query) return EMPTY_TITLE_PLACEHOLDER;
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return EMPTY_TITLE_PLACEHOLDER;
+  const redacted = trimmed
+    .replace(STUDENT_NUMBER_RE, "[redacted]")
+    .replace(HEX_TOKEN_RE, "[redacted]");
+  if (redacted.length <= MAX_TITLE_LEN) return redacted;
+  return `${redacted.slice(0, MAX_TITLE_LEN - 1)}…`;
 }
 
 function safeSources(sources: PersonaTurnSource[]): PersonaTurnSource[] {
@@ -110,6 +147,44 @@ export class ConversationService {
       personaName: conversation.personaName,
       createdAt: conversation.createdAt.toISOString()
     };
+  }
+
+  // sprint-8 slice-1 — GET /v1/conversations 의 service 메서드.
+  // - cookie-auth ownerId 필터 단독 (cross-owner leak X, plan §4.1).
+  // - subject query param 시 추가 filter (Shield Pattern 은 DTO 에서).
+  // - 무제한 (D5=c lock).
+  // - turnCount 는 Prisma `_count` 로 N+1 회피.
+  // - derivedTitle 은 첫 turn query 의 PII redact + 40자 truncate.
+  // - 정렬은 최근 활동 우선 (updatedAt desc) — sidebar "최근 대화" 의미와 일치.
+  async list(
+    ownerId: string,
+    query: ListConversationsQueryDto = {}
+  ): Promise<ConversationListItem[]> {
+    const where: Record<string, unknown> = { ownerId };
+    if (query.subject) where.subject = query.subject;
+
+    const rows: any[] = await this.prisma.conversation.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      include: {
+        _count: { select: { turns: true } },
+        turns: {
+          orderBy: { createdAt: "asc" },
+          take: 1,
+          select: { query: true }
+        }
+      }
+    });
+
+    return rows.map((c) => ({
+      id: c.id,
+      subject: c.subject,
+      personaName: c.personaName,
+      derivedTitle: deriveTitleFromQuery(c.turns[0]?.query),
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+      turnCount: c._count.turns
+    }));
   }
 
   async history(
