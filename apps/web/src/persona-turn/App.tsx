@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TurnForm, type TurnFormSubmitInput } from "./components/TurnForm";
 import { ResponsePanel } from "./components/ResponsePanel";
 import { SourcesPanel } from "./components/SourcesPanel";
@@ -11,10 +11,16 @@ import {
   appendConversationTurn,
   createConversation,
   fetchConversation,
+  listConversations,
   PersonaTurnApiError,
   type Agent,
+  type ConversationListItem,
   type PersonaTurnResult
 } from "./api/personaTurns";
+import {
+  buildConversationRoute,
+  parseConversationRoute
+} from "./conversation-route";
 
 const CONSENT_DELAY_MS = 1000;
 const CONVERSATION_STORAGE_KEY = "study-note.personaTurn.conversationId";
@@ -42,12 +48,20 @@ function isUserRole(r: string): r is UserRole {
   return r === "master" || r === "admin" || r === "normal";
 }
 
+// sprint-8 slice-3 — URL 우선 + localStorage mirror. URL 이 source of truth.
+function readInitialConversationId(): string | null {
+  if (typeof window === "undefined") return null;
+  const fromHash = parseConversationRoute(window.location.hash).conversationId;
+  if (fromHash) return fromHash;
+  return window.localStorage.getItem(CONVERSATION_STORAGE_KEY);
+}
+
 export function App() {
   const [mode, setMode] = useState<Mode>("fixture");
   const [agent, setAgent] = useState<Agent>("gemini-cli");
   const [consentDelayActive, setConsentDelayActive] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(() =>
-    window.localStorage.getItem(CONVERSATION_STORAGE_KEY)
+  const [conversationId, setConversationId] = useState<string | null>(
+    readInitialConversationId
   );
   const [historyLoading, setHistoryLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +69,18 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   // plan §3 AC2-amend — persona-turn API 의 503 AUTH_DEV_DISABLED 매핑.
   const [mcpDisconnected, setMcpDisconnected] = useState(false);
+  // sprint-8 slice-3 — sidebar "최근 대화" 의 data source.
+  const [conversations, setConversations] = useState<ConversationListItem[]>([]);
+  // sprint-8 slice-3 AC3 — URL 의 stale conversationId (backend 404) 안내 카드.
+  const [conversationNotFound, setConversationNotFound] = useState(false);
+  // PR #8 P1 fix — handleSubmit 가 in-flight 인 동안 사용자가 sidebar 로 다른
+  // conversation 으로 전환하면 late response 가 잘못된 conversation 의 UI 에
+  // append 될 race. ref 로 live activeId 추적 → response 도착 시점에 일치 안 하면
+  // discard. ref 사용 이유: state closure 가 handleSubmit 의 try 안에서 stale.
+  const liveConversationIdRef = useRef<string | null>(conversationId);
+  useEffect(() => {
+    liveConversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   // Auth state
   const [authState, setAuthState] = useState<AuthState>("checking");
@@ -113,6 +139,51 @@ export function App() {
     setMcpDisconnected(false);
   }, [mode]);
 
+  // sprint-8 slice-3 — hashchange 리스너 (back/forward 또는 sidebar 클릭).
+  useEffect(() => {
+    function onHashChange() {
+      const next = parseConversationRoute(window.location.hash).conversationId;
+      setConversationId(next);
+      setConversationNotFound(false);
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // sprint-8 slice-3 — conversationId 변경 시 URL + localStorage 동기.
+  // URL 이 source of truth, localStorage 는 mirror (재방문 / cross-tab 폴백).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const expectedHash = buildConversationRoute(conversationId);
+    if (window.location.hash !== expectedHash) {
+      // hashchange 무한 루프 방지 — 동일 값일 때만 skip.
+      window.history.replaceState(null, "", expectedHash);
+    }
+    if (conversationId) {
+      window.localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId);
+    } else {
+      window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    }
+  }, [conversationId]);
+
+  // sprint-8 slice-3 AC2 — sign-in 후 또는 conversationId 변동 후 list 재fetch.
+  // sidebar "최근 대화" group 의 data source. cookie 부재 / 인증 미완료 시 빈 list 유지.
+  useEffect(() => {
+    if (authState !== "signed-in") return;
+    let cancelled = false;
+    listConversations()
+      .then((items) => {
+        if (!cancelled) setConversations(items);
+      })
+      .catch(() => {
+        // silent fallback — list 가 비면 sidebar placeholder ("아직 대화 없음") 노출.
+        if (!cancelled) setConversations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authState, conversationId]);
+
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
@@ -144,14 +215,22 @@ export function App() {
       })
       .catch((err) => {
         if (cancelled) return;
-        window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
-        setConversationId(null);
         setMessages([]);
+        // sprint-8 slice-3 AC3 — URL 의 stale conversationId (taken or deleted) →
+        // 404 안내 카드. activeId clear + storage clear, error 카드 와 분리.
         if (err instanceof PersonaTurnApiError) {
-          setError(`${err.errorCode}: 이전 대화를 불러오지 못했습니다.`);
+          if (err.status === 404 || err.errorCode === "CONVERSATION_NOT_FOUND") {
+            setConversationNotFound(true);
+            setConversationId(null);
+          } else {
+            setConversationId(null);
+            setError(`${err.errorCode}: 이전 대화를 불러오지 못했습니다.`);
+          }
         } else if (err instanceof TypeError) {
+          setConversationId(null);
           setError("네트워크 오류 — backend 가 떠있는지 확인 (npm run dev:backend).");
         } else {
+          setConversationId(null);
           setError("이전 대화를 불러오지 못했습니다.");
         }
       })
@@ -163,22 +242,24 @@ export function App() {
     };
   }, [conversationId]);
 
-  // form input change (subject/query/k) 시 stale error / mcpDisconnected clear.
+  // form input change (subject/query/k) 시 stale error / mcpDisconnected / notFound clear.
   const handleFormChange = useCallback(() => {
     setError(null);
     setMcpDisconnected(false);
+    setConversationNotFound(false);
   }, []);
 
   async function handleSubmit(input: TurnFormSubmitInput) {
     setError(null);
     setMcpDisconnected(false);
+    setConversationNotFound(false);
     setIsSubmitting(true);
     try {
       let activeConversationId = conversationId;
       if (!activeConversationId) {
         const created = await createConversation(input.subject);
         activeConversationId = created.id;
-        window.localStorage.setItem(CONVERSATION_STORAGE_KEY, created.id);
+        // sprint-8 slice-3 — setConversationId 가 URL/localStorage 동기 useEffect 트리거.
         setConversationId(created.id);
       }
       const next = await appendConversationTurn({
@@ -191,7 +272,25 @@ export function App() {
       if (!next.conversationId || !next.turnId || !next.createdAt) {
         throw new Error("대화 응답 metadata 누락");
       }
+      // PR #8 P1 fix — turn 이 in-flight 인 동안 사용자가 sidebar 클릭으로 다른
+      // conversation 으로 전환했으면 본 응답은 더 이상 활성 화면에 해당 X. discard.
+      // backend 가 응답에 conversationId 를 실어 보내므로 그것을 진실의 단일 source
+      // 로 사용 — closure 의 activeConversationId 도, ref 도 동시 비교.
+      if (
+        next.conversationId !== liveConversationIdRef.current &&
+        next.conversationId !== activeConversationId
+      ) {
+        // 활성 화면이 바뀌었음. 새 화면은 자체 useEffect 가 history 를 다시 load 함.
+        return;
+      }
       setMessages((prev) => [...prev, next as ChatTurn]);
+      // sprint-8 slice-3 — 새 conversation 생성 직후 sidebar list 갱신.
+      try {
+        const items = await listConversations();
+        setConversations(items);
+      } catch {
+        // silent — sidebar 는 다음 갱신 시점에 회복.
+      }
     } catch (err) {
       if (err instanceof PersonaTurnApiError) {
         // plan §3 AC2-amend — 503 AUTH_DEV_DISABLED 만 MCP 미연결 카드로 매핑.
@@ -212,10 +311,11 @@ export function App() {
   }
 
   function handleNewConversation() {
-    window.localStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    // sprint-8 slice-3 — setConversationId(null) → URL/localStorage 동기 useEffect 트리거.
     setConversationId(null);
     setMessages([]);
     setError(null);
+    setConversationNotFound(false);
   }
 
   async function handleSignIn(e: React.FormEvent) {
@@ -357,6 +457,8 @@ export function App() {
     <PersonaSidebar
       activeSubjectId="digital-engineering"
       role={authUser?.role}
+      conversations={conversations}
+      activeConversationId={conversationId}
     />
     <main
       style={{
@@ -443,6 +545,28 @@ export function App() {
       />
 
       {mcpDisconnected && <MCPDisconnectedCard />}
+
+      {conversationNotFound && (
+        <section
+          role="alert"
+          data-conversation-not-found="true"
+          style={{
+            marginTop: 24,
+            padding: 16,
+            border: "1px solid #fde68a",
+            borderRadius: 8,
+            background: "#fffbeb",
+            color: "#92400e",
+            fontSize: 14
+          }}
+        >
+          <strong>대화를 찾지 못했어요</strong>
+          <p style={{ margin: "4px 0 0" }}>
+            요청한 대화가 삭제됐거나 본인 계정의 대화가 아닙니다. 사이드바에서
+            다른 대화를 선택하거나 "새 대화 시작" 을 눌러주세요.
+          </p>
+        </section>
+      )}
 
       {error && (
         <section
