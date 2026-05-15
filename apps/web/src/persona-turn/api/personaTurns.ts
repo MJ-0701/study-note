@@ -84,6 +84,19 @@ export interface ConversationHistory extends ConversationSummary {
   turns: ConversationTurn[];
 }
 
+// sprint-8 slice-1 backend GET /v1/conversations 의 item shape mirror.
+// backend (ConversationListItem) 와 동일 — frontend bundle 분리라 import 불가하니
+// string 동기 검증 (CI 또는 grep diff) 으로 lock.
+export interface ConversationListItem {
+  id: string;
+  subject: string;
+  personaName: string;
+  derivedTitle: string;
+  createdAt: string;
+  updatedAt: string;
+  turnCount: number;
+}
+
 export async function createConversation(subject: string): Promise<ConversationSummary> {
   const res = await fetch(`${BACKEND_BASE}/api/v1/conversations`, {
     method: "POST",
@@ -96,6 +109,22 @@ export async function createConversation(subject: string): Promise<ConversationS
 export async function fetchConversation(id: string): Promise<ConversationHistory> {
   const res = await fetch(`${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(id)}`);
   return parseJsonResponse<ConversationHistory>(res);
+}
+
+// sprint-8 slice-2 — GET /v1/conversations[?subject=<slug>] frontend port.
+// cookie-auth (credentials: "include") + subject 선택 filter.
+// backend ValidationPipe 가 subject regex 위반 시 400 VALIDATION_ERROR.
+export async function listConversations(
+  subject?: string
+): Promise<ConversationListItem[]> {
+  const url = subject
+    ? `${BACKEND_BASE}/api/v1/conversations?subject=${encodeURIComponent(subject)}`
+    : `${BACKEND_BASE}/api/v1/conversations`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include"
+  });
+  return parseJsonResponse<ConversationListItem[]>(res);
 }
 
 export async function appendConversationTurn(input: {

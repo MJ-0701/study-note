@@ -21,6 +21,7 @@
     "prisma:seed": "pnpm --filter @study-note/api prisma:seed",
     "test:web-gate": "node --experimental-strip-types --no-warnings --test apps/web/src/persona-turn/components/gate-state.spec.ts",
     "test:web-onboarding-copy": "node --experimental-strip-types --no-warnings --test apps/web/src/onboarding/secret-handling-copy.spec.ts",
+    "test:web-recent-conversations": "node --experimental-strip-types --no-warnings --test apps/web/src/persona-turn/components/recent-conversations.spec.ts",
     "smoke:backend": "pnpm --filter @study-note/api build && node scripts/smoke-backend-contract.mjs",
     "smoke:auth-signin": "pnpm --filter @study-note/api build && node scripts/smoke-auth-signin.mjs",
     "smoke:auth-signup": "pnpm --filter @study-note/api build && node scripts/smoke-auth-signup.mjs",
