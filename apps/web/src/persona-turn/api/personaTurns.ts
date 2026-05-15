@@ -100,6 +100,7 @@ export interface ConversationListItem {
 export async function createConversation(subject: string): Promise<ConversationSummary> {
   const res = await fetch(`${BACKEND_BASE}/api/v1/conversations`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ subject })
   });
@@ -107,7 +108,9 @@ export async function createConversation(subject: string): Promise<ConversationS
 }
 
 export async function fetchConversation(id: string): Promise<ConversationHistory> {
-  const res = await fetch(`${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(id)}`);
+  const res = await fetch(`${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(id)}`, {
+    credentials: "include"
+  });
   return parseJsonResponse<ConversationHistory>(res);
 }
 
@@ -138,6 +141,7 @@ export async function appendConversationTurn(input: {
     `${BACKEND_BASE}/api/v1/conversations/${encodeURIComponent(input.conversationId)}/turns`,
     {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query: input.query,
@@ -153,6 +157,7 @@ export async function appendConversationTurn(input: {
 export async function submitPersonaTurn(input: PersonaTurnSubmit): Promise<PersonaTurnResult> {
   const res = await fetch(`${BACKEND_BASE}/api/v1/persona-turns`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
   });
