@@ -24,6 +24,7 @@
     "test:web-recent-conversations": "node --experimental-strip-types --no-warnings --test apps/web/src/persona-turn/components/recent-conversations.spec.ts",
     "test:web-conversation-route": "node --experimental-strip-types --no-warnings --test apps/web/src/persona-turn/conversation-route.spec.ts",
     "smoke:backend": "pnpm --filter @study-note/api build && node scripts/smoke-backend-contract.mjs",
+    "smoke:conversation-list": "pnpm --filter @study-note/api build && node scripts/smoke-conversation-list.mjs",
     "smoke:auth-signin": "pnpm --filter @study-note/api build && node scripts/smoke-auth-signin.mjs",
     "smoke:auth-signup": "pnpm --filter @study-note/api build && node scripts/smoke-auth-signup.mjs",
     "smoke:auth-deny": "pnpm --filter @study-note/api build && node scripts/smoke-auth-deny.mjs",
