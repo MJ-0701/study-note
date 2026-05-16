@@ -11,7 +11,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json .npmrc .
 COPY packages ./packages
 COPY apps/api ./apps/api
 
-RUN cat .npmrc && pnpm install --frozen-lockfile --fetch-timeout=600000 --network-concurrency=2
+RUN pnpm install --frozen-lockfile --fetch-timeout=600000 --network-concurrency=2
 RUN pnpm --filter @study-note/api prisma:generate
 RUN pnpm --filter @study-note/api build
 

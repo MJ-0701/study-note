@@ -4,6 +4,7 @@ import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/do
 import type {
   DownloadIntent,
   ExportBundle,
+  HeadObjectResult,
   StorageObjectInput,
   StorageObjectOutput,
   UploadIntent
@@ -20,7 +21,7 @@ export class LocalMockStorageService extends StoragePort {
     }
   >();
 
-  createUploadIntent(material: PdfMaterialRecord): UploadIntent {
+  async createUploadIntent(material: PdfMaterialRecord): Promise<UploadIntent> {
     return {
       method: "PUT",
       uploadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
@@ -77,6 +78,23 @@ export class LocalMockStorageService extends StoragePort {
       originalPdf: this.createDownloadIntent(material),
       annotation
     };
+  }
+
+  async headObject(storageKey: string): Promise<HeadObjectResult> {
+    const object = this.objects.get(storageKey);
+
+    if (!object) {
+      throw new Error(`Local mock object not found for headObject: ${storageKey}`);
+    }
+
+    return {
+      contentLength: object.body.length,
+      contentType: object.contentType
+    };
+  }
+
+  async deleteObject(storageKey: string): Promise<void> {
+    this.objects.delete(storageKey);
   }
 }
 

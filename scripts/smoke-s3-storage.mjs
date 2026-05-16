@@ -1,6 +1,10 @@
 import { Readable } from "node:stream";
-import { createStorageProvider } from "../apps/api/dist/storage/storage.provider.js";
-import { S3StorageService } from "../apps/api/dist/storage/s3-storage.service.js";
+// Import from the @study-note/storage package dist (packages/storage/dist/).
+// The workspace build script runs `pnpm --filter @study-note/api build` which
+// transitively compiles @study-note/storage via the pnpm workspace linkage.
+// If that does not produce fresh files, run `pnpm --filter @study-note/storage build` first.
+import { createStorageProvider } from "../packages/storage/dist/storage.provider.js";
+import { S3StorageService } from "../packages/storage/dist/s3-storage.service.js";
 
 const samplePdf = Buffer.from("%PDF-1.4\n% mocked s3 smoke\n%%EOF\n");
 const material = {

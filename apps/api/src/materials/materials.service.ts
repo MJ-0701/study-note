@@ -72,7 +72,7 @@ export class MaterialsService {
 
     return {
       material: materialRecord,
-      upload: this.storage.createUploadIntent(materialRecord)
+      upload: await this.storage.createUploadIntent(materialRecord)
     };
   }
 
