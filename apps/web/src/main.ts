@@ -52,6 +52,7 @@ import "./styles.css";
 type Route =
   | { name: "home" }
   | { name: "intake" }
+  | { name: "pdf-workspaces" }
   | { name: "subject"; subjectId: string }
   | { name: "subject-intake"; subjectId: string }
   | { name: "pdf-workspace"; subjectId: string }
@@ -1362,7 +1363,12 @@ function renderApp(): void {
       ? subject.weekNotes.find((item) => item.id === route.weekId)
       : undefined;
 
-  if (route.name !== "home" && route.name !== "intake" && !subject) {
+  if (
+    route.name !== "home" &&
+    route.name !== "intake" &&
+    route.name !== "pdf-workspaces" &&
+    !subject
+  ) {
     appRoot.innerHTML = renderShell(
       renderHomeSidebar(notebook, { name: "home" }),
       renderNotFound(),
@@ -1394,6 +1400,15 @@ function renderApp(): void {
       renderHomeSidebar(notebook, route),
       renderIntakeGuide(notebook),
       `${notebook.title} / 자료 투입`
+    );
+    return;
+  }
+
+  if (route.name === "pdf-workspaces") {
+    appRoot.innerHTML = renderShell(
+      renderHomeSidebar(notebook, route),
+      renderPdfWorkspaceIndex(notebook),
+      `${notebook.title} / PDF 작업공간`
     );
     return;
   }
@@ -1453,6 +1468,10 @@ function parseRoute(hash: string): Route {
 
   if (parts[0] === "subjects" && parts[1]) {
     return { name: "subject", subjectId: parts[1] };
+  }
+
+  if (parts[0] === "pdf-workspaces") {
+    return { name: "pdf-workspaces" };
   }
 
   if (parts[0] === "intake") {
@@ -1586,6 +1605,12 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
           `).join("")}
         </nav>
       </div>
+      <div class="sidebar-group">
+        <p class="group-label">PDF 작업공간</p>
+        <nav>
+          <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
+        </nav>
+      </div>
       ${renderClassSchedule()}
       <details class="sidebar-details" ${route.name === "intake" ? "open" : ""}>
         <summary>자료 관리</summary>
@@ -1650,6 +1675,12 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
           ${subject.weekNotes.map((week) => `
             <a class="${route.name === "week" && route.weekId === week.id ? "active" : ""}" href="${weekPath(subject, week)}">${week.label}</a>
           `).join("")}
+        </nav>
+      </div>
+      <div class="sidebar-group">
+        <p class="group-label">PDF 작업공간</p>
+        <nav>
+          <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
         </nav>
       </div>
       ${renderClassSchedule(currentSession?.label)}
@@ -2339,7 +2370,7 @@ function renderSubjectPage(subject: SubjectNote): string {
         <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${subject.id}">
           10분 정리노트 만들기
         </button>
-        <a class="action-link" href="${subjectPdfWorkspacePath(subject)}">PDF에 필기하기</a>
+        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
         <a class="action-link" href="${subjectIntakePath(subject)}">${subject.title} 자료 넣기</a>
       </div>
     </section>
@@ -2459,6 +2490,40 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
       <h2 id="week-practice-title">예제문제</h2>
       <div class="question-list">
         ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
+      </div>
+    </section>
+  `;
+}
+
+// slice-3: PDF 작업공간 index 페이지 — 4 과목 카드 그리드.
+// 카드 클릭 → #/subjects/<id>/pdf-workspace (subjectPdfWorkspacePath 사용 — BC safe).
+function renderPdfWorkspaceIndex(studyNotebook: StudyNotebook): string {
+  const cards = studyNotebook.subjects
+    .map(
+      (subject) => `
+    <article class="subject-card">
+      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
+      <h3>${subject.title}</h3>
+      <p>${subject.summary.goal}</p>
+      <div class="subject-card-footer">
+        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">열기</a>
+      </div>
+    </article>
+  `
+    )
+    .join("");
+
+  return `
+    <section class="subject-page-hero">
+      <p class="meta">PDF 작업공간</p>
+      <h1>과목별 PDF 작업공간</h1>
+      <p class="lede">과목을 선택해 PDF 열람 · 필기 작업공간으로 이동합니다.</p>
+    </section>
+    <section aria-labelledby="pdf-workspaces-title">
+      <p class="meta">과목 선택</p>
+      <h2 id="pdf-workspaces-title">작업공간 목록</h2>
+      <div class="subject-grid">
+        ${cards}
       </div>
     </section>
   `;
