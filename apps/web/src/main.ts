@@ -7,6 +7,7 @@ import {
   fetchPdfMaterialFile,
   listPdfMaterials,
   uploadMaterialFile,
+  type MaterialUploadIntent,
   type PdfMaterialRecord
 } from "./api/materials";
 import {
@@ -62,6 +63,7 @@ type IntakeFeedback =
       title: string;
       detail: string;
       href?: string;
+      retrySubjectId?: string;
     }
   | undefined;
 
@@ -122,6 +124,8 @@ const failedPdfPreviewLoadKeys = new Set<string>();
 let activeInkStroke: ActiveInkStroke | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
+// slice-2: stash last pending upload for retry CTA
+let pendingPdfRetry: { file: File; subjectId: string; intent: MaterialUploadIntent } | undefined;
 let quickNote: QuickNote | undefined;
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -569,6 +573,59 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // slice-2: retry PDF upload after S3 PUT / completion failure
+  if (quickNoteButton?.dataset.action === "retry-pdf-upload") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+
+    if (!subjectId || !pendingPdfRetry || pendingPdfRetry.subjectId !== subjectId) {
+      return;
+    }
+
+    const { file, intent } = pendingPdfRetry;
+    const intentExpiry = new Date(intent.upload.expiresAt).getTime();
+    const now = Date.now();
+
+    if (now < intentExpiry) {
+      // Intent still valid — retry from S3 PUT step (skip re-creating intent)
+      intakeFeedback = {
+        kind: "success",
+        title: "업로드를 재시도합니다.",
+        detail: "S3 PUT 단계부터 다시 시도합니다."
+      };
+      renderApp();
+
+      void (async () => {
+        try {
+          const uploadedMaterial = await uploadMaterialFile(apiBaseUrl, intent, file);
+          pendingPdfRetry = undefined;
+          updatePdfWorkspace(subjectId, (workspace) => ({
+            ...workspace,
+            material: createPdfMaterialFromBackend(uploadedMaterial, workspace.material)
+          }));
+          await loadPdfPreviewFromBackend(subjectId, uploadedMaterial, { force: true, silent: true });
+          intakeFeedback = {
+            kind: "success",
+            title: "PDF를 backend에 저장했습니다.",
+            detail: `${uploadedMaterial.fileName} · ${formatPdfFileSize(uploadedMaterial.fileSize)} · 재시도 성공`
+          };
+        } catch (retryError) {
+          intakeFeedback = {
+            kind: "error",
+            title: "재시도 중에도 업로드를 완료하지 못했습니다.",
+            detail: formatMaterialError(retryError),
+            retrySubjectId: subjectId
+          };
+        }
+        renderApp();
+      })();
+    } else {
+      // Intent expired — restart from full import flow
+      void importPdfMaterialFile(file, subjectId);
+    }
+
+    return;
+  }
+
   const resetButton = target.closest<HTMLButtonElement>("[data-action='reset-local-data']");
 
   if (!resetButton) {
@@ -881,6 +938,9 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       contentType: "application/pdf"
     });
 
+    // Stash intent for retry CTA (resume at S3 PUT step if intent still valid)
+    pendingPdfRetry = { file, subjectId, intent };
+
     clearActivePdfObjectUrl(subjectId);
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
@@ -888,11 +948,11 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     }));
     renderApp();
 
-    const uploadedMaterial = await uploadMaterialFile(
-      apiBaseUrl,
-      intent.upload.uploadUrl,
-      file
-    );
+    // slice-2: new S3 direct PUT flow — intent → S3 PUT (with retry) → completion
+    const uploadedMaterial = await uploadMaterialFile(apiBaseUrl, intent, file);
+
+    // Upload success — clear retry state
+    pendingPdfRetry = undefined;
 
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
@@ -917,7 +977,8 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     intakeFeedback = {
       kind: "error",
       title: "PDF 업로드를 완료하지 못했습니다.",
-      detail: formatMaterialError(error)
+      detail: formatMaterialError(error),
+      retrySubjectId: subjectId
     };
   }
 
@@ -1948,11 +2009,17 @@ function renderIntakeFeedback(
     return `<div class="import-feedback">${emptyText}</div>`;
   }
 
+  const retryButton =
+    intakeFeedback.kind === "error" && intakeFeedback.retrySubjectId && pendingPdfRetry
+      ? `<button class="secondary-action" type="button" data-action="retry-pdf-upload" data-subject-id="${escapeHtml(intakeFeedback.retrySubjectId)}">재시도</button>`
+      : "";
+
   return `
     <div class="import-feedback is-${intakeFeedback.kind}">
       <strong>${intakeFeedback.title}</strong>
       <p>${intakeFeedback.detail}</p>
       ${intakeFeedback.href ? `<a href="${intakeFeedback.href}">반영된 수업일 노트 보기</a>` : ""}
+      ${retryButton}
     </div>
   `;
 }

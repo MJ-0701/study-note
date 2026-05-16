@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
@@ -39,6 +40,8 @@ interface UploadFileInput {
 
 @Injectable()
 export class MaterialsService {
+  private readonly logger = new Logger(MaterialsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StoragePort
@@ -121,10 +124,85 @@ export class MaterialsService {
     return toPdfMaterialRecord(saved);
   }
 
+  async completeUpload(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
+    // Step 1: load material (owner scoping + soft-delete guard)
+    const material = await this.prisma.pdfMaterial.findFirst({
+      where: { id: materialId, ownerId, deletedAt: null }
+    });
+
+    if (!material) {
+      throw new NotFoundException("PDF material not found");
+    }
+
+    // Step 2: idempotent — already uploaded, no headObject call needed
+    if (material.uploadStatus === "uploaded") {
+      this.logger.log(
+        `materials.complete.noop reason=already-uploaded materialId=${materialId}`
+      );
+      return toPdfMaterialRecord(material);
+    }
+
+    // Step 3: headObject verify
+    let headSize: number;
+    try {
+      const head = await this.storage.headObject(material.storageKey);
+      headSize = head.contentLength;
+    } catch (error) {
+      // S3 NoSuchKey: object not yet PUT or was never uploaded
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `materials.complete.size-mismatch declared=${material.fileSize} actual=not-found materialId=${materialId} reason=${msg}`
+      );
+      throw new ConflictException({
+        errorCode: "UPLOAD_NOT_FOUND",
+        errorMessage: "S3 object not found. The file may not have been uploaded yet."
+      });
+    }
+
+    if (headSize !== material.fileSize) {
+      this.logger.warn(
+        `materials.complete.size-mismatch declared=${material.fileSize} actual=${headSize} materialId=${materialId}`
+      );
+      throw new ConflictException({
+        errorCode: "UPLOAD_SIZE_MISMATCH",
+        errorMessage: `File size mismatch: declared ${material.fileSize}, actual ${headSize}`
+      });
+    }
+
+    // Step 4: race-safe conditional update (updateMany where uploadStatus=pending)
+    // Returns {count: 0|1}. count=0 means another concurrent call already transitioned.
+    const { count } = await this.prisma.pdfMaterial.updateMany({
+      where: { id: materialId, uploadStatus: "pending", deletedAt: null },
+      data: { uploadStatus: "uploaded" }
+    });
+
+    if (count === 0) {
+      // Another concurrent call already transitioned → re-fetch and return current state
+      this.logger.log(
+        `materials.complete.noop reason=already-uploaded(race) materialId=${materialId}`
+      );
+    } else {
+      this.logger.log(
+        `materials.complete.transitioned materialId=${materialId} from=pending to=uploaded headObjectSize=${headSize}`
+      );
+    }
+
+    const updated = await this.prisma.pdfMaterial.findFirst({
+      where: { id: materialId, ownerId, deletedAt: null }
+    });
+
+    if (!updated) {
+      throw new NotFoundException("PDF material not found after transition");
+    }
+
+    return toPdfMaterialRecord(updated);
+  }
+
   async listMaterials(ownerId: string): Promise<PdfMaterialRecord[]> {
     const materials = await this.prisma.pdfMaterial.findMany({
       where: {
-        ownerId
+        ownerId,
+        deletedAt: null
       },
       orderBy: {
         createdAt: "desc"
@@ -138,7 +216,8 @@ export class MaterialsService {
     const material = await this.prisma.pdfMaterial.findFirst({
       where: {
         id: materialId,
-        ownerId
+        ownerId,
+        deletedAt: null
       }
     });
 

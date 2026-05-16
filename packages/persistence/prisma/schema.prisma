@@ -56,6 +56,7 @@ model PdfMaterial {
   contentType String
   storageKey  String
   uploadStatus String              @default("pending")
+  deletedAt   DateTime?
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
   owner       User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)

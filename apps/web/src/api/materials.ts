@@ -62,24 +62,123 @@ export async function createMaterialUploadIntent(
   });
 }
 
+/**
+ * Upload a PDF file using the S3 direct-PUT flow (intent → S3 PUT → completion).
+ *
+ * Flow:
+ *   (a) POST /api/materials/upload-intent → intent (materialId + uploadUrl)
+ *   (b) Browser → S3 direct PUT (omit credentials — cross-origin S3 call; no cookie needed)
+ *       Exception: if uploadUrl is relative (local-mock provider) → use credentials:include
+ *       so the existing Nest PUT handler's SessionAuthGuard passes.
+ *   (c) POST /api/materials/:id/complete → confirms upload to BE
+ *
+ * Retry (exponential backoff): S3 PUT 5xx/network errors → 1s/2s/4s, max 3 attempts.
+ * 4xx = immediate throw (no retry).
+ */
 export async function uploadMaterialFile(
   apiBaseUrl: string,
-  uploadUrl: string,
+  intent: MaterialUploadIntent,
   file: File
 ): Promise<PdfMaterialRecord> {
-  const payload = await fetchJson<{ material: PdfMaterialRecord }>(
-    apiBaseUrl,
-    uploadUrl,
-    {
-      method: "PUT",
-      headers: {
-        "content-type": "application/pdf"
-      },
-      body: file
-    }
-  );
+  const { material, upload } = intent;
+  const materialId = material.id;
+  const isS3Direct = /^https?:\/\//i.test(upload.uploadUrl);
 
-  return payload.material;
+  // Exponential backoff retry: 1s, 2s, 4s
+  const delays = [1000, 2000, 4000];
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      let response: Response;
+
+      if (isS3Direct) {
+        // Cross-origin S3 PUT — omit cookies (no session required for pre-signed URL)
+        response = await fetch(upload.uploadUrl, {
+          method: "PUT",
+          headers: upload.requiredHeaders,
+          body: file
+          // Note: no credentials option → defaults to "same-origin", effectively omits cookie for cross-origin
+        });
+      } else {
+        // Local-mock: relative URL hitting Nest PUT handler (requires session cookie)
+        response = await fetch(resolveApiUrl(apiBaseUrl, upload.uploadUrl), {
+          method: "PUT",
+          headers: {
+            "content-type": "application/pdf",
+            "content-length": String(file.size),
+            ...upload.requiredHeaders
+          },
+          credentials: "include",
+          body: file
+        });
+      }
+
+      if (response.ok) {
+        console.info(`materials.s3-put.ok materialId=${materialId} bytes=${file.size}`);
+        break; // S3 PUT succeeded, proceed to completion
+      }
+
+      // 4xx — do not retry
+      if (response.status >= 400 && response.status < 500) {
+        throw new MaterialApiError(
+          `S3 PUT failed with status ${response.status}`,
+          response.status,
+          response.statusText
+        );
+      }
+
+      // 5xx — retry
+      const msg = `HTTP ${response.status} ${response.statusText}`;
+      lastError = new Error(msg);
+      if (attempt < 3) {
+        console.warn(`materials.s3-put.retry attempt=${attempt}/3 reason=${msg}`);
+        await sleep(delays[attempt - 1] ?? 4000);
+      } else {
+        console.warn(`materials.s3-put.retry attempt=${attempt}/3 reason=${msg}`);
+      }
+    } catch (error) {
+      if (error instanceof MaterialApiError) throw error;
+
+      // Network / CORS failure — retry
+      const msg = error instanceof Error ? error.message : String(error);
+      lastError = error instanceof Error ? error : new Error(msg);
+      if (attempt < 3) {
+        console.warn(`materials.s3-put.retry attempt=${attempt}/3 reason=${msg}`);
+        await sleep(delays[attempt - 1] ?? 4000);
+      } else {
+        console.warn(`materials.s3-put.retry attempt=${attempt}/3 reason=${msg}`);
+      }
+    }
+  }
+
+  if (lastError) {
+    // All retries exhausted
+    throw lastError;
+  }
+
+  // (c) Notify BE that upload is complete
+  return completeMaterialUpload(apiBaseUrl, materialId);
+}
+
+/**
+ * Notify backend that S3 upload is complete.
+ * Returns PdfMaterialRecord with uploadStatus=uploaded.
+ * Exported for callers that need bare completion (e.g. retry after S3 PUT success).
+ */
+export async function completeMaterialUpload(
+  apiBaseUrl: string,
+  materialId: string
+): Promise<PdfMaterialRecord> {
+  return fetchJson<PdfMaterialRecord>(
+    apiBaseUrl,
+    `/materials/${encodeURIComponent(materialId)}/complete`,
+    { method: "POST" }
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function listPdfMaterials(
