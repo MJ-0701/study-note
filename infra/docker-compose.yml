@@ -74,14 +74,19 @@ services:
       - STUDY_NOTE_SECOND_USER_NAME=${STUDY_NOTE_SECOND_USER_NAME:-Reviewer}
       - STUDY_NOTE_SECOND_STUDENT_NUMBER=${STUDY_NOTE_SECOND_STUDENT_NUMBER:-20260002}
       - STUDY_NOTE_SECOND_USER_EMAIL=${STUDY_NOTE_SECOND_USER_EMAIL:-reviewer@example.com}
+      # Seed toggle: dev default true, prod must set STUDY_NOTE_RUN_SEED=false explicitly
+      - STUDY_NOTE_RUN_SEED=${STUDY_NOTE_RUN_SEED:-true}
     networks:
       - study-note-net
+    restart: on-failure:3
     healthcheck:
       # Use node http.get — avoids curl/wget IPv6 ambiguity in alpine containers
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
+      # entrypoint: up to 60s DB wait + migrate + seed; allow 90s before health probes begin
+      start_period: 90s
 
   fe-service:
     build:

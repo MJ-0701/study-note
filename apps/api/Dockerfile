@@ -30,6 +30,16 @@ COPY packages ./packages
 COPY apps/api/package.json ./apps/api/package.json
 RUN pnpm install --frozen-lockfile --prod --fetch-timeout=600000 --network-concurrency=2
 
+# Install prisma CLI globally so entrypoint can run `prisma migrate deploy`.
+# Pinned to match devDependencies in apps/api/package.json.
+# @prisma/client engines are already in node_modules via --prod install;
+# the CLI (devDep) is not, so we add it explicitly here.
+RUN npm install -g prisma@6.19.3
+
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+
+# Entrypoint: DB wait → migrate deploy → optional seed → exec app
+COPY --chmod=0755 apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
+
 EXPOSE 3000
-CMD ["node", "apps/api/dist/main.js"]
+ENTRYPOINT ["sh", "/app/apps/api/docker-entrypoint.sh"]
