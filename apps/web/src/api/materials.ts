@@ -133,7 +133,10 @@ function resolveApiUrl(apiBaseUrl: string, path: string): string {
     return path;
   }
 
-  const normalizedBase = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
+  const absoluteBase = /^https?:\/\//i.test(apiBaseUrl)
+    ? apiBaseUrl
+    : `${window.location.origin}${apiBaseUrl.startsWith("/") ? apiBaseUrl : `/${apiBaseUrl}`}`;
+  const normalizedBase = absoluteBase.endsWith("/") ? absoluteBase : `${absoluteBase}/`;
   const normalizedPath = path.startsWith("/api/")
     ? path
     : path.replace(/^\/+/, "");

@@ -1,4 +1,6 @@
 # SECURITY WARNING: For LOCAL DEVELOPMENT ONLY. Never use these credentials in production.
+name: study-note
+
 services:
   db-service:
     image: mysql:8.0
