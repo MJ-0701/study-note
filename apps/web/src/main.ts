@@ -175,6 +175,17 @@ let activeChecklistDrag: {
   startNormX: number;
   startNormY: number;
 } | undefined;
+// sprint-12/slice-6: tracks an in-progress sticky note drag (header pointerdown → pointerup).
+// Mirrors textbox/checklist drag — pointermove = DOM 직접 갱신, pointerup = store + renderApp.
+let activeStickyDrag: {
+  subjectId: string;
+  noteId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startNormX: number;
+  startNormY: number;
+} | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
@@ -1068,6 +1079,40 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
+  // sprint-12/slice-6: sticky note header drag — same pattern as textbox drag.
+  // button 클릭 (delete) 은 drag 로 처리하지 않고 click handler 에 위임.
+  const stickyDragHandle = target.closest<HTMLElement>("[data-action='sticky-drag-handle']");
+
+  if (stickyDragHandle && !target.closest("button")) {
+    const subjectIdForDrag = surface.dataset.subjectId;
+    const noteIdForDrag = stickyDragHandle.dataset.noteId;
+
+    if (subjectIdForDrag && noteIdForDrag) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const note = workspace.stickyNotes.find((n) => n.id === noteIdForDrag);
+
+      if (note) {
+        event.preventDefault();
+        try {
+          stickyDragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic events may not support setPointerCapture
+        }
+        activeStickyDrag = {
+          subjectId: subjectIdForDrag,
+          noteId: noteIdForDrag,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startNormX: note.anchor.x,
+          startNormY: note.anchor.y
+        };
+      }
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3: checklist header drag — same pattern as textbox drag.
   // R10-refine: button 클릭 (delete / toggle) 은 drag 로 처리하지 않고 click handler 에 위임.
   const checklistDragHandle = target.closest<HTMLElement>("[data-action='checklist-drag-handle']");
@@ -1123,6 +1168,9 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 
   if (material.selectedTool === "sticky") {
     addStickyNote(subjectId, "text", point);
+    // sprint-12/slice-6: 1 click = 1 추가 후 tool mode = read 자동 복귀.
+    // 의도 외 중복 추가 방지. 재추가 시 도구 재선택 필요.
+    setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
     return;
@@ -1131,6 +1179,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-12/slice-2 R3: text tool — click-to-place a new textbox at the surface point.
   if (material.selectedTool === "text") {
     addTextBox(subjectId, point);
+    setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
     return;
@@ -1139,6 +1188,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-12/slice-3: checklist tool — click-to-place a new checklist at the surface point.
   if ((material.selectedTool as LocalPdfTool) === "checklist") {
     addChecklistWidget(subjectId, point);
+    setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
     return;
@@ -1248,6 +1298,36 @@ function handleDocumentPointerMove(event: PointerEvent): void {
     return;
   }
 
+  // sprint-12/slice-6: sticky note drag — same pattern as textbox drag.
+  if (activeStickyDrag && activeStickyDrag.pointerId === event.pointerId) {
+    const { subjectId, noteId, startClientX, startClientY, startNormX, startNormY } = activeStickyDrag;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      const dy = (event.clientY - startClientY) / rect.height;
+      applyStickyMove(subjectId, noteId, { x: startNormX + dx, y: startNormY + dy });
+      // update DOM position directly to avoid full renderApp jank on every move.
+      const el = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const note = workspace.stickyNotes.find((n) => n.id === noteId);
+
+        if (note) {
+          el.style.left = `${note.anchor.x * 100}%`;
+          el.style.top = `${note.anchor.y * 100}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3: checklist drag — same pattern as textbox drag.
   if (activeChecklistDrag && activeChecklistDrag.pointerId === event.pointerId) {
     const { subjectId, checklistId, startClientX, startClientY, startNormX, startNormY } = activeChecklistDrag;
@@ -1345,6 +1425,13 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-12/slice-3: clear checklist drag state on pointer release.
   if (activeChecklistDrag && activeChecklistDrag.pointerId === event.pointerId) {
     activeChecklistDrag = undefined;
+    renderApp(); // final re-render to settle position
+    return;
+  }
+
+  // sprint-12/slice-6: clear sticky note drag state on pointer release.
+  if (activeStickyDrag && activeStickyDrag.pointerId === event.pointerId) {
+    activeStickyDrag = undefined;
     renderApp(); // final re-render to settle position
     return;
   }
@@ -2256,6 +2343,23 @@ function applyChecklistMove(
   }));
 }
 
+// sprint-12/slice-6: sticky note move (inline reducer — no domain moveStickyNote yet).
+// anchor field (not position) is the sticky note's normalized coordinate.
+function applyStickyMove(
+  subjectId: string,
+  noteId: string,
+  anchor: { x: number; y: number }
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    stickyNotes: workspace.stickyNotes.map((note) =>
+      note.id === noteId
+        ? { ...note, anchor: normalizePdfPoint(anchor.x, anchor.y), updatedAt: new Date().toISOString() }
+        : note
+    )
+  }));
+}
+
 // debounce handle for checklist item label update — avoids store write on every keystroke.
 // Module-level (one at a time): user edits one label at a time; prior debounce fires harmlessly.
 let checklistLabelDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -2517,6 +2621,39 @@ function renderApp(): void {
       `${subject.title} / ${week.label}`
     );
   }
+
+  // sprint-12/slice-6: PDF iframe DOM 보존. innerHTML replace 마다 새 iframe 만들면
+  // browser 가 blob URL 을 매번 재로드 → PDF 점멸. mount helper 가 module-level
+  // iframe element 1개를 유지하고 src 가 같으면 그대로, 다르면 src 만 갱신.
+  mountPdfFrame(appRoot);
+}
+
+// sprint-12/slice-6: PDF iframe 보존 mount.
+// renderShell 안의 [data-pdf-frame-mount] placeholder 자리에 module-level iframe 을 attach.
+// src 변경 (페이지 이동, 다른 PDF) 만 iframe 의 src 갱신, src 동일 시 무동작.
+let preservedPdfFrame: HTMLIFrameElement | null = null;
+let preservedPdfFrameSrc = "";
+
+function mountPdfFrame(root: HTMLElement): void {
+  const placeholder = root.querySelector<HTMLElement>("[data-pdf-frame-mount]");
+  if (!placeholder) {
+    return; // 현 페이지에 PDF stage 없음 (home / intake / etc).
+  }
+  const targetSrc = placeholder.getAttribute("data-pdf-frame-src") ?? "";
+  const targetTitle = placeholder.getAttribute("data-pdf-frame-title") ?? "";
+
+  if (!preservedPdfFrame) {
+    preservedPdfFrame = document.createElement("iframe");
+    preservedPdfFrame.className = "pdf-frame";
+  }
+  if (preservedPdfFrame.title !== targetTitle) {
+    preservedPdfFrame.title = targetTitle;
+  }
+  if (preservedPdfFrameSrc !== targetSrc) {
+    preservedPdfFrame.src = targetSrc;
+    preservedPdfFrameSrc = targetSrc;
+  }
+  placeholder.replaceWith(preservedPdfFrame);
 }
 
 function parseRoute(hash: string): Route {
@@ -3234,11 +3371,11 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
         <div class="pdf-stage" aria-label="${subject.title} PDF page annotation surface">
           ${
             objectUrl
-              ? `<iframe
-                  class="pdf-frame"
-                  title="${subject.title} PDF preview"
-                  src="${escapeHtml(`${objectUrl}#page=${selectedPage}&toolbar=0&navpanes=0&view=FitH`)}"
-                ></iframe>`
+              ? `<div
+                  data-pdf-frame-mount="true"
+                  data-pdf-frame-src="${escapeHtml(`${objectUrl}#page=${selectedPage}&toolbar=0&navpanes=0&view=FitH`)}"
+                  data-pdf-frame-title="${escapeHtml(`${subject.title} PDF preview`)}"
+                ></div>`
               : `<div class="pdf-placeholder">
                   <strong>${getPdfPreviewPlaceholderTitle(Boolean(material), isPreviewLoading)}</strong>
                   <span>${getPdfPreviewPlaceholderDetail(Boolean(material), selectedPage)}</span>
@@ -3529,7 +3666,13 @@ function renderStickyNote(subjectId: string, note: SubjectPdfWorkspace["stickyNo
       style="left: ${note.anchor.x * 100}%; top: ${note.anchor.y * 100}%;"
       data-note-id="${note.id}"
     >
-      <div class="sticky-note-header">
+      <div
+        class="sticky-note-header"
+        data-action="sticky-drag-handle"
+        data-note-id="${note.id}"
+        role="button"
+        aria-label="포스트잇 이동"
+      >
         <span>${formatStickyBlockKind(block.kind)}</span>
         <button
           type="button"
