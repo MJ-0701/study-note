@@ -1486,71 +1486,72 @@ p {
    - drag handle = header bar; body = textarea.
    - touch-action: none on header prevents scroll conflict (AC §위험-5).
    R10: pointer-events: auto — surface is-read-mode override. */
-.pdf-textbox {
-  background: #f0f7ff;
-  border: 1px solid #8ab4e8;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
-  display: grid;
-  grid-template-rows: auto 1fr;
-  min-height: 80px;
-  min-width: 140px;
+/* sprint-12/slice-7: textbox redesign — macOS Preview 스타일 인라인 텍스트.
+   박스 frame 폐기 (border / bg / shadow 모두 제거). 작은 폰트로 PDF 본문 위 직접 필기.
+   default = no border. hover/focus = minimal dotted border. delete ✕ = hover 시만 노출. */
+.pdf-textbox.is-inline {
+  background: transparent;
+  border: 0;
+  cursor: grab;
+  font-size: 0.875rem; /* ~14px */
+  padding: 0;
   pointer-events: auto;
   position: absolute;
   z-index: 3;
 }
 
-.pdf-textbox-header {
-  align-items: center;
-  background: #d0e8ff;
-  border-bottom: 1px solid #8ab4e8;
-  border-radius: 5px 5px 0 0;
-  cursor: grab;
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 6px;
-  touch-action: none;
-  user-select: none;
-}
-
-.pdf-textbox-header:active {
+.pdf-textbox.is-inline:active {
   cursor: grabbing;
 }
 
-.pdf-textbox-header span {
-  color: var(--ds-fg);
-  font-size: var(--ds-fs-meta);
-  font-weight: 600;
+.pdf-textbox.is-inline:hover {
+  outline: 1px dashed rgba(26, 26, 26, 0.3);
+  outline-offset: 2px;
 }
 
-.pdf-textbox-header button {
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--ds-fg-soft);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  min-height: 28px;
-  min-width: 28px;
-  padding: 0;
-}
-
-.pdf-textbox-header button:hover {
-  background: rgba(26, 26, 26, 0.08);
-  color: var(--ds-fg);
-}
-
-.pdf-textbox-body {
+.pdf-textbox-inline-input {
   background: transparent;
   border: 0;
   color: var(--ds-fg);
+  cursor: text;
+  field-sizing: content; /* Chrome 123+ — fallback to manual sizing via rows="1" */
   font: inherit;
-  font-size: var(--ds-fs-meta);
-  min-height: 60px;
+  font-size: inherit;
+  min-height: 1.4em;
+  min-width: 80px;
   outline: 0;
-  padding: 6px 8px;
+  padding: 0 2px;
   resize: none;
+  user-select: text;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+.pdf-textbox-inline-input:focus {
+  outline: 1px dotted var(--ds-accent, #4f46e5);
+  outline-offset: 2px;
+}
+
+.pdf-textbox-delete {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(26, 26, 26, 0.2);
+  border-radius: 50%;
+  color: var(--ds-fg);
+  cursor: pointer;
+  display: none;
+  font-size: 0.75rem;
+  height: 18px;
+  line-height: 14px;
+  padding: 0;
+  position: absolute;
+  right: -22px;
+  top: -4px;
+  width: 18px;
+}
+
+.pdf-textbox.is-inline:hover .pdf-textbox-delete,
+.pdf-textbox.is-inline:focus-within .pdf-textbox-delete {
+  display: inline-block;
 }
 
 /* sprint-12/slice-3: checklist tool cursor — crosshair to indicate click-to-place. */

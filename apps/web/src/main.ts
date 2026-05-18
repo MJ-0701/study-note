@@ -1,3 +1,4 @@
+import morphdom from "morphdom";
 import { sampleLectureNote } from "./data/sampleLectureNote";
 import { localIntakeGuide } from "./data/intakeGuide";
 import { classSchedule, scheduleRangeLabel } from "./data/classSchedule";
@@ -206,6 +207,18 @@ if (!app) {
 }
 
 const appRoot = app;
+
+// sprint-12/slice-7: morphdom DOM diff 도입.
+// 이전 = appRoot.innerHTML = html 매 호출 시 전체 DOM teardown + rebuild → PDF iframe
+// 재생성 → blob URL 재로드 → 점멸. morphdom = element-level diff, iframe element 의
+// src attribute 가 동일하면 setAttribute 호출 X → iframe reload 0 = 점멸 해결.
+function renderInto(html: string): void {
+  // morphdom 가 wrapper element 의 children 만 diff 적용.
+  const wrapper = document.createElement("div");
+  wrapper.id = appRoot.id;
+  wrapper.innerHTML = html;
+  morphdom(appRoot, wrapper, { childrenOnly: true });
+}
 
 document.addEventListener("change", handleDocumentChange);
 document.addEventListener("click", handleDocumentClick);
@@ -1045,11 +1058,13 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  // sprint-12/slice-2: textbox header drag — start drag state before other early-returns.
-  // R10-refine: button 클릭 (delete / toggle) 은 drag 로 처리하지 않고 click handler 에 위임.
+  // sprint-12/slice-2: textbox drag — start drag state before other early-returns.
+  // R10-refine: button 클릭 (delete) 은 drag 로 처리하지 않고 click handler 에 위임.
+  // slice-7 redesign: textbox 가 article 자체 = drag handle. textarea/input click = focus
+  // (edit) 이라 drag skip. button click 도 skip.
   const dragHandle = target.closest<HTMLElement>("[data-action='drag-textbox-handle']");
 
-  if (dragHandle && !target.closest("button")) {
+  if (dragHandle && !target.closest("button") && !target.closest("textarea") && !target.closest("input")) {
     const subjectIdForDrag = surface.dataset.subjectId;
     const textBoxIdForDrag = dragHandle.dataset.textboxId;
 
@@ -2511,13 +2526,13 @@ async function importWeekNoteFile(
 function renderApp(): void {
   if (authBootState === "checking") {
     document.body.removeAttribute("data-route");
-    appRoot.innerHTML = renderSessionCheckPage();
+    renderInto(renderSessionCheckPage());
     return;
   }
 
   if (!authSession) {
     document.body.removeAttribute("data-route");
-    appRoot.innerHTML = renderLoginPage();
+    renderInto(renderLoginPage());
     return;
   }
 
@@ -2542,84 +2557,84 @@ function renderApp(): void {
     route.name !== "pdf-workspaces" &&
     !subject
   ) {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderHomeSidebar(notebook, { name: "home" }),
       renderNotFound(),
       "study-note / 찾을 수 없음"
-    );
+    ));
     return;
   }
 
   if (route.name === "week" && subject && !week) {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderSubjectSidebar(subject, route),
       renderNotFound(),
       `${subject.title} / 찾을 수 없음`
-    );
+    ));
     return;
   }
 
   if (route.name === "home") {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderHomeSidebar(notebook, route),
       renderHome(notebook),
       `${notebook.title} / 홈`
-    );
+    ));
     return;
   }
 
   if (route.name === "intake") {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderHomeSidebar(notebook, route),
       renderIntakeGuide(notebook),
       `${notebook.title} / 자료 투입`
-    );
+    ));
     return;
   }
 
   if (route.name === "pdf-workspaces") {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderHomeSidebar(notebook, route),
       renderPdfWorkspaceIndex(notebook),
       `${notebook.title} / PDF 작업공간`
-    );
+    ));
     return;
   }
 
   if (route.name === "subject-intake" && subject) {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderSubjectSidebar(subject, route),
       renderSubjectIntakeGuide(subject),
       `${subject.title} / 자료 투입`
-    );
+    ));
     return;
   }
 
   if (route.name === "pdf-workspace" && subject) {
     ensurePdfPreviewForWorkspace(subject.id);
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderSubjectSidebar(subject, route),
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
-    );
+    ));
     return;
   }
 
   if (route.name === "subject" && subject) {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderSubjectSidebar(subject, route),
       renderSubjectPage(subject),
       `${subject.title} / 총정리`
-    );
+    ));
     return;
   }
 
   if (route.name === "week" && subject && week) {
-    appRoot.innerHTML = renderShell(
+    renderInto(renderShell(
       renderSubjectSidebar(subject, route),
       renderWeekPage(subject, week),
       `${subject.title} / ${week.label}`
-    );
+    ));
   }
 
   // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
@@ -3668,37 +3683,36 @@ function renderStickyNote(subjectId: string, note: SubjectPdfWorkspace["stickyNo
 // AC9-e: content rendered via textarea.value (innerHTML 금지).
 // AC9-g: data-textbox-id only; content not exposed in data-*, title, aria-label.
 // Drag: header bar handles pointerdown for drag. Body = textarea for editing.
+// sprint-12/slice-7: textbox redesign — macOS Preview 스타일 인라인 텍스트.
+// 박스 frame 폐기. PDF 본문 위 작은 폰트로 직접 필기. drag = 전체 widget (textarea 외부),
+// edit = textarea focus, delete = hover 시만 노출되는 ✕ 버튼. AC9-e: textarea value
+// attribute escapeHtml, innerHTML 미사용.
 function renderTextBox(subjectId: string, tb: PdfTextBox): string {
   return `
     <article
-      class="pdf-textbox"
-      style="left: ${tb.position.x * 100}%; top: ${tb.position.y * 100}%; width: ${tb.size.width * 100}%; height: ${tb.size.height * 100}%;"
+      class="pdf-textbox is-inline"
+      style="left: ${tb.position.x * 100}%; top: ${tb.position.y * 100}%;"
       data-textbox-id="${tb.id}"
+      data-action="drag-textbox-handle"
+      role="group"
+      aria-label="텍스트 박스"
     >
-      <div
-        class="pdf-textbox-header"
-        data-action="drag-textbox-handle"
-        data-textbox-id="${tb.id}"
-        aria-label="텍스트 박스 이동"
-        role="button"
-        tabindex="0"
-      >
-        <span>텍스트 박스</span>
-        <button
-          type="button"
-          aria-label="텍스트 박스 삭제"
-          data-action="delete-textbox"
-          data-subject-id="${subjectId}"
-          data-textbox-id="${tb.id}"
-        >×</button>
-      </div>
       <textarea
-        class="pdf-textbox-body"
+        class="pdf-textbox-inline-input"
         data-action="update-textbox-content"
         data-subject-id="${subjectId}"
         data-textbox-id="${tb.id}"
-        placeholder="내용을 입력하세요"
+        placeholder="텍스트"
+        rows="1"
       >${escapeHtml(tb.content)}</textarea>
+      <button
+        type="button"
+        class="pdf-textbox-delete"
+        aria-label="텍스트 박스 삭제"
+        data-action="delete-textbox"
+        data-subject-id="${subjectId}"
+        data-textbox-id="${tb.id}"
+      >×</button>
     </article>
   `;
 }
