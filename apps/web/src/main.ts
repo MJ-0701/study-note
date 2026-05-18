@@ -2622,38 +2622,9 @@ function renderApp(): void {
     );
   }
 
-  // sprint-12/slice-6: PDF iframe DOM 보존. innerHTML replace 마다 새 iframe 만들면
-  // browser 가 blob URL 을 매번 재로드 → PDF 점멸. mount helper 가 module-level
-  // iframe element 1개를 유지하고 src 가 같으면 그대로, 다르면 src 만 갱신.
-  mountPdfFrame(appRoot);
-}
-
-// sprint-12/slice-6: PDF iframe 보존 mount.
-// renderShell 안의 [data-pdf-frame-mount] placeholder 자리에 module-level iframe 을 attach.
-// src 변경 (페이지 이동, 다른 PDF) 만 iframe 의 src 갱신, src 동일 시 무동작.
-let preservedPdfFrame: HTMLIFrameElement | null = null;
-let preservedPdfFrameSrc = "";
-
-function mountPdfFrame(root: HTMLElement): void {
-  const placeholder = root.querySelector<HTMLElement>("[data-pdf-frame-mount]");
-  if (!placeholder) {
-    return; // 현 페이지에 PDF stage 없음 (home / intake / etc).
-  }
-  const targetSrc = placeholder.getAttribute("data-pdf-frame-src") ?? "";
-  const targetTitle = placeholder.getAttribute("data-pdf-frame-title") ?? "";
-
-  if (!preservedPdfFrame) {
-    preservedPdfFrame = document.createElement("iframe");
-    preservedPdfFrame.className = "pdf-frame";
-  }
-  if (preservedPdfFrame.title !== targetTitle) {
-    preservedPdfFrame.title = targetTitle;
-  }
-  if (preservedPdfFrameSrc !== targetSrc) {
-    preservedPdfFrame.src = targetSrc;
-    preservedPdfFrameSrc = targetSrc;
-  }
-  placeholder.replaceWith(preservedPdfFrame);
+  // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
+  // iframe reload trigger → PDF 미표시. mountPdfFrame 폐기. 점멸 fix 후속 별 sprint
+  // (selective re-render 또는 PDF stage 외부 mount 큰 변경 필요).
 }
 
 function parseRoute(hash: string): Route {
@@ -3371,11 +3342,11 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
         <div class="pdf-stage" aria-label="${subject.title} PDF page annotation surface">
           ${
             objectUrl
-              ? `<div
-                  data-pdf-frame-mount="true"
-                  data-pdf-frame-src="${escapeHtml(`${objectUrl}#page=${selectedPage}&toolbar=0&navpanes=0&view=FitH`)}"
-                  data-pdf-frame-title="${escapeHtml(`${subject.title} PDF preview`)}"
-                ></div>`
+              ? `<iframe
+                  class="pdf-frame"
+                  title="${subject.title} PDF preview"
+                  src="${escapeHtml(`${objectUrl}#page=${selectedPage}&toolbar=0&navpanes=0&view=FitH`)}"
+                ></iframe>`
               : `<div class="pdf-placeholder">
                   <strong>${getPdfPreviewPlaceholderTitle(Boolean(material), isPreviewLoading)}</strong>
                   <span>${getPdfPreviewPlaceholderDetail(Boolean(material), selectedPage)}</span>
