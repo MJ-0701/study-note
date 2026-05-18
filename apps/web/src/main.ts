@@ -131,9 +131,6 @@ let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
 let pendingPdfRetry: { file: File; subjectId: string; intent: MaterialUploadIntent } | undefined;
 let quickNote: QuickNote | undefined;
-// sprint-11/slice-2 R4-c: sticky kind selection modal (module-scope, no localStorage).
-// null = closed, { subjectId } = open for that workspace.
-let stickyKindModal: { subjectId: string } | null = null;
 const app = document.querySelector<HTMLDivElement>("#app");
 
 interface ActiveInkStroke {
@@ -154,7 +151,6 @@ document.addEventListener("change", handleDocumentChange);
 document.addEventListener("click", handleDocumentClick);
 document.addEventListener("input", handleDocumentInput);
 document.addEventListener("submit", handleDocumentSubmit);
-document.addEventListener("keydown", handleDocumentKeydown);
 document.addEventListener("pointerdown", handleDocumentPointerDown);
 document.addEventListener("pointermove", handleDocumentPointerMove);
 document.addEventListener("pointerup", handleDocumentPointerUp);
@@ -439,14 +435,6 @@ function handleDocumentChange(event: Event): void {
   target.value = "";
 }
 
-// sprint-11/slice-2 R4-c: Esc key closes sticky kind modal.
-function handleDocumentKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && stickyKindModal !== null) {
-    stickyKindModal = null;
-    renderApp();
-  }
-}
-
 function handleDocumentClick(event: MouseEvent): void {
   const target = event.target;
 
@@ -550,12 +538,6 @@ function handleDocumentClick(event: MouseEvent): void {
 
     if (subjectId && isPdfWorkspaceTool(tool)) {
       setPdfTool(subjectId, tool);
-      // sprint-11/slice-2 R4-c: 포스트잇 도구 선택 시 sticky kind modal open.
-      if (tool === "sticky") {
-        stickyKindModal = { subjectId };
-      } else {
-        stickyKindModal = null;
-      }
       renderApp();
     }
 
@@ -593,41 +575,6 @@ function handleDocumentClick(event: MouseEvent): void {
       renderApp();
     }
 
-    return;
-  }
-
-  // sprint-11/slice-2 R4-c: sticky kind modal — option selection.
-  if (quickNoteButton?.dataset.action === "select-sticky-kind") {
-    const subjectId = quickNoteButton.dataset.subjectId;
-    const kind = quickNoteButton.dataset.blockKind as StickyNoteBlockKind | undefined;
-
-    if (subjectId && isStickyNoteBlockKind(kind)) {
-      addStickyNote(subjectId, kind);
-      stickyKindModal = null;
-      renderApp();
-    }
-
-    return;
-  }
-
-  // sprint-11/slice-2 R4-c: sticky kind modal — close via close button.
-  if (quickNoteButton?.dataset.action === "close-sticky-kind-modal") {
-    stickyKindModal = null;
-    renderApp();
-    return;
-  }
-
-  // sprint-11/slice-2 R4-c: sticky kind modal — close via overlay background click.
-  // Check target (not closest ancestor) to ensure only a direct click on the overlay
-  // backdrop triggers close — clicks on the dialog body do NOT bubble to here
-  // because the dialog body has no data-action, so closest() would still find overlay,
-  // but we guard with instanceof check on the exact element.
-  if (
-    target instanceof HTMLElement &&
-    target.dataset.action === "sticky-kind-modal-overlay"
-  ) {
-    stickyKindModal = null;
-    renderApp();
     return;
   }
 
@@ -1513,11 +1460,6 @@ function renderApp(): void {
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
     );
-    // sprint-11/slice-2 R4-c: focus first option in sticky kind modal after re-render.
-    // Must run after innerHTML assignment — targets the newly-written DOM.
-    if (stickyKindModal !== null) {
-      appRoot.querySelector<HTMLButtonElement>('[data-action="select-sticky-kind"]')?.focus();
-    }
     return;
   }
 
@@ -2284,7 +2226,6 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
         </aside>
       </div>
     </section>
-    ${renderStickyKindModal(subject.id)}
   `;
 }
 
@@ -2368,6 +2309,12 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "sticky", selectedTool, "포스트잇")}
         ${renderToolButton(subjectId, "pen", selectedTool, "펜")}
       </div>
+      <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가">
+        ${renderStickyAddButton(subjectId, "text", "텍스트")}
+        ${renderStickyAddButton(subjectId, "checklist", "체크")}
+        ${renderStickyAddButton(subjectId, "table", "표")}
+        ${renderStickyAddButton(subjectId, "chart-note", "그래프")}
+      </div>
     </div>
   `;
 }
@@ -2391,64 +2338,21 @@ function renderToolButton(
   `;
 }
 
-// sprint-11/slice-2 R4-c: sticky kind selection modal.
-// Rendered as a fixed overlay fragment — position:fixed in CSS, parent doesn't matter.
-// Shown when stickyKindModal.subjectId === subjectId for this workspace.
-function renderStickyKindModal(subjectId: string): string {
-  if (!stickyKindModal || stickyKindModal.subjectId !== subjectId) {
-    return "";
-  }
-
-  const kinds: { kind: StickyNoteBlockKind; label: string; desc: string }[] = [
-    { kind: "text",       label: "텍스트",  desc: "자유 서식 메모" },
-    { kind: "checklist",  label: "체크",    desc: "체크리스트 항목" },
-    { kind: "table",      label: "표",      desc: "표 형식 정리" },
-    { kind: "chart-note", label: "그래프",  desc: "차트/그래프 메모" }
-  ];
-
-  const options = kinds.map((item) => `
-    <button
-      class="sticky-kind-option"
-      type="button"
-      data-action="select-sticky-kind"
-      data-subject-id="${subjectId}"
-      data-block-kind="${item.kind}"
-    >
-      <span class="sticky-kind-option__label">${item.label}</span>
-      <span class="sticky-kind-option__desc">${item.desc}</span>
-    </button>
-  `).join("");
-
+function renderStickyAddButton(
+  subjectId: string,
+  kind: StickyNoteBlockKind,
+  label: string
+): string {
   return `
-    <div
-      class="sticky-kind-overlay"
-      data-action="sticky-kind-modal-overlay"
-      role="none"
+    <button
+      class="tool-button"
+      type="button"
+      data-action="add-sticky-note"
+      data-subject-id="${subjectId}"
+      data-block-kind="${kind}"
     >
-      <div
-        class="sticky-kind-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="sticky-kind-title"
-        aria-describedby="sticky-kind-hint"
-      >
-        <div class="sticky-kind-dialog__header">
-          <h3 id="sticky-kind-title" class="sticky-kind-dialog__title">포스트잇 형식 선택</h3>
-          <button
-            class="sticky-kind-close"
-            type="button"
-            data-action="close-sticky-kind-modal"
-            aria-label="닫기"
-          >✕</button>
-        </div>
-        <p id="sticky-kind-hint" class="sticky-kind-dialog__hint">
-          텍스트 / 체크 / 표 / 그래프 — 모두 포스트잇 안에 들어가는 형식입니다.
-        </p>
-        <div class="sticky-kind-options" role="group" aria-label="포스트잇 형식">
-          ${options}
-        </div>
-      </div>
-    </div>
+      ${label}
+    </button>
   `;
 }
 
