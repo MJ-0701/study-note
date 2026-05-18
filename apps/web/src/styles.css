@@ -1471,6 +1471,151 @@ p {
   resize: none;
 }
 
+/* sprint-12/slice-3: checklist tool cursor — crosshair to indicate click-to-place. */
+.pdf-annotation-surface.is-checklist-mode {
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
+/* sprint-12/slice-3: checklist widget.
+   - position: absolute (relative to annotation surface).
+   - size: content-based auto expand (no fixed width/height — R4 schema).
+   - drag handle = header bar; items = ul/li with checkbox + text input.
+   - touch-action: none on header prevents scroll conflict. */
+.pdf-checklist {
+  background: #f0fff4;
+  border: 1px solid #6dbf8a;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-checklist-header {
+  align-items: center;
+  background: #c6f0d4;
+  border-bottom: 1px solid #6dbf8a;
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-checklist-header:active {
+  cursor: grabbing;
+}
+
+.pdf-checklist-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+.pdf-checklist-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.pdf-checklist-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-checklist-items {
+  list-style: none;
+  margin: 0;
+  padding: 4px 6px;
+}
+
+.pdf-checklist-item {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.pdf-checklist-item input[type="checkbox"] {
+  cursor: pointer;
+  flex-shrink: 0;
+  height: 14px;
+  margin: 0;
+  width: 14px;
+}
+
+.pdf-checklist-item-label {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--ds-fg);
+  flex: 1;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-width: 80px;
+  outline: 0;
+  padding: 1px 2px;
+}
+
+.pdf-checklist-item-label:focus {
+  border-bottom-color: var(--ds-accent);
+}
+
+.pdf-checklist-item-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+  min-height: 20px;
+  min-width: 20px;
+  opacity: 0;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+
+.pdf-checklist-item:hover .pdf-checklist-item-delete {
+  opacity: 1;
+}
+
+.pdf-checklist-item-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-checklist-add-item {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #6dbf8a;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  padding: 4px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.pdf-checklist-add-item:hover {
+  background: #c6f0d4;
+  color: var(--ds-fg);
+}
+
 /* sprint-11/slice-1 R1: inspector aside — collapsed hides from layout flow. */
 .pdf-inspector {
   align-self: start;

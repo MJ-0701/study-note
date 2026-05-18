@@ -32,19 +32,27 @@ import {
   validateWeekNoteImportPayload
 } from "@study-note/domain";
 import {
+  addChecklistItem,
+  createChecklist,
   createInkStroke,
   createPdfMaterialFromBackend,
   createStickyNote,
   createTextBox,
+  deleteChecklist,
+  deleteChecklistItem,
   deleteTextBox,
   estimatePdfPageCount,
   formatPdfFileSize,
   getSubjectPdfWorkspace,
   hydrateSubjectPdfWorkspace,
+  moveChecklist,
   moveTextBox,
   normalizePdfPoint,
   pdfWorkspaceStorageKey,
+  toggleChecklistItem,
+  updateChecklistItemLabel,
   updateTextBoxContent,
+  type PdfChecklist,
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfTextBox,
@@ -139,6 +147,16 @@ let activeEraserDrag: { subjectId: string; pointerId: number; pageNumber: number
 let activeTextBoxDrag: {
   subjectId: string;
   textBoxId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startNormX: number;
+  startNormY: number;
+} | undefined;
+// sprint-12/slice-3: tracks an in-progress checklist drag (header pointerdown → pointerup).
+let activeChecklistDrag: {
+  subjectId: string;
+  checklistId: string;
   pointerId: number;
   startClientX: number;
   startClientY: number;
@@ -449,6 +467,23 @@ function handleDocumentChange(event: Event): void {
     return;
   }
 
+  // sprint-12/slice-3: checklist item checkbox toggle
+  if (target.dataset.action === "toggle-checklist-item") {
+    const subjectId = target.dataset.subjectId;
+    const checklistId = target.dataset.checklistId;
+    const itemId = target.dataset.itemId;
+
+    if (subjectId && checklistId && itemId) {
+      applyToggleChecklistItem(subjectId, checklistId, itemId);
+      // AC9-e: no renderApp here — checkbox state already reflects toggle via DOM;
+      // store write is sufficient. renderApp would rebuild DOM and discard focus.
+      // However, unlike debounced text input, toggle is discrete — renderApp is safe.
+      renderApp();
+    }
+
+    return;
+  }
+
   if (target.dataset.action !== "import-week-note") {
     return;
   }
@@ -626,6 +661,46 @@ function handleDocumentClick(event: MouseEvent): void {
 
     if (subjectId && textBoxId) {
       removeTextBox(subjectId, textBoxId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-12/slice-3: checklist delete (entire checklist)
+  if (quickNoteButton?.dataset.action === "delete-checklist") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const checklistId = quickNoteButton.dataset.checklistId;
+
+    if (subjectId && checklistId) {
+      removeChecklist(subjectId, checklistId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-12/slice-3: add item to checklist
+  if (quickNoteButton?.dataset.action === "add-checklist-item") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const checklistId = quickNoteButton.dataset.checklistId;
+
+    if (subjectId && checklistId) {
+      addItemToChecklist(subjectId, checklistId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-12/slice-3: delete a single checklist item
+  if (quickNoteButton?.dataset.action === "delete-checklist-item") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const checklistId = quickNoteButton.dataset.checklistId;
+    const itemId = quickNoteButton.dataset.itemId;
+
+    if (subjectId && checklistId && itemId) {
+      removeChecklistItem(subjectId, checklistId, itemId);
       renderApp();
     }
 
@@ -864,6 +939,21 @@ function handleDocumentInput(event: Event): void {
       // AC9-d: log action name + id only, no content
       scheduleTextBoxContentUpdate(subjectId, textBoxId, target.value);
     }
+
+    return;
+  }
+
+  // sprint-12/slice-3: checklist item label update (debounced 300ms)
+  // AC9-e: value set via DOM property, not innerHTML. No renderApp in debounced callback.
+  // AC9-g: label not logged, not in data-*, not in title/aria-label.
+  if (target.dataset.action === "update-checklist-item-label") {
+    const subjectId = target.dataset.subjectId;
+    const checklistId = target.dataset.checklistId;
+    const itemId = target.dataset.itemId;
+
+    if (subjectId && checklistId && itemId) {
+      scheduleChecklistItemLabelUpdate(subjectId, checklistId, itemId, target.value);
+    }
   }
 }
 
@@ -913,7 +1003,40 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox")) {
+  // sprint-12/slice-3: checklist header drag — same pattern as textbox drag.
+  const checklistDragHandle = target.closest<HTMLElement>("[data-action='checklist-drag-handle']");
+
+  if (checklistDragHandle) {
+    const subjectIdForDrag = surface.dataset.subjectId;
+    const checklistIdForDrag = checklistDragHandle.dataset.checklistId;
+
+    if (subjectIdForDrag && checklistIdForDrag) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const cl = workspace.checklists.find((c) => c.id === checklistIdForDrag);
+
+      if (cl) {
+        event.preventDefault();
+        try {
+          checklistDragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic events may not support setPointerCapture
+        }
+        activeChecklistDrag = {
+          subjectId: subjectIdForDrag,
+          checklistId: checklistIdForDrag,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startNormX: cl.position.x,
+          startNormY: cl.position.y
+        };
+      }
+    }
+
+    return;
+  }
+
+  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox, .pdf-checklist")) {
     return;
   }
 
@@ -942,6 +1065,14 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-12/slice-2 R3: text tool — click-to-place a new textbox at the surface point.
   if (material.selectedTool === "text") {
     addTextBox(subjectId, point);
+    renderApp();
+    event.preventDefault();
+    return;
+  }
+
+  // sprint-12/slice-3: checklist tool — click-to-place a new checklist at the surface point.
+  if ((material.selectedTool as LocalPdfTool) === "checklist") {
+    addChecklistWidget(subjectId, point);
     renderApp();
     event.preventDefault();
     return;
@@ -1034,6 +1165,36 @@ function handleDocumentPointerMove(event: PointerEvent): void {
     return;
   }
 
+  // sprint-12/slice-3: checklist drag — same pattern as textbox drag.
+  if (activeChecklistDrag && activeChecklistDrag.pointerId === event.pointerId) {
+    const { subjectId, checklistId, startClientX, startClientY, startNormX, startNormY } = activeChecklistDrag;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      const dy = (event.clientY - startClientY) / rect.height;
+      applyChecklistMove(subjectId, checklistId, { x: startNormX + dx, y: startNormY + dy });
+      // update DOM position directly to avoid full renderApp jank on every move.
+      const el = document.querySelector<HTMLElement>(`[data-checklist-id="${checklistId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const cl = workspace.checklists.find((c) => c.id === checklistId);
+
+        if (cl) {
+          el.style.left = `${cl.position.x * 100}%`;
+          el.style.top = `${cl.position.y * 100}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
@@ -1074,6 +1235,13 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-12/slice-2: clear textbox drag state on pointer release.
   if (activeTextBoxDrag && activeTextBoxDrag.pointerId === event.pointerId) {
     activeTextBoxDrag = undefined;
+    renderApp(); // final re-render to settle position
+    return;
+  }
+
+  // sprint-12/slice-3: clear checklist drag state on pointer release.
+  if (activeChecklistDrag && activeChecklistDrag.pointerId === event.pointerId) {
+    activeChecklistDrag = undefined;
     renderApp(); // final re-render to settle position
     return;
   }
@@ -1628,6 +1796,94 @@ function applyTextBoxMove(
       tb.id === textBoxId ? moveTextBox(tb, position) : tb
     )
   }));
+}
+
+// ---------------------------------------------------------------------------
+// sprint-12/slice-3 — PdfChecklist store operations
+// Pattern mirrors addTextBox / removeTextBox / applyTextBoxMove above.
+// ---------------------------------------------------------------------------
+
+function addChecklistWidget(
+  subjectId: string,
+  position: { x: number; y: number }
+): void {
+  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const page = workspace.material?.selectedPage ?? 1;
+  const checklist = createChecklist({ subjectId, page, position });
+
+  updatePdfWorkspace(subjectId, (current) => ({
+    ...current,
+    checklists: [...current.checklists, checklist]
+  }));
+}
+
+function removeChecklist(subjectId: string, checklistId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    checklists: deleteChecklist(workspace.checklists, checklistId)
+  }));
+}
+
+function addItemToChecklist(subjectId: string, checklistId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    checklists: workspace.checklists.map((cl) =>
+      cl.id === checklistId ? addChecklistItem(cl) : cl
+    )
+  }));
+}
+
+function removeChecklistItem(subjectId: string, checklistId: string, itemId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    checklists: workspace.checklists.map((cl) =>
+      cl.id === checklistId ? deleteChecklistItem(cl, itemId) : cl
+    )
+  }));
+}
+
+function applyToggleChecklistItem(subjectId: string, checklistId: string, itemId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    checklists: workspace.checklists.map((cl) =>
+      cl.id === checklistId ? toggleChecklistItem(cl, itemId) : cl
+    )
+  }));
+}
+
+function applyChecklistMove(
+  subjectId: string,
+  checklistId: string,
+  position: { x: number; y: number }
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    checklists: workspace.checklists.map((cl) =>
+      cl.id === checklistId ? moveChecklist(cl, position) : cl
+    )
+  }));
+}
+
+// debounce handle for checklist item label update — avoids store write on every keystroke.
+// Module-level (one at a time): user edits one label at a time; prior debounce fires harmlessly.
+let checklistLabelDebounce: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleChecklistItemLabelUpdate(
+  subjectId: string,
+  checklistId: string,
+  itemId: string,
+  label: string
+): void {
+  clearTimeout(checklistLabelDebounce);
+  // AC9-e: no renderApp in debounced callback — avoids DOM rebuild mid-keystroke (focus loss).
+  checklistLabelDebounce = setTimeout(() => {
+    updatePdfWorkspace(subjectId, (workspace) => ({
+      ...workspace,
+      checklists: workspace.checklists.map((cl) =>
+        cl.id === checklistId ? updateChecklistItemLabel(cl, itemId, label) : cl
+      )
+    }));
+  }, 300);
 }
 
 function addStickyNote(
@@ -2512,6 +2768,10 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const pageTextBoxes = workspace.textBoxes.filter(
     (tb) => tb.page === selectedPage
   );
+  // sprint-12/slice-3: filter checklists for current page
+  const pageChecklists = workspace.checklists.filter(
+    (cl) => cl.page === selectedPage
+  );
   const inputId = `pdf-file-${subject.id}`;
 
   return `
@@ -2596,6 +2856,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             <svg class="ink-layer is-live-layer" viewBox="0 0 1000 1414" preserveAspectRatio="none" aria-hidden="true" data-live-ink-layer="true"></svg>
             ${pageNotes.map((note) => renderStickyNote(subject.id, note)).join("")}
             ${pageTextBoxes.map((tb) => renderTextBox(subject.id, tb)).join("")}
+            ${pageChecklists.map((cl) => renderChecklist(subject.id, cl)).join("")}
           </div>
         </div>
 
@@ -2611,6 +2872,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             <div><dt>포스트잇</dt><dd>${workspace.stickyNotes.length}개</dd></div>
             <div><dt>펜 stroke</dt><dd>${workspace.inkStrokes.length}개</dd></div>
             <div><dt>텍스트 박스</dt><dd>${workspace.textBoxes.length}개</dd></div>
+            <div><dt>체크리스트</dt><dd>${workspace.checklists.length}개</dd></div>
             <div><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">
@@ -2709,6 +2971,7 @@ function renderPdfToolbar(
       </div>
       <div class="pdf-tool-group" role="group" aria-label="annotation 도구">
         ${renderToolButton(subjectId, "text", selectedTool, "텍스트 박스")}
+        ${renderToolButton(subjectId, "checklist", selectedTool, "체크리스트")}
       </div>
       <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가 (legacy)">
         ${renderStickyAddButton(subjectId, "text", "텍스트 (포스트잇 안)")}
@@ -2827,6 +3090,86 @@ function renderTextBox(subjectId: string, tb: PdfTextBox): string {
         placeholder="내용을 입력하세요"
       >${escapeHtml(tb.content)}</textarea>
     </article>
+  `;
+}
+
+// sprint-12/slice-3: checklist widget renderer.
+// AC9-e: label rendered via <input value="..."> DOM attribute (innerHTML 금지).
+//   escapeHtml applied on value to prevent attribute injection.
+// AC9-g: data-* attrs = id references only (data-checklist-id, data-item-id).
+//   No data-label, no title="${label}", no aria-label="${label}".
+//   Placeholder is a fixed string; label is NOT read back from DOM.
+// Drag: header bar (data-action="checklist-drag-handle") handles pointerdown.
+// Size: CSS content-based auto expand (no fixed width/height — R4 schema).
+function renderChecklist(subjectId: string, cl: PdfChecklist): string {
+  const itemsHtml = cl.items.map((item) => `
+    <li class="pdf-checklist-item" data-item-id="${item.id}">
+      <input
+        type="checkbox"
+        data-action="toggle-checklist-item"
+        data-subject-id="${subjectId}"
+        data-checklist-id="${cl.id}"
+        data-item-id="${item.id}"
+        ${item.checked ? "checked" : ""}
+      />
+      <input
+        type="text"
+        class="pdf-checklist-item-label"
+        data-action="update-checklist-item-label"
+        data-subject-id="${subjectId}"
+        data-checklist-id="${cl.id}"
+        data-item-id="${item.id}"
+        value="${escapeHtml(item.label)}"
+        placeholder="항목 이름"
+        maxlength="500"
+      />
+      <button
+        type="button"
+        class="pdf-checklist-item-delete"
+        data-action="delete-checklist-item"
+        data-subject-id="${subjectId}"
+        data-checklist-id="${cl.id}"
+        data-item-id="${item.id}"
+        aria-label="항목 삭제"
+      >✕</button>
+    </li>
+  `).join("");
+
+  return `
+    <div
+      class="pdf-checklist"
+      data-checklist-id="${cl.id}"
+      style="left: ${cl.position.x * 100}%; top: ${cl.position.y * 100}%;"
+    >
+      <div
+        class="pdf-checklist-header"
+        data-action="checklist-drag-handle"
+        data-checklist-id="${cl.id}"
+        aria-label="체크리스트 이동"
+        role="button"
+        tabindex="0"
+      >
+        <span class="pdf-checklist-title">체크리스트</span>
+        <button
+          type="button"
+          class="pdf-checklist-delete"
+          data-action="delete-checklist"
+          data-subject-id="${subjectId}"
+          data-checklist-id="${cl.id}"
+          aria-label="체크리스트 삭제"
+        >✕</button>
+      </div>
+      <ul class="pdf-checklist-items">
+        ${itemsHtml}
+      </ul>
+      <button
+        type="button"
+        class="pdf-checklist-add-item"
+        data-action="add-checklist-item"
+        data-subject-id="${subjectId}"
+        data-checklist-id="${cl.id}"
+      >+ 항목 추가</button>
+    </div>
   `;
 }
 
