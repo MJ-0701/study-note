@@ -16,6 +16,7 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { HeadObjectResult } from "@study-note/storage";
+import { ObjectNotFoundError } from "@study-note/storage";
 import { MaterialsService } from "../materials.service";
 
 // ─── Minimal type stubs ───────────────────────────────────────────────────────
@@ -240,11 +241,11 @@ describe("MaterialsService.completeUpload", () => {
     assert.equal(headObjectCalled, false, "headObject must NOT be called for already-uploaded material");
   });
 
-  it("bonus — headObject NoSuchKey → 409 UPLOAD_NOT_FOUND", async () => {
+  it("bonus — headObject ObjectNotFoundError → 409 UPLOAD_NOT_FOUND", async () => {
     const row = makeRow({ uploadStatus: "pending", fileSize: 100 });
-    const noSuchKeyError = new Error("NoSuchKey: The object does not exist");
-    noSuchKeyError.name = "NoSuchKey";
-    const service = buildService(row, noSuchKeyError, 0);
+    // ObjectNotFoundError: s3-storage / local-mock 모두 이 typed error 던짐
+    const notFoundError = new ObjectNotFoundError("users/user-001/materials/mat-001/lecture.pdf");
+    const service = buildService(row, notFoundError, 0);
 
     await assert.rejects(
       () => service.completeUpload("user-001", "mat-001"),
@@ -252,6 +253,24 @@ describe("MaterialsService.completeUpload", () => {
         assert.ok(err instanceof ConflictException, "should throw ConflictException");
         const response = (err as ConflictException).getResponse() as Record<string, unknown>;
         assert.equal(response.errorCode, "UPLOAD_NOT_FOUND");
+        return true;
+      }
+    );
+  });
+
+  it("bonus — headObject 인프라 장애 → ConflictException 아닌 원본 error rethrow", async () => {
+    const row = makeRow({ uploadStatus: "pending", fileSize: 100 });
+    // 인프라 장애 시뮬레이션: generic Error (auth / network / S3 outage)
+    const infraError = new Error("S3 endpoint unreachable");
+    const service = buildService(row, infraError, 0);
+
+    await assert.rejects(
+      () => service.completeUpload("user-001", "mat-001"),
+      (err: unknown) => {
+        // ConflictException 이 아닌 원본 error 가 rethrow 되어야 함
+        assert.ok(!(err instanceof ConflictException), "ConflictException 이어서는 안 됨");
+        assert.ok(err instanceof Error, "Error 이어야 함");
+        assert.ok((err as Error).message.includes("S3 endpoint unreachable"), "원본 메시지 보존");
         return true;
       }
     );

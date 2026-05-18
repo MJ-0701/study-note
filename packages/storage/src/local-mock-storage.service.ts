@@ -9,7 +9,7 @@ import type {
   StorageObjectOutput,
   UploadIntent
 } from "./storage.port";
-import { StoragePort } from "./storage.port";
+import { ObjectNotFoundError, StoragePort } from "./storage.port";
 
 @Injectable()
 export class LocalMockStorageService extends StoragePort {
@@ -84,7 +84,7 @@ export class LocalMockStorageService extends StoragePort {
     const object = this.objects.get(storageKey);
 
     if (!object) {
-      throw new Error(`Local mock object not found for headObject: ${storageKey}`);
+      throw new ObjectNotFoundError(storageKey);
     }
 
     return {

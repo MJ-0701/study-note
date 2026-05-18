@@ -17,7 +17,7 @@ import type {
   StorageObjectOutput,
   UploadIntent
 } from "./storage.port";
-import { StoragePort } from "./storage.port";
+import { ObjectNotFoundError, StoragePort } from "./storage.port";
 
 const TTL_SECONDS = 900; // 15 minutes — plan §R6 TTL ≤ 900
 
@@ -210,20 +210,40 @@ export class S3StorageService extends StoragePort {
   }
 
   async headObject(storageKey: string): Promise<HeadObjectResult> {
-    const result = (await this.client.send(
-      new HeadObjectCommand({
-        Bucket: this.config.bucket,
-        Key: storageKey
-      })
-    )) as {
-      ContentLength?: number;
-      ContentType?: string;
-    };
+    try {
+      const result = (await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey
+        })
+      )) as {
+        ContentLength?: number;
+        ContentType?: string;
+      };
 
-    return {
-      contentLength: result.ContentLength ?? 0,
-      contentType: result.ContentType
-    };
+      return {
+        contentLength: result.ContentLength ?? 0,
+        contentType: result.ContentType
+      };
+    } catch (err) {
+      // AWS SDK v3 HeadObjectCommand 404 식별:
+      //   - err.name === "NotFound"  (HeadObject 전용 — GetObject 는 "NoSuchKey")
+      //   - err.Code === "NoSuchKey" (일부 localstack 응답 호환)
+      //   - err.$metadata?.httpStatusCode === 404 (모든 경우 안전망)
+      const e = err as Record<string, unknown>;
+      const is404 =
+        e["name"] === "NotFound" ||
+        e["name"] === "NoSuchKey" ||
+        e["Code"] === "NoSuchKey" ||
+        (e["$metadata"] as Record<string, unknown> | undefined)?.["httpStatusCode"] === 404;
+
+      if (is404) {
+        throw new ObjectNotFoundError(storageKey);
+      }
+
+      // 인프라 장애(auth / network / 5xx) — 원본 error 그대로 rethrow
+      throw err;
+    }
   }
 
   async deleteObject(storageKey: string): Promise<void> {

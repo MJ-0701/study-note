@@ -15,7 +15,7 @@ import type {
   PdfStickyNote
 } from "@study-note/domain";
 import { PrismaService, toAnnotationPayload, toAnnotationSnapshotRecord, toPdfMaterialRecord } from "@study-note/persistence";
-import { StoragePort } from "@study-note/storage";
+import { ObjectNotFoundError, StoragePort } from "@study-note/storage";
 
 interface CreateUploadIntentInput {
   subjectId: string;
@@ -148,15 +148,22 @@ export class MaterialsService {
       const head = await this.storage.headObject(material.storageKey);
       headSize = head.contentLength;
     } catch (error) {
-      // S3 NoSuchKey: object not yet PUT or was never uploaded
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `materials.complete.size-mismatch declared=${material.fileSize} actual=not-found materialId=${materialId} reason=${msg}`
+      if (error instanceof ObjectNotFoundError) {
+        // S3 오브젝트 명시적 미존재 — 사용자 업로드 미완료로 분류
+        this.logger.warn(
+          `materials.complete.size-mismatch declared=${material.fileSize} actual=not-found materialId=${materialId} reason=${error.message}`
+        );
+        throw new ConflictException({
+          errorCode: "UPLOAD_NOT_FOUND",
+          errorMessage: "S3 object not found. The file may not have been uploaded yet."
+        });
+      }
+      // 인프라 장애 (auth / network / S3 outage / transient AWS error) — error 로그 후 rethrow
+      // Nest 기본 처리 → 500 InternalServerError (운영자 alert 트리거)
+      this.logger.error(
+        `materials.complete.headObject-failed materialId=${materialId} error=${error instanceof Error ? error.message : String(error)}`
       );
-      throw new ConflictException({
-        errorCode: "UPLOAD_NOT_FOUND",
-        errorMessage: "S3 object not found. The file may not have been uploaded yet."
-      });
+      throw error;
     }
 
     if (headSize !== material.fileSize) {

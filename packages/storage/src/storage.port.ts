@@ -1,6 +1,18 @@
 import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
 import type { Readable } from "node:stream";
 
+/**
+ * S3 오브젝트가 존재하지 않을 때 headObject/getObject 에서 던지는 typed error.
+ * 인프라 장애(5xx, auth, network)와 명시적으로 구분하기 위해 사용.
+ * 호출자는 instanceof 로 분기 후 나머지 error 는 rethrow 한다.
+ */
+export class ObjectNotFoundError extends Error {
+  constructor(public readonly storageKey: string) {
+    super(`Storage object not found: ${storageKey}`);
+    this.name = "ObjectNotFoundError";
+  }
+}
+
 export interface UploadIntent {
   method: "PUT";
   uploadUrl: string;
