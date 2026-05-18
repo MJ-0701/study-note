@@ -35,13 +35,19 @@ import {
   createInkStroke,
   createPdfMaterialFromBackend,
   createStickyNote,
+  createTextBox,
+  deleteTextBox,
   estimatePdfPageCount,
   formatPdfFileSize,
   getSubjectPdfWorkspace,
+  hydrateSubjectPdfWorkspace,
+  moveTextBox,
   normalizePdfPoint,
   pdfWorkspaceStorageKey,
+  updateTextBoxContent,
   type PdfInkPoint,
   type PdfInkStroke,
+  type PdfTextBox,
   type PdfWorkspaceStore,
   type PdfWorkspaceTool,
   type StickyNoteBlockKind,
@@ -129,6 +135,16 @@ let activeInkStroke: ActiveInkStroke | undefined;
 // sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
 // Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
 let activeEraserDrag: { subjectId: string; pointerId: number; pageNumber: number } | undefined;
+// sprint-12/slice-2: tracks an in-progress textbox drag (header pointerdown → pointerup).
+let activeTextBoxDrag: {
+  subjectId: string;
+  textBoxId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startNormX: number;
+  startNormY: number;
+} | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
@@ -357,7 +373,17 @@ function loadPdfWorkspaceStore(): PdfWorkspaceStore {
     const parsed = JSON.parse(stored) as Partial<PdfWorkspaceStore>;
 
     if (parsed.workspaces && typeof parsed.workspaces === "object") {
-      return { workspaces: parsed.workspaces as PdfWorkspaceStore["workspaces"] };
+      // sprint-12/slice-2: hydrate each workspace through fail-closed helper.
+      // corrupt entries (invalid textBoxes/checklists) are dropped per-item.
+      // sticky/ink BC: pass-through (array保証のみ).
+      const raw = parsed.workspaces as Record<string, unknown>;
+      const workspaces: PdfWorkspaceStore["workspaces"] = {};
+
+      for (const [id, entry] of Object.entries(raw)) {
+        workspaces[id] = hydrateSubjectPdfWorkspace(entry);
+      }
+
+      return { workspaces };
     }
   } catch {
     window.localStorage.removeItem(pdfWorkspaceStorageKey);
@@ -593,6 +619,19 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-12/slice-2: textbox delete button
+  if (quickNoteButton?.dataset.action === "delete-textbox") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const textBoxId = quickNoteButton.dataset.textboxId;
+
+    if (subjectId && textBoxId) {
+      removeTextBox(subjectId, textBoxId);
+      renderApp();
+    }
+
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "clear-pdf-annotations") {
     const subjectId = quickNoteButton.dataset.subjectId;
 
@@ -786,34 +825,46 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
 function handleDocumentInput(event: Event): void {
   const target = event.target;
 
-  if (
-    !(target instanceof HTMLTextAreaElement) ||
-    target.dataset.action !== "update-sticky-note"
-  ) {
+  if (!(target instanceof HTMLTextAreaElement)) {
     return;
   }
 
-  const subjectId = target.dataset.subjectId;
-  const noteId = target.dataset.noteId;
+  if (target.dataset.action === "update-sticky-note") {
+    const subjectId = target.dataset.subjectId;
+    const noteId = target.dataset.noteId;
 
-  if (!subjectId || !noteId) {
+    if (!subjectId || !noteId) {
+      return;
+    }
+
+    updatePdfWorkspace(subjectId, (workspace) => ({
+      ...workspace,
+      stickyNotes: workspace.stickyNotes.map((note) =>
+        note.id === noteId
+          ? {
+              ...note,
+              blocks: note.blocks.map((block, index) =>
+                index === 0 ? { ...block, content: target.value } : block
+              ),
+              updatedAt: new Date().toISOString()
+            }
+          : note
+      )
+    }));
+
     return;
   }
 
-  updatePdfWorkspace(subjectId, (workspace) => ({
-    ...workspace,
-    stickyNotes: workspace.stickyNotes.map((note) =>
-      note.id === noteId
-        ? {
-            ...note,
-            blocks: note.blocks.map((block, index) =>
-              index === 0 ? { ...block, content: target.value } : block
-            ),
-            updatedAt: new Date().toISOString()
-          }
-        : note
-    )
-  }));
+  // sprint-12/slice-2: textbox content update (debounced 300ms)
+  if (target.dataset.action === "update-textbox-content") {
+    const subjectId = target.dataset.subjectId;
+    const textBoxId = target.dataset.textboxId;
+
+    if (subjectId && textBoxId) {
+      // AC9-d: log action name + id only, no content
+      scheduleTextBoxContentUpdate(subjectId, textBoxId, target.value);
+    }
+  }
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -829,7 +880,40 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  if (target.closest("a, button, input, label, textarea, .sticky-note")) {
+  // sprint-12/slice-2: textbox header drag — start drag state before other early-returns.
+  const dragHandle = target.closest<HTMLElement>("[data-action='drag-textbox-handle']");
+
+  if (dragHandle) {
+    const subjectIdForDrag = surface.dataset.subjectId;
+    const textBoxIdForDrag = dragHandle.dataset.textboxId;
+
+    if (subjectIdForDrag && textBoxIdForDrag) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const tb = workspace.textBoxes.find((t) => t.id === textBoxIdForDrag);
+
+      if (tb) {
+        event.preventDefault();
+        try {
+          dragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic events may not support setPointerCapture
+        }
+        activeTextBoxDrag = {
+          subjectId: subjectIdForDrag,
+          textBoxId: textBoxIdForDrag,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startNormX: tb.position.x,
+          startNormY: tb.position.y
+        };
+      }
+    }
+
+    return;
+  }
+
+  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox")) {
     return;
   }
 
@@ -850,6 +934,14 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 
   if (material.selectedTool === "sticky") {
     addStickyNote(subjectId, "text", point);
+    renderApp();
+    event.preventDefault();
+    return;
+  }
+
+  // sprint-12/slice-2 R3: text tool — click-to-place a new textbox at the surface point.
+  if (material.selectedTool === "text") {
+    addTextBox(subjectId, point);
     renderApp();
     event.preventDefault();
     return;
@@ -912,6 +1004,36 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 }
 
 function handleDocumentPointerMove(event: PointerEvent): void {
+  // sprint-12/slice-2: textbox drag — move widget by normalized delta.
+  if (activeTextBoxDrag && activeTextBoxDrag.pointerId === event.pointerId) {
+    const { subjectId, textBoxId, startClientX, startClientY, startNormX, startNormY } = activeTextBoxDrag;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      const dy = (event.clientY - startClientY) / rect.height;
+      applyTextBoxMove(subjectId, textBoxId, { x: startNormX + dx, y: startNormY + dy });
+      // re-render cheaply: update DOM position directly to avoid full renderApp on every move.
+      const el = document.querySelector<HTMLElement>(`[data-textbox-id="${textBoxId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const tb = workspace.textBoxes.find((t) => t.id === textBoxId);
+
+        if (tb) {
+          el.style.left = `${tb.position.x * 100}%`;
+          el.style.top = `${tb.position.y * 100}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
@@ -949,6 +1071,13 @@ function handleDocumentPointerMove(event: PointerEvent): void {
 }
 
 function handleDocumentPointerUp(event: PointerEvent): void {
+  // sprint-12/slice-2: clear textbox drag state on pointer release.
+  if (activeTextBoxDrag && activeTextBoxDrag.pointerId === event.pointerId) {
+    activeTextBoxDrag = undefined;
+    renderApp(); // final re-render to settle position
+    return;
+  }
+
   // R10-c: clear eraser drag state on pointer release.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     activeEraserDrag = undefined;
@@ -1228,14 +1357,20 @@ function updateLiveStroke(): void {
   );
 }
 
-// sprint-11/slice-2: "eraser" extends the domain-level PdfWorkspaceTool locally.
-// packages/domain is whitelist-excluded, so we widen here without touching the package.
-// sprint-12 reserved tools: "text" | "checklist" | "table" | "chart" (실 기능 분리 예정).
-//                           현재는 sticky kind variant 로 잔존 (text/checklist/table/chart-note).
-type LocalPdfTool = PdfWorkspaceTool | "eraser";
+// sprint-12/slice-2: domain PdfWorkspaceTool union now includes "eraser" | "text" | "checklist".
+// LocalPdfTool is now an alias for the domain union (redundant "| eraser" dropped).
+// sprint-13 reserved tools: "table" | "chart" (실 기능 분리 예정).
+type LocalPdfTool = PdfWorkspaceTool;
 
 function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
-  return tool === "read" || tool === "sticky" || tool === "pen" || tool === "eraser";
+  return (
+    tool === "read" ||
+    tool === "sticky" ||
+    tool === "pen" ||
+    tool === "eraser" ||
+    tool === "text" ||
+    tool === "checklist"
+  );
 }
 
 /**
@@ -1435,6 +1570,64 @@ function setPdfTool(subjectId: string, tool: LocalPdfTool): void {
       }
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// sprint-12/slice-2 — PdfTextBox store operations
+// Pattern mirrors addStickyNote / deleteStickyNote above.
+// ---------------------------------------------------------------------------
+
+function addTextBox(
+  subjectId: string,
+  position: { x: number; y: number }
+): void {
+  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const page = workspace.material?.selectedPage ?? 1;
+  const textBox = createTextBox({ subjectId, page, position });
+
+  updatePdfWorkspace(subjectId, (current) => ({
+    ...current,
+    textBoxes: [...current.textBoxes, textBox]
+  }));
+}
+
+function removeTextBox(subjectId: string, textBoxId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    textBoxes: deleteTextBox(workspace.textBoxes, textBoxId)
+  }));
+}
+
+// debounce handle for textbox content update — avoids store write on every keystroke.
+let textBoxContentDebounce: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleTextBoxContentUpdate(
+  subjectId: string,
+  textBoxId: string,
+  content: string
+): void {
+  clearTimeout(textBoxContentDebounce);
+  textBoxContentDebounce = setTimeout(() => {
+    updatePdfWorkspace(subjectId, (workspace) => ({
+      ...workspace,
+      textBoxes: workspace.textBoxes.map((tb) =>
+        tb.id === textBoxId ? updateTextBoxContent(tb, content) : tb
+      )
+    }));
+  }, 300);
+}
+
+function applyTextBoxMove(
+  subjectId: string,
+  textBoxId: string,
+  position: { x: number; y: number }
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    textBoxes: workspace.textBoxes.map((tb) =>
+      tb.id === textBoxId ? moveTextBox(tb, position) : tb
+    )
+  }));
 }
 
 function addStickyNote(
@@ -2315,6 +2508,10 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const pageStrokes = workspace.inkStrokes.filter(
     (stroke) => stroke.pageNumber === selectedPage
   );
+  // sprint-12/slice-2: filter textboxes for current page
+  const pageTextBoxes = workspace.textBoxes.filter(
+    (tb) => tb.page === selectedPage
+  );
   const inputId = `pdf-file-${subject.id}`;
 
   return `
@@ -2398,6 +2595,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             </svg>
             <svg class="ink-layer is-live-layer" viewBox="0 0 1000 1414" preserveAspectRatio="none" aria-hidden="true" data-live-ink-layer="true"></svg>
             ${pageNotes.map((note) => renderStickyNote(subject.id, note)).join("")}
+            ${pageTextBoxes.map((tb) => renderTextBox(subject.id, tb)).join("")}
           </div>
         </div>
 
@@ -2412,6 +2610,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           <dl>
             <div><dt>포스트잇</dt><dd>${workspace.stickyNotes.length}개</dd></div>
             <div><dt>펜 stroke</dt><dd>${workspace.inkStrokes.length}개</dd></div>
+            <div><dt>텍스트 박스</dt><dd>${workspace.textBoxes.length}개</dd></div>
             <div><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">
@@ -2508,9 +2707,12 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "pen", selectedTool, "펜")}
         ${renderToolButton(subjectId, "eraser", selectedTool, "지우개")}
       </div>
-      <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가">
-        ${renderStickyAddButton(subjectId, "text", "텍스트")}
-        ${renderStickyAddButton(subjectId, "checklist", "체크")}
+      <div class="pdf-tool-group" role="group" aria-label="annotation 도구">
+        ${renderToolButton(subjectId, "text", selectedTool, "텍스트 박스")}
+      </div>
+      <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가 (legacy)">
+        ${renderStickyAddButton(subjectId, "text", "텍스트 (포스트잇 안)")}
+        ${renderStickyAddButton(subjectId, "checklist", "체크 (포스트잇 안)")}
         ${renderStickyAddButton(subjectId, "table", "표")}
         ${renderStickyAddButton(subjectId, "chart-note", "그래프")}
       </div>
@@ -2585,6 +2787,45 @@ function renderStickyNote(subjectId: string, note: SubjectPdfWorkspace["stickyNo
         data-subject-id="${subjectId}"
         data-note-id="${note.id}"
       >${escapeHtml(block.content)}</textarea>
+    </article>
+  `;
+}
+
+// sprint-12/slice-2 R3: textbox widget renderer.
+// AC9-e: content rendered via textarea.value (innerHTML 금지).
+// AC9-g: data-textbox-id only; content not exposed in data-*, title, aria-label.
+// Drag: header bar handles pointerdown for drag. Body = textarea for editing.
+function renderTextBox(subjectId: string, tb: PdfTextBox): string {
+  return `
+    <article
+      class="pdf-textbox"
+      style="left: ${tb.position.x * 100}%; top: ${tb.position.y * 100}%; width: ${tb.size.width * 100}%; height: ${tb.size.height * 100}%;"
+      data-textbox-id="${tb.id}"
+    >
+      <div
+        class="pdf-textbox-header"
+        data-action="drag-textbox-handle"
+        data-textbox-id="${tb.id}"
+        aria-label="텍스트 박스 이동"
+        role="button"
+        tabindex="0"
+      >
+        <span>텍스트 박스</span>
+        <button
+          type="button"
+          aria-label="텍스트 박스 삭제"
+          data-action="delete-textbox"
+          data-subject-id="${subjectId}"
+          data-textbox-id="${tb.id}"
+        >×</button>
+      </div>
+      <textarea
+        class="pdf-textbox-body"
+        data-action="update-textbox-content"
+        data-subject-id="${subjectId}"
+        data-textbox-id="${tb.id}"
+        placeholder="내용을 입력하세요"
+      >${escapeHtml(tb.content)}</textarea>
     </article>
   `;
 }
@@ -3160,7 +3401,9 @@ function formatPdfTool(tool: LocalPdfTool): string {
     read: "읽기",
     sticky: "포스트잇",
     pen: "펜",
-    eraser: "지우개"
+    eraser: "지우개",
+    text: "텍스트 박스",
+    checklist: "체크리스트"
   };
 
   return labels[tool];

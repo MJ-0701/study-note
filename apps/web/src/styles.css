@@ -1395,6 +1395,82 @@ p {
   resize: vertical;
 }
 
+/* sprint-12/slice-2 R3: text tool cursor — crosshair to indicate click-to-place. */
+.pdf-annotation-surface.is-text-mode {
+  cursor: text;
+  pointer-events: auto;
+}
+
+/* sprint-12/slice-2 R3: textbox widget.
+   - position: absolute (relative to annotation surface).
+   - drag handle = header bar; body = textarea.
+   - touch-action: none on header prevents scroll conflict (AC §위험-5). */
+.pdf-textbox {
+  background: #f0f7ff;
+  border: 1px solid #8ab4e8;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 80px;
+  min-width: 140px;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-textbox-header {
+  align-items: center;
+  background: #d0e8ff;
+  border-bottom: 1px solid #8ab4e8;
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-textbox-header:active {
+  cursor: grabbing;
+}
+
+.pdf-textbox-header span {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+.pdf-textbox-header button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.pdf-textbox-header button:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-textbox-body {
+  background: transparent;
+  border: 0;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-height: 60px;
+  outline: 0;
+  padding: 6px 8px;
+  resize: none;
+}
+
 /* sprint-11/slice-1 R1: inspector aside — collapsed hides from layout flow. */
 .pdf-inspector {
   align-self: start;
