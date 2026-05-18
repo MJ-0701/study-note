@@ -1520,12 +1520,9 @@ body[data-route="pdf-workspace"] .content {
     min-height: 560px;
   }
 
-  /* sprint-11/slice-3 R8: 모바일에서 inspector toggle 버튼 숨김 (옵션 A).
-     pdf-workspace-layout 이 단일 컬럼 강제이므로 toggle 은 의미 없음.
-     모바일 inspector UX 는 sprint-12 후속 작업. */
-  .pdf-inspector-toggle {
-    display: none;
-  }
+  /* sprint-11/codex-P1: 모바일에서 inspector toggle 노출 유지.
+     toggle 숨김 시 inspector content (메모/필기 전체 지우기 등) 접근 불가 → 제거.
+     inspector aside 는 단일 컬럼 스택 그대로; toggle 클릭으로 펼침 가능. */
 }
 
 @media (max-width: 1100px) and (min-width: 821px) {
