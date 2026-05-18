@@ -1228,7 +1228,8 @@ function updateLiveStroke(): void {
 
 // sprint-11/slice-2: "eraser" extends the domain-level PdfWorkspaceTool locally.
 // packages/domain is whitelist-excluded, so we widen here without touching the package.
-// sprint-12 reserved: "text" | "checklist" | "table" | "chart" will be added to the domain type.
+// sprint-12 reserved tools: "text" | "checklist" | "table" | "chart" (실 기능 분리 예정).
+//                           현재는 sticky kind variant 로 잔존 (text/checklist/table/chart-note).
 type LocalPdfTool = PdfWorkspaceTool | "eraser";
 
 function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
