@@ -1243,6 +1243,108 @@ p {
   color: var(--ds-bg);
 }
 
+/* sprint-11/slice-2 R4-c: sticky kind selection modal overlay + dialog.
+   position:fixed — rendered inside pdf-workspace section but visually full-screen. */
+.sticky-kind-overlay {
+  align-items: center;
+  background: rgb(0 0 0 / 0.45);
+  cursor: pointer;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 200;
+}
+
+.sticky-kind-dialog {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.18);
+  cursor: default;
+  max-width: 400px;
+  padding: var(--ds-space-md);
+  width: calc(100% - 2 * var(--ds-space-md));
+}
+
+.sticky-kind-dialog__header {
+  align-items: center;
+  display: flex;
+  gap: var(--ds-space-xs);
+  justify-content: space-between;
+  margin-bottom: var(--ds-space-xs);
+}
+
+.sticky-kind-dialog__title {
+  font-size: var(--ds-fs-h3);
+  font-weight: 700;
+  margin: 0;
+}
+
+.sticky-kind-close {
+  background: none;
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  line-height: 1;
+  min-height: 32px;
+  padding: 4px 8px;
+}
+
+.sticky-kind-close:hover {
+  background: var(--ds-bg-soft);
+  color: var(--ds-fg);
+}
+
+.sticky-kind-dialog__hint {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  margin: 0 0 var(--ds-space-md);
+}
+
+.sticky-kind-options {
+  display: grid;
+  gap: var(--ds-space-xs);
+  grid-template-columns: 1fr 1fr;
+}
+
+.sticky-kind-option {
+  align-items: flex-start;
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 2px;
+  min-height: 64px;
+  padding: var(--ds-space-sm);
+  text-align: left;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.sticky-kind-option:hover,
+.sticky-kind-option:focus-visible {
+  background: var(--ds-accent-soft);
+  border-color: var(--ds-accent);
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 1px;
+}
+
+.sticky-kind-option__label {
+  font-size: var(--ds-fs-body);
+  font-weight: 600;
+}
+
+.sticky-kind-option__desc {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+}
+
 /* sprint-11/slice-1 R1: inspector collapse toggle.
    Default (접힘) = single column. Expanded = slim inspector 220-260px. */
 .pdf-workspace-layout {
