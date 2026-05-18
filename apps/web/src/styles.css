@@ -1243,6 +1243,69 @@ p {
   color: var(--ds-bg);
 }
 
+.pdf-eraser-subtoolbar {
+  align-items: center;
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: var(--ds-space-sm);
+  padding: 8px 10px;
+}
+
+.pdf-eraser-shape-picker {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-xs);
+}
+
+.eraser-shape-button {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  min-height: 36px;
+  padding: 6px 10px;
+}
+
+.eraser-shape-button:hover {
+  background: #eef6ff;
+}
+
+.eraser-shape-button.active {
+  background: var(--ds-accent);
+  border-color: var(--ds-accent);
+  color: #fff;
+}
+
+.pdf-eraser-size-control {
+  align-items: center;
+  color: var(--ds-fg);
+  display: inline-flex;
+  flex: 1 1 260px;
+  gap: var(--ds-space-sm);
+  min-width: min(100%, 240px);
+}
+
+.pdf-eraser-size-control span {
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pdf-eraser-size-control input {
+  accent-color: var(--ds-accent);
+  flex: 1;
+  min-width: 140px;
+}
+
 /* sprint-11/slice-1 R1: inspector collapse toggle.
    Default (접힘) = single column. Expanded = slim inspector 220-260px. */
 .pdf-workspace-layout {
@@ -1318,11 +1381,10 @@ p {
   touch-action: none;
 }
 
-/* sprint-11/slice-2-refine R10-a: eraser tool — round SVG circle cursor (radius 16px outline).
-   Percent-encoded for Firefox compatibility. Hot-spot at center (17,17) so the erase circle
-   aligns with the pointer tip. touch-action: none required for drag erase on touch devices. */
+/* sprint-12/slice-4: eraser cursor is an inline SVG data URL from main.ts (shape × size).
+   CSS keeps the interaction flags and a crosshair fallback only. */
 .pdf-annotation-surface.is-eraser-mode {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='34'%3E%3Ccircle cx='17' cy='17' r='16' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") 17 17, crosshair;
+  cursor: crosshair;
   pointer-events: auto;
   touch-action: none;
 }

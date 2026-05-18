@@ -31,6 +31,9 @@ import {
   deleteChecklistItem,
   moveChecklist,
   deleteChecklist,
+  // Eraser
+  setEraserShape,
+  setEraserSize,
   // Hydration
   hydrateSubjectPdfWorkspace,
   createEmptyPdfWorkspace,
@@ -352,6 +355,42 @@ describe("R4: PdfChecklist reducers", () => {
 });
 
 // ---------------------------------------------------------------------------
+// R5 — Eraser reducers
+// ---------------------------------------------------------------------------
+describe("R5: Eraser reducers", () => {
+  it("setEraserShape: shape 값 갱신", () => {
+    const ws = createEmptyPdfWorkspace("sub-eraser");
+    const updated = setEraserShape(ws, "square");
+    assert.equal(updated.eraserShape, "square");
+    assert.equal(ws.eraserShape, "circle", "원본 불변");
+  });
+
+  it("setEraserSize: 16..64 범위 안 값 보존", () => {
+    const ws = createEmptyPdfWorkspace("sub-eraser");
+    const updated = setEraserSize(ws, 32);
+    assert.equal(updated.eraserSize, 32);
+  });
+
+  it("setEraserSize: 8 → 16 clamp", () => {
+    const ws = createEmptyPdfWorkspace("sub-eraser");
+    const updated = setEraserSize(ws, 8);
+    assert.equal(updated.eraserSize, 16);
+  });
+
+  it("setEraserSize: 80 → 64 clamp", () => {
+    const ws = createEmptyPdfWorkspace("sub-eraser");
+    const updated = setEraserSize(ws, 80);
+    assert.equal(updated.eraserSize, 64);
+  });
+
+  it("setEraserSize: NaN → 16 default", () => {
+    const ws = createEmptyPdfWorkspace("sub-eraser");
+    const updated = setEraserSize(ws, Number.NaN);
+    assert.equal(updated.eraserSize, 16);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AC9-c — hydration fail-closed
 // ---------------------------------------------------------------------------
 describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
@@ -362,6 +401,8 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.deepEqual(result.checklists, []);
     assert.deepEqual(result.stickyNotes, []);
     assert.deepEqual(result.inkStrokes, []);
+    assert.equal(result.eraserShape, "circle");
+    assert.equal(result.eraserSize, 16);
   });
 
   it("undefined → empty state", () => {
@@ -413,6 +454,58 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.equal(result.inkStrokes.length, 1);
     assert.deepEqual(result.textBoxes, []);
     assert.deepEqual(result.checklists, []);
+    assert.equal(result.eraserShape, "circle");
+    assert.equal(result.eraserSize, 16);
+  });
+
+  it("eraserShape unknown → circle default", () => {
+    const raw = {
+      ...buildStateWithTextBoxes([]),
+      eraserShape: "hexagon",
+      eraserSize: 32,
+    };
+    const result = hydrateSubjectPdfWorkspace(raw);
+    assert.equal(result.eraserShape, "circle");
+    assert.equal(result.eraserSize, 32);
+  });
+
+  it("eraserShape valid values → 보존", () => {
+    for (const shape of ["circle", "square", "triangle", "line"] as const) {
+      const result = hydrateSubjectPdfWorkspace({
+        ...buildStateWithTextBoxes([]),
+        eraserShape: shape,
+        eraserSize: 32,
+      });
+      assert.equal(result.eraserShape, shape);
+    }
+  });
+
+  it("eraserSize NaN/non-number → 16 default", () => {
+    const resultNaN = hydrateSubjectPdfWorkspace({
+      ...buildStateWithTextBoxes([]),
+      eraserSize: Number.NaN,
+    });
+    assert.equal(resultNaN.eraserSize, 16);
+
+    const resultString = hydrateSubjectPdfWorkspace({
+      ...buildStateWithTextBoxes([]),
+      eraserSize: "32",
+    });
+    assert.equal(resultString.eraserSize, 16);
+  });
+
+  it("eraserSize out-of-range → 16..64 clamp", () => {
+    const tooSmall = hydrateSubjectPdfWorkspace({
+      ...buildStateWithTextBoxes([]),
+      eraserSize: 8,
+    });
+    assert.equal(tooSmall.eraserSize, 16);
+
+    const tooLarge = hydrateSubjectPdfWorkspace({
+      ...buildStateWithTextBoxes([]),
+      eraserSize: 80,
+    });
+    assert.equal(tooLarge.eraserSize, 64);
   });
 
   // --- textBox 검증 ---
@@ -605,6 +698,8 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
       subjectId: "sub-round",
       stickyNotes: [],
       inkStrokes: [],
+      eraserShape: "triangle",
+      eraserSize: 40,
       textBoxes: [
         {
           id: "textbox-1",
@@ -632,6 +727,8 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
       updatedAt: now,
     };
     const result = hydrateSubjectPdfWorkspace(raw);
+    assert.equal(result.eraserShape, "triangle");
+    assert.equal(result.eraserSize, 40);
     assert.equal(result.textBoxes.length, 1);
     const tb = result.textBoxes[0];
     assert.ok(tb !== undefined);
@@ -650,12 +747,14 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
 // createEmptyPdfWorkspace — sprint-12 확장 검증
 // ---------------------------------------------------------------------------
 describe("createEmptyPdfWorkspace: sprint-12 확장", () => {
-  it("textBoxes + checklists 가 빈 배열로 초기화됨", () => {
+  it("textBoxes + checklists + eraser defaults 가 초기화됨", () => {
     const ws = createEmptyPdfWorkspace("sub-test");
     assert.deepEqual(ws.textBoxes, []);
     assert.deepEqual(ws.checklists, []);
     assert.deepEqual(ws.stickyNotes, []);
     assert.deepEqual(ws.inkStrokes, []);
+    assert.equal(ws.eraserShape, "circle");
+    assert.equal(ws.eraserSize, 16);
     assert.equal(ws.subjectId, "sub-test");
   });
 });

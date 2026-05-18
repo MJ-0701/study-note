@@ -12,6 +12,8 @@ export type PdfWorkspaceTool =
   | "text"
   | "checklist";
 
+export type PdfEraserShape = "circle" | "square" | "triangle" | "line";
+
 export type StickyNoteBlockKind = "text" | "checklist" | "table" | "chart-note";
 
 export interface NormalizedPoint {
@@ -138,6 +140,8 @@ export interface SubjectPdfWorkspace {
   material?: PdfMaterialDraft;
   stickyNotes: PdfStickyNote[];
   inkStrokes: PdfInkStroke[];
+  eraserShape: PdfEraserShape;
+  eraserSize: number;
   // sprint-12 신규 슬라이스
   textBoxes: PdfTextBox[];
   checklists: PdfChecklist[];
@@ -149,12 +153,18 @@ export interface PdfWorkspaceStore {
 }
 
 export const pdfWorkspaceStorageKey = "study-note.pdf-workspaces.v1";
+const DEFAULT_ERASER_SHAPE: PdfEraserShape = "circle";
+const DEFAULT_ERASER_SIZE = 16;
+const MIN_ERASER_SIZE = 16;
+const MAX_ERASER_SIZE = 64;
 
 export function createEmptyPdfWorkspace(subjectId: string): SubjectPdfWorkspace {
   return {
     subjectId,
     stickyNotes: [],
     inkStrokes: [],
+    eraserShape: DEFAULT_ERASER_SHAPE,
+    eraserSize: DEFAULT_ERASER_SIZE,
     textBoxes: [],
     checklists: [],
     updatedAt: new Date().toISOString()
@@ -478,6 +488,49 @@ export function deleteChecklist(
 }
 
 // ---------------------------------------------------------------------------
+// sprint-12/slice-4 — Eraser widget reducers
+// ---------------------------------------------------------------------------
+
+function normalizeEraserShape(shape: unknown): PdfEraserShape {
+  return shape === "square" ||
+    shape === "triangle" ||
+    shape === "line" ||
+    shape === "circle"
+    ? shape
+    : DEFAULT_ERASER_SHAPE;
+}
+
+function normalizeEraserSize(size: unknown): number {
+  if (typeof size !== "number" || !Number.isFinite(size)) {
+    return DEFAULT_ERASER_SIZE;
+  }
+
+  return Math.min(MAX_ERASER_SIZE, Math.max(MIN_ERASER_SIZE, size));
+}
+
+export function setEraserShape(
+  workspace: SubjectPdfWorkspace,
+  shape: PdfEraserShape
+): SubjectPdfWorkspace {
+  return {
+    ...workspace,
+    eraserShape: normalizeEraserShape(shape),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function setEraserSize(
+  workspace: SubjectPdfWorkspace,
+  size: number
+): SubjectPdfWorkspace {
+  return {
+    ...workspace,
+    eraserSize: normalizeEraserSize(size),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+// ---------------------------------------------------------------------------
 // sprint-12 AC9-c — hydration fail-closed helper (R5)
 //
 // hydrateSubjectPdfWorkspace(raw): SubjectPdfWorkspace
@@ -671,6 +724,8 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
     material,
     stickyNotes,
     inkStrokes,
+    eraserShape: normalizeEraserShape(r.eraserShape),
+    eraserSize: normalizeEraserSize(r.eraserSize),
     textBoxes,
     checklists,
     updatedAt

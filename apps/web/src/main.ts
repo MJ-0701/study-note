@@ -49,6 +49,8 @@ import {
   moveTextBox,
   normalizePdfPoint,
   pdfWorkspaceStorageKey,
+  setEraserShape,
+  setEraserSize,
   toggleChecklistCollapsed,
   toggleChecklistItem,
   updateChecklistItemLabel,
@@ -143,7 +145,12 @@ const failedPdfPreviewLoadKeys = new Set<string>();
 let activeInkStroke: ActiveInkStroke | undefined;
 // sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
 // Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
-let activeEraserDrag: { subjectId: string; pointerId: number; pageNumber: number } | undefined;
+let activeEraserDrag: {
+  subjectId: string;
+  pointerId: number;
+  pageNumber: number;
+  dragPath: EraserDragPoint[];
+} | undefined;
 // sprint-12/slice-2: tracks an in-progress textbox drag (header pointerdown → pointerup).
 let activeTextBoxDrag: {
   subjectId: string;
@@ -468,6 +475,17 @@ function handleDocumentChange(event: Event): void {
     return;
   }
 
+  if (target.dataset.action === "set-eraser-size") {
+    const subjectId = target.dataset.subjectId;
+
+    if (subjectId) {
+      applySetEraserSize(subjectId, Number(target.value));
+      renderApp();
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3: checklist item checkbox toggle
   if (target.dataset.action === "toggle-checklist-item") {
     const subjectId = target.dataset.subjectId;
@@ -601,6 +619,18 @@ function handleDocumentClick(event: MouseEvent): void {
 
     if (subjectId && isPdfWorkspaceTool(tool)) {
       setPdfTool(subjectId, tool);
+      renderApp();
+    }
+
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "set-eraser-shape") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const shape = quickNoteButton.dataset.eraserShape as EraserShape | undefined;
+
+    if (subjectId && isEraserShape(shape)) {
+      applySetEraserShape(subjectId, shape);
       renderApp();
     }
 
@@ -923,6 +953,17 @@ function handleDocumentInput(event: Event): void {
     return;
   }
 
+  if (target.dataset.action === "set-eraser-size") {
+    const subjectId = target.dataset.subjectId;
+
+    if (subjectId) {
+      applySetEraserSize(subjectId, Number(target.value));
+      renderApp();
+    }
+
+    return;
+  }
+
   if (target.dataset.action === "update-sticky-note") {
     const subjectId = target.dataset.subjectId;
     const noteId = target.dataset.noteId;
@@ -1100,11 +1141,11 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   }
 
   // sprint-11/slice-2-refine R10-b/c: eraser drag — px-accurate point erasure.
-  // codex P2: hit-test in pixel space so erase area = circle (not ellipse on A4 surfaces).
-  // ERASER_RADIUS_PX = 16 matches SVG cursor circle (r=16, 34×34 svg, hotspot 17 17).
+  // sprint-12/slice-4: shape/size-driven hit-test in pixel space.
   if ((material.selectedTool as LocalPdfTool) === "eraser") {
     const pageNumber = material.selectedPage;
-    const ERASER_RADIUS_PX = 16; // screen pixels — matches SVG cursor radius
+    const eraserShape = workspace.eraserShape;
+    const eraserSize = workspace.eraserSize;
 
     event.preventDefault();
     try {
@@ -1114,10 +1155,25 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     }
 
     // R10-c: register eraser drag state before applying first erase.
-    activeEraserDrag = { subjectId, pointerId: event.pointerId, pageNumber };
+    activeEraserDrag = {
+      subjectId,
+      pointerId: event.pointerId,
+      pageNumber,
+      dragPath: [point]
+    };
 
     const rect = surface.getBoundingClientRect();
-    applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS_PX, rect.width, rect.height);
+    applyEraserAtPoint(
+      subjectId,
+      pageNumber,
+      eraserShape,
+      point.x,
+      point.y,
+      eraserSize,
+      rect.width,
+      rect.height,
+      activeEraserDrag.dragPath
+    );
     return;
   }
 
@@ -1219,7 +1275,6 @@ function handleDocumentPointerMove(event: PointerEvent): void {
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
-    const ERASER_RADIUS_PX = 16; // screen pixels — matches SVG cursor radius
 
     const surface = document.querySelector<HTMLElement>(
       `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
@@ -1229,7 +1284,26 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       event.preventDefault();
       const rect = surface.getBoundingClientRect();
       const point = getSurfacePoint(event, surface);
-      applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS_PX, rect.width, rect.height);
+      activeEraserDrag.dragPath.push(point);
+
+      if (activeEraserDrag.dragPath.length > ERASER_LINE_SEGMENT_CAP + 1) {
+        activeEraserDrag.dragPath = activeEraserDrag.dragPath.slice(
+          -(ERASER_LINE_SEGMENT_CAP + 1)
+        );
+      }
+
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+      applyEraserAtPoint(
+        subjectId,
+        pageNumber,
+        workspace.eraserShape,
+        point.x,
+        point.y,
+        workspace.eraserSize,
+        rect.width,
+        rect.height,
+        activeEraserDrag.dragPath
+      );
     }
 
     return;
@@ -1550,6 +1624,10 @@ function updateLiveStroke(): void {
 // LocalPdfTool is now an alias for the domain union (redundant "| eraser" dropped).
 // sprint-13 reserved tools: "table" | "chart" (실 기능 분리 예정).
 type LocalPdfTool = PdfWorkspaceTool;
+type EraserShape = "circle" | "square" | "triangle" | "line";
+type EraserDragPoint = { x: number; y: number };
+
+const ERASER_LINE_SEGMENT_CAP = 50;
 
 function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
   return (
@@ -1562,52 +1640,86 @@ function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
   );
 }
 
-/**
- * R10-b: Erase ink points within `radiusPx` of (cx, cy) in pixel space, splitting strokes
- * as needed.
- *
- * Algorithm: O(S × P) where S = stroke count, P = max points per stroke.
- * Coordinates are stored normalized (0..1); hit-test converts each point to pixel space
- * by multiplying by surfaceWidth/surfaceHeight before comparing with radiusPx. This
- * ensures the erase area is a circle in screen pixels (matching the SVG cursor circle)
- * rather than a circle in normalized space (which would be an ellipse on non-square
- * surfaces such as A4 = 1:√2).
- *
- * Consecutive surviving points form a new segment. A segment with fewer than 2 points
- * carries no drawing meaning and is dropped. Strokes with no points in radius are
- * returned unchanged (same reference).
- *
- * Split ID rule: each surviving segment takes id `${origId}-s${segmentIndex}`.
- * Re-erasing a split segment produces ids like `foo-s0-s0`, `foo-s0-s1` — the
- * original id prefix is always preserved as a searchable substring.
- *
- * @param strokes       — current page ink strokes (normalized 0..1 coordinates)
- * @param cx            — erase center x (normalized 0..1)
- * @param cy            — erase center y (normalized 0..1)
- * @param radiusPx      — erase radius in screen pixels (matches SVG cursor radius = 16)
- * @param surfaceWidth  — surface element width in pixels (getBoundingClientRect().width)
- * @param surfaceHeight — surface element height in pixels (getBoundingClientRect().height)
- */
-function eraseStrokePointsInRadius(
+function isEraserShape(shape: string | undefined): shape is EraserShape {
+  return (
+    shape === "circle" ||
+    shape === "square" ||
+    shape === "triangle" ||
+    shape === "line"
+  );
+}
+
+interface PixelPoint {
+  x: number;
+  y: number;
+}
+
+interface PixelSegment {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+}
+
+interface PixelBBox {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+function eraseStrokePointsByShape(
   strokes: PdfInkStroke[],
+  shape: EraserShape,
   cx: number,
   cy: number,
-  radiusPx: number,
+  size: number,
   surfaceWidth: number,
-  surfaceHeight: number
+  surfaceHeight: number,
+  dragPath?: readonly EraserDragPoint[]
 ): PdfInkStroke[] {
   const result: PdfInkStroke[] = [];
-  const r2 = radiusPx * radiusPx;
+  const safeSize = Number.isFinite(size) ? Math.min(64, Math.max(16, size)) : 16;
+  const halfSize = safeSize / 2;
+  const cxPx = cx * surfaceWidth;
+  const cyPx = cy * surfaceHeight;
+  const circleR2 = halfSize * halfSize;
+  const lineHit =
+    shape === "line"
+      ? buildLineHitState(dragPath, surfaceWidth, surfaceHeight, halfSize)
+      : undefined;
 
   for (const stroke of strokes) {
+    if (shape === "line") {
+      if (!lineHit) {
+        result.push(stroke);
+        continue;
+      }
+
+      const strokeBbox = getStrokePixelBBox(stroke, surfaceWidth, surfaceHeight);
+
+      if (!strokeBbox || !bboxIntersects(strokeBbox, lineHit.bbox)) {
+        result.push(stroke);
+        continue;
+      }
+    }
+
     // Fast path: check if ANY point is within radiusPx before splitting.
     let hasHit = false;
 
     for (const pt of stroke.points) {
-      const dxPx = (pt.x - cx) * surfaceWidth;
-      const dyPx = (pt.y - cy) * surfaceHeight;
-
-      if (dxPx * dxPx + dyPx * dyPx <= r2) {
+      if (isPointHitByEraserShape(
+        pt,
+        shape,
+        cxPx,
+        cyPx,
+        halfSize,
+        circleR2,
+        safeSize,
+        surfaceWidth,
+        surfaceHeight,
+        lineHit?.segments
+      )) {
         hasHit = true;
         break;
       }
@@ -1625,11 +1737,20 @@ function eraseStrokePointsInRadius(
     let current: PdfInkPoint[] = [];
 
     for (const pt of stroke.points) {
-      const dxPx = (pt.x - cx) * surfaceWidth;
-      const dyPx = (pt.y - cy) * surfaceHeight;
-      const inRadius = dxPx * dxPx + dyPx * dyPx <= r2;
+      const inShape = isPointHitByEraserShape(
+        pt,
+        shape,
+        cxPx,
+        cyPx,
+        halfSize,
+        circleR2,
+        safeSize,
+        surfaceWidth,
+        surfaceHeight,
+        lineHit?.segments
+      );
 
-      if (inRadius) {
+      if (inShape) {
         // Erased point — flush current segment.
         if (current.length > 0) {
           segments.push(current);
@@ -1661,6 +1782,212 @@ function eraseStrokePointsInRadius(
   return result;
 }
 
+function eraseStrokePointsInRadius(
+  strokes: PdfInkStroke[],
+  cx: number,
+  cy: number,
+  radiusPx: number,
+  surfaceWidth: number,
+  surfaceHeight: number
+): PdfInkStroke[] {
+  return eraseStrokePointsByShape(
+    strokes,
+    "circle",
+    cx,
+    cy,
+    radiusPx * 2,
+    surfaceWidth,
+    surfaceHeight
+  );
+}
+
+function isPointHitByEraserShape(
+  pt: PdfInkPoint,
+  shape: EraserShape,
+  cxPx: number,
+  cyPx: number,
+  halfSize: number,
+  circleR2: number,
+  size: number,
+  surfaceWidth: number,
+  surfaceHeight: number,
+  lineSegments?: readonly PixelSegment[]
+): boolean {
+  const px = pt.x * surfaceWidth;
+  const py = pt.y * surfaceHeight;
+  const dxPx = px - cxPx;
+  const dyPx = py - cyPx;
+
+  if (shape === "circle") {
+    return dxPx * dxPx + dyPx * dyPx <= circleR2;
+  }
+
+  if (shape === "square") {
+    return Math.abs(dxPx) <= halfSize && Math.abs(dyPx) <= halfSize;
+  }
+
+  if (shape === "triangle") {
+    return isPointInEraserTriangle({ x: px, y: py }, cxPx, cyPx, size);
+  }
+
+  if (!lineSegments || lineSegments.length === 0) {
+    return false;
+  }
+
+  for (const segment of lineSegments) {
+    if (distancePointToSegmentSq(px, py, segment) <= circleR2) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isPointInEraserTriangle(
+  point: PixelPoint,
+  cxPx: number,
+  cyPx: number,
+  size: number
+): boolean {
+  const height = size * Math.sqrt(3) / 2;
+  const a = { x: cxPx, y: cyPx - height * 2 / 3 };
+  const b = { x: cxPx - size / 2, y: cyPx + height / 3 };
+  const c = { x: cxPx + size / 2, y: cyPx + height / 3 };
+  const denominator =
+    (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+
+  if (denominator === 0) {
+    return false;
+  }
+
+  const alpha =
+    ((b.y - c.y) * (point.x - c.x) + (c.x - b.x) * (point.y - c.y)) /
+    denominator;
+  const beta =
+    ((c.y - a.y) * (point.x - c.x) + (a.x - c.x) * (point.y - c.y)) /
+    denominator;
+  const gamma = 1 - alpha - beta;
+  const epsilon = -1e-9;
+
+  return alpha >= epsilon && beta >= epsilon && gamma >= epsilon;
+}
+
+function buildLineHitState(
+  dragPath: readonly EraserDragPoint[] | undefined,
+  surfaceWidth: number,
+  surfaceHeight: number,
+  radiusPx: number
+): { segments: PixelSegment[]; bbox: PixelBBox } | undefined {
+  if (!dragPath || dragPath.length < 2) {
+    return undefined;
+  }
+
+  const cappedPath = dragPath.slice(-(ERASER_LINE_SEGMENT_CAP + 1));
+  const segments: PixelSegment[] = [];
+  let bbox: PixelBBox | undefined;
+
+  for (let i = 1; i < cappedPath.length; i++) {
+    const prev = cappedPath[i - 1];
+    const next = cappedPath[i];
+
+    if (!prev || !next) {
+      continue;
+    }
+
+    const segment: PixelSegment = {
+      ax: prev.x * surfaceWidth,
+      ay: prev.y * surfaceHeight,
+      bx: next.x * surfaceWidth,
+      by: next.y * surfaceHeight
+    };
+
+    segments.push(segment);
+    bbox = includePointInBBox(bbox, segment.ax, segment.ay);
+    bbox = includePointInBBox(bbox, segment.bx, segment.by);
+  }
+
+  if (!bbox || segments.length === 0) {
+    return undefined;
+  }
+
+  return { segments, bbox: expandBBox(bbox, radiusPx) };
+}
+
+function getStrokePixelBBox(
+  stroke: PdfInkStroke,
+  surfaceWidth: number,
+  surfaceHeight: number
+): PixelBBox | undefined {
+  let bbox: PixelBBox | undefined;
+
+  for (const point of stroke.points) {
+    bbox = includePointInBBox(bbox, point.x * surfaceWidth, point.y * surfaceHeight);
+  }
+
+  return bbox;
+}
+
+function includePointInBBox(
+  bbox: PixelBBox | undefined,
+  x: number,
+  y: number
+): PixelBBox {
+  if (!bbox) {
+    return { minX: x, minY: y, maxX: x, maxY: y };
+  }
+
+  return {
+    minX: Math.min(bbox.minX, x),
+    minY: Math.min(bbox.minY, y),
+    maxX: Math.max(bbox.maxX, x),
+    maxY: Math.max(bbox.maxY, y)
+  };
+}
+
+function expandBBox(bbox: PixelBBox, amount: number): PixelBBox {
+  return {
+    minX: bbox.minX - amount,
+    minY: bbox.minY - amount,
+    maxX: bbox.maxX + amount,
+    maxY: bbox.maxY + amount
+  };
+}
+
+function bboxIntersects(a: PixelBBox, b: PixelBBox): boolean {
+  return (
+    a.minX <= b.maxX &&
+    a.maxX >= b.minX &&
+    a.minY <= b.maxY &&
+    a.maxY >= b.minY
+  );
+}
+
+function distancePointToSegmentSq(
+  px: number,
+  py: number,
+  segment: PixelSegment
+): number {
+  const vx = segment.bx - segment.ax;
+  const vy = segment.by - segment.ay;
+  const wx = px - segment.ax;
+  const wy = py - segment.ay;
+  const lengthSq = vx * vx + vy * vy;
+
+  if (lengthSq === 0) {
+    const dx = px - segment.ax;
+    const dy = py - segment.ay;
+    return dx * dx + dy * dy;
+  }
+
+  const t = Math.min(1, Math.max(0, (wx * vx + wy * vy) / lengthSq));
+  const closestX = segment.ax + t * vx;
+  const closestY = segment.ay + t * vy;
+  const dx = px - closestX;
+  const dy = py - closestY;
+
+  return dx * dx + dy * dy;
+}
+
 /**
  * R10-c helper: apply eraseStrokePointsInRadius to the workspace store and re-render.
  * Called from both pointerdown (first click) and pointermove (drag continuations).
@@ -1670,11 +1997,13 @@ function eraseStrokePointsInRadius(
 function applyEraserAtPoint(
   subjectId: string,
   pageNumber: number,
+  shape: EraserShape,
   cx: number,
   cy: number,
-  radiusPx: number,
+  size: number,
   surfaceWidth: number,
-  surfaceHeight: number
+  surfaceHeight: number,
+  dragPath?: readonly EraserDragPoint[]
 ): void {
   updatePdfWorkspace(subjectId, (workspace) => {
     const pageStrokes = workspace.inkStrokes.filter(
@@ -1687,14 +2016,26 @@ function applyEraserAtPoint(
       pageStrokes,
       cx,
       cy,
-      radiusPx,
+      size / 2,
       surfaceWidth,
       surfaceHeight
     );
+    const shapeAwarePageStrokes = shape === "circle"
+      ? remainingPageStrokes
+      : eraseStrokePointsByShape(
+          pageStrokes,
+          shape,
+          cx,
+          cy,
+          size,
+          surfaceWidth,
+          surfaceHeight,
+          dragPath
+        );
 
     return {
       ...workspace,
-      inkStrokes: [...otherStrokes, ...remainingPageStrokes]
+      inkStrokes: [...otherStrokes, ...shapeAwarePageStrokes]
     };
   });
 
@@ -1759,6 +2100,14 @@ function setPdfTool(subjectId: string, tool: LocalPdfTool): void {
       }
     };
   });
+}
+
+function applySetEraserShape(subjectId: string, shape: EraserShape): void {
+  updatePdfWorkspace(subjectId, (workspace) => setEraserShape(workspace, shape));
+}
+
+function applySetEraserSize(subjectId: string, size: number): void {
+  updatePdfWorkspace(subjectId, (workspace) => setEraserSize(workspace, size));
 }
 
 // ---------------------------------------------------------------------------
@@ -2840,7 +3189,15 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           <h2 id="pdf-workspace-title">페이지 ${selectedPage}${material ? ` / ${material.pageCount}` : ""}</h2>
         </div>
         <div class="pdf-toolbar-row">
-          ${renderPdfToolbar(subject.id, selectedTool, material?.pageCount ?? 1, selectedPage, Boolean(material))}
+          ${renderPdfToolbar(
+            subject.id,
+            selectedTool,
+            material?.pageCount ?? 1,
+            selectedPage,
+            Boolean(material),
+            workspace.eraserShape,
+            workspace.eraserSize
+          )}
           <button
             class="pdf-inspector-toggle secondary-action"
             type="button"
@@ -2867,6 +3224,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           }
           <div
             class="pdf-annotation-surface is-${selectedTool}-mode"
+            ${selectedTool === "eraser" ? `style="${renderEraserCursorStyle(workspace.eraserShape, workspace.eraserSize)}"` : ""}
             data-pdf-annotation-surface="true"
             data-subject-id="${subject.id}"
             data-page-number="${selectedPage}"
@@ -2962,7 +3320,9 @@ function renderPdfToolbar(
   selectedTool: LocalPdfTool,
   pageCount: number,
   selectedPage: number,
-  hasMaterial: boolean
+  hasMaterial: boolean,
+  eraserShape: EraserShape,
+  eraserSize: number
 ): string {
   const disabled = hasMaterial ? "" : "disabled";
 
@@ -3000,8 +3360,103 @@ function renderPdfToolbar(
         ${renderStickyAddButton(subjectId, "table", "표")}
         ${renderStickyAddButton(subjectId, "chart-note", "그래프")}
       </div>
+      ${selectedTool === "eraser" ? renderEraserSubToolbar(subjectId, eraserShape, eraserSize, disabled) : ""}
     </div>
   `;
+}
+
+function renderEraserSubToolbar(
+  subjectId: string,
+  eraserShape: EraserShape,
+  eraserSize: number,
+  disabled: string
+): string {
+  return `
+    <div class="pdf-eraser-subtoolbar" aria-label="지우개 설정">
+      <div class="pdf-eraser-shape-picker" role="group" aria-label="지우개 모양">
+        ${renderEraserShapeButton(subjectId, "circle", eraserShape, "원", "원형 지우개", disabled)}
+        ${renderEraserShapeButton(subjectId, "square", eraserShape, "네모", "네모 지우개", disabled)}
+        ${renderEraserShapeButton(subjectId, "triangle", eraserShape, "세모", "세모 지우개", disabled)}
+        ${renderEraserShapeButton(subjectId, "line", eraserShape, "선", "선 지우개", disabled)}
+      </div>
+      <label class="pdf-eraser-size-control">
+        <span>지우개 크기: ${Math.round(eraserSize)}px</span>
+        <input
+          type="range"
+          min="16"
+          max="64"
+          value="${Math.round(eraserSize)}"
+          data-action="set-eraser-size"
+          data-subject-id="${subjectId}"
+          ${disabled}
+        />
+      </label>
+    </div>
+  `;
+}
+
+function renderEraserShapeButton(
+  subjectId: string,
+  shape: EraserShape,
+  selectedShape: EraserShape,
+  label: string,
+  ariaLabel: string,
+  disabled: string
+): string {
+  return `
+    <button
+      class="eraser-shape-button ${selectedShape === shape ? "active" : ""}"
+      type="button"
+      data-action="set-eraser-shape"
+      data-subject-id="${subjectId}"
+      data-eraser-shape="${shape}"
+      aria-label="${ariaLabel}"
+      aria-pressed="${selectedShape === shape ? "true" : "false"}"
+      ${disabled}
+    >
+      ${label}
+    </button>
+  `;
+}
+
+function renderEraserCursorStyle(shape: EraserShape, size: number): string {
+  const safeSize = Number.isFinite(size) ? Math.min(64, Math.max(16, size)) : 16;
+  const viewBoxSize = safeSize + 2;
+  const center = viewBoxSize / 2;
+  const svg = renderEraserCursorSvg(shape, safeSize, viewBoxSize, center);
+  const dataUrl = encodeURIComponent(svg);
+
+  return `cursor: url('data:image/svg+xml,${dataUrl}') ${center} ${center}, crosshair;`;
+}
+
+function renderEraserCursorSvg(
+  shape: EraserShape,
+  size: number,
+  viewBoxSize: number,
+  center: number
+): string {
+  const half = size / 2;
+  const stroke = 1.5;
+  const common = `fill="none" stroke="black" stroke-width="${stroke}"`;
+
+  if (shape === "circle") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}"><circle cx="${center}" cy="${center}" r="${half}" ${common}/></svg>`;
+  }
+
+  if (shape === "square") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}"><rect x="${center - half}" y="${center - half}" width="${size}" height="${size}" ${common}/></svg>`;
+  }
+
+  if (shape === "triangle") {
+    const height = size * Math.sqrt(3) / 2;
+    const p1 = `${center},${center - height * 2 / 3}`;
+    const p2 = `${center - half},${center + height / 3}`;
+    const p3 = `${center + half},${center + height / 3}`;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" overflow="visible"><polygon points="${p1} ${p2} ${p3}" ${common}/></svg>`;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}"><line x1="${center - half}" y1="${center + half}" x2="${center + half}" y2="${center - half}" ${common} stroke-linecap="round"/><circle cx="${center}" cy="${center}" r="2" fill="black"/></svg>`;
 }
 
 function renderToolButton(
