@@ -226,22 +226,25 @@ export class S3StorageService extends StoragePort {
         contentType: result.ContentType
       };
     } catch (err) {
-      // AWS SDK v3 HeadObjectCommand 404 식별:
-      //   - err.name === "NotFound"  (HeadObject 전용 — GetObject 는 "NoSuchKey")
-      //   - err.Code === "NoSuchKey" (일부 localstack 응답 호환)
-      //   - err.$metadata?.httpStatusCode === 404 (모든 경우 안전망)
+      // AWS SDK v3 HeadObjectCommand missing-key 식별 (narrowing):
+      //   - err.name === "NotFound"  : HeadObject 전용 SDK v3 공식 missing-key 시그널
+      //   - err.Code === "NoSuchKey" : 구 SDK / 일부 localstack 응답 호환
+      //
+      // 의도적으로 제외한 조건:
+      //   - err.name === "NoSuchKey" : GetObject 시그널, HeadObject 에는 불필요
+      //   - httpStatusCode === 404   : NoSuchBucket, 잘못된 endpoint, IAM 등
+      //     인프라 장애도 404를 반환할 수 있어 ObjectNotFoundError 로 잘못 분류될 위험.
+      //     인프라 장애는 원본 rethrow → 500 surface → 운영자 alert 유도.
       const e = err as Record<string, unknown>;
-      const is404 =
+      const isMissingKey =
         e["name"] === "NotFound" ||
-        e["name"] === "NoSuchKey" ||
-        e["Code"] === "NoSuchKey" ||
-        (e["$metadata"] as Record<string, unknown> | undefined)?.["httpStatusCode"] === 404;
+        e["Code"] === "NoSuchKey";
 
-      if (is404) {
+      if (isMissingKey) {
         throw new ObjectNotFoundError(storageKey);
       }
 
-      // 인프라 장애(auth / network / 5xx) — 원본 error 그대로 rethrow
+      // 인프라 장애(auth / network / NoSuchBucket / 5xx) — 원본 error 그대로 rethrow
       throw err;
     }
   }
