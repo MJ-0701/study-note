@@ -116,6 +116,7 @@ export async function uploadMaterialFile(
 
       if (response.ok) {
         console.info(`materials.s3-put.ok materialId=${materialId} bytes=${file.size}`);
+        lastError = undefined; // 이전 attempt 의 stale error 초기화 (post-loop check 방어)
         break; // S3 PUT succeeded, proceed to completion
       }
 
