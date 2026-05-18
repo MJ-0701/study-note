@@ -297,6 +297,81 @@ describe("MaterialsService.completeUpload", () => {
     );
   });
 
+  it("bonus — readObjectPrefix ObjectNotFoundError → 409 UPLOAD_NOT_FOUND, material stays pending", async () => {
+    // HEAD ↔ Range GET 사이 object 삭제 race: headObject 는 성공, readObjectPrefix 는 ObjectNotFoundError
+    const row = makeRow({ uploadStatus: "pending", fileSize: 100 });
+    let updateManyCalls = 0;
+
+    const prisma = {
+      pdfMaterial: {
+        findFirst: async () => row,
+        findMany: async () => [],
+        create: async () => row,
+        update: async () => row,
+        updateMany: async () => {
+          updateManyCalls++;
+          return { count: 1 };
+        }
+      }
+    } as unknown as import("@study-note/persistence").PrismaService;
+
+    const storage = {
+      ...makeStorage({ contentLength: 100 }),
+      readObjectPrefix: async (_key: string, _length: number): Promise<Buffer> => {
+        throw new ObjectNotFoundError("users/user-001/materials/mat-001/lecture.pdf");
+      }
+    } as unknown as import("@study-note/storage").StoragePort;
+
+    const service = new MaterialsService(prisma, storage);
+
+    await assert.rejects(
+      () => service.completeUpload("user-001", "mat-001"),
+      (err: unknown) => {
+        assert.ok(err instanceof ConflictException, "should throw ConflictException");
+        const response = (err as ConflictException).getResponse() as Record<string, unknown>;
+        assert.equal(response.errorCode, "UPLOAD_NOT_FOUND", "errorCode must be UPLOAD_NOT_FOUND");
+        return true;
+      }
+    );
+
+    // material stays pending: updateMany must NOT have been called
+    assert.equal(updateManyCalls, 0, "updateMany must not be called when readObjectPrefix throws — material stays pending");
+  });
+
+  it("bonus — readObjectPrefix generic error → 원본 error rethrow (5xx)", async () => {
+    // 인프라 장애 시뮬레이션: generic Error (auth / network / S3 outage)
+    const row = makeRow({ uploadStatus: "pending", fileSize: 100 });
+
+    const prisma = {
+      pdfMaterial: {
+        findFirst: async () => row,
+        findMany: async () => [],
+        create: async () => row,
+        update: async () => row,
+        updateMany: async () => ({ count: 1 })
+      }
+    } as unknown as import("@study-note/persistence").PrismaService;
+
+    const storage = {
+      ...makeStorage({ contentLength: 100 }),
+      readObjectPrefix: async (_key: string, _length: number): Promise<Buffer> => {
+        throw new Error("S3 range-get connection reset");
+      }
+    } as unknown as import("@study-note/storage").StoragePort;
+
+    const service = new MaterialsService(prisma, storage);
+
+    await assert.rejects(
+      () => service.completeUpload("user-001", "mat-001"),
+      (err: unknown) => {
+        assert.ok(!(err instanceof ConflictException), "ConflictException 이어서는 안 됨");
+        assert.ok(err instanceof Error, "Error 이어야 함");
+        assert.ok((err as Error).message.includes("S3 range-get connection reset"), "원본 메시지 보존");
+        return true;
+      }
+    );
+  });
+
   it("bonus — PDF magic mismatch → 400 PDF_MAGIC_MISMATCH, material stays pending", async () => {
     // headObject size matches (100 === 100), but prefix is not %PDF-
     // → completion must reject with BadRequestException and NOT call updateMany.

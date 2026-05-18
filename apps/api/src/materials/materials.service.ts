@@ -180,7 +180,27 @@ export class MaterialsService {
     // Prevents non-PDF or corrupted files with matching fileSize from being transitioned.
     // material stays "pending" on failure → FE can re-upload.
     // O(1) S3 cost: 1 Range GET (bytes=0-4) per completion call.
-    const prefix = await this.storage.readObjectPrefix(material.storageKey, PDF_MAGIC_PREFIX.length);
+    let prefix: Buffer;
+    try {
+      prefix = await this.storage.readObjectPrefix(material.storageKey, PDF_MAGIC_PREFIX.length);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        // HEAD 와 Range GET 사이 object 삭제 (orphan cleanup race, transient S3 condition 등)
+        this.logger.warn(
+          `materials.complete.readObjectPrefix-not-found materialId=${materialId} reason=${error.message}`
+        );
+        throw new ConflictException({
+          errorCode: "UPLOAD_NOT_FOUND",
+          errorMessage: "S3 object disappeared between HEAD and content read. Retry upload."
+        });
+      }
+      // 인프라 장애 — error 로그 후 rethrow (500 InternalServerError 운영자 alert 트리거)
+      this.logger.error(
+        `materials.complete.readObjectPrefix-failed materialId=${materialId} error=${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
+
     if (!prefix.equals(PDF_MAGIC_PREFIX)) {
       this.logger.warn(
         `materials.complete.magic-mismatch materialId=${materialId} prefix=${prefix.toString("hex")}`
