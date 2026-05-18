@@ -534,7 +534,7 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "set-pdf-tool") {
     const subjectId = quickNoteButton.dataset.subjectId;
-    const tool = quickNoteButton.dataset.tool as PdfWorkspaceTool | undefined;
+    const tool = quickNoteButton.dataset.tool as LocalPdfTool | undefined;
 
     if (subjectId && isPdfWorkspaceTool(tool)) {
       setPdfTool(subjectId, tool);
@@ -847,6 +847,38 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 
   if (material.selectedTool === "sticky") {
     addStickyNote(subjectId, "text", point);
+    renderApp();
+    event.preventDefault();
+    return;
+  }
+
+  // sprint-11/slice-2 R10: eraser — find and delete the closest ink stroke within threshold.
+  // Coordinate space: normalized 0..1 (same as stored PdfInkPoint.x/y via getSurfacePoint).
+  // Threshold 0.02 ≈ 16px / 800px typical surface width. No localStorage; pure in-memory.
+  if ((material.selectedTool as LocalPdfTool) === "eraser") {
+    const pageNumber = material.selectedPage;
+    const ERASER_THRESHOLD = 0.02; // normalized; ≈ 16px on an 800px-wide surface
+
+    updatePdfWorkspace(subjectId, (workspace) => {
+      const pageStrokes = workspace.inkStrokes.filter(
+        (s) => s.pageNumber === pageNumber
+      );
+      const otherStrokes = workspace.inkStrokes.filter(
+        (s) => s.pageNumber !== pageNumber
+      );
+      const remainingPageStrokes = eraseClosestStroke(
+        pageStrokes,
+        point.x,
+        point.y,
+        ERASER_THRESHOLD
+      );
+
+      return {
+        ...workspace,
+        inkStrokes: [...otherStrokes, ...remainingPageStrokes]
+      };
+    });
+
     renderApp();
     event.preventDefault();
     return;
@@ -1178,8 +1210,70 @@ function updateLiveStroke(): void {
   );
 }
 
-function isPdfWorkspaceTool(tool: string | undefined): tool is PdfWorkspaceTool {
-  return tool === "read" || tool === "sticky" || tool === "pen";
+// sprint-11/slice-2: "eraser" extends the domain-level PdfWorkspaceTool locally.
+// packages/domain is whitelist-excluded, so we widen here without touching the package.
+// sprint-12 reserved: "text" | "checklist" | "table" | "chart" will be added to the domain type.
+type LocalPdfTool = PdfWorkspaceTool | "eraser";
+
+function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
+  return tool === "read" || tool === "sticky" || tool === "pen" || tool === "eraser";
+}
+
+/**
+ * Erase the closest ink stroke within `threshold` (normalized 0..1 coordinate space).
+ *
+ * Algorithm: O(S * P) where S = stroke count, P = max points per stroke.
+ * For each stroke, compute the minimum Euclidean distance from `clickX/Y` to any
+ * of the stroke's points. The stroke with the smallest min-distance is the hit
+ * candidate. If that distance ≤ threshold, the stroke is removed; otherwise no-op.
+ *
+ * Tie-break (equidistant strokes): the stroke with the lexicographically larger
+ * `id` wins (erased). Since `createInkStroke` uses `stroke-${Date.now()}-…`,
+ * a larger id corresponds to a newer stroke — erasing newest is the natural UX.
+ *
+ * @param strokes  — current page ink strokes (normalized points)
+ * @param clickX   — normalized click x (0..1)
+ * @param clickY   — normalized click y (0..1)
+ * @param threshold — normalized distance threshold (≈ 16px / surface width)
+ */
+function eraseClosestStroke(
+  strokes: PdfInkStroke[],
+  clickX: number,
+  clickY: number,
+  threshold: number
+): PdfInkStroke[] {
+  let bestId: string | undefined;
+  let bestDist = Infinity;
+
+  for (const stroke of strokes) {
+    let minDist = Infinity;
+
+    for (const pt of stroke.points) {
+      const dx = pt.x - clickX;
+      const dy = pt.y - clickY;
+      const d = Math.sqrt(dx * dx + dy * dy);
+
+      if (d < minDist) {
+        minDist = d;
+      }
+    }
+
+    if (minDist <= threshold) {
+      if (
+        minDist < bestDist ||
+        (minDist === bestDist && stroke.id > (bestId ?? ""))
+      ) {
+        bestDist = minDist;
+        bestId = stroke.id;
+      }
+    }
+  }
+
+  if (bestId === undefined) {
+    return strokes;
+  }
+
+  return strokes.filter((s) => s.id !== bestId);
 }
 
 function isStickyNoteBlockKind(
@@ -1222,7 +1316,7 @@ function setPdfPage(subjectId: string, pageNumber: number): void {
   });
 }
 
-function setPdfTool(subjectId: string, tool: PdfWorkspaceTool): void {
+function setPdfTool(subjectId: string, tool: LocalPdfTool): void {
   updatePdfWorkspace(subjectId, (workspace) => {
     const material = workspace.material;
 
@@ -1234,7 +1328,9 @@ function setPdfTool(subjectId: string, tool: PdfWorkspaceTool): void {
       ...workspace,
       material: {
         ...material,
-        selectedTool: tool
+        // Cast: "eraser" is a local extension; the domain store accepts PdfWorkspaceTool.
+        // The store treats unknown tool values as opaque strings at runtime (JSON.stringify).
+        selectedTool: tool as PdfWorkspaceTool
       }
     };
   });
@@ -2099,7 +2195,8 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
   const material = workspace.material;
   const selectedPage = material?.selectedPage ?? 1;
-  const selectedTool = material?.selectedTool ?? "read";
+  // Cast: "eraser" is stored via LocalPdfTool cast in setPdfTool; recover the wider type here.
+  const selectedTool = (material?.selectedTool ?? "read") as LocalPdfTool;
   const objectUrl =
     material?.backendMaterialId &&
     activePdfObjectUrlMaterialIds.get(subject.id) === material.backendMaterialId
@@ -2279,7 +2376,7 @@ function getPdfPreviewPlaceholderDetail(
 
 function renderPdfToolbar(
   subjectId: string,
-  selectedTool: PdfWorkspaceTool,
+  selectedTool: LocalPdfTool,
   pageCount: number,
   selectedPage: number,
   hasMaterial: boolean
@@ -2308,6 +2405,7 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "read", selectedTool, "읽기")}
         ${renderToolButton(subjectId, "sticky", selectedTool, "포스트잇")}
         ${renderToolButton(subjectId, "pen", selectedTool, "펜")}
+        ${renderToolButton(subjectId, "eraser", selectedTool, "지우개")}
       </div>
       <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가">
         ${renderStickyAddButton(subjectId, "text", "텍스트")}
@@ -2321,8 +2419,8 @@ function renderPdfToolbar(
 
 function renderToolButton(
   subjectId: string,
-  tool: PdfWorkspaceTool,
-  selectedTool: PdfWorkspaceTool,
+  tool: LocalPdfTool,
+  selectedTool: LocalPdfTool,
   label: string
 ): string {
   return `
@@ -2956,11 +3054,12 @@ function formatSourceVisibility(visibility: SourceMaterial["visibility"]): strin
   return labels[visibility];
 }
 
-function formatPdfTool(tool: PdfWorkspaceTool): string {
-  const labels: Record<PdfWorkspaceTool, string> = {
+function formatPdfTool(tool: LocalPdfTool): string {
+  const labels: Record<LocalPdfTool, string> = {
     read: "읽기",
     sticky: "포스트잇",
-    pen: "펜"
+    pen: "펜",
+    eraser: "지우개"
   };
 
   return labels[tool];

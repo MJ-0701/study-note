@@ -1318,6 +1318,12 @@ p {
   touch-action: none;
 }
 
+/* sprint-11/slice-2 R10: eraser tool — cell cursor signals "click to delete" */
+.pdf-annotation-surface.is-eraser-mode {
+  cursor: cell;
+  pointer-events: auto;
+}
+
 .ink-layer {
   block-size: 100%;
   inline-size: 100%;
