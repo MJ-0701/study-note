@@ -112,6 +112,9 @@ const notebookStorageKey = "study-note.notebook.v2";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
 let notebook = loadStoredNotebook();
 let pdfWorkspaceStore = loadPdfWorkspaceStore();
+// sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
+// Default = false (접힘). Restored from localStorage on page load.
+let inspectorOpen = readInspectorOpen();
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -123,6 +126,9 @@ const activePdfObjectUrlMaterialIds = new Map<string, string>();
 const activePdfPreviewLoads = new Set<string>();
 const failedPdfPreviewLoadKeys = new Set<string>();
 let activeInkStroke: ActiveInkStroke | undefined;
+// sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
+// Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
+let activeEraserDrag: { subjectId: string; pointerId: number; pageNumber: number } | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
@@ -157,6 +163,22 @@ renderApp();
 
 // slice-2: always rehydrate from server — cookie carries the session token.
 void revalidateStoredSession();
+
+// sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
+// Only reads/writes key "studyNote.pdfWorkspace.inspectorOpen".
+// Invalid / null / non-true JSON → false (fail-closed, AC9-b).
+function readInspectorOpen(): boolean {
+  try {
+    const raw = localStorage.getItem("studyNote.pdfWorkspace.inspectorOpen");
+    if (raw === null) return false;
+    return JSON.parse(raw) === true;
+  } catch { return false; }
+}
+function writeInspectorOpen(value: boolean): void {
+  try {
+    localStorage.setItem("studyNote.pdfWorkspace.inspectorOpen", JSON.stringify(value === true));
+  } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
+}
 
 function loadStoredNotebook(): StudyNotebook {
   const stored = window.localStorage.getItem(notebookStorageKey);
@@ -505,9 +527,17 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-11/slice-1 R1/R2: toggle inspector open/close + localStorage persistence.
+  if (quickNoteButton?.dataset.action === "toggle-pdf-inspector") {
+    inspectorOpen = !inspectorOpen;
+    writeInspectorOpen(inspectorOpen);
+    renderApp();
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "set-pdf-tool") {
     const subjectId = quickNoteButton.dataset.subjectId;
-    const tool = quickNoteButton.dataset.tool as PdfWorkspaceTool | undefined;
+    const tool = quickNoteButton.dataset.tool as LocalPdfTool | undefined;
 
     if (subjectId && isPdfWorkspaceTool(tool)) {
       setPdfTool(subjectId, tool);
@@ -825,6 +855,28 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
+  // sprint-11/slice-2-refine R10-b/c: eraser drag — px-accurate point erasure.
+  // codex P2: hit-test in pixel space so erase area = circle (not ellipse on A4 surfaces).
+  // ERASER_RADIUS_PX = 16 matches SVG cursor circle (r=16, 34×34 svg, hotspot 17 17).
+  if ((material.selectedTool as LocalPdfTool) === "eraser") {
+    const pageNumber = material.selectedPage;
+    const ERASER_RADIUS_PX = 16; // screen pixels — matches SVG cursor radius
+
+    event.preventDefault();
+    try {
+      surface.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic smoke events do not always register as active browser pointers.
+    }
+
+    // R10-c: register eraser drag state before applying first erase.
+    activeEraserDrag = { subjectId, pointerId: event.pointerId, pageNumber };
+
+    const rect = surface.getBoundingClientRect();
+    applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS_PX, rect.width, rect.height);
+    return;
+  }
+
   if (material.selectedTool !== "pen") {
     return;
   }
@@ -860,6 +912,25 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 }
 
 function handleDocumentPointerMove(event: PointerEvent): void {
+  // R10-c: eraser drag — apply erase at each move position.
+  if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
+    const { subjectId, pageNumber } = activeEraserDrag;
+    const ERASER_RADIUS_PX = 16; // screen pixels — matches SVG cursor radius
+
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const point = getSurfacePoint(event, surface);
+      applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS_PX, rect.width, rect.height);
+    }
+
+    return;
+  }
+
   if (!activeInkStroke || activeInkStroke.pointerId !== event.pointerId) {
     return;
   }
@@ -878,6 +949,12 @@ function handleDocumentPointerMove(event: PointerEvent): void {
 }
 
 function handleDocumentPointerUp(event: PointerEvent): void {
+  // R10-c: clear eraser drag state on pointer release.
+  if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
+    activeEraserDrag = undefined;
+    return;
+  }
+
   if (!activeInkStroke || activeInkStroke.pointerId !== event.pointerId) {
     return;
   }
@@ -1151,8 +1228,153 @@ function updateLiveStroke(): void {
   );
 }
 
-function isPdfWorkspaceTool(tool: string | undefined): tool is PdfWorkspaceTool {
-  return tool === "read" || tool === "sticky" || tool === "pen";
+// sprint-11/slice-2: "eraser" extends the domain-level PdfWorkspaceTool locally.
+// packages/domain is whitelist-excluded, so we widen here without touching the package.
+// sprint-12 reserved tools: "text" | "checklist" | "table" | "chart" (실 기능 분리 예정).
+//                           현재는 sticky kind variant 로 잔존 (text/checklist/table/chart-note).
+type LocalPdfTool = PdfWorkspaceTool | "eraser";
+
+function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
+  return tool === "read" || tool === "sticky" || tool === "pen" || tool === "eraser";
+}
+
+/**
+ * R10-b: Erase ink points within `radiusPx` of (cx, cy) in pixel space, splitting strokes
+ * as needed.
+ *
+ * Algorithm: O(S × P) where S = stroke count, P = max points per stroke.
+ * Coordinates are stored normalized (0..1); hit-test converts each point to pixel space
+ * by multiplying by surfaceWidth/surfaceHeight before comparing with radiusPx. This
+ * ensures the erase area is a circle in screen pixels (matching the SVG cursor circle)
+ * rather than a circle in normalized space (which would be an ellipse on non-square
+ * surfaces such as A4 = 1:√2).
+ *
+ * Consecutive surviving points form a new segment. A segment with fewer than 2 points
+ * carries no drawing meaning and is dropped. Strokes with no points in radius are
+ * returned unchanged (same reference).
+ *
+ * Split ID rule: each surviving segment takes id `${origId}-s${segmentIndex}`.
+ * Re-erasing a split segment produces ids like `foo-s0-s0`, `foo-s0-s1` — the
+ * original id prefix is always preserved as a searchable substring.
+ *
+ * @param strokes       — current page ink strokes (normalized 0..1 coordinates)
+ * @param cx            — erase center x (normalized 0..1)
+ * @param cy            — erase center y (normalized 0..1)
+ * @param radiusPx      — erase radius in screen pixels (matches SVG cursor radius = 16)
+ * @param surfaceWidth  — surface element width in pixels (getBoundingClientRect().width)
+ * @param surfaceHeight — surface element height in pixels (getBoundingClientRect().height)
+ */
+function eraseStrokePointsInRadius(
+  strokes: PdfInkStroke[],
+  cx: number,
+  cy: number,
+  radiusPx: number,
+  surfaceWidth: number,
+  surfaceHeight: number
+): PdfInkStroke[] {
+  const result: PdfInkStroke[] = [];
+  const r2 = radiusPx * radiusPx;
+
+  for (const stroke of strokes) {
+    // Fast path: check if ANY point is within radiusPx before splitting.
+    let hasHit = false;
+
+    for (const pt of stroke.points) {
+      const dxPx = (pt.x - cx) * surfaceWidth;
+      const dyPx = (pt.y - cy) * surfaceHeight;
+
+      if (dxPx * dxPx + dyPx * dyPx <= r2) {
+        hasHit = true;
+        break;
+      }
+    }
+
+    if (!hasHit) {
+      // No points in radius — return same reference (no mutation).
+      result.push(stroke);
+      continue;
+    }
+
+    // Split: collect surviving-point segments. Each gap (erased point) ends
+    // the current segment and starts a new one.
+    const segments: PdfInkPoint[][] = [];
+    let current: PdfInkPoint[] = [];
+
+    for (const pt of stroke.points) {
+      const dxPx = (pt.x - cx) * surfaceWidth;
+      const dyPx = (pt.y - cy) * surfaceHeight;
+      const inRadius = dxPx * dxPx + dyPx * dyPx <= r2;
+
+      if (inRadius) {
+        // Erased point — flush current segment.
+        if (current.length > 0) {
+          segments.push(current);
+          current = [];
+        }
+      } else {
+        current.push(pt);
+      }
+    }
+
+    if (current.length > 0) {
+      segments.push(current);
+    }
+
+    segments.forEach((pts, i) => {
+      // Drop segments with fewer than 2 points (no visible line can be drawn).
+      if (pts.length < 2) {
+        return;
+      }
+
+      result.push({
+        ...stroke,
+        id: `${stroke.id}-s${i}`,
+        points: pts
+      });
+    });
+  }
+
+  return result;
+}
+
+/**
+ * R10-c helper: apply eraseStrokePointsInRadius to the workspace store and re-render.
+ * Called from both pointerdown (first click) and pointermove (drag continuations).
+ * Cost: one full store update + renderApp() per call. Acceptable for initial impl;
+ * throttle/RAF can be added later if dogfood shows jank.
+ */
+function applyEraserAtPoint(
+  subjectId: string,
+  pageNumber: number,
+  cx: number,
+  cy: number,
+  radiusPx: number,
+  surfaceWidth: number,
+  surfaceHeight: number
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => {
+    const pageStrokes = workspace.inkStrokes.filter(
+      (s) => s.pageNumber === pageNumber
+    );
+    const otherStrokes = workspace.inkStrokes.filter(
+      (s) => s.pageNumber !== pageNumber
+    );
+    const remainingPageStrokes = eraseStrokePointsInRadius(
+      pageStrokes,
+      cx,
+      cy,
+      radiusPx,
+      surfaceWidth,
+      surfaceHeight
+    );
+
+    return {
+      ...workspace,
+      inkStrokes: [...otherStrokes, ...remainingPageStrokes]
+    };
+  });
+
+  renderApp();
 }
 
 function isStickyNoteBlockKind(
@@ -1195,7 +1417,7 @@ function setPdfPage(subjectId: string, pageNumber: number): void {
   });
 }
 
-function setPdfTool(subjectId: string, tool: PdfWorkspaceTool): void {
+function setPdfTool(subjectId: string, tool: LocalPdfTool): void {
   updatePdfWorkspace(subjectId, (workspace) => {
     const material = workspace.material;
 
@@ -1207,7 +1429,9 @@ function setPdfTool(subjectId: string, tool: PdfWorkspaceTool): void {
       ...workspace,
       material: {
         ...material,
-        selectedTool: tool
+        // Cast: "eraser" is a local extension; the domain store accepts PdfWorkspaceTool.
+        // The store treats unknown tool values as opaque strings at runtime (JSON.stringify).
+        selectedTool: tool as PdfWorkspaceTool
       }
     };
   });
@@ -1341,16 +1565,20 @@ async function importWeekNoteFile(
 
 function renderApp(): void {
   if (authBootState === "checking") {
+    document.body.removeAttribute("data-route");
     appRoot.innerHTML = renderSessionCheckPage();
     return;
   }
 
   if (!authSession) {
+    document.body.removeAttribute("data-route");
     appRoot.innerHTML = renderLoginPage();
     return;
   }
 
   const route = parseRoute(window.location.hash);
+  // sprint-11/slice-1 R3-b: body data-route for CSS scope (.content max-width).
+  document.body.dataset.route = route.name;
   const subject =
     route.name === "subject" ||
     route.name === "subject-intake" ||
@@ -2068,7 +2296,8 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
   const material = workspace.material;
   const selectedPage = material?.selectedPage ?? 1;
-  const selectedTool = material?.selectedTool ?? "read";
+  // Cast: "eraser" is stored via LocalPdfTool cast in setPdfTool; recover the wider type here.
+  const selectedTool = (material?.selectedTool ?? "read") as LocalPdfTool;
   const objectUrl =
     material?.backendMaterialId &&
     activePdfObjectUrlMaterialIds.get(subject.id) === material.backendMaterialId
@@ -2132,10 +2361,19 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           <p class="meta">§2 — PDF viewer + annotation layer</p>
           <h2 id="pdf-workspace-title">페이지 ${selectedPage}${material ? ` / ${material.pageCount}` : ""}</h2>
         </div>
-        ${renderPdfToolbar(subject.id, selectedTool, material?.pageCount ?? 1, selectedPage, Boolean(material))}
+        <div class="pdf-toolbar-row">
+          ${renderPdfToolbar(subject.id, selectedTool, material?.pageCount ?? 1, selectedPage, Boolean(material))}
+          <button
+            class="pdf-inspector-toggle secondary-action"
+            type="button"
+            data-action="toggle-pdf-inspector"
+            aria-expanded="${inspectorOpen ? "true" : "false"}"
+            aria-controls="pdf-inspector-aside"
+          >${inspectorOpen ? "검사기 닫기" : "검사기 열기"}</button>
+        </div>
       </div>
 
-      <div class="pdf-workspace-layout">
+      <div class="pdf-workspace-layout${inspectorOpen ? " is-inspector-open" : ""}">
         <div class="pdf-stage" aria-label="${subject.title} PDF page annotation surface">
           ${
             objectUrl
@@ -2163,7 +2401,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           </div>
         </div>
 
-        <aside class="pdf-inspector" aria-label="PDF annotation state">
+        <aside
+          class="pdf-inspector${inspectorOpen ? "" : " pdf-inspector--collapsed"}"
+          id="pdf-inspector-aside"
+          aria-label="PDF annotation state"
+          aria-hidden="${inspectorOpen ? "false" : "true"}"
+        >
           <p class="meta">§3 — 저장 상태</p>
           <h3>로컬 annotation</h3>
           <dl>
@@ -2234,7 +2477,7 @@ function getPdfPreviewPlaceholderDetail(
 
 function renderPdfToolbar(
   subjectId: string,
-  selectedTool: PdfWorkspaceTool,
+  selectedTool: LocalPdfTool,
   pageCount: number,
   selectedPage: number,
   hasMaterial: boolean
@@ -2263,6 +2506,7 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "read", selectedTool, "읽기")}
         ${renderToolButton(subjectId, "sticky", selectedTool, "포스트잇")}
         ${renderToolButton(subjectId, "pen", selectedTool, "펜")}
+        ${renderToolButton(subjectId, "eraser", selectedTool, "지우개")}
       </div>
       <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가">
         ${renderStickyAddButton(subjectId, "text", "텍스트")}
@@ -2276,8 +2520,8 @@ function renderPdfToolbar(
 
 function renderToolButton(
   subjectId: string,
-  tool: PdfWorkspaceTool,
-  selectedTool: PdfWorkspaceTool,
+  tool: LocalPdfTool,
+  selectedTool: LocalPdfTool,
   label: string
 ): string {
   return `
@@ -2911,11 +3155,12 @@ function formatSourceVisibility(visibility: SourceMaterial["visibility"]): strin
   return labels[visibility];
 }
 
-function formatPdfTool(tool: PdfWorkspaceTool): string {
-  const labels: Record<PdfWorkspaceTool, string> = {
+function formatPdfTool(tool: LocalPdfTool): string {
+  const labels: Record<LocalPdfTool, string> = {
     read: "읽기",
     sticky: "포스트잇",
-    pen: "펜"
+    pen: "펜",
+    eraser: "지우개"
   };
 
   return labels[tool];
