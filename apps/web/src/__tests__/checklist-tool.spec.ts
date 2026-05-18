@@ -25,6 +25,7 @@ interface Checklist {
   page: number;
   position: { x: number; y: number };
   items: ChecklistItem[];
+  collapsed: boolean;   // R11: default true
   createdAt: string;
   updatedAt: string;
 }
@@ -68,8 +69,18 @@ function createChecklist(input: {
     page: input.page,
     position: normalizePdfPoint(input.position.x, input.position.y),
     items: [{ id: itemId, label: "", checked: false }],
+    collapsed: true, // R11: default 접힘
     createdAt: now,
     updatedAt: now
+  };
+}
+
+// R11: toggleChecklistCollapsed reducer (inline mirror)
+function toggleChecklistCollapsed(checklist: Checklist): Checklist {
+  return {
+    ...checklist,
+    collapsed: !checklist.collapsed,
+    updatedAt: new Date().toISOString()
   };
 }
 
@@ -212,12 +223,16 @@ function validateChecklist(raw: unknown): Checklist | null {
     .map(validateChecklistItem)
     .filter((item): item is ChecklistItem => item !== null);
 
+  // R11: collapsed hydration — boolean coercion (=== true 만 true). 누락 시 default true.
+  const collapsed = r.collapsed === false ? false : true;
+
   return {
     id: r.id,
     subjectId: r.subjectId,
     page: r.page,
     position: { x: pos.x as number, y: pos.y as number },
     items,
+    collapsed,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt
   };
@@ -263,6 +278,7 @@ function makeChecklist(overrides?: Partial<Checklist>): Checklist {
     page: 1,
     position: { x: 0.1, y: 0.2 },
     items: [{ id: "clitem-001", label: "", checked: false }],
+    collapsed: true, // R11: default
     createdAt: "2026-05-18T00:00:00.000Z",
     updatedAt: "2026-05-18T00:00:00.000Z",
     ...overrides
@@ -405,6 +421,53 @@ describe("PdfChecklist reducer (sprint-12/slice-3 AC2)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tests — R11: collapse/expand reducer
+// ---------------------------------------------------------------------------
+describe("R11: toggleChecklistCollapsed (collapse/expand)", () => {
+  it("createChecklist 의 default collapsed = true", () => {
+    const cl = createChecklist({ subjectId: "s1", page: 1, position: { x: 0.2, y: 0.3 } });
+    assert.equal(cl.collapsed, true, "신규 checklist 은 접힘 상태로 생성");
+  });
+
+  it("toggleChecklistCollapsed: true → false (펼침)", () => {
+    const cl = makeChecklist({ collapsed: true });
+    const expanded = toggleChecklistCollapsed(cl);
+    assert.equal(expanded.collapsed, false, "접힘 → 펼침");
+  });
+
+  it("toggleChecklistCollapsed: false → true (접힘)", () => {
+    const cl = makeChecklist({ collapsed: false });
+    const collapsed = toggleChecklistCollapsed(cl);
+    assert.equal(collapsed.collapsed, true, "펼침 → 접힘");
+  });
+
+  it("toggleChecklistCollapsed: 두 번 호출 → 원래 상태 복귀", () => {
+    const cl = makeChecklist({ collapsed: true });
+    const toggled = toggleChecklistCollapsed(toggleChecklistCollapsed(cl));
+    assert.equal(toggled.collapsed, true, "2회 toggle → 원복");
+  });
+
+  it("toggleChecklistCollapsed: items 미변경", () => {
+    const cl = makeChecklist({
+      collapsed: true,
+      items: [
+        { id: "item-1", label: "A", checked: true },
+        { id: "item-2", label: "B", checked: false }
+      ]
+    });
+    const expanded = toggleChecklistCollapsed(cl);
+    assert.equal(expanded.items.length, 2, "items 개수 미변경");
+    assert.equal(expanded.items[0].checked, true, "item-1 checked 미변경");
+  });
+
+  it("toggleChecklistCollapsed: 원본 불변 (immutability)", () => {
+    const cl = makeChecklist({ collapsed: false });
+    toggleChecklistCollapsed(cl);
+    assert.equal(cl.collapsed, false, "원본 collapsed 미변경");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Tests — AC9-c: hydration integration + fail-closed
 // ---------------------------------------------------------------------------
 describe("hydrateWorkspace checklist hydration fail-closed (AC9-c)", () => {
@@ -517,5 +580,57 @@ describe("hydrateWorkspace checklist hydration fail-closed (AC9-c)", () => {
     const ws = hydrateWorkspace(raw);
 
     assert.equal(ws.checklists.length, 0, "empty id → skip");
+  });
+
+  // R11: collapsed hydration
+  it("collapsed 누락 → default true (접힘)", () => {
+    const raw = {
+      subjectId: "s1",
+      checklists: [{ ...BASE_CHECKLIST }] // collapsed 필드 없음
+    };
+    const ws = hydrateWorkspace(raw);
+
+    assert.equal(ws.checklists[0].collapsed, true, "collapsed 누락 → true default");
+  });
+
+  it("collapsed: true (boolean) → true 보존", () => {
+    const raw = {
+      subjectId: "s1",
+      checklists: [{ ...BASE_CHECKLIST, collapsed: true }]
+    };
+    const ws = hydrateWorkspace(raw);
+
+    assert.equal(ws.checklists[0].collapsed, true);
+  });
+
+  it("collapsed: false (boolean) → false 보존 (펼침 유지)", () => {
+    const raw = {
+      subjectId: "s1",
+      checklists: [{ ...BASE_CHECKLIST, collapsed: false }]
+    };
+    const ws = hydrateWorkspace(raw);
+
+    assert.equal(ws.checklists[0].collapsed, false, "false = 명시적 펼침 → 보존");
+  });
+
+  it("collapsed: 'true' (string) → true (fail-closed: 누락 처리와 동일)", () => {
+    const raw = {
+      subjectId: "s1",
+      checklists: [{ ...BASE_CHECKLIST, collapsed: "true" }]
+    };
+    const ws = hydrateWorkspace(raw);
+
+    // string 'true' !== false → default true
+    assert.equal(ws.checklists[0].collapsed, true, "string 'true' → boolean coercion → true");
+  });
+
+  it("collapsed: 0 (number) → true (fail-closed, 누락과 동일)", () => {
+    const raw = {
+      subjectId: "s1",
+      checklists: [{ ...BASE_CHECKLIST, collapsed: 0 }]
+    };
+    const ws = hydrateWorkspace(raw);
+
+    assert.equal(ws.checklists[0].collapsed, true, "number 0 → true (not === false)");
   });
 });

@@ -83,6 +83,7 @@ export interface PdfChecklist {
   position: { x: number; y: number };    // normalized 0..1
   // checklist size = content 기반 자동; fixed size 필드 없음
   items: PdfChecklistItem[];
+  collapsed: boolean;                    // R11: default true (접힘 = PDF 본문 가림 최소화)
   createdAt: string;                     // ISO string
   updatedAt: string;
 }
@@ -374,8 +375,21 @@ export function createChecklist(input: {
     page: input.page,
     position: normalizePdfPoint(input.position.x, input.position.y),
     items: [{ id: itemId, label: "", checked: false }],
+    collapsed: true, // R11: 기본 접힘 (PDF 본문 가림 최소화)
     createdAt: now,
     updatedAt: now
+  };
+}
+
+// ---------------------------------------------------------------------------
+// R11 — toggleChecklistCollapsed reducer
+// Algorithm: O(1) immutable spread. collapsed 반전.
+// ---------------------------------------------------------------------------
+export function toggleChecklistCollapsed(checklist: PdfChecklist): PdfChecklist {
+  return {
+    ...checklist,
+    collapsed: !checklist.collapsed,
+    updatedAt: new Date().toISOString()
   };
 }
 
@@ -601,12 +615,16 @@ function validateChecklist(raw: unknown): PdfChecklist | null {
     .map(validateChecklistItem)
     .filter((item): item is PdfChecklistItem => item !== null);
 
+  // R11: collapsed hydration — boolean coercion (=== true 만 true). 누락 시 default true.
+  const collapsed = r.collapsed === false ? false : true;
+
   return {
     id: r.id,
     subjectId: r.subjectId,
     page: r.page,
     position: { x: pos.x, y: pos.y },
     items,
+    collapsed,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt
   };

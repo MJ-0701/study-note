@@ -49,6 +49,7 @@ import {
   moveTextBox,
   normalizePdfPoint,
   pdfWorkspaceStorageKey,
+  toggleChecklistCollapsed,
   toggleChecklistItem,
   updateChecklistItemLabel,
   updateTextBoxContent,
@@ -678,6 +679,24 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-12/slice-3-refine R11: toggle collapse/expand state (mode-agnostic)
+  if (quickNoteButton?.dataset.action === "toggle-checklist-collapsed") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const checklistId = quickNoteButton.dataset.checklistId;
+
+    if (subjectId && checklistId) {
+      updatePdfWorkspace(subjectId, (workspace) => ({
+        ...workspace,
+        checklists: workspace.checklists.map((cl) =>
+          cl.id === checklistId ? toggleChecklistCollapsed(cl) : cl
+        )
+      }));
+      renderApp();
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3: add item to checklist
   if (quickNoteButton?.dataset.action === "add-checklist-item") {
     const subjectId = quickNoteButton.dataset.subjectId;
@@ -971,9 +990,10 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   }
 
   // sprint-12/slice-2: textbox header drag — start drag state before other early-returns.
+  // R10-refine: button 클릭 (delete / toggle) 은 drag 로 처리하지 않고 click handler 에 위임.
   const dragHandle = target.closest<HTMLElement>("[data-action='drag-textbox-handle']");
 
-  if (dragHandle) {
+  if (dragHandle && !target.closest("button")) {
     const subjectIdForDrag = surface.dataset.subjectId;
     const textBoxIdForDrag = dragHandle.dataset.textboxId;
 
@@ -1004,9 +1024,10 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   }
 
   // sprint-12/slice-3: checklist header drag — same pattern as textbox drag.
+  // R10-refine: button 클릭 (delete / toggle) 은 drag 로 처리하지 않고 click handler 에 위임.
   const checklistDragHandle = target.closest<HTMLElement>("[data-action='checklist-drag-handle']");
 
-  if (checklistDragHandle) {
+  if (checklistDragHandle && !target.closest("button")) {
     const subjectIdForDrag = surface.dataset.subjectId;
     const checklistIdForDrag = checklistDragHandle.dataset.checklistId;
 
@@ -3101,7 +3122,17 @@ function renderTextBox(subjectId: string, tb: PdfTextBox): string {
 //   Placeholder is a fixed string; label is NOT read back from DOM.
 // Drag: header bar (data-action="checklist-drag-handle") handles pointerdown.
 // Size: CSS content-based auto expand (no fixed width/height — R4 schema).
+// R11: collapsed: boolean — 접힘 시 items + add-item 버튼 숨김 (is-collapsed CSS 클래스).
+//   toggle button (▶/▼) = AC9-e: static text, aria-expanded 반전.
+//   header 카운트 표시 (접힘 시): "(체크된 수/전체 수)".
 function renderChecklist(subjectId: string, cl: PdfChecklist): string {
+  const isCollapsed = cl.collapsed !== false; // default true — boolean coercion (누락 시 접힘)
+  const checkedCount = cl.items.filter((item) => item.checked).length;
+  const totalCount = cl.items.length;
+  const countLabel = isCollapsed ? ` (${checkedCount}/${totalCount})` : "";
+  const toggleArrow = isCollapsed ? "▶" : "▼";
+  const itemsContainerId = `pdf-checklist-items-${cl.id}`;
+
   const itemsHtml = cl.items.map((item) => `
     <li class="pdf-checklist-item" data-item-id="${item.id}">
       <input
@@ -3137,7 +3168,7 @@ function renderChecklist(subjectId: string, cl: PdfChecklist): string {
 
   return `
     <div
-      class="pdf-checklist"
+      class="pdf-checklist${isCollapsed ? " is-collapsed" : ""}"
       data-checklist-id="${cl.id}"
       style="left: ${cl.position.x * 100}%; top: ${cl.position.y * 100}%;"
     >
@@ -3149,7 +3180,17 @@ function renderChecklist(subjectId: string, cl: PdfChecklist): string {
         role="button"
         tabindex="0"
       >
-        <span class="pdf-checklist-title">체크리스트</span>
+        <button
+          type="button"
+          class="pdf-checklist-toggle"
+          data-action="toggle-checklist-collapsed"
+          data-subject-id="${subjectId}"
+          data-checklist-id="${cl.id}"
+          aria-expanded="${isCollapsed ? "false" : "true"}"
+          aria-controls="${itemsContainerId}"
+          aria-label="${isCollapsed ? "체크리스트 펼치기" : "체크리스트 접기"}"
+        >${toggleArrow}</button>
+        <span class="pdf-checklist-title">체크리스트${escapeHtml(countLabel)}</span>
         <button
           type="button"
           class="pdf-checklist-delete"
@@ -3159,7 +3200,7 @@ function renderChecklist(subjectId: string, cl: PdfChecklist): string {
           aria-label="체크리스트 삭제"
         >✕</button>
       </div>
-      <ul class="pdf-checklist-items">
+      <ul class="pdf-checklist-items" id="${itemsContainerId}">
         ${itemsHtml}
       </ul>
       <button

@@ -26,6 +26,7 @@ import {
   createChecklist,
   addChecklistItem,
   toggleChecklistItem,
+  toggleChecklistCollapsed,
   updateChecklistItemLabel,
   deleteChecklistItem,
   moveChecklist,
@@ -158,7 +159,7 @@ describe("R3: PdfTextBox reducers", () => {
 // R4 — PdfChecklist reducers
 // ---------------------------------------------------------------------------
 describe("R4: PdfChecklist reducers", () => {
-  it("createChecklist: 기본값 — item 1개 (빈 label)", () => {
+  it("createChecklist: 기본값 — item 1개 (빈 label), collapsed = true", () => {
     const cl = createChecklist({
       subjectId: "sub-2",
       page: 1,
@@ -175,6 +176,7 @@ describe("R4: PdfChecklist reducers", () => {
     assert.ok(firstItem !== undefined);
     assert.equal(firstItem.label, "");
     assert.equal(firstItem.checked, false);
+    assert.equal(cl.collapsed, true, "R11: default collapsed = true");
   });
 
   it("createChecklist: position 범위 외 → clamp", () => {
@@ -318,6 +320,34 @@ describe("R4: PdfChecklist reducers", () => {
     const originalLen = cl.items.length;
     addChecklistItem(cl, "test");
     assert.equal(cl.items.length, originalLen);
+  });
+
+  // R11: toggleChecklistCollapsed
+  it("toggleChecklistCollapsed: true → false (펼침)", () => {
+    const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    assert.equal(cl.collapsed, true, "default 접힘");
+    const expanded = toggleChecklistCollapsed(cl);
+    assert.equal(expanded.collapsed, false, "펼침");
+  });
+
+  it("toggleChecklistCollapsed: false → true (접힘)", () => {
+    const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const expanded = toggleChecklistCollapsed(cl);
+    const collapsed = toggleChecklistCollapsed(expanded);
+    assert.equal(collapsed.collapsed, true, "재접힘");
+  });
+
+  it("toggleChecklistCollapsed: items 미변경", () => {
+    const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const withItem = addChecklistItem(cl, "테스트");
+    const toggled = toggleChecklistCollapsed(withItem);
+    assert.equal(toggled.items.length, 2, "items 개수 미변경");
+  });
+
+  it("toggleChecklistCollapsed: 원본 불변", () => {
+    const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    toggleChecklistCollapsed(cl);
+    assert.equal(cl.collapsed, true, "원본 불변");
   });
 });
 
@@ -535,6 +565,39 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.deepEqual(cl.items, []);
   });
 
+  // R11: collapsed hydration
+  it("R11: collapsed 누락 → default true (접힘)", () => {
+    const raw = buildStateWithChecklists([makeRawChecklist()]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    const cl = result.checklists[0];
+    assert.ok(cl !== undefined);
+    assert.equal(cl.collapsed, true, "collapsed 누락 → true");
+  });
+
+  it("R11: collapsed: false → false 보존", () => {
+    const raw = buildStateWithChecklists([makeRawChecklist({ collapsed: false })]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    const cl = result.checklists[0];
+    assert.ok(cl !== undefined);
+    assert.equal(cl.collapsed, false, "false 명시 → 펼침 유지");
+  });
+
+  it("R11: collapsed: true → true 보존", () => {
+    const raw = buildStateWithChecklists([makeRawChecklist({ collapsed: true })]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    const cl = result.checklists[0];
+    assert.ok(cl !== undefined);
+    assert.equal(cl.collapsed, true);
+  });
+
+  it("R11: collapsed: 'true' (string) → true (not === false → default true)", () => {
+    const raw = buildStateWithChecklists([makeRawChecklist({ collapsed: "true" as unknown as boolean })]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    const cl = result.checklists[0];
+    assert.ok(cl !== undefined);
+    assert.equal(cl.collapsed, true, "string 'true' → boolean coercion → true (접힘)");
+  });
+
   // --- 완전한 정상 state round-trip ---
   it("정상 state round-trip: 모든 slice 보존", () => {
     const now = new Date().toISOString();
@@ -561,6 +624,7 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
           page: 2,
           position: { x: 0.5, y: 0.5 },
           items: [{ id: "item-0", label: "first", checked: true }],
+          collapsed: false, // 명시적 펼침
           createdAt: now,
           updatedAt: now,
         },
@@ -578,6 +642,7 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     const firstItem = cl.items[0];
     assert.ok(firstItem !== undefined);
     assert.equal(firstItem.checked, true);
+    assert.equal(cl.collapsed, false, "R11: collapsed: false 명시 → 보존");
   });
 });
 

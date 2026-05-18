@@ -1347,6 +1347,8 @@ p {
   opacity: 0.72;
 }
 
+/* R10: pointer-events: auto — surface 의 is-read-mode pointer-events:none 을 자식에서 override.
+   부모 surface 가 pointer-events: none 이어도 위젯 ✕ / drag / textarea 는 항상 클릭 가능. */
 .sticky-note {
   background: #fff8c7;
   border: 1px solid #d9c15d;
@@ -1355,6 +1357,7 @@ p {
   display: grid;
   max-width: 240px;
   min-width: 180px;
+  pointer-events: auto;
   position: absolute;
   transform: translate(-8px, -8px);
   z-index: 3;
@@ -1404,7 +1407,8 @@ p {
 /* sprint-12/slice-2 R3: textbox widget.
    - position: absolute (relative to annotation surface).
    - drag handle = header bar; body = textarea.
-   - touch-action: none on header prevents scroll conflict (AC §위험-5). */
+   - touch-action: none on header prevents scroll conflict (AC §위험-5).
+   R10: pointer-events: auto — surface is-read-mode override. */
 .pdf-textbox {
   background: #f0f7ff;
   border: 1px solid #8ab4e8;
@@ -1414,6 +1418,7 @@ p {
   grid-template-rows: auto 1fr;
   min-height: 80px;
   min-width: 140px;
+  pointer-events: auto;
   position: absolute;
   z-index: 3;
 }
@@ -1481,7 +1486,9 @@ p {
    - position: absolute (relative to annotation surface).
    - size: content-based auto expand (no fixed width/height — R4 schema).
    - drag handle = header bar; items = ul/li with checkbox + text input.
-   - touch-action: none on header prevents scroll conflict. */
+   - touch-action: none on header prevents scroll conflict.
+   R10: pointer-events: auto — surface is-read-mode override.
+   R11: .is-collapsed = 접힘 상태 (height ≤ 40px; items + add-item 숨김). */
 .pdf-checklist {
   background: #f0fff4;
   border: 1px solid #6dbf8a;
@@ -1490,8 +1497,15 @@ p {
   display: flex;
   flex-direction: column;
   min-width: 180px;
+  pointer-events: auto;
   position: absolute;
   z-index: 3;
+}
+
+/* R11: collapsed state — items 리스트와 add-item 버튼 숨김 (height ≤ 40px = header only). */
+.pdf-checklist.is-collapsed .pdf-checklist-items,
+.pdf-checklist.is-collapsed .pdf-checklist-add-item {
+  display: none;
 }
 
 .pdf-checklist-header {
@@ -1515,6 +1529,26 @@ p {
   color: var(--ds-fg);
   font-size: var(--ds-fs-meta);
   font-weight: 600;
+}
+
+/* R11: collapse/expand toggle button — ▶/▼ static text, aria-expanded driven. */
+.pdf-checklist-toggle {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  min-height: 28px;
+  min-width: 22px;
+  padding: 0 2px;
+}
+
+.pdf-checklist-toggle:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
 }
 
 .pdf-checklist-delete {
