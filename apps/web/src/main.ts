@@ -3693,10 +3693,17 @@ function renderTextBox(subjectId: string, tb: PdfTextBox): string {
       class="pdf-textbox is-inline"
       style="left: ${tb.position.x * 100}%; top: ${tb.position.y * 100}%;"
       data-textbox-id="${tb.id}"
-      data-action="drag-textbox-handle"
       role="group"
       aria-label="텍스트 박스"
     >
+      <span
+        class="pdf-textbox-grip"
+        data-action="drag-textbox-handle"
+        data-textbox-id="${tb.id}"
+        aria-label="텍스트 박스 이동"
+        role="button"
+        tabindex="0"
+      >⋮⋮</span>
       <textarea
         class="pdf-textbox-inline-input"
         data-action="update-textbox-content"

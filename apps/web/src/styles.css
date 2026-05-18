@@ -1509,6 +1509,36 @@ p {
   outline-offset: 2px;
 }
 
+/* sprint-12/slice-7-refine: drag grip handle. textarea size 가 content fit 라
+   외부 click 영역 0. grip = hover/focus 시만 표시, left side absolute. */
+.pdf-textbox-grip {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(26, 26, 26, 0.2);
+  border-radius: 3px;
+  color: var(--ds-fg-soft);
+  cursor: grab;
+  display: none;
+  font-size: 0.75rem;
+  height: 18px;
+  left: -22px;
+  letter-spacing: -2px;
+  line-height: 16px;
+  padding: 0 2px;
+  position: absolute;
+  top: -2px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-textbox.is-inline:hover .pdf-textbox-grip,
+.pdf-textbox.is-inline:focus-within .pdf-textbox-grip {
+  display: inline-block;
+}
+
+.pdf-textbox-grip:active {
+  cursor: grabbing;
+}
+
 .pdf-textbox-inline-input {
   background: transparent;
   border: 0;
