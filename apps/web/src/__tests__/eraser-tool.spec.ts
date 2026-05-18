@@ -1,14 +1,16 @@
-// sprint-11/slice-2 spec — eraseClosestStroke reducer (AC10).
+// sprint-11/slice-2-refine spec — eraseStrokePointsInRadius reducer (AC10 R10-b).
 //
 // 실행 (project-root 에서):
 //   node --experimental-strip-types --no-warnings --test apps/web/src/__tests__/eraser-tool.spec.ts
 //
 // 좌표계: normalized 0..1 (PdfInkPoint.x / .y 와 동일 — getSurfacePoint 결과).
-// 임계값(threshold): normalized distance. 단위 테스트는 DOM-free; 브라우저 픽셀 의존 없음.
+// 반경(radius): normalized distance. 단위 테스트는 DOM-free; 브라우저 픽셀 의존 없음.
 //
-// Tie-break 규칙: 동거리(equidistant) stroke 가 복수일 경우 id 가 lexicographically
-// 큰(더 새로운) stroke 를 삭제한다. createInkStroke id = "stroke-{timestamp}-{len}"
-// 이므로 timestamp 기준 최신 stroke 삭제 = 가장 자연스러운 UX.
+// 핵심 동작:
+//   - 각 stroke 의 points 중 (cx,cy) 로부터 거리 ≤ radius 인 point 를 제거.
+//   - 연속 생존 point 그룹 = segment. segment 길이 < 2 → drop.
+//   - hit 없는 stroke = 원본 reference 그대로.
+//   - split 된 segment id = "${origId}-s${segmentIndex}".
 
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
@@ -34,52 +36,82 @@ interface InkStroke {
 }
 
 // ---------------------------------------------------------------------------
-// eraseClosestStroke — inline copy of the pure reducer from main.ts.
+// eraseStrokePointsInRadius — inline copy of the pure reducer from main.ts.
 // This duplication is intentional: keeps the spec self-contained and runnable
 // without the Vite bundler.
 //
-// Algorithm: O(S × P). For each stroke, compute min Euclidean distance to any
-// point. Hit candidate = any stroke whose min-distance ≤ threshold.
-// Among candidates, the one with the smallest distance wins; tie → largest id.
+// Algorithm: O(S × P). For each stroke, remove points within radius of (cx,cy).
+// Consecutive surviving points form a segment; segments with < 2 points are dropped.
+// Strokes with no hit points are returned as-is (same reference).
+// Split segment id = `${origId}-s${segmentIndex}`.
 // ---------------------------------------------------------------------------
-function eraseClosestStroke(
+function eraseStrokePointsInRadius(
   strokes: InkStroke[],
-  clickX: number,
-  clickY: number,
-  threshold: number
+  cx: number,
+  cy: number,
+  radius: number
 ): InkStroke[] {
-  let bestId: string | undefined;
-  let bestDist = Infinity;
+  const result: InkStroke[] = [];
 
   for (const stroke of strokes) {
-    let minDist = Infinity;
+    // Fast path: check if ANY point is within radius before splitting.
+    let hasHit = false;
 
     for (const pt of stroke.points) {
-      const dx = pt.x - clickX;
-      const dy = pt.y - clickY;
-      const d = Math.sqrt(dx * dx + dy * dy);
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
 
-      if (d < minDist) {
-        minDist = d;
+      if (dx * dx + dy * dy <= radius * radius) {
+        hasHit = true;
+        break;
       }
     }
 
-    if (minDist <= threshold) {
-      if (
-        minDist < bestDist ||
-        (minDist === bestDist && stroke.id > (bestId ?? ""))
-      ) {
-        bestDist = minDist;
-        bestId = stroke.id;
+    if (!hasHit) {
+      result.push(stroke);
+      continue;
+    }
+
+    // Split: collect surviving-point segments. Each gap (erased point) ends
+    // the current segment and starts a new one.
+    const segments: InkPoint[][] = [];
+    let current: InkPoint[] = [];
+
+    for (const pt of stroke.points) {
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
+      const inRadius = dx * dx + dy * dy <= radius * radius;
+
+      if (inRadius) {
+        if (current.length > 0) {
+          segments.push(current);
+          current = [];
+        }
+      } else {
+        current.push(pt);
       }
+    }
+
+    if (current.length > 0) {
+      segments.push(current);
+    }
+
+    for (let i = 0; i < segments.length; i++) {
+      const pts = segments[i];
+
+      if (pts.length < 2) {
+        continue;
+      }
+
+      result.push({
+        ...stroke,
+        id: `${stroke.id}-s${i}`,
+        points: pts
+      });
     }
   }
 
-  if (bestId === undefined) {
-    return strokes;
-  }
-
-  return strokes.filter((s) => s.id !== bestId);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,114 +131,178 @@ function makeStroke(
   };
 }
 
-const THRESHOLD = 0.02; // normalized; ≈ 16px on 800px surface
+const RADIUS = 0.02; // normalized; ≈ 16px on 800px surface
+
+// 두 점 사이 거리 (normalized).
+function dist(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = ay - by;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-describe("eraseClosestStroke (sprint-11/slice-2 AC10)", () => {
-  // Case 1: 빈 배열 — 변화 없음
+describe("eraseStrokePointsInRadius (sprint-11/slice-2-refine AC10 R10-b)", () => {
+  // Case 1: 빈 배열 → 변화 없음
   it("빈 stroke 배열 → 그대로 반환", () => {
-    const result = eraseClosestStroke([], 0.5, 0.5, THRESHOLD);
+    const result = eraseStrokePointsInRadius([], 0.5, 0.5, RADIUS);
     assert.deepEqual(result, []);
   });
 
-  // Case 2: hit 없음 (모든 stroke 가 threshold 밖) → 변화 없음
-  it("모든 stroke 가 threshold 밖 → 배열 변경 없음", () => {
-    const strokes = [
-      makeStroke("stroke-1", [{ x: 0.9, y: 0.9 }]),
-      makeStroke("stroke-2", [{ x: 0.1, y: 0.1 }])
-    ];
-    // click at (0.5, 0.5), threshold = 0.02 — both strokes are far away
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
+  // Case 2: 영역 안 point 없음 → 모든 stroke 그대로 (동일 참조)
+  it("영역 안 point 없음 → 모든 stroke 변경 없음 + 동일 참조 유지", () => {
+    const s1 = makeStroke("stroke-1", [{ x: 0.9, y: 0.9 }]);
+    const s2 = makeStroke("stroke-2", [{ x: 0.1, y: 0.1 }]);
+    const strokes = [s1, s2];
+    // click at (0.5, 0.5), radius = 0.02 — both strokes far outside
+    const result = eraseStrokePointsInRadius(strokes, 0.5, 0.5, RADIUS);
     assert.equal(result.length, 2);
-    assert.equal(result[0].id, "stroke-1");
-    assert.equal(result[1].id, "stroke-2");
+    assert.strictEqual(result[0], s1); // same reference
+    assert.strictEqual(result[1], s2);
   });
 
-  // Case 3: hit 1개 → 그 stroke 만 삭제
-  it("반경 안 stroke 1개 → 해당 stroke 삭제, 나머지 유지", () => {
-    const strokes = [
-      makeStroke("stroke-hit", [{ x: 0.501, y: 0.501 }]), // distance ≈ 0.0014 — 임계 이내
-      makeStroke("stroke-far", [{ x: 0.9, y: 0.9 }])       // distance ≈ 0.566  — 임계 밖
-    ];
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
-    assert.equal(result.length, 1);
-    assert.equal(result[0].id, "stroke-far");
-  });
+  // Case 3: stroke 중간 point 1개 영역 안 → 2 segment 로 split
+  it("stroke 중간 point 1개 영역 안 → 2 segments 로 split", () => {
+    // Points: p0(out), p1(out), p2(IN), p3(out), p4(out)
+    // Expected: segment([p0,p1]) id="stroke-A-s0", segment([p3,p4]) id="stroke-A-s1"
+    const p0 = { x: 0.1, y: 0.1 };
+    const p1 = { x: 0.2, y: 0.2 };
+    const p2 = { x: 0.5, y: 0.5 }; // IN radius
+    const p3 = { x: 0.8, y: 0.8 };
+    const p4 = { x: 0.9, y: 0.9 };
 
-  // Case 4: hit 다수 — 가장 가까운 1개만 삭제
-  it("반경 안 stroke 다수 → 가장 가까운 stroke 1개만 삭제", () => {
-    const strokes = [
-      makeStroke("stroke-close", [{ x: 0.505, y: 0.505 }]), // dist ≈ 0.007
-      makeStroke("stroke-near",  [{ x: 0.51,  y: 0.51  }]), // dist ≈ 0.014
-      makeStroke("stroke-far",   [{ x: 0.9,   y: 0.9   }])  // dist ≈ 0.566 (밖)
-    ];
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
+    assert.ok(dist(p2.x, p2.y, 0.5, 0.5) <= RADIUS); // sanity
+
+    const stroke = makeStroke("stroke-A", [p0, p1, p2, p3, p4]);
+    const result = eraseStrokePointsInRadius([stroke], 0.5, 0.5, RADIUS);
+
     assert.equal(result.length, 2);
-    // stroke-close 는 삭제됨
-    assert.ok(result.every((s) => s.id !== "stroke-close"));
-    // stroke-near 과 stroke-far 는 남음
-    assert.ok(result.some((s) => s.id === "stroke-near"));
-    assert.ok(result.some((s) => s.id === "stroke-far"));
+    assert.equal(result[0].id, "stroke-A-s0");
+    assert.equal(result[0].points.length, 2);
+    assert.deepEqual(result[0].points[0], { ...p0, t: 0 });
+    assert.deepEqual(result[0].points[1], { ...p1, t: 0 });
+
+    assert.equal(result[1].id, "stroke-A-s1");
+    assert.equal(result[1].points.length, 2);
+    assert.deepEqual(result[1].points[0], { ...p3, t: 0 });
+    assert.deepEqual(result[1].points[1], { ...p4, t: 0 });
   });
 
-  // Case 5: 동거리 tie-break — id 가 lexicographically 큰 stroke 삭제
-  it("동거리 stroke 2개 → id 가 큰(lexicographically later) stroke 삭제", () => {
-    // 두 stroke 모두 (0.5, 0.5) 에 point 를 가짐 → distance = 0 (same)
-    const strokes = [
-      makeStroke("stroke-2025-1000", [{ x: 0.5, y: 0.5 }]), // 나중 id (larger)
-      makeStroke("stroke-2024-0001", [{ x: 0.5, y: 0.5 }])  // 이전 id (smaller)
-    ];
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
+  // Case 4: stroke 중간 연속 point 다수 영역 안 → 그 구간만 제거, 양쪽 segment 보존
+  it("stroke 중간 연속 point 다수 영역 안 → 연속 구간 제거, 양쪽 segment 보존", () => {
+    // Points: p0(out), p1(out), p2(IN), p3(IN), p4(out), p5(out)
+    const p0 = { x: 0.1, y: 0.1 };
+    const p1 = { x: 0.2, y: 0.2 };
+    const p2 = { x: 0.5, y: 0.5 };    // IN
+    const p3 = { x: 0.505, y: 0.505 }; // IN (dist ≈ 0.007 < 0.02)
+    const p4 = { x: 0.8, y: 0.8 };
+    const p5 = { x: 0.9, y: 0.9 };
+
+    assert.ok(dist(p2.x, p2.y, 0.5, 0.5) <= RADIUS);
+    assert.ok(dist(p3.x, p3.y, 0.5, 0.5) <= RADIUS);
+
+    const stroke = makeStroke("stroke-B", [p0, p1, p2, p3, p4, p5]);
+    const result = eraseStrokePointsInRadius([stroke], 0.5, 0.5, RADIUS);
+
+    assert.equal(result.length, 2);
+    assert.equal(result[0].id, "stroke-B-s0");
+    assert.deepEqual(result[0].points.map((p) => ({ x: p.x, y: p.y })), [
+      { x: p0.x, y: p0.y },
+      { x: p1.x, y: p1.y }
+    ]);
+    assert.equal(result[1].id, "stroke-B-s1");
+    assert.deepEqual(result[1].points.map((p) => ({ x: p.x, y: p.y })), [
+      { x: p4.x, y: p4.y },
+      { x: p5.x, y: p5.y }
+    ]);
+  });
+
+  // Case 5: stroke 모든 point 영역 안 → stroke 통째 제거
+  it("stroke 모든 point 영역 안 → stroke 통째 제거", () => {
+    const stroke = makeStroke("stroke-C", [
+      { x: 0.5, y: 0.5 },
+      { x: 0.505, y: 0.505 }
+    ]);
+    const result = eraseStrokePointsInRadius([stroke], 0.5, 0.5, RADIUS);
+    assert.equal(result.length, 0);
+  });
+
+  // Case 6: stroke 끝점만 영역 안 → 끝점 제거, 시작점 측 segment 1개 보존
+  it("stroke 마지막 point 만 영역 안 → 마지막 point 제거, 나머지 segment 보존", () => {
+    // Points: p0(out), p1(out), p2(out), p3(IN)
+    // → segment([p0,p1,p2]) with id "stroke-D-s0"
+    const p0 = { x: 0.1, y: 0.1 };
+    const p1 = { x: 0.2, y: 0.2 };
+    const p2 = { x: 0.3, y: 0.3 };
+    const p3 = { x: 0.5, y: 0.5 }; // IN
+
+    assert.ok(dist(p3.x, p3.y, 0.5, 0.5) <= RADIUS);
+
+    const stroke = makeStroke("stroke-D", [p0, p1, p2, p3]);
+    const result = eraseStrokePointsInRadius([stroke], 0.5, 0.5, RADIUS);
+
     assert.equal(result.length, 1);
-    // 더 큰 id("stroke-2025-1000") 가 삭제됨
-    assert.equal(result[0].id, "stroke-2024-0001");
+    assert.equal(result[0].id, "stroke-D-s0");
+    assert.equal(result[0].points.length, 3);
+    assert.deepEqual(result[0].points.map((p) => ({ x: p.x, y: p.y })), [
+      { x: p0.x, y: p0.y },
+      { x: p1.x, y: p1.y },
+      { x: p2.x, y: p2.y }
+    ]);
   });
 
-  // Case 6: stroke 의 여러 point 중 하나라도 반경 안이면 hit
-  it("stroke 의 일부 point 만 반경 안에 있어도 hit 로 인식", () => {
-    const strokes = [
-      // 첫 point 는 멀지만 두 번째 point 는 클릭 좌표와 일치
-      makeStroke("stroke-partial", [
-        { x: 0.9, y: 0.9 },
-        { x: 0.5, y: 0.5 }
-      ]),
-      makeStroke("stroke-far", [{ x: 0.0, y: 0.0 }])
-    ];
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
+  // Case 7: split 후 segment 길이 1 → drop
+  it("split 후 segment 길이 1 (point 1개) → 해당 segment drop", () => {
+    // Points: p0(IN), p1(out-alone), p2(IN), p3(out), p4(out)
+    // After erase: p0 removed, current=[p1] → flush as segment([p1])
+    //              p2 removed, current=[] → nothing to flush
+    //              p3,p4 → segment([p3,p4])
+    // segments: [[p1], [p3,p4]]
+    // [[p1]] length < 2 → drop. Only [[p3,p4]] survives → id "stroke-E-s1"
+    const p0 = { x: 0.5, y: 0.5 };   // IN
+    const p1 = { x: 0.3, y: 0.3 };   // OUT (alone after p0 removed)
+    const p2 = { x: 0.5, y: 0.5 };   // IN
+    const p3 = { x: 0.8, y: 0.8 };   // OUT
+    const p4 = { x: 0.9, y: 0.9 };   // OUT
+
+    assert.ok(dist(p0.x, p0.y, 0.5, 0.5) <= RADIUS);
+    assert.ok(dist(p2.x, p2.y, 0.5, 0.5) <= RADIUS);
+
+    const stroke = makeStroke("stroke-E", [p0, p1, p2, p3, p4]);
+    const result = eraseStrokePointsInRadius([stroke], 0.5, 0.5, RADIUS);
+
+    // segment index 0 ([p1]) was dropped (length 1).
+    // segment index 1 ([p3,p4]) survives with id "stroke-E-s1".
     assert.equal(result.length, 1);
-    assert.equal(result[0].id, "stroke-far");
+    assert.equal(result[0].id, "stroke-E-s1");
+    assert.equal(result[0].points.length, 2);
+    assert.deepEqual(result[0].points.map((p) => ({ x: p.x, y: p.y })), [
+      { x: p3.x, y: p3.y },
+      { x: p4.x, y: p4.y }
+    ]);
   });
 
-  // Case 7: 임계 경계값 — threshold 이내 거리 = hit
-  it("threshold 이내 거리의 stroke 는 삭제됨", () => {
-    // Place point at (0.5 + 0.01, 0.5) → distance = 0.01 < threshold(0.02)
-    // Note: exact 0.02 cannot be tested due to floating-point precision (0.52-0.5 > 0.02 in IEEE754).
-    const strokes = [
-      makeStroke("stroke-boundary", [{ x: 0.51, y: 0.5 }])
-    ];
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
-    assert.equal(result.length, 0); // 삭제됨
-  });
+  // Case 8: 다중 stroke 동시 처리 — 1개만 영향, 1개 그대로
+  it("다중 stroke — 영향받은 stroke 만 처리, 나머지 동일 참조 유지", () => {
+    // stroke-hit: p0(out), p1(IN), p2(out) → split [p0] drop, [p2] drop → 0 survivors (both len 1)
+    // stroke-safe: all points out → same reference
+    const pOut1 = { x: 0.1, y: 0.1 };
+    const pIn   = { x: 0.5, y: 0.5 }; // IN
+    const pOut2 = { x: 0.9, y: 0.9 };
 
-  // Case 8: 임계 경계값 — threshold 보다 큰 거리 = miss
-  it("distance > threshold 인 stroke 는 삭제하지 않음", () => {
-    // Place at distance 0.03 (clearly outside threshold = 0.02)
-    const strokes = [
-      makeStroke("stroke-outside", [{ x: 0.53, y: 0.5 }])
-    ];
-    const result = eraseClosestStroke(strokes, 0.5, 0.5, THRESHOLD);
-    assert.equal(result.length, 1); // 유지됨
-  });
+    assert.ok(dist(pIn.x, pIn.y, 0.5, 0.5) <= RADIUS);
+    assert.ok(dist(pOut1.x, pOut1.y, 0.5, 0.5) > RADIUS);
+    assert.ok(dist(pOut2.x, pOut2.y, 0.5, 0.5) > RADIUS);
 
-  // Case 9 (선택): 클릭 좌표 = 경계 밖 (음수)
-  it("클릭 좌표가 normalized 범위 밖(음수)이어도 오류 없이 동작", () => {
-    // stroke at (0.01, 0.01) — positive, within normalized range
-    // click at (-0.01, -0.01) — negative (e.g. click on toolbar rendered above surface)
-    // distance = sqrt(0.02^2 + 0.02^2) ≈ 0.0283 > threshold=0.02 → miss
-    const strokes = [makeStroke("stroke-1", [{ x: 0.01, y: 0.01 }])];
-    const result = eraseClosestStroke(strokes, -0.01, -0.01, THRESHOLD);
-    assert.equal(result.length, 1); // 삭제 안 됨
+    const strokeHit  = makeStroke("stroke-hit",  [pOut1, pIn, pOut2]);
+    const strokeSafe = makeStroke("stroke-safe", [{ x: 0.0, y: 0.0 }, { x: 0.05, y: 0.05 }]);
+
+    const result = eraseStrokePointsInRadius([strokeHit, strokeSafe], 0.5, 0.5, RADIUS);
+
+    // strokeHit: both surviving segments have length 1 → all dropped → 0 from strokeHit.
+    // strokeSafe: untouched → same reference.
+    assert.equal(result.length, 1);
+    assert.strictEqual(result[0], strokeSafe); // same reference confirms no-op path
   });
 });

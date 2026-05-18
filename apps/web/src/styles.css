@@ -1318,10 +1318,13 @@ p {
   touch-action: none;
 }
 
-/* sprint-11/slice-2 R10: eraser tool — cell cursor signals "click to delete" */
+/* sprint-11/slice-2-refine R10-a: eraser tool — round SVG circle cursor (radius 16px outline).
+   Percent-encoded for Firefox compatibility. Hot-spot at center (17,17) so the erase circle
+   aligns with the pointer tip. touch-action: none required for drag erase on touch devices. */
 .pdf-annotation-surface.is-eraser-mode {
-  cursor: cell;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='34'%3E%3Ccircle cx='17' cy='17' r='16' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") 17 17, crosshair;
   pointer-events: auto;
+  touch-action: none;
 }
 
 .ink-layer {

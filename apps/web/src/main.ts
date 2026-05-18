@@ -126,6 +126,9 @@ const activePdfObjectUrlMaterialIds = new Map<string, string>();
 const activePdfPreviewLoads = new Set<string>();
 const failedPdfPreviewLoadKeys = new Set<string>();
 let activeInkStroke: ActiveInkStroke | undefined;
+// sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
+// Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
+let activeEraserDrag: { subjectId: string; pointerId: number; pageNumber: number } | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
@@ -852,35 +855,24 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  // sprint-11/slice-2 R10: eraser — find and delete the closest ink stroke within threshold.
+  // sprint-11/slice-2-refine R10-b/c: eraser drag — px-accurate point erasure.
   // Coordinate space: normalized 0..1 (same as stored PdfInkPoint.x/y via getSurfacePoint).
-  // Threshold 0.02 ≈ 16px / 800px typical surface width. No localStorage; pure in-memory.
+  // Radius 0.02 ≈ 16px on an 800px-wide surface. No localStorage; pure in-memory.
   if ((material.selectedTool as LocalPdfTool) === "eraser") {
     const pageNumber = material.selectedPage;
-    const ERASER_THRESHOLD = 0.02; // normalized; ≈ 16px on an 800px-wide surface
+    const ERASER_RADIUS = 0.02; // normalized; ≈ 16px on an 800px-wide surface
 
-    updatePdfWorkspace(subjectId, (workspace) => {
-      const pageStrokes = workspace.inkStrokes.filter(
-        (s) => s.pageNumber === pageNumber
-      );
-      const otherStrokes = workspace.inkStrokes.filter(
-        (s) => s.pageNumber !== pageNumber
-      );
-      const remainingPageStrokes = eraseClosestStroke(
-        pageStrokes,
-        point.x,
-        point.y,
-        ERASER_THRESHOLD
-      );
-
-      return {
-        ...workspace,
-        inkStrokes: [...otherStrokes, ...remainingPageStrokes]
-      };
-    });
-
-    renderApp();
     event.preventDefault();
+    try {
+      surface.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic smoke events do not always register as active browser pointers.
+    }
+
+    // R10-c: register eraser drag state before applying first erase.
+    activeEraserDrag = { subjectId, pointerId: event.pointerId, pageNumber };
+
+    applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS);
     return;
   }
 
@@ -919,6 +911,24 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 }
 
 function handleDocumentPointerMove(event: PointerEvent): void {
+  // R10-c: eraser drag — apply erase at each move position.
+  if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
+    const { subjectId, pageNumber } = activeEraserDrag;
+    const ERASER_RADIUS = 0.02;
+
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const point = getSurfacePoint(event, surface);
+      applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS);
+    }
+
+    return;
+  }
+
   if (!activeInkStroke || activeInkStroke.pointerId !== event.pointerId) {
     return;
   }
@@ -937,6 +947,12 @@ function handleDocumentPointerMove(event: PointerEvent): void {
 }
 
 function handleDocumentPointerUp(event: PointerEvent): void {
+  // R10-c: clear eraser drag state on pointer release.
+  if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
+    activeEraserDrag = undefined;
+    return;
+  }
+
   if (!activeInkStroke || activeInkStroke.pointerId !== event.pointerId) {
     return;
   }
@@ -1220,60 +1236,127 @@ function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
 }
 
 /**
- * Erase the closest ink stroke within `threshold` (normalized 0..1 coordinate space).
+ * R10-b: Erase ink points within `radius` of (cx, cy), splitting strokes as needed.
  *
- * Algorithm: O(S * P) where S = stroke count, P = max points per stroke.
- * For each stroke, compute the minimum Euclidean distance from `clickX/Y` to any
- * of the stroke's points. The stroke with the smallest min-distance is the hit
- * candidate. If that distance ≤ threshold, the stroke is removed; otherwise no-op.
+ * Algorithm: O(S × P) where S = stroke count, P = max points per stroke.
+ * For each stroke, walks the points array and removes any point whose Euclidean
+ * distance to (cx, cy) is ≤ radius. Consecutive surviving points form a new
+ * segment. A segment with fewer than 2 points carries no drawing meaning and is
+ * dropped. Strokes with no points in radius are returned unchanged (same reference).
  *
- * Tie-break (equidistant strokes): the stroke with the lexicographically larger
- * `id` wins (erased). Since `createInkStroke` uses `stroke-${Date.now()}-…`,
- * a larger id corresponds to a newer stroke — erasing newest is the natural UX.
+ * Split ID rule: each surviving segment takes id `${origId}-s${segmentIndex}`.
+ * Re-erasing a split segment produces ids like `foo-s0-s0`, `foo-s0-s1` — the
+ * original id prefix is always preserved as a searchable substring.
  *
- * @param strokes  — current page ink strokes (normalized points)
- * @param clickX   — normalized click x (0..1)
- * @param clickY   — normalized click y (0..1)
- * @param threshold — normalized distance threshold (≈ 16px / surface width)
+ * @param strokes — current page ink strokes (normalized 0..1 coordinates)
+ * @param cx      — erase center x (normalized 0..1)
+ * @param cy      — erase center y (normalized 0..1)
+ * @param radius  — erase radius (normalized; ≈ 16px / surface width = 0.02)
  */
-function eraseClosestStroke(
+function eraseStrokePointsInRadius(
   strokes: PdfInkStroke[],
-  clickX: number,
-  clickY: number,
-  threshold: number
+  cx: number,
+  cy: number,
+  radius: number
 ): PdfInkStroke[] {
-  let bestId: string | undefined;
-  let bestDist = Infinity;
+  const result: PdfInkStroke[] = [];
 
   for (const stroke of strokes) {
-    let minDist = Infinity;
+    // Fast path: check if ANY point is within radius before splitting.
+    let hasHit = false;
 
     for (const pt of stroke.points) {
-      const dx = pt.x - clickX;
-      const dy = pt.y - clickY;
-      const d = Math.sqrt(dx * dx + dy * dy);
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
 
-      if (d < minDist) {
-        minDist = d;
+      if (dx * dx + dy * dy <= radius * radius) {
+        hasHit = true;
+        break;
       }
     }
 
-    if (minDist <= threshold) {
-      if (
-        minDist < bestDist ||
-        (minDist === bestDist && stroke.id > (bestId ?? ""))
-      ) {
-        bestDist = minDist;
-        bestId = stroke.id;
+    if (!hasHit) {
+      // No points in radius — return same reference (no mutation).
+      result.push(stroke);
+      continue;
+    }
+
+    // Split: collect surviving-point segments. Each gap (erased point) ends
+    // the current segment and starts a new one.
+    const segments: PdfInkPoint[][] = [];
+    let current: PdfInkPoint[] = [];
+
+    for (const pt of stroke.points) {
+      const dx = pt.x - cx;
+      const dy = pt.y - cy;
+      const inRadius = dx * dx + dy * dy <= radius * radius;
+
+      if (inRadius) {
+        // Erased point — flush current segment.
+        if (current.length > 0) {
+          segments.push(current);
+          current = [];
+        }
+      } else {
+        current.push(pt);
       }
     }
+
+    if (current.length > 0) {
+      segments.push(current);
+    }
+
+    segments.forEach((pts, i) => {
+      // Drop segments with fewer than 2 points (no visible line can be drawn).
+      if (pts.length < 2) {
+        return;
+      }
+
+      result.push({
+        ...stroke,
+        id: `${stroke.id}-s${i}`,
+        points: pts
+      });
+    });
   }
 
-  if (bestId === undefined) {
-    return strokes;
-  }
+  return result;
+}
 
-  return strokes.filter((s) => s.id !== bestId);
+/**
+ * R10-c helper: apply eraseStrokePointsInRadius to the workspace store and re-render.
+ * Called from both pointerdown (first click) and pointermove (drag continuations).
+ * Cost: one full store update + renderApp() per call. Acceptable for initial impl;
+ * throttle/RAF can be added later if dogfood shows jank.
+ */
+function applyEraserAtPoint(
+  subjectId: string,
+  pageNumber: number,
+  cx: number,
+  cy: number,
+  radius: number
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => {
+    const pageStrokes = workspace.inkStrokes.filter(
+      (s) => s.pageNumber === pageNumber
+    );
+    const otherStrokes = workspace.inkStrokes.filter(
+      (s) => s.pageNumber !== pageNumber
+    );
+    const remainingPageStrokes = eraseStrokePointsInRadius(
+      pageStrokes,
+      cx,
+      cy,
+      radius
+    );
+
+    return {
+      ...workspace,
+      inkStrokes: [...otherStrokes, ...remainingPageStrokes]
+    };
+  });
+
+  renderApp();
 }
 
 function isStickyNoteBlockKind(
