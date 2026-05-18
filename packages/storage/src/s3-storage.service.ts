@@ -62,7 +62,7 @@ export class S3StorageService extends StoragePort {
     const region = requireEnv(env, "S3_REGION");
     const endpoint = env["S3_ENDPOINT"]?.trim() || undefined;
     const publicEndpoint = env["S3_PUBLIC_ENDPOINT"]?.trim() || undefined;
-    const forcePathStyle = env["S3_FORCE_PATH_STYLE"] === "true";
+    const forcePathStyle = parseBoolEnv(env["S3_FORCE_PATH_STYLE"]);
 
     // Explicit credentials — required for localstack. Prod uses IAM role → omit if unset.
     const accessKeyId = env["S3_ACCESS_KEY_ID"]?.trim() || undefined;
@@ -267,6 +267,22 @@ export class S3StorageService extends StoragePort {
       annotation
     };
   }
+}
+
+/**
+ * Boolean env helper — accepts common truthy strings (case-insensitive):
+ *   "1" | "true" | "yes" | "on" → true
+ *   "" | undefined | "false" | "0" | "no" | "off" | anything else → false
+ *
+ * Sprint-10/slice-1 에서 readBoolean(env.S3_FORCE_PATH_STYLE) 를
+ * env["S3_FORCE_PATH_STYLE"] === "true" 로 좁힌 게 회귀:
+ *   기존 S3_FORCE_PATH_STYLE=1 이 silently false → localstack/custom endpoint 에서
+ *   virtual-host 스타일 시도 → 호스트 미해결 → pre-signed PUT 실패.
+ */
+function parseBoolEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
