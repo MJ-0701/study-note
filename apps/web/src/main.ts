@@ -856,11 +856,11 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   }
 
   // sprint-11/slice-2-refine R10-b/c: eraser drag — px-accurate point erasure.
-  // Coordinate space: normalized 0..1 (same as stored PdfInkPoint.x/y via getSurfacePoint).
-  // Radius 0.02 ≈ 16px on an 800px-wide surface. No localStorage; pure in-memory.
+  // codex P2: hit-test in pixel space so erase area = circle (not ellipse on A4 surfaces).
+  // ERASER_RADIUS_PX = 16 matches SVG cursor circle (r=16, 34×34 svg, hotspot 17 17).
   if ((material.selectedTool as LocalPdfTool) === "eraser") {
     const pageNumber = material.selectedPage;
-    const ERASER_RADIUS = 0.02; // normalized; ≈ 16px on an 800px-wide surface
+    const ERASER_RADIUS_PX = 16; // screen pixels — matches SVG cursor radius
 
     event.preventDefault();
     try {
@@ -872,7 +872,8 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     // R10-c: register eraser drag state before applying first erase.
     activeEraserDrag = { subjectId, pointerId: event.pointerId, pageNumber };
 
-    applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS);
+    const rect = surface.getBoundingClientRect();
+    applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS_PX, rect.width, rect.height);
     return;
   }
 
@@ -914,7 +915,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
-    const ERASER_RADIUS = 0.02;
+    const ERASER_RADIUS_PX = 16; // screen pixels — matches SVG cursor radius
 
     const surface = document.querySelector<HTMLElement>(
       `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
@@ -922,8 +923,9 @@ function handleDocumentPointerMove(event: PointerEvent): void {
 
     if (surface) {
       event.preventDefault();
+      const rect = surface.getBoundingClientRect();
       const point = getSurfacePoint(event, surface);
-      applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS);
+      applyEraserAtPoint(subjectId, pageNumber, point.x, point.y, ERASER_RADIUS_PX, rect.width, rect.height);
     }
 
     return;
@@ -1237,40 +1239,51 @@ function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
 }
 
 /**
- * R10-b: Erase ink points within `radius` of (cx, cy), splitting strokes as needed.
+ * R10-b: Erase ink points within `radiusPx` of (cx, cy) in pixel space, splitting strokes
+ * as needed.
  *
  * Algorithm: O(S × P) where S = stroke count, P = max points per stroke.
- * For each stroke, walks the points array and removes any point whose Euclidean
- * distance to (cx, cy) is ≤ radius. Consecutive surviving points form a new
- * segment. A segment with fewer than 2 points carries no drawing meaning and is
- * dropped. Strokes with no points in radius are returned unchanged (same reference).
+ * Coordinates are stored normalized (0..1); hit-test converts each point to pixel space
+ * by multiplying by surfaceWidth/surfaceHeight before comparing with radiusPx. This
+ * ensures the erase area is a circle in screen pixels (matching the SVG cursor circle)
+ * rather than a circle in normalized space (which would be an ellipse on non-square
+ * surfaces such as A4 = 1:√2).
+ *
+ * Consecutive surviving points form a new segment. A segment with fewer than 2 points
+ * carries no drawing meaning and is dropped. Strokes with no points in radius are
+ * returned unchanged (same reference).
  *
  * Split ID rule: each surviving segment takes id `${origId}-s${segmentIndex}`.
  * Re-erasing a split segment produces ids like `foo-s0-s0`, `foo-s0-s1` — the
  * original id prefix is always preserved as a searchable substring.
  *
- * @param strokes — current page ink strokes (normalized 0..1 coordinates)
- * @param cx      — erase center x (normalized 0..1)
- * @param cy      — erase center y (normalized 0..1)
- * @param radius  — erase radius (normalized; ≈ 16px / surface width = 0.02)
+ * @param strokes       — current page ink strokes (normalized 0..1 coordinates)
+ * @param cx            — erase center x (normalized 0..1)
+ * @param cy            — erase center y (normalized 0..1)
+ * @param radiusPx      — erase radius in screen pixels (matches SVG cursor radius = 16)
+ * @param surfaceWidth  — surface element width in pixels (getBoundingClientRect().width)
+ * @param surfaceHeight — surface element height in pixels (getBoundingClientRect().height)
  */
 function eraseStrokePointsInRadius(
   strokes: PdfInkStroke[],
   cx: number,
   cy: number,
-  radius: number
+  radiusPx: number,
+  surfaceWidth: number,
+  surfaceHeight: number
 ): PdfInkStroke[] {
   const result: PdfInkStroke[] = [];
+  const r2 = radiusPx * radiusPx;
 
   for (const stroke of strokes) {
-    // Fast path: check if ANY point is within radius before splitting.
+    // Fast path: check if ANY point is within radiusPx before splitting.
     let hasHit = false;
 
     for (const pt of stroke.points) {
-      const dx = pt.x - cx;
-      const dy = pt.y - cy;
+      const dxPx = (pt.x - cx) * surfaceWidth;
+      const dyPx = (pt.y - cy) * surfaceHeight;
 
-      if (dx * dx + dy * dy <= radius * radius) {
+      if (dxPx * dxPx + dyPx * dyPx <= r2) {
         hasHit = true;
         break;
       }
@@ -1288,9 +1301,9 @@ function eraseStrokePointsInRadius(
     let current: PdfInkPoint[] = [];
 
     for (const pt of stroke.points) {
-      const dx = pt.x - cx;
-      const dy = pt.y - cy;
-      const inRadius = dx * dx + dy * dy <= radius * radius;
+      const dxPx = (pt.x - cx) * surfaceWidth;
+      const dyPx = (pt.y - cy) * surfaceHeight;
+      const inRadius = dxPx * dxPx + dyPx * dyPx <= r2;
 
       if (inRadius) {
         // Erased point — flush current segment.
@@ -1335,7 +1348,9 @@ function applyEraserAtPoint(
   pageNumber: number,
   cx: number,
   cy: number,
-  radius: number
+  radiusPx: number,
+  surfaceWidth: number,
+  surfaceHeight: number
 ): void {
   updatePdfWorkspace(subjectId, (workspace) => {
     const pageStrokes = workspace.inkStrokes.filter(
@@ -1348,7 +1363,9 @@ function applyEraserAtPoint(
       pageStrokes,
       cx,
       cy,
-      radius
+      radiusPx,
+      surfaceWidth,
+      surfaceHeight
     );
 
     return {
