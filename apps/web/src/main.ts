@@ -151,6 +151,10 @@ let activeEraserDrag: {
   pageNumber: number;
   dragPath: EraserDragPoint[];
 } | undefined;
+// sprint-12/slice-4-refine: RAF throttle for eraser drag render.
+// renderApp = full innerHTML replace → 매 pointermove 마다 호출 시 PDF stage 점멸.
+// drag 중 = scheduleEraserRender() 로 60fps cap, pointerup = 즉시 renderApp.
+let eraserRenderScheduled = false;
 // sprint-12/slice-2: tracks an in-progress textbox drag (header pointerdown → pointerup).
 let activeTextBoxDrag: {
   subjectId: string;
@@ -1174,6 +1178,8 @@ function handleDocumentPointerDown(event: PointerEvent): void {
       rect.height,
       activeEraserDrag.dragPath
     );
+    // sprint-12/slice-4-refine: pointerdown = 즉시 1회 render (시각 피드백 시작 시점).
+    renderApp();
     return;
   }
 
@@ -1304,6 +1310,8 @@ function handleDocumentPointerMove(event: PointerEvent): void {
         rect.height,
         activeEraserDrag.dragPath
       );
+      // sprint-12/slice-4-refine: drag 중 = RAF throttle. 매 pointermove 마다 renderApp 호출 X.
+      scheduleEraserRender();
     }
 
     return;
@@ -1344,6 +1352,8 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // R10-c: clear eraser drag state on pointer release.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     activeEraserDrag = undefined;
+    // sprint-12/slice-4-refine: drag 종료 시 final renderApp 1회 = RAF 미완료분 sync.
+    renderApp();
     return;
   }
 
@@ -2005,6 +2015,9 @@ function applyEraserAtPoint(
   surfaceHeight: number,
   dragPath?: readonly EraserDragPoint[]
 ): void {
+  // sprint-12/slice-4-refine: state mutation 만. render = caller (pointerdown/move/up) 결정.
+  // Finding 2 정돈: shape="circle" → eraseStrokePointsInRadius / else → eraseStrokePointsByShape.
+  // 이전 코드 = 둘 다 호출 후 한 쪽 결과만 사용 → 비-circle shape 일 때 dead 계산 낭비.
   updatePdfWorkspace(subjectId, (workspace) => {
     const pageStrokes = workspace.inkStrokes.filter(
       (s) => s.pageNumber === pageNumber
@@ -2012,34 +2025,43 @@ function applyEraserAtPoint(
     const otherStrokes = workspace.inkStrokes.filter(
       (s) => s.pageNumber !== pageNumber
     );
-    const remainingPageStrokes = eraseStrokePointsInRadius(
-      pageStrokes,
-      cx,
-      cy,
-      size / 2,
-      surfaceWidth,
-      surfaceHeight
-    );
-    const shapeAwarePageStrokes = shape === "circle"
-      ? remainingPageStrokes
-      : eraseStrokePointsByShape(
-          pageStrokes,
-          shape,
-          cx,
-          cy,
-          size,
-          surfaceWidth,
-          surfaceHeight,
-          dragPath
-        );
+    const shapeAwarePageStrokes =
+      shape === "circle"
+        ? eraseStrokePointsInRadius(
+            pageStrokes,
+            cx,
+            cy,
+            size / 2,
+            surfaceWidth,
+            surfaceHeight
+          )
+        : eraseStrokePointsByShape(
+            pageStrokes,
+            shape,
+            cx,
+            cy,
+            size,
+            surfaceWidth,
+            surfaceHeight,
+            dragPath
+          );
 
     return {
       ...workspace,
       inkStrokes: [...otherStrokes, ...shapeAwarePageStrokes]
     };
   });
+}
 
-  renderApp();
+// sprint-12/slice-4-refine: RAF throttle 으로 drag 중 renderApp 빈도 제한.
+// pointermove 가 동일 frame 안 N회 호출되도 다음 RAF tick 에 단 1회만 render.
+function scheduleEraserRender(): void {
+  if (eraserRenderScheduled) return;
+  eraserRenderScheduled = true;
+  requestAnimationFrame(() => {
+    eraserRenderScheduled = false;
+    renderApp();
+  });
 }
 
 function isStickyNoteBlockKind(
