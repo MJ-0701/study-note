@@ -1,0 +1,2 @@
+ALTER TABLE `PdfMaterial`
+  ADD COLUMN `deletedAt` DATETIME(3) NULL DEFAULT NULL;

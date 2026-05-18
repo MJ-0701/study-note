@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   Post,
   Put,
@@ -52,6 +53,15 @@ export class MaterialsController {
         contentLength: readContentLength(request.headers["content-length"])
       })
     };
+  }
+
+  @Post(":materialId/complete")
+  @HttpCode(200)
+  async completeUpload(
+    @Req() request: AuthenticatedRequest,
+    @Param("materialId") materialId: string
+  ) {
+    return this.materials.completeUpload(request.user.id, materialId);
   }
 
   @Get()

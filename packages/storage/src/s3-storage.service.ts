@@ -1,63 +1,163 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { Injectable } from "@nestjs/common";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Injectable, Logger } from "@nestjs/common";
 import { Readable } from "node:stream";
 import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
 import type {
   DownloadIntent,
   ExportBundle,
+  HeadObjectResult,
   StorageObjectInput,
   StorageObjectOutput,
   UploadIntent
 } from "./storage.port";
-import { StoragePort } from "./storage.port";
+import { ObjectNotFoundError, StoragePort } from "./storage.port";
+
+const TTL_SECONDS = 900; // 15 minutes — plan §R6 TTL ≤ 900
 
 export interface S3StorageConfig {
   bucket: string;
   region: string;
+  /** Internal endpoint for server-side S3 ops (e.g. http://s3-service:4566 in docker compose) */
   endpoint?: string;
+  /** Public endpoint used when signing PUT URLs for browser access (e.g. http://localhost:4566) */
+  publicEndpoint?: string;
   forcePathStyle?: boolean;
 }
 
 export interface S3ClientLike {
-  send(command: PutObjectCommand | GetObjectCommand): Promise<unknown>;
+  send(
+    command: PutObjectCommand | GetObjectCommand | HeadObjectCommand | DeleteObjectCommand
+  ): Promise<unknown>;
 }
 
 @Injectable()
 export class S3StorageService extends StoragePort {
+  private readonly logger = new Logger("materials");
+
   constructor(
     private readonly client: S3ClientLike,
-    private readonly config: S3StorageConfig
+    private readonly config: S3StorageConfig,
+    /** Optional separate signer client with public endpoint — if omitted, presign falls back to client */
+    private readonly signerClient?: S3Client
   ) {
     super();
   }
 
+  /**
+   * Factory from env. Two S3Client instances:
+   * - `client`: uses S3_ENDPOINT (internal docker network) for server-side ops
+   * - `signerClient`: uses S3_PUBLIC_ENDPOINT for presigning PUT URLs the browser will call
+   *
+   * O(1) construction cost — both clients are lazy-connecting.
+   */
   static fromEnv(env: NodeJS.ProcessEnv = process.env): S3StorageService {
     const bucket = requireEnv(env, "S3_BUCKET");
     const region = requireEnv(env, "S3_REGION");
-    const endpoint = env.S3_ENDPOINT?.trim() || undefined;
-    const forcePathStyle = readBoolean(env.S3_FORCE_PATH_STYLE);
+    const endpoint = env["S3_ENDPOINT"]?.trim() || undefined;
+    const publicEndpoint = env["S3_PUBLIC_ENDPOINT"]?.trim() || undefined;
+    const forcePathStyle = parseBoolEnv(env["S3_FORCE_PATH_STYLE"]);
+
+    // Explicit credentials — required for localstack. Prod uses IAM role → omit if unset.
+    const accessKeyId = env["S3_ACCESS_KEY_ID"]?.trim() || undefined;
+    const secretAccessKey = env["S3_SECRET_ACCESS_KEY"]?.trim() || undefined;
+    const credentials =
+      accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {};
+
+    // Internal client for server-side ops (headObject, deleteObject, putObject)
+    const internalClient = new S3Client({
+      region,
+      ...(endpoint ? { endpoint } : {}),
+      forcePathStyle,
+      ...credentials
+    });
+
+    // Signer client: uses publicEndpoint so presigned URLs are browser-reachable.
+    // If S3_PUBLIC_ENDPOINT not set (prod AWS), signer uses same config as internal
+    // (AWS default endpoint is already browser-reachable via virtual-host style).
+    // requestChecksumCalculation: "WHEN_REQUIRED" — AWS SDK v3 ≥ 3.729 adds CRC32
+    // checksum params to presigned URLs by default (x-amz-checksum-crc32=AAAAAA==).
+    // This causes BadDigest/XAmzContentSHA256Mismatch when the browser PUTs actual
+    // bytes whose CRC32 != the baked-in zero value. Disable auto-checksum injection.
+    const signerClient = new S3Client({
+      region,
+      ...(publicEndpoint ? { endpoint: publicEndpoint } : endpoint ? { endpoint } : {}),
+      forcePathStyle,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      ...credentials
+    });
 
     return new S3StorageService(
-      new S3Client({
-        region,
-        ...(endpoint ? { endpoint } : {}),
-        ...(forcePathStyle === undefined ? {} : { forcePathStyle })
-      }),
+      internalClient,
       {
         bucket,
         region,
-        ...(endpoint ? { endpoint } : {}),
-        ...(forcePathStyle === undefined ? {} : { forcePathStyle })
-      }
+        endpoint,
+        publicEndpoint,
+        forcePathStyle
+      },
+      signerClient
     );
   }
 
-  createUploadIntent(material: PdfMaterialRecord): UploadIntent {
+  /**
+   * Returns a pre-signed PUT URL whose host is S3_PUBLIC_ENDPOINT (browser-reachable).
+   * plan AC2: X-Amz-Algorithm=AWS4-HMAC-SHA256, X-Amz-Expires<=900.
+   *
+   * When signerClient is set (fromEnv path), presigns with the public endpoint.
+   * Without signerClient (raw constructor path / tests), returns BE-proxy URL fallback.
+   *
+   * O(1) excluding SDK network: signs locally using credentials + date without I/O.
+   */
+  async createUploadIntent(material: PdfMaterialRecord): Promise<UploadIntent> {
+    if (this.signerClient) {
+      const command = new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: material.storageKey,
+        ContentType: material.contentType,
+        ContentLength: material.fileSize
+      });
+
+      // Type cast needed: getSignedUrl expects Client<any,...> from @smithy/types;
+      // S3Client satisfies this at runtime but TypeScript may see duplicate private declarations
+      // across pnpm-hoisted @smithy/types copies. Cast is safe — S3Client IS-A Client.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const uploadUrl = await getSignedUrl(this.signerClient as any, command, {
+        expiresIn: TTL_SECONDS
+      });
+
+      const expiresAt = new Date(Date.now() + TTL_SECONDS * 1000).toISOString();
+
+      // plan §7.3 observability: INFO log on presigned URL issuance
+      this.logger.log(
+        `materials.upload-intent.issued materialId=${material.id} bucket=${this.config.bucket} ttlSec=${TTL_SECONDS}`
+      );
+
+      return {
+        method: "PUT",
+        uploadUrl,
+        storageKey: material.storageKey,
+        expiresAt,
+        requiredHeaders: {
+          "content-type": material.contentType
+        }
+      };
+    }
+
+    // Fallback for tests using raw constructor without signerClient
     return {
       method: "PUT",
       uploadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
       storageKey: material.storageKey,
-      expiresAt: getExpiry(),
+      expiresAt: new Date(Date.now() + TTL_SECONDS * 1000).toISOString(),
       requiredHeaders: {
         "content-type": material.contentType
       }
@@ -69,7 +169,7 @@ export class S3StorageService extends StoragePort {
       method: "GET",
       downloadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
       storageKey: material.storageKey,
-      expiresAt: getExpiry()
+      expiresAt: new Date(Date.now() + TTL_SECONDS * 1000).toISOString()
     };
   }
 
@@ -109,6 +209,109 @@ export class S3StorageService extends StoragePort {
     };
   }
 
+  async headObject(storageKey: string): Promise<HeadObjectResult> {
+    try {
+      const result = (await this.client.send(
+        new HeadObjectCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey
+        })
+      )) as {
+        ContentLength?: number;
+        ContentType?: string;
+      };
+
+      return {
+        contentLength: result.ContentLength ?? 0,
+        contentType: result.ContentType
+      };
+    } catch (err) {
+      // AWS SDK v3 HeadObjectCommand missing-key 식별 (narrowing):
+      //   - err.name === "NotFound"  : HeadObject 전용 SDK v3 공식 missing-key 시그널
+      //   - err.Code === "NoSuchKey" : 구 SDK / 일부 localstack 응답 호환
+      //
+      // 의도적으로 제외한 조건:
+      //   - err.name === "NoSuchKey" : GetObject 시그널, HeadObject 에는 불필요
+      //   - httpStatusCode === 404   : NoSuchBucket, 잘못된 endpoint, IAM 등
+      //     인프라 장애도 404를 반환할 수 있어 ObjectNotFoundError 로 잘못 분류될 위험.
+      //     인프라 장애는 원본 rethrow → 500 surface → 운영자 alert 유도.
+      const e = err as Record<string, unknown>;
+      const isMissingKey =
+        e["name"] === "NotFound" ||
+        e["Code"] === "NoSuchKey";
+
+      if (isMissingKey) {
+        throw new ObjectNotFoundError(storageKey);
+      }
+
+      // 인프라 장애(auth / network / NoSuchBucket / 5xx) — 원본 error 그대로 rethrow
+      throw err;
+    }
+  }
+
+  async deleteObject(storageKey: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.config.bucket,
+        Key: storageKey
+      })
+    );
+  }
+
+  /**
+   * S3 Range GET: first `length` bytes of object.
+   * Used by completeUpload to verify %PDF- magic without fetching the full file.
+   *
+   * Missing-key narrowing (GetObject 기준):
+   *   - name === "NoSuchKey": SDK v3 공식 GetObject missing-key 시그널
+   *   - Code === "NoSuchKey": localstack / 구 SDK 호환
+   * HeadObject (name === "NotFound") 은 GetObject 에 적용되지 않으므로 제외.
+   *
+   * O(1) data transfer — 5 byte Range GET. S3 cost: GET 1 회 (min billable unit 동일).
+   */
+  async readObjectPrefix(storageKey: string, length: number): Promise<Buffer> {
+    let result: unknown;
+    try {
+      result = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey,
+          Range: `bytes=0-${length - 1}`
+        })
+      );
+    } catch (err) {
+      const e = err as Record<string, unknown>;
+      const isMissingKey =
+        e["name"] === "NoSuchKey" ||
+        e["Code"] === "NoSuchKey";
+      if (isMissingKey) {
+        throw new ObjectNotFoundError(storageKey);
+      }
+      throw err;
+    }
+
+    const body = (result as { Body?: unknown }).Body;
+    // SDK v3 SdkStream: transformToByteArray() is the canonical path.
+    // Fall back to async-iterable aggregation for custom / test clients.
+    let bytes: Uint8Array;
+    if (body && typeof (body as { transformToByteArray?: unknown }).transformToByteArray === "function") {
+      bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+    } else if (body && typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+      bytes = Buffer.concat(chunks);
+    } else if (body instanceof Uint8Array) {
+      bytes = body;
+    } else {
+      throw new Error("S3 readObjectPrefix: unsupported body type");
+    }
+
+    // Cap to requested length defensively (S3 Range 206 may return up to length bytes)
+    return Buffer.from(bytes).subarray(0, length);
+  }
+
   createExportBundle(
     material: PdfMaterialRecord,
     annotation: AnnotationSnapshotRecord
@@ -123,8 +326,20 @@ export class S3StorageService extends StoragePort {
   }
 }
 
-function getExpiry() {
-  return new Date(Date.now() + 15 * 60 * 1000).toISOString();
+/**
+ * Boolean env helper — accepts common truthy strings (case-insensitive):
+ *   "1" | "true" | "yes" | "on" → true
+ *   "" | undefined | "false" | "0" | "no" | "off" | anything else → false
+ *
+ * Sprint-10/slice-1 에서 readBoolean(env.S3_FORCE_PATH_STYLE) 를
+ * env["S3_FORCE_PATH_STYLE"] === "true" 로 좁힌 게 회귀:
+ *   기존 S3_FORCE_PATH_STYLE=1 이 silently false → localstack/custom endpoint 에서
+ *   virtual-host 스타일 시도 → 호스트 미해결 → pre-signed PUT 실패.
+ */
+function parseBoolEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
@@ -135,14 +350,6 @@ function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
   }
 
   return value;
-}
-
-function readBoolean(value: string | undefined): boolean | undefined {
-  if (value === undefined || value.trim() === "") {
-    return undefined;
-  }
-
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 async function toReadable(body: unknown): Promise<Readable> {

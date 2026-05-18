@@ -33,7 +33,7 @@
     "smoke:auth-dev-disable": "pnpm --filter @study-note/api build && node scripts/smoke-auth-dev-disable.mjs",
     "smoke:auth-pii-redaction": "pnpm --filter @study-note/api build && node scripts/smoke-auth-pii-redaction.mjs",
     "smoke:cli-path": "pnpm --filter @study-note/cli build && node scripts/smoke-cli-path.mjs",
-    "smoke:s3-storage": "pnpm --filter @study-note/api build && node scripts/smoke-s3-storage.mjs",
+    "smoke:s3-storage": "pnpm --filter @study-note/storage build && pnpm --filter @study-note/api build && node scripts/smoke-s3-storage.mjs",
     "smoke:s3-real": "pnpm --filter @study-note/api build && node scripts/smoke-real-s3-storage.mjs",
     "smoke:pdf-workspace": "pnpm --filter @study-note/api build && node scripts/smoke-pdf-workspace.mjs",
     "ingest:pdf": "pnpm --filter @study-note/cli build && node --env-file-if-exists=.env apps/cli/dist/ingest-pdf.js",

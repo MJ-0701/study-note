@@ -7,6 +7,7 @@ import {
   fetchPdfMaterialFile,
   listPdfMaterials,
   uploadMaterialFile,
+  type MaterialUploadIntent,
   type PdfMaterialRecord
 } from "./api/materials";
 import {
@@ -51,6 +52,7 @@ import "./styles.css";
 type Route =
   | { name: "home" }
   | { name: "intake" }
+  | { name: "pdf-workspaces" }
   | { name: "subject"; subjectId: string }
   | { name: "subject-intake"; subjectId: string }
   | { name: "pdf-workspace"; subjectId: string }
@@ -62,6 +64,7 @@ type IntakeFeedback =
       title: string;
       detail: string;
       href?: string;
+      retrySubjectId?: string;
     }
   | undefined;
 
@@ -122,6 +125,8 @@ const failedPdfPreviewLoadKeys = new Set<string>();
 let activeInkStroke: ActiveInkStroke | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
+// slice-2: stash last pending upload for retry CTA
+let pendingPdfRetry: { file: File; subjectId: string; intent: MaterialUploadIntent } | undefined;
 let quickNote: QuickNote | undefined;
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -569,6 +574,59 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // slice-2: retry PDF upload after S3 PUT / completion failure
+  if (quickNoteButton?.dataset.action === "retry-pdf-upload") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+
+    if (!subjectId || !pendingPdfRetry || pendingPdfRetry.subjectId !== subjectId) {
+      return;
+    }
+
+    const { file, intent } = pendingPdfRetry;
+    const intentExpiry = new Date(intent.upload.expiresAt).getTime();
+    const now = Date.now();
+
+    if (now < intentExpiry) {
+      // Intent still valid — retry from S3 PUT step (skip re-creating intent)
+      intakeFeedback = {
+        kind: "success",
+        title: "업로드를 재시도합니다.",
+        detail: "S3 PUT 단계부터 다시 시도합니다."
+      };
+      renderApp();
+
+      void (async () => {
+        try {
+          const uploadedMaterial = await uploadMaterialFile(apiBaseUrl, intent, file);
+          pendingPdfRetry = undefined;
+          updatePdfWorkspace(subjectId, (workspace) => ({
+            ...workspace,
+            material: createPdfMaterialFromBackend(uploadedMaterial, workspace.material)
+          }));
+          await loadPdfPreviewFromBackend(subjectId, uploadedMaterial, { force: true, silent: true });
+          intakeFeedback = {
+            kind: "success",
+            title: "PDF를 backend에 저장했습니다.",
+            detail: `${uploadedMaterial.fileName} · ${formatPdfFileSize(uploadedMaterial.fileSize)} · 재시도 성공`
+          };
+        } catch (retryError) {
+          intakeFeedback = {
+            kind: "error",
+            title: "재시도 중에도 업로드를 완료하지 못했습니다.",
+            detail: formatMaterialError(retryError),
+            retrySubjectId: subjectId
+          };
+        }
+        renderApp();
+      })();
+    } else {
+      // Intent expired — restart from full import flow
+      void importPdfMaterialFile(file, subjectId);
+    }
+
+    return;
+  }
+
   const resetButton = target.closest<HTMLButtonElement>("[data-action='reset-local-data']");
 
   if (!resetButton) {
@@ -881,6 +939,9 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       contentType: "application/pdf"
     });
 
+    // Stash intent for retry CTA (resume at S3 PUT step if intent still valid)
+    pendingPdfRetry = { file, subjectId, intent };
+
     clearActivePdfObjectUrl(subjectId);
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
@@ -888,11 +949,11 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     }));
     renderApp();
 
-    const uploadedMaterial = await uploadMaterialFile(
-      apiBaseUrl,
-      intent.upload.uploadUrl,
-      file
-    );
+    // slice-2: new S3 direct PUT flow — intent → S3 PUT (with retry) → completion
+    const uploadedMaterial = await uploadMaterialFile(apiBaseUrl, intent, file);
+
+    // Upload success — clear retry state
+    pendingPdfRetry = undefined;
 
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
@@ -917,7 +978,8 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     intakeFeedback = {
       kind: "error",
       title: "PDF 업로드를 완료하지 못했습니다.",
-      detail: formatMaterialError(error)
+      detail: formatMaterialError(error),
+      retrySubjectId: subjectId
     };
   }
 
@@ -1301,7 +1363,12 @@ function renderApp(): void {
       ? subject.weekNotes.find((item) => item.id === route.weekId)
       : undefined;
 
-  if (route.name !== "home" && route.name !== "intake" && !subject) {
+  if (
+    route.name !== "home" &&
+    route.name !== "intake" &&
+    route.name !== "pdf-workspaces" &&
+    !subject
+  ) {
     appRoot.innerHTML = renderShell(
       renderHomeSidebar(notebook, { name: "home" }),
       renderNotFound(),
@@ -1333,6 +1400,15 @@ function renderApp(): void {
       renderHomeSidebar(notebook, route),
       renderIntakeGuide(notebook),
       `${notebook.title} / 자료 투입`
+    );
+    return;
+  }
+
+  if (route.name === "pdf-workspaces") {
+    appRoot.innerHTML = renderShell(
+      renderHomeSidebar(notebook, route),
+      renderPdfWorkspaceIndex(notebook),
+      `${notebook.title} / PDF 작업공간`
     );
     return;
   }
@@ -1392,6 +1468,10 @@ function parseRoute(hash: string): Route {
 
   if (parts[0] === "subjects" && parts[1]) {
     return { name: "subject", subjectId: parts[1] };
+  }
+
+  if (parts[0] === "pdf-workspaces") {
+    return { name: "pdf-workspaces" };
   }
 
   if (parts[0] === "intake") {
@@ -1525,6 +1605,12 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
           `).join("")}
         </nav>
       </div>
+      <div class="sidebar-group">
+        <p class="group-label">PDF 작업공간</p>
+        <nav>
+          <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
+        </nav>
+      </div>
       ${renderClassSchedule()}
       <details class="sidebar-details" ${route.name === "intake" ? "open" : ""}>
         <summary>자료 관리</summary>
@@ -1589,6 +1675,12 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
           ${subject.weekNotes.map((week) => `
             <a class="${route.name === "week" && route.weekId === week.id ? "active" : ""}" href="${weekPath(subject, week)}">${week.label}</a>
           `).join("")}
+        </nav>
+      </div>
+      <div class="sidebar-group">
+        <p class="group-label">PDF 작업공간</p>
+        <nav>
+          <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
         </nav>
       </div>
       ${renderClassSchedule(currentSession?.label)}
@@ -1948,11 +2040,17 @@ function renderIntakeFeedback(
     return `<div class="import-feedback">${emptyText}</div>`;
   }
 
+  const retryButton =
+    intakeFeedback.kind === "error" && intakeFeedback.retrySubjectId && pendingPdfRetry
+      ? `<button class="secondary-action" type="button" data-action="retry-pdf-upload" data-subject-id="${escapeHtml(intakeFeedback.retrySubjectId)}">재시도</button>`
+      : "";
+
   return `
     <div class="import-feedback is-${intakeFeedback.kind}">
       <strong>${intakeFeedback.title}</strong>
       <p>${intakeFeedback.detail}</p>
       ${intakeFeedback.href ? `<a href="${intakeFeedback.href}">반영된 수업일 노트 보기</a>` : ""}
+      ${retryButton}
     </div>
   `;
 }
@@ -2272,7 +2370,7 @@ function renderSubjectPage(subject: SubjectNote): string {
         <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${subject.id}">
           10분 정리노트 만들기
         </button>
-        <a class="action-link" href="${subjectPdfWorkspacePath(subject)}">PDF에 필기하기</a>
+        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
         <a class="action-link" href="${subjectIntakePath(subject)}">${subject.title} 자료 넣기</a>
       </div>
     </section>
@@ -2392,6 +2490,40 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
       <h2 id="week-practice-title">예제문제</h2>
       <div class="question-list">
         ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
+      </div>
+    </section>
+  `;
+}
+
+// slice-3: PDF 작업공간 index 페이지 — 4 과목 카드 그리드.
+// 카드 클릭 → #/subjects/<id>/pdf-workspace (subjectPdfWorkspacePath 사용 — BC safe).
+function renderPdfWorkspaceIndex(studyNotebook: StudyNotebook): string {
+  const cards = studyNotebook.subjects
+    .map(
+      (subject) => `
+    <article class="subject-card">
+      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
+      <h3>${subject.title}</h3>
+      <p>${subject.summary.goal}</p>
+      <div class="subject-card-footer">
+        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">열기</a>
+      </div>
+    </article>
+  `
+    )
+    .join("");
+
+  return `
+    <section class="subject-page-hero">
+      <p class="meta">PDF 작업공간</p>
+      <h1>과목별 PDF 작업공간</h1>
+      <p class="lede">과목을 선택해 PDF 열람 · 필기 작업공간으로 이동합니다.</p>
+    </section>
+    <section aria-labelledby="pdf-workspaces-title">
+      <p class="meta">과목 선택</p>
+      <h2 id="pdf-workspaces-title">작업공간 목록</h2>
+      <div class="subject-grid">
+        ${cards}
       </div>
     </section>
   `;

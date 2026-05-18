@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException
 } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
@@ -14,7 +15,7 @@ import type {
   PdfStickyNote
 } from "@study-note/domain";
 import { PrismaService, toAnnotationPayload, toAnnotationSnapshotRecord, toPdfMaterialRecord } from "@study-note/persistence";
-import { StoragePort } from "@study-note/storage";
+import { ObjectNotFoundError, StoragePort } from "@study-note/storage";
 
 interface CreateUploadIntentInput {
   subjectId: string;
@@ -39,6 +40,8 @@ interface UploadFileInput {
 
 @Injectable()
 export class MaterialsService {
+  private readonly logger = new Logger(MaterialsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StoragePort
@@ -72,7 +75,7 @@ export class MaterialsService {
 
     return {
       material: materialRecord,
-      upload: this.storage.createUploadIntent(materialRecord)
+      upload: await this.storage.createUploadIntent(materialRecord)
     };
   }
 
@@ -121,10 +124,127 @@ export class MaterialsService {
     return toPdfMaterialRecord(saved);
   }
 
+  async completeUpload(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
+    // Step 1: load material (owner scoping + soft-delete guard)
+    const material = await this.prisma.pdfMaterial.findFirst({
+      where: { id: materialId, ownerId, deletedAt: null }
+    });
+
+    if (!material) {
+      throw new NotFoundException("PDF material not found");
+    }
+
+    // Step 2: idempotent — already uploaded, no headObject call needed
+    if (material.uploadStatus === "uploaded") {
+      this.logger.log(
+        `materials.complete.noop reason=already-uploaded materialId=${materialId}`
+      );
+      return toPdfMaterialRecord(material);
+    }
+
+    // Step 3: headObject verify
+    let headSize: number;
+    try {
+      const head = await this.storage.headObject(material.storageKey);
+      headSize = head.contentLength;
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        // S3 오브젝트 명시적 미존재 — 사용자 업로드 미완료로 분류
+        this.logger.warn(
+          `materials.complete.size-mismatch declared=${material.fileSize} actual=not-found materialId=${materialId} reason=${error.message}`
+        );
+        throw new ConflictException({
+          errorCode: "UPLOAD_NOT_FOUND",
+          errorMessage: "S3 object not found. The file may not have been uploaded yet."
+        });
+      }
+      // 인프라 장애 (auth / network / S3 outage / transient AWS error) — error 로그 후 rethrow
+      // Nest 기본 처리 → 500 InternalServerError (운영자 alert 트리거)
+      this.logger.error(
+        `materials.complete.headObject-failed materialId=${materialId} error=${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
+
+    if (headSize !== material.fileSize) {
+      this.logger.warn(
+        `materials.complete.size-mismatch declared=${material.fileSize} actual=${headSize} materialId=${materialId}`
+      );
+      throw new ConflictException({
+        errorCode: "UPLOAD_SIZE_MISMATCH",
+        errorMessage: `File size mismatch: declared ${material.fileSize}, actual ${headSize}`
+      });
+    }
+
+    // Step 3b: PDF magic bytes check — same guard as server-upload path (uploadFile).
+    // Prevents non-PDF or corrupted files with matching fileSize from being transitioned.
+    // material stays "pending" on failure → FE can re-upload.
+    // O(1) S3 cost: 1 Range GET (bytes=0-4) per completion call.
+    let prefix: Buffer;
+    try {
+      prefix = await this.storage.readObjectPrefix(material.storageKey, PDF_MAGIC_PREFIX.length);
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        // HEAD 와 Range GET 사이 object 삭제 (orphan cleanup race, transient S3 condition 등)
+        this.logger.warn(
+          `materials.complete.readObjectPrefix-not-found materialId=${materialId} reason=${error.message}`
+        );
+        throw new ConflictException({
+          errorCode: "UPLOAD_NOT_FOUND",
+          errorMessage: "S3 object disappeared between HEAD and content read. Retry upload."
+        });
+      }
+      // 인프라 장애 — error 로그 후 rethrow (500 InternalServerError 운영자 alert 트리거)
+      this.logger.error(
+        `materials.complete.readObjectPrefix-failed materialId=${materialId} error=${error instanceof Error ? error.message : String(error)}`
+      );
+      throw error;
+    }
+
+    if (!prefix.equals(PDF_MAGIC_PREFIX)) {
+      this.logger.warn(
+        `materials.complete.magic-mismatch materialId=${materialId} prefix=${prefix.toString("hex")}`
+      );
+      throw new BadRequestException({
+        errorCode: "PDF_MAGIC_MISMATCH",
+        errorMessage: "Uploaded file is not a valid PDF (magic bytes mismatch)"
+      });
+    }
+
+    // Step 4: race-safe conditional update (updateMany where uploadStatus=pending)
+    // Returns {count: 0|1}. count=0 means another concurrent call already transitioned.
+    const { count } = await this.prisma.pdfMaterial.updateMany({
+      where: { id: materialId, uploadStatus: "pending", deletedAt: null },
+      data: { uploadStatus: "uploaded" }
+    });
+
+    if (count === 0) {
+      // Another concurrent call already transitioned → re-fetch and return current state
+      this.logger.log(
+        `materials.complete.noop reason=already-uploaded(race) materialId=${materialId}`
+      );
+    } else {
+      this.logger.log(
+        `materials.complete.transitioned materialId=${materialId} from=pending to=uploaded headObjectSize=${headSize}`
+      );
+    }
+
+    const updated = await this.prisma.pdfMaterial.findFirst({
+      where: { id: materialId, ownerId, deletedAt: null }
+    });
+
+    if (!updated) {
+      throw new NotFoundException("PDF material not found after transition");
+    }
+
+    return toPdfMaterialRecord(updated);
+  }
+
   async listMaterials(ownerId: string): Promise<PdfMaterialRecord[]> {
     const materials = await this.prisma.pdfMaterial.findMany({
       where: {
-        ownerId
+        ownerId,
+        deletedAt: null
       },
       orderBy: {
         createdAt: "desc"
@@ -138,7 +258,8 @@ export class MaterialsService {
     const material = await this.prisma.pdfMaterial.findFirst({
       where: {
         id: materialId,
-        ownerId
+        ownerId,
+        deletedAt: null
       }
     });
 
