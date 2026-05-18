@@ -2260,16 +2260,19 @@ function removeTextBox(subjectId: string, textBoxId: string): void {
   }));
 }
 
-// debounce handle for textbox content update — avoids store write on every keystroke.
-let textBoxContentDebounce: ReturnType<typeof setTimeout> | undefined;
+// debounce handles per textbox — codex P1 fix: 1개 module-level timer 공유 시 textbox A→B
+// 빠른 타이핑 = A 의 pending save cancel → A content 손실. per-id Map 으로 격리.
+const textBoxContentDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
 
 function scheduleTextBoxContentUpdate(
   subjectId: string,
   textBoxId: string,
   content: string
 ): void {
-  clearTimeout(textBoxContentDebounce);
-  textBoxContentDebounce = setTimeout(() => {
+  const prev = textBoxContentDebounceMap.get(textBoxId);
+  if (prev) clearTimeout(prev);
+  const handle = setTimeout(() => {
+    textBoxContentDebounceMap.delete(textBoxId);
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
       textBoxes: workspace.textBoxes.map((tb) =>
@@ -2277,6 +2280,7 @@ function scheduleTextBoxContentUpdate(
       )
     }));
   }, 300);
+  textBoxContentDebounceMap.set(textBoxId, handle);
 }
 
 function applyTextBoxMove(
@@ -2375,9 +2379,9 @@ function applyStickyMove(
   }));
 }
 
-// debounce handle for checklist item label update — avoids store write on every keystroke.
-// Module-level (one at a time): user edits one label at a time; prior debounce fires harmlessly.
-let checklistLabelDebounce: ReturnType<typeof setTimeout> | undefined;
+// debounce handles per checklist item — codex P1 fix: 1개 shared timer = item A→B 빠른
+// 편집 시 A label drop. per-item Map (key = checklistId:itemId) 으로 격리.
+const checklistLabelDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
 
 function scheduleChecklistItemLabelUpdate(
   subjectId: string,
@@ -2385,9 +2389,12 @@ function scheduleChecklistItemLabelUpdate(
   itemId: string,
   label: string
 ): void {
-  clearTimeout(checklistLabelDebounce);
+  const key = `${checklistId}:${itemId}`;
+  const prev = checklistLabelDebounceMap.get(key);
+  if (prev) clearTimeout(prev);
   // AC9-e: no renderApp in debounced callback — avoids DOM rebuild mid-keystroke (focus loss).
-  checklistLabelDebounce = setTimeout(() => {
+  const handle = setTimeout(() => {
+    checklistLabelDebounceMap.delete(key);
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
       checklists: workspace.checklists.map((cl) =>
@@ -2395,6 +2402,7 @@ function scheduleChecklistItemLabelUpdate(
       )
     }));
   }, 300);
+  checklistLabelDebounceMap.set(key, handle);
 }
 
 function addStickyNote(
