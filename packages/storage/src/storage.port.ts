@@ -70,4 +70,7 @@ export abstract class StoragePort {
   abstract headObject(storageKey: string): Promise<HeadObjectResult>;
   // slice-1: exposed for orphan cleanup (slice-2+)
   abstract deleteObject(storageKey: string): Promise<void>;
+  // completion PDF magic check — reads first `length` bytes of a stored object.
+  // Used by completeUpload to verify %PDF- magic without downloading the full file.
+  abstract readObjectPrefix(storageKey: string, length: number): Promise<Buffer>;
 }

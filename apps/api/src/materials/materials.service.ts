@@ -176,6 +176,21 @@ export class MaterialsService {
       });
     }
 
+    // Step 3b: PDF magic bytes check — same guard as server-upload path (uploadFile).
+    // Prevents non-PDF or corrupted files with matching fileSize from being transitioned.
+    // material stays "pending" on failure → FE can re-upload.
+    // O(1) S3 cost: 1 Range GET (bytes=0-4) per completion call.
+    const prefix = await this.storage.readObjectPrefix(material.storageKey, PDF_MAGIC_PREFIX.length);
+    if (!prefix.equals(PDF_MAGIC_PREFIX)) {
+      this.logger.warn(
+        `materials.complete.magic-mismatch materialId=${materialId} prefix=${prefix.toString("hex")}`
+      );
+      throw new BadRequestException({
+        errorCode: "PDF_MAGIC_MISMATCH",
+        errorMessage: "Uploaded file is not a valid PDF (magic bytes mismatch)"
+      });
+    }
+
     // Step 4: race-safe conditional update (updateMany where uploadStatus=pending)
     // Returns {count: 0|1}. count=0 means another concurrent call already transitioned.
     const { count } = await this.prisma.pdfMaterial.updateMany({

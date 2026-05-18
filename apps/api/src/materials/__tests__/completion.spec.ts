@@ -14,7 +14,7 @@
  */
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import type { HeadObjectResult } from "@study-note/storage";
 import { ObjectNotFoundError } from "@study-note/storage";
 import { MaterialsService } from "../materials.service";
@@ -88,7 +88,12 @@ function makePrisma(
   };
 }
 
-function makeStorage(headResult: HeadObjectResult | Error) {
+const PDF_MAGIC = Buffer.from("%PDF-");
+
+function makeStorage(
+  headResult: HeadObjectResult | Error,
+  prefixOverride?: Buffer
+) {
   return {
     createUploadIntent: async () => ({
       method: "PUT" as const,
@@ -110,7 +115,11 @@ function makeStorage(headResult: HeadObjectResult | Error) {
       if (headResult instanceof Error) throw headResult;
       return headResult;
     },
-    deleteObject: async () => {}
+    deleteObject: async () => {},
+    readObjectPrefix: async (_storageKey: string, length: number): Promise<Buffer> => {
+      // Default: return valid %PDF- prefix. Tests can override via prefixOverride.
+      return prefixOverride ?? PDF_MAGIC.subarray(0, length);
+    }
   };
 }
 
@@ -286,5 +295,46 @@ describe("MaterialsService.completeUpload", () => {
         return true;
       }
     );
+  });
+
+  it("bonus — PDF magic mismatch → 400 PDF_MAGIC_MISMATCH, material stays pending", async () => {
+    // headObject size matches (100 === 100), but prefix is not %PDF-
+    // → completion must reject with BadRequestException and NOT call updateMany.
+    const row = makeRow({ uploadStatus: "pending", fileSize: 100 });
+    let updateManyCalls = 0;
+
+    const prisma = {
+      pdfMaterial: {
+        findFirst: async () => row,
+        findMany: async () => [],
+        create: async () => row,
+        update: async () => row,
+        updateMany: async () => {
+          updateManyCalls++;
+          return { count: 1 };
+        }
+      }
+    } as unknown as import("@study-note/persistence").PrismaService;
+
+    // prefix override: 5 bytes that are NOT %PDF-
+    const wrongPrefix = Buffer.from("XXXXX");
+    const storage = {
+      ...makeStorage({ contentLength: 100 }, wrongPrefix)
+    } as unknown as import("@study-note/storage").StoragePort;
+
+    const service = new MaterialsService(prisma, storage);
+
+    await assert.rejects(
+      () => service.completeUpload("user-001", "mat-001"),
+      (err: unknown) => {
+        assert.ok(err instanceof BadRequestException, "should throw BadRequestException");
+        const response = (err as BadRequestException).getResponse() as Record<string, unknown>;
+        assert.equal(response["errorCode"], "PDF_MAGIC_MISMATCH", "errorCode must be PDF_MAGIC_MISMATCH");
+        return true;
+      }
+    );
+
+    // material stays pending: updateMany must NOT have been called
+    assert.equal(updateManyCalls, 0, "updateMany must not be called when magic check fails — material stays pending");
   });
 });

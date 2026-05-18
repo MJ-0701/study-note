@@ -258,6 +258,60 @@ export class S3StorageService extends StoragePort {
     );
   }
 
+  /**
+   * S3 Range GET: first `length` bytes of object.
+   * Used by completeUpload to verify %PDF- magic without fetching the full file.
+   *
+   * Missing-key narrowing (GetObject 기준):
+   *   - name === "NoSuchKey": SDK v3 공식 GetObject missing-key 시그널
+   *   - Code === "NoSuchKey": localstack / 구 SDK 호환
+   * HeadObject (name === "NotFound") 은 GetObject 에 적용되지 않으므로 제외.
+   *
+   * O(1) data transfer — 5 byte Range GET. S3 cost: GET 1 회 (min billable unit 동일).
+   */
+  async readObjectPrefix(storageKey: string, length: number): Promise<Buffer> {
+    let result: unknown;
+    try {
+      result = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.config.bucket,
+          Key: storageKey,
+          Range: `bytes=0-${length - 1}`
+        })
+      );
+    } catch (err) {
+      const e = err as Record<string, unknown>;
+      const isMissingKey =
+        e["name"] === "NoSuchKey" ||
+        e["Code"] === "NoSuchKey";
+      if (isMissingKey) {
+        throw new ObjectNotFoundError(storageKey);
+      }
+      throw err;
+    }
+
+    const body = (result as { Body?: unknown }).Body;
+    // SDK v3 SdkStream: transformToByteArray() is the canonical path.
+    // Fall back to async-iterable aggregation for custom / test clients.
+    let bytes: Uint8Array;
+    if (body && typeof (body as { transformToByteArray?: unknown }).transformToByteArray === "function") {
+      bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+    } else if (body && typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+      bytes = Buffer.concat(chunks);
+    } else if (body instanceof Uint8Array) {
+      bytes = body;
+    } else {
+      throw new Error("S3 readObjectPrefix: unsupported body type");
+    }
+
+    // Cap to requested length defensively (S3 Range 206 may return up to length bytes)
+    return Buffer.from(bytes).subarray(0, length);
+  }
+
   createExportBundle(
     material: PdfMaterialRecord,
     annotation: AnnotationSnapshotRecord

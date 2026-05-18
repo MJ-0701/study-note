@@ -96,6 +96,14 @@ export class LocalMockStorageService extends StoragePort {
   async deleteObject(storageKey: string): Promise<void> {
     this.objects.delete(storageKey);
   }
+
+  async readObjectPrefix(storageKey: string, length: number): Promise<Buffer> {
+    const object = this.objects.get(storageKey);
+    if (!object) {
+      throw new ObjectNotFoundError(storageKey);
+    }
+    return object.body.subarray(0, length);
+  }
 }
 
 function getExpiry() {
