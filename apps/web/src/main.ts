@@ -475,9 +475,7 @@ function handleDocumentChange(event: Event): void {
 
     if (subjectId && checklistId && itemId) {
       applyToggleChecklistItem(subjectId, checklistId, itemId);
-      // AC9-e: no renderApp here — checkbox state already reflects toggle via DOM;
-      // store write is sufficient. renderApp would rebuild DOM and discard focus.
-      // However, unlike debounced text input, toggle is discrete — renderApp is safe.
+      // renderApp safe here: discrete toggle, no in-flight input focus to lose.
       renderApp();
     }
 
@@ -900,7 +898,9 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
 function handleDocumentInput(event: Event): void {
   const target = event.target;
 
-  if (!(target instanceof HTMLTextAreaElement)) {
+  // sprint-12/slice-3: broaden guard to accept HTMLInputElement as well
+  // (checklist item label = <input type="text">; textBox/sticky = <textarea>).
+  if (!(target instanceof HTMLTextAreaElement) && !(target instanceof HTMLInputElement)) {
     return;
   }
 
