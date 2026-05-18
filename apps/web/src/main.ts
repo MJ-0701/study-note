@@ -112,6 +112,9 @@ const notebookStorageKey = "study-note.notebook.v2";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
 let notebook = loadStoredNotebook();
 let pdfWorkspaceStore = loadPdfWorkspaceStore();
+// sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
+// Default = false (접힘). Restored from localStorage on page load.
+let inspectorOpen = readInspectorOpen();
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -157,6 +160,22 @@ renderApp();
 
 // slice-2: always rehydrate from server — cookie carries the session token.
 void revalidateStoredSession();
+
+// sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
+// Only reads/writes key "studyNote.pdfWorkspace.inspectorOpen".
+// Invalid / null / non-true JSON → false (fail-closed, AC9-b).
+function readInspectorOpen(): boolean {
+  try {
+    const raw = localStorage.getItem("studyNote.pdfWorkspace.inspectorOpen");
+    if (raw === null) return false;
+    return JSON.parse(raw) === true;
+  } catch { return false; }
+}
+function writeInspectorOpen(value: boolean): void {
+  try {
+    localStorage.setItem("studyNote.pdfWorkspace.inspectorOpen", JSON.stringify(value === true));
+  } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
+}
 
 function loadStoredNotebook(): StudyNotebook {
   const stored = window.localStorage.getItem(notebookStorageKey);
@@ -502,6 +521,14 @@ function handleDocumentClick(event: MouseEvent): void {
       scrollToQuickNote();
     }
 
+    return;
+  }
+
+  // sprint-11/slice-1 R1/R2: toggle inspector open/close + localStorage persistence.
+  if (quickNoteButton?.dataset.action === "toggle-pdf-inspector") {
+    inspectorOpen = !inspectorOpen;
+    writeInspectorOpen(inspectorOpen);
+    renderApp();
     return;
   }
 
@@ -1341,16 +1368,20 @@ async function importWeekNoteFile(
 
 function renderApp(): void {
   if (authBootState === "checking") {
+    document.body.removeAttribute("data-route");
     appRoot.innerHTML = renderSessionCheckPage();
     return;
   }
 
   if (!authSession) {
+    document.body.removeAttribute("data-route");
     appRoot.innerHTML = renderLoginPage();
     return;
   }
 
   const route = parseRoute(window.location.hash);
+  // sprint-11/slice-1 R3-b: body data-route for CSS scope (.content max-width).
+  document.body.dataset.route = route.name;
   const subject =
     route.name === "subject" ||
     route.name === "subject-intake" ||
@@ -2132,10 +2163,19 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           <p class="meta">§2 — PDF viewer + annotation layer</p>
           <h2 id="pdf-workspace-title">페이지 ${selectedPage}${material ? ` / ${material.pageCount}` : ""}</h2>
         </div>
-        ${renderPdfToolbar(subject.id, selectedTool, material?.pageCount ?? 1, selectedPage, Boolean(material))}
+        <div class="pdf-toolbar-row">
+          ${renderPdfToolbar(subject.id, selectedTool, material?.pageCount ?? 1, selectedPage, Boolean(material))}
+          <button
+            class="pdf-inspector-toggle secondary-action"
+            type="button"
+            data-action="toggle-pdf-inspector"
+            aria-expanded="${inspectorOpen ? "true" : "false"}"
+            aria-controls="pdf-inspector-aside"
+          >${inspectorOpen ? "검사기 닫기" : "검사기 열기"}</button>
+        </div>
       </div>
 
-      <div class="pdf-workspace-layout">
+      <div class="pdf-workspace-layout${inspectorOpen ? " is-inspector-open" : ""}">
         <div class="pdf-stage" aria-label="${subject.title} PDF page annotation surface">
           ${
             objectUrl
@@ -2163,7 +2203,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           </div>
         </div>
 
-        <aside class="pdf-inspector" aria-label="PDF annotation state">
+        <aside
+          class="pdf-inspector${inspectorOpen ? "" : " pdf-inspector--collapsed"}"
+          id="pdf-inspector-aside"
+          aria-label="PDF annotation state"
+          aria-hidden="${inspectorOpen ? "false" : "true"}"
+        >
           <p class="meta">§3 — 저장 상태</p>
           <h3>로컬 annotation</h3>
           <dl>
