@@ -1243,6 +1243,21 @@ p {
   color: var(--ds-bg);
 }
 
+.tool-button:focus-visible {
+  outline: 2px solid var(--ds-accent, #4f46e5);
+  outline-offset: 2px;
+}
+
+/* sprint-12/slice-5: 표/그래프 도구 = sprint-13 까지 disabled placeholder. */
+.tool-button.is-disabled-placeholder {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tool-button.is-disabled-placeholder:hover {
+  background: var(--ds-bg);
+}
+
 .pdf-eraser-subtoolbar {
   align-items: center;
   background: var(--ds-bg-soft);

@@ -3375,12 +3375,8 @@ function renderPdfToolbar(
       <div class="pdf-tool-group" role="group" aria-label="annotation 도구">
         ${renderToolButton(subjectId, "text", selectedTool, "텍스트 박스")}
         ${renderToolButton(subjectId, "checklist", selectedTool, "체크리스트")}
-      </div>
-      <div class="pdf-tool-group" role="group" aria-label="포스트잇 추가 (legacy)">
-        ${renderStickyAddButton(subjectId, "text", "텍스트 (포스트잇 안)")}
-        ${renderStickyAddButton(subjectId, "checklist", "체크 (포스트잇 안)")}
-        ${renderStickyAddButton(subjectId, "table", "표")}
-        ${renderStickyAddButton(subjectId, "chart-note", "그래프")}
+        ${renderDisabledToolButton("표", "표 도구 — sprint-13 예정")}
+        ${renderDisabledToolButton("그래프", "그래프 도구 — sprint-13 예정")}
       </div>
       ${selectedTool === "eraser" ? renderEraserSubToolbar(subjectId, eraserShape, eraserSize, disabled) : ""}
     </div>
@@ -3494,29 +3490,31 @@ function renderToolButton(
       data-action="set-pdf-tool"
       data-subject-id="${subjectId}"
       data-tool="${tool}"
+      aria-pressed="${selectedTool === tool ? "true" : "false"}"
     >
       ${label}
     </button>
   `;
 }
 
-function renderStickyAddButton(
-  subjectId: string,
-  kind: StickyNoteBlockKind,
-  label: string
-): string {
+// sprint-12/slice-5: sprint-13 까지 미구현 도구 (표/그래프) 의 disabled placeholder.
+// 클릭 무동작. tooltip / aria-label 으로 사용자에게 미래 도입 예정 표시.
+function renderDisabledToolButton(label: string, ariaLabel: string): string {
+  const escapedLabel = escapeHtml(label);
+  const escapedAria = escapeHtml(ariaLabel);
   return `
     <button
-      class="tool-button"
+      class="tool-button is-disabled-placeholder"
       type="button"
-      data-action="add-sticky-note"
-      data-subject-id="${subjectId}"
-      data-block-kind="${kind}"
+      disabled
+      aria-label="${escapedAria}"
+      title="${escapedAria}"
     >
-      ${label}
+      ${escapedLabel}
     </button>
   `;
 }
+
 
 function renderStickyNote(subjectId: string, note: SubjectPdfWorkspace["stickyNotes"][number]): string {
   const block = note.blocks[0];
