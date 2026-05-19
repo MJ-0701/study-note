@@ -248,13 +248,28 @@ function buildLineHitState(
   surfaceHeight: number,
   radiusPx: number
 ): { segments: PixelSegment[]; bbox: PixelBBox } | undefined {
-  if (!dragPath || dragPath.length < 2) {
+  if (!dragPath || dragPath.length < 1) {
     return undefined;
   }
 
   const cappedPath = dragPath.slice(-(ERASER_LINE_SEGMENT_CAP + 1));
   const segments: PixelSegment[] = [];
   let bbox: PixelBBox | undefined;
+
+  if (cappedPath.length === 1) {
+    const point = cappedPath[0];
+    if (!point) {
+      return undefined;
+    }
+
+    const px = point.x * surfaceWidth;
+    const py = point.y * surfaceHeight;
+
+    segments.push({ ax: px, ay: py, bx: px, by: py });
+    bbox = includePointInBBox(bbox, px, py);
+
+    return { segments, bbox: expandBBox(bbox, radiusPx) };
+  }
 
   for (let i = 1; i < cappedPath.length; i++) {
     const prev = cappedPath[i - 1];
@@ -726,6 +741,58 @@ describe("eraseStrokePointsByShape", () => {
   it("shape=line: 1 segment dragPath, point distance > size/2 from segment → preserved", () => {
     const dragPath = [{ x: 0.1, y: 0.5 }, { x: 0.9, y: 0.5 }];
     const stroke = makeStroke("line-miss", [
+      { x: 0.5, y: 0.512 },
+      { x: 0.9, y: 0.9 }
+    ]);
+
+    const result = eraseStrokePointsByShape(
+      [stroke],
+      "line",
+      0.5,
+      0.5,
+      LINE_SIZE_PX,
+      W,
+      H,
+      dragPath
+    );
+
+    assert.equal(result.length, 1);
+    assert.strictEqual(result[0], stroke);
+  });
+
+  it("shape=line: tap dragPath length=1, point distance ≤ size/2 from tap → removed", () => {
+    const dragPath = [{ x: 0.5, y: 0.5 }];
+    const p0 = { x: 0.1, y: 0.1 };
+    const p1 = { x: 0.2, y: 0.2 };
+    const nearTap = { x: 0.5, y: 0.506 };
+    const p3 = { x: 0.8, y: 0.8 };
+    const p4 = { x: 0.9, y: 0.9 };
+    const stroke = makeStroke("line-tap-hit", [p0, p1, nearTap, p3, p4]);
+
+    assert.ok(
+      distPx(nearTap.x, nearTap.y, dragPath[0].x, dragPath[0].y, W, H) <=
+        LINE_SIZE_PX / 2
+    );
+
+    const result = eraseStrokePointsByShape(
+      [stroke],
+      "line",
+      0.5,
+      0.5,
+      LINE_SIZE_PX,
+      W,
+      H,
+      dragPath
+    );
+
+    assert.equal(result.length, 2);
+    assert.deepEqual(coords(result[0]), [p0, p1]);
+    assert.deepEqual(coords(result[1]), [p3, p4]);
+  });
+
+  it("shape=line: tap dragPath length=1, all points distance > size/2 from tap → preserved", () => {
+    const dragPath = [{ x: 0.5, y: 0.5 }];
+    const stroke = makeStroke("line-tap-miss", [
       { x: 0.5, y: 0.512 },
       { x: 0.9, y: 0.9 }
     ]);

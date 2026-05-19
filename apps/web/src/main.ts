@@ -1990,13 +1990,28 @@ function buildLineHitState(
   surfaceHeight: number,
   radiusPx: number
 ): { segments: PixelSegment[]; bbox: PixelBBox } | undefined {
-  if (!dragPath || dragPath.length < 2) {
+  if (!dragPath || dragPath.length < 1) {
     return undefined;
   }
 
   const cappedPath = dragPath.slice(-(ERASER_LINE_SEGMENT_CAP + 1));
   const segments: PixelSegment[] = [];
   let bbox: PixelBBox | undefined;
+
+  if (cappedPath.length === 1) {
+    const point = cappedPath[0];
+    if (!point) {
+      return undefined;
+    }
+
+    const px = point.x * surfaceWidth;
+    const py = point.y * surfaceHeight;
+
+    segments.push({ ax: px, ay: py, bx: px, by: py });
+    bbox = includePointInBBox(bbox, px, py);
+
+    return { segments, bbox: expandBBox(bbox, radiusPx) };
+  }
 
   for (let i = 1; i < cappedPath.length; i++) {
     const prev = cappedPath[i - 1];
