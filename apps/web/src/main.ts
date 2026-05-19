@@ -38,15 +38,18 @@ import {
   createInkStroke,
   createPdfMaterialFromBackend,
   createStickyNote,
+  createTable,
   createTextBox,
   deleteChecklist,
   deleteChecklistItem,
+  deleteTable,
   deleteTextBox,
   estimatePdfPageCount,
   formatPdfFileSize,
   getSubjectPdfWorkspace,
   hydrateSubjectPdfWorkspace,
   moveChecklist,
+  moveTable,
   moveTextBox,
   normalizePdfPoint,
   pdfWorkspaceStorageKey,
@@ -54,11 +57,14 @@ import {
   setEraserSize,
   toggleChecklistCollapsed,
   toggleChecklistItem,
+  toggleTableCollapsed,
   updateChecklistItemLabel,
+  updateTableContent,
   updateTextBoxContent,
   type PdfChecklist,
   type PdfInkPoint,
   type PdfInkStroke,
+  type PdfTable,
   type PdfTextBox,
   type PdfWorkspaceStore,
   type PdfWorkspaceTool,
@@ -176,6 +182,16 @@ let activeChecklistDrag: {
   startNormX: number;
   startNormY: number;
 } | undefined;
+// sprint-13/slice-2: tracks an in-progress table drag (header pointerdown -> pointerup).
+let activeTableDrag: {
+  subjectId: string;
+  tableId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startNormX: number;
+  startNormY: number;
+} | undefined;
 // sprint-12/slice-6: tracks an in-progress sticky note drag (header pointerdown → pointerup).
 // Mirrors textbox/checklist drag — pointermove = DOM 직접 갱신, pointerup = store + renderApp.
 let activeStickyDrag: {
@@ -218,6 +234,7 @@ function renderInto(html: string): void {
   wrapper.id = appRoot.id;
   wrapper.innerHTML = html;
   morphdom(appRoot, wrapper, { childrenOnly: true });
+  refreshTablePreviews();
 }
 
 document.addEventListener("change", handleDocumentChange);
@@ -737,6 +754,19 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-13/slice-2: table delete (entire table)
+  if (quickNoteButton?.dataset.action === "delete-table") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const tableId = quickNoteButton.dataset.tableId;
+
+    if (subjectId && tableId) {
+      removeTable(subjectId, tableId);
+      renderApp();
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3-refine R11: toggle collapse/expand state (mode-agnostic)
   if (quickNoteButton?.dataset.action === "toggle-checklist-collapsed") {
     const subjectId = quickNoteButton.dataset.subjectId;
@@ -749,6 +779,19 @@ function handleDocumentClick(event: MouseEvent): void {
           cl.id === checklistId ? toggleChecklistCollapsed(cl) : cl
         )
       }));
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-13/slice-2: table collapse/expand state (mode-agnostic)
+  if (quickNoteButton?.dataset.action === "toggle-table-collapsed") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const tableId = quickNoteButton.dataset.tableId;
+
+    if (subjectId && tableId) {
+      applyTableCollapseToggle(subjectId, tableId);
       renderApp();
     }
 
@@ -1031,6 +1074,19 @@ function handleDocumentInput(event: Event): void {
     return;
   }
 
+  // sprint-13/slice-2: table markdown update (debounced store write + immediate preview).
+  if (target.dataset.action === "update-table-content") {
+    const subjectId = target.dataset.subjectId;
+    const tableId = target.dataset.tableId;
+
+    if (subjectId && tableId) {
+      refreshTablePreview(tableId, target.value);
+      scheduleTableContentUpdate(subjectId, tableId, target.value);
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3: checklist item label update (debounced 300ms)
   // AC9-e: value set via DOM property, not innerHTML. No renderApp in debounced callback.
   // AC9-g: label not logged, not in data-*, not in title/aria-label.
@@ -1162,7 +1218,41 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox, .pdf-checklist")) {
+  // sprint-13/slice-2: table header drag — same pattern as checklist drag.
+  // Button clicks (toggle/delete) and textarea edits stay in click/input handlers.
+  const tableDragHandle = target.closest<HTMLElement>("[data-action='table-drag-handle']");
+
+  if (tableDragHandle && !target.closest("button") && !target.closest("textarea") && !target.closest("input")) {
+    const subjectIdForDrag = surface.dataset.subjectId;
+    const tableIdForDrag = tableDragHandle.dataset.tableId;
+
+    if (subjectIdForDrag && tableIdForDrag) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const table = workspace.tables.find((item) => item.id === tableIdForDrag);
+
+      if (table) {
+        event.preventDefault();
+        try {
+          tableDragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic events may not support setPointerCapture
+        }
+        activeTableDrag = {
+          subjectId: subjectIdForDrag,
+          tableId: tableIdForDrag,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startNormX: table.position.x,
+          startNormY: table.position.y
+        };
+      }
+    }
+
+    return;
+  }
+
+  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox, .pdf-checklist, .pdf-table")) {
     return;
   }
 
@@ -1203,6 +1293,15 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-12/slice-3: checklist tool — click-to-place a new checklist at the surface point.
   if ((material.selectedTool as LocalPdfTool) === "checklist") {
     addChecklistWidget(subjectId, point);
+    setPdfTool(subjectId, "read");
+    renderApp();
+    event.preventDefault();
+    return;
+  }
+
+  // sprint-13/slice-2: table tool — click-to-place a new table at the surface point.
+  if ((material.selectedTool as LocalPdfTool) === "table") {
+    addTable(subjectId, point);
     setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
@@ -1373,6 +1472,35 @@ function handleDocumentPointerMove(event: PointerEvent): void {
     return;
   }
 
+  // sprint-13/slice-2: table drag — same pattern as checklist drag.
+  if (activeTableDrag && activeTableDrag.pointerId === event.pointerId) {
+    const { subjectId, tableId, startClientX, startClientY, startNormX, startNormY } = activeTableDrag;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      const dy = (event.clientY - startClientY) / rect.height;
+      applyTableMove(subjectId, tableId, { x: startNormX + dx, y: startNormY + dy });
+      const el = document.querySelector<HTMLElement>(`[data-table-id="${tableId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const table = workspace.tables.find((item) => item.id === tableId);
+
+        if (table) {
+          el.style.left = `${table.position.x * 100}%`;
+          el.style.top = `${table.position.y * 100}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
@@ -1440,6 +1568,13 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-12/slice-3: clear checklist drag state on pointer release.
   if (activeChecklistDrag && activeChecklistDrag.pointerId === event.pointerId) {
     activeChecklistDrag = undefined;
+    renderApp(); // final re-render to settle position
+    return;
+  }
+
+  // sprint-13/slice-2: clear table drag state on pointer release.
+  if (activeTableDrag && activeTableDrag.pointerId === event.pointerId) {
+    activeTableDrag = undefined;
     renderApp(); // final re-render to settle position
     return;
   }
@@ -1734,7 +1869,7 @@ function updateLiveStroke(): void {
 
 // sprint-12/slice-2: domain PdfWorkspaceTool union now includes "eraser" | "text" | "checklist".
 // LocalPdfTool is now an alias for the domain union (redundant "| eraser" dropped).
-// sprint-13 reserved tools: "table" | "chart" (실 기능 분리 예정).
+// sprint-13: "table" | "chart" added in domain; slice-2 activates table UI.
 type LocalPdfTool = PdfWorkspaceTool;
 type EraserShape = "circle" | "square" | "triangle" | "line";
 type EraserDragPoint = { x: number; y: number };
@@ -1748,7 +1883,9 @@ function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
     tool === "pen" ||
     tool === "eraser" ||
     tool === "text" ||
-    tool === "checklist"
+    tool === "checklist" ||
+    tool === "table" ||
+    tool === "chart"
   );
 }
 
@@ -2377,6 +2514,79 @@ function applyChecklistMove(
   }));
 }
 
+// ---------------------------------------------------------------------------
+// sprint-13/slice-2 — PdfTable store operations
+// Pattern mirrors addChecklistWidget / removeChecklist / applyChecklistMove.
+// ---------------------------------------------------------------------------
+
+function addTable(
+  subjectId: string,
+  position: { x: number; y: number }
+): void {
+  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const page = workspace.material?.selectedPage ?? 1;
+  const table = createTable({ subjectId, page, position });
+
+  updatePdfWorkspace(subjectId, (current) => ({
+    ...current,
+    tables: [...current.tables, table]
+  }));
+}
+
+function removeTable(subjectId: string, tableId: string): void {
+  const prev = tableContentDebounceMap.get(tableId);
+  if (prev) clearTimeout(prev);
+  tableContentDebounceMap.delete(tableId);
+
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: deleteTable(workspace.tables, tableId)
+  }));
+}
+
+function applyTableMove(
+  subjectId: string,
+  tableId: string,
+  position: { x: number; y: number }
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: workspace.tables.map((table) =>
+      table.id === tableId ? moveTable(table, position) : table
+    )
+  }));
+}
+
+const tableContentDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleTableContentUpdate(
+  subjectId: string,
+  tableId: string,
+  content: string
+): void {
+  const prev = tableContentDebounceMap.get(tableId);
+  if (prev) clearTimeout(prev);
+  const handle = setTimeout(() => {
+    tableContentDebounceMap.delete(tableId);
+    updatePdfWorkspace(subjectId, (workspace) => ({
+      ...workspace,
+      tables: workspace.tables.map((table) =>
+        table.id === tableId ? updateTableContent(table, content) : table
+      )
+    }));
+  }, 300);
+  tableContentDebounceMap.set(tableId, handle);
+}
+
+function applyTableCollapseToggle(subjectId: string, tableId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: workspace.tables.map((table) =>
+      table.id === tableId ? toggleTableCollapsed(table) : table
+    )
+  }));
+}
+
 // sprint-12/slice-6: sticky note move (inline reducer — no domain moveStickyNote yet).
 // anchor field (not position) is the sticky note's normalized coordinate.
 function applyStickyMove(
@@ -2712,6 +2922,167 @@ function subjectIntakePath(subject: SubjectNote): string {
 
 function subjectPdfWorkspacePath(subject: SubjectNote): string {
   return `#/subjects/${subject.id}/pdf-workspace`;
+}
+
+interface ParsedMarkdownTable {
+  headers: string[];
+  rows: string[][];
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim();
+  const cells: string[] = [];
+  let current = "";
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    const next = trimmed[i + 1];
+
+    if (char === "\\" && next === "|") {
+      current += "|";
+      i += 1;
+      continue;
+    }
+
+    if (char === "|") {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+
+  if (trimmed.startsWith("|")) {
+    cells.shift();
+  }
+
+  if (trimmed.endsWith("|")) {
+    cells.pop();
+  }
+
+  return cells;
+}
+
+function isMarkdownSeparatorCell(cell: string): boolean {
+  return /^:?-{3,}:?$/.test(cell.replace(/\s+/g, ""));
+}
+
+function normalizeMarkdownTableRow(cells: string[], width: number): string[] {
+  return Array.from({ length: width }, (_, index) => cells[index] ?? "");
+}
+
+function parseMarkdownTable(source: string): ParsedMarkdownTable | null {
+  if (source.trim().length === 0) {
+    return null;
+  }
+
+  const lines = source
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length < 2) {
+    return null;
+  }
+
+  const headerLine = lines[0];
+  const separatorLine = lines[1];
+  if (headerLine === undefined || separatorLine === undefined) {
+    return null;
+  }
+  const headers = splitMarkdownTableRow(headerLine);
+  const separator = splitMarkdownTableRow(separatorLine);
+
+  if (
+    headers.length === 0 ||
+    headers.every((cell) => cell.length === 0) ||
+    separator.length !== headers.length ||
+    !separator.every(isMarkdownSeparatorCell)
+  ) {
+    return null;
+  }
+
+  return {
+    headers,
+    rows: lines.slice(2).map((line) =>
+      normalizeMarkdownTableRow(splitMarkdownTableRow(line), headers.length)
+    )
+  };
+}
+
+function renderTableElement(parsed: ParsedMarkdownTable): HTMLTableElement {
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+
+  parsed.headers.forEach((header) => {
+    const th = document.createElement("th");
+    th.textContent = header;
+    headerRow.append(th);
+  });
+
+  thead.append(headerRow);
+  table.append(thead);
+
+  const tbody = document.createElement("tbody");
+
+  parsed.rows.forEach((row) => {
+    const tr = document.createElement("tr");
+
+    row.forEach((value) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.append(td);
+    });
+
+    tbody.append(tr);
+  });
+
+  table.append(tbody);
+
+  return table;
+}
+
+function buildTablePreviewNode(source: string): HTMLElement {
+  const parsed = parseMarkdownTable(source);
+
+  if (parsed) {
+    return renderTableElement(parsed);
+  }
+
+  const fallback = document.createElement("pre");
+  fallback.textContent = source;
+  return fallback;
+}
+
+function refreshTablePreview(tableId: string, source?: string): void {
+  const preview = document.querySelector<HTMLElement>(
+    `[data-table-preview-id="${tableId}"]`
+  );
+
+  if (!preview) {
+    return;
+  }
+
+  const textarea = document.querySelector<HTMLTextAreaElement>(
+    `textarea[data-action="update-table-content"][data-table-id="${tableId}"]`
+  );
+  preview.replaceChildren(buildTablePreviewNode(source ?? textarea?.value ?? ""));
+}
+
+function refreshTablePreviews(): void {
+  document
+    .querySelectorAll<HTMLElement>("[data-table-preview-id]")
+    .forEach((preview) => {
+      const tableId = preview.dataset.tablePreviewId;
+
+      if (tableId) {
+        refreshTablePreview(tableId);
+      }
+    });
 }
 
 function weekPath(subject: SubjectNote, week: WeekNote): string {
@@ -3312,6 +3683,10 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const pageChecklists = workspace.checklists.filter(
     (cl) => cl.page === selectedPage
   );
+  // sprint-13/slice-2: filter tables for current page
+  const pageTables = workspace.tables.filter(
+    (table) => table.page === selectedPage
+  );
   const inputId = `pdf-file-${subject.id}`;
 
   return `
@@ -3406,6 +3781,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             ${pageNotes.map((note) => renderStickyNote(subject.id, note)).join("")}
             ${pageTextBoxes.map((tb) => renderTextBox(subject.id, tb)).join("")}
             ${pageChecklists.map((cl) => renderChecklist(subject.id, cl)).join("")}
+            ${pageTables.map((table) => renderTable(subject.id, table)).join("")}
           </div>
         </div>
 
@@ -3422,6 +3798,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             <div><dt>펜 stroke</dt><dd>${workspace.inkStrokes.length}개</dd></div>
             <div><dt>텍스트 박스</dt><dd>${workspace.textBoxes.length}개</dd></div>
             <div><dt>체크리스트</dt><dd>${workspace.checklists.length}개</dd></div>
+            <div><dt>표</dt><dd>${workspace.tables.length}개</dd></div>
             <div><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">
@@ -3523,7 +3900,7 @@ function renderPdfToolbar(
       <div class="pdf-tool-group" role="group" aria-label="annotation 도구">
         ${renderToolButton(subjectId, "text", selectedTool, "텍스트 박스")}
         ${renderToolButton(subjectId, "checklist", selectedTool, "체크리스트")}
-        ${renderDisabledToolButton("표", "표 도구 — sprint-13 예정")}
+        ${renderToolButton(subjectId, "table", selectedTool, "표")}
         ${renderDisabledToolButton("그래프", "그래프 도구 — sprint-13 예정")}
       </div>
       ${selectedTool === "eraser" ? renderEraserSubToolbar(subjectId, eraserShape, eraserSize, disabled) : ""}
@@ -3846,6 +4223,64 @@ function renderChecklist(subjectId: string, cl: PdfChecklist): string {
         data-checklist-id="${cl.id}"
       >+ 항목 추가</button>
     </div>
+  `;
+}
+
+// sprint-13/slice-2: table widget renderer.
+// Preview is populated after morphdom via renderTableElement(), using DOM API + textContent.
+function renderTable(subjectId: string, table: PdfTable): string {
+  const isCollapsed = table.collapsed !== false;
+  const toggleArrow = isCollapsed ? "▶" : "▼";
+  const bodyId = `pdf-table-body-${table.id}`;
+
+  return `
+    <article
+      class="pdf-table${isCollapsed ? " is-collapsed" : ""}"
+      data-table-id="${table.id}"
+      style="left: ${table.position.x * 100}%; top: ${table.position.y * 100}%;"
+    >
+      <div
+        class="pdf-table-header"
+        data-action="table-drag-handle"
+        data-table-id="${table.id}"
+        aria-label="표 이동"
+        role="button"
+        tabindex="0"
+      >
+        <button
+          type="button"
+          class="pdf-table-toggle"
+          data-action="toggle-table-collapsed"
+          data-subject-id="${subjectId}"
+          data-table-id="${table.id}"
+          aria-expanded="${isCollapsed ? "false" : "true"}"
+          aria-controls="${bodyId}"
+          aria-label="${isCollapsed ? "표 펼치기" : "표 접기"}"
+        >${toggleArrow}</button>
+        <span class="pdf-table-title">표</span>
+        <button
+          type="button"
+          class="pdf-table-delete"
+          data-action="delete-table"
+          data-subject-id="${subjectId}"
+          data-table-id="${table.id}"
+          aria-label="표 삭제"
+        >✕</button>
+      </div>
+      <div class="pdf-table-body" id="${bodyId}" data-hidden-when-collapsed>
+        <textarea
+          class="pdf-table-input"
+          data-action="update-table-content"
+          data-subject-id="${subjectId}"
+          data-table-id="${table.id}"
+          placeholder="| 제목 1 | 제목 2 |
+|---|---|
+| 값 1 | 값 2 |"
+          rows="4"
+        >${escapeHtml(table.content)}</textarea>
+        <div class="pdf-table-preview" data-table-preview-id="${table.id}"></div>
+      </div>
+    </article>
   `;
 }
 
@@ -4422,7 +4857,9 @@ function formatPdfTool(tool: LocalPdfTool): string {
     pen: "펜",
     eraser: "지우개",
     text: "텍스트 박스",
-    checklist: "체크리스트"
+    checklist: "체크리스트",
+    table: "표",
+    chart: "그래프"
   };
 
   return labels[tool];

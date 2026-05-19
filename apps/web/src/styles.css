@@ -1248,7 +1248,7 @@ p {
   outline-offset: 2px;
 }
 
-/* sprint-12/slice-5: 표/그래프 도구 = sprint-13 까지 disabled placeholder. */
+/* sprint-13/slice-2: 그래프 도구만 남은 disabled placeholder. */
 .tool-button.is-disabled-placeholder {
   cursor: not-allowed;
   opacity: 0.5;
@@ -1590,6 +1590,12 @@ p {
   pointer-events: auto;
 }
 
+/* sprint-13/slice-2: table tool cursor — crosshair to indicate click-to-place. */
+.pdf-annotation-surface.is-table-mode {
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
 /* sprint-12/slice-3: checklist widget.
    - position: absolute (relative to annotation surface).
    - size: content-based auto expand (no fixed width/height — R4 schema).
@@ -1756,6 +1762,129 @@ p {
 .pdf-checklist-add-item:hover {
   background: #c6f0d4;
   color: var(--ds-fg);
+}
+
+/* sprint-13/slice-2: table widget mirrors checklist collapse + header drag. */
+.pdf-table {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-width: 60%;
+  min-width: 240px;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-table.is-collapsed .pdf-table-body {
+  display: none;
+}
+
+.pdf-table-header {
+  align-items: center;
+  background: rgba(246, 248, 250, 0.96);
+  border-bottom: 1px solid rgba(26, 26, 26, 0.14);
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-table-header:active {
+  cursor: grabbing;
+}
+
+.pdf-table-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+.pdf-table-toggle,
+.pdf-table-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+}
+
+.pdf-table-toggle {
+  font-size: 0.7rem;
+  min-height: 28px;
+  min-width: 22px;
+}
+
+.pdf-table-delete {
+  font-size: 1rem;
+  min-height: 28px;
+  min-width: 28px;
+}
+
+.pdf-table-toggle:hover,
+.pdf-table-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-table-body {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.pdf-table-input {
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-height: 96px;
+  min-width: 220px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.pdf-table-preview {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.pdf-table-preview table {
+  border-collapse: collapse;
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  width: 100%;
+}
+
+.pdf-table-preview th,
+.pdf-table-preview td {
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pdf-table-preview th {
+  background: rgba(246, 248, 250, 0.96);
+  font-weight: 700;
+}
+
+.pdf-table-preview pre {
+  color: var(--ds-fg-soft);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 /* sprint-11/slice-1 R1: inspector aside — collapsed hides from layout flow. */
