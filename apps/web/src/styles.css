@@ -1248,7 +1248,7 @@ p {
   outline-offset: 2px;
 }
 
-/* sprint-12/slice-5: 표/그래프 도구 = sprint-13 까지 disabled placeholder. */
+/* sprint-13/slice-2: 그래프 도구만 남은 disabled placeholder. */
 .tool-button.is-disabled-placeholder {
   cursor: not-allowed;
   opacity: 0.5;
@@ -1355,6 +1355,21 @@ p {
 .pdf-frame {
   border: 0;
   background: var(--ds-bg);
+  opacity: 0;
+  /* The app owns page navigation; keep native PDF viewer scroll from detaching annotations. */
+  pointer-events: none;
+  transition: opacity 0.08s ease-out;
+  z-index: 0;
+}
+
+.pdf-frame.is-active {
+  opacity: 1;
+  z-index: 1;
+}
+
+.pdf-frame.is-preload {
+  opacity: 1;
+  z-index: 0;
 }
 
 .pdf-placeholder {
@@ -1382,7 +1397,8 @@ p {
 }
 
 .pdf-annotation-surface.is-read-mode {
-  pointer-events: none;
+  /* Read mode still acts as the page-bound glass layer, not a click-through iframe. */
+  pointer-events: auto;
 }
 
 .pdf-annotation-surface.is-sticky-mode {
@@ -1590,6 +1606,12 @@ p {
   pointer-events: auto;
 }
 
+/* sprint-13/slice-2: table tool cursor — crosshair to indicate click-to-place. */
+.pdf-annotation-surface.is-table-mode {
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
 /* sprint-12/slice-3: checklist widget.
    - position: absolute (relative to annotation surface).
    - size: content-based auto expand (no fixed width/height — R4 schema).
@@ -1756,6 +1778,446 @@ p {
 .pdf-checklist-add-item:hover {
   background: #c6f0d4;
   color: var(--ds-fg);
+}
+
+/* sprint-13/slice-2: table widget mirrors checklist collapse + header drag. */
+.pdf-table {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-width: 60%;
+  min-width: 240px;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-table.is-collapsed .pdf-table-body {
+  display: none;
+}
+
+.pdf-table-header {
+  align-items: center;
+  background: rgba(246, 248, 250, 0.96);
+  border-bottom: 1px solid rgba(26, 26, 26, 0.14);
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-table-header:active {
+  cursor: grabbing;
+}
+
+.pdf-table-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+.pdf-table-toggle,
+.pdf-table-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+}
+
+.pdf-table-toggle {
+  font-size: 0.7rem;
+  min-height: 28px;
+  min-width: 22px;
+}
+
+.pdf-table-delete {
+  font-size: 1rem;
+  min-height: 28px;
+  min-width: 28px;
+}
+
+.pdf-table-toggle:hover,
+.pdf-table-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-table-body {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+/* sprint-13/slice-5: editable cell grid */
+.pdf-table-grid {
+  border-collapse: collapse;
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  max-width: 100%;
+  width: 100%;
+}
+
+.pdf-table-grid th,
+.pdf-table-grid td {
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  padding: 2px 4px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pdf-table-grid thead th {
+  background: rgba(246, 248, 250, 0.96);
+}
+
+.pdf-table-grid td.pdf-table-col-actions,
+.pdf-table-grid td.pdf-table-row-actions,
+.pdf-table-grid th.pdf-table-col-actions {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.pdf-table-cell-input {
+  background: transparent;
+  border: 0;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  outline: none;
+  padding: 2px 4px;
+  width: 100%;
+}
+
+.pdf-table-cell-input:focus {
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 2px;
+  outline: 1px solid var(--ds-accent);
+}
+
+.pdf-table-delete-col,
+.pdf-table-delete-row {
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 3px;
+}
+
+.pdf-table-delete-col:hover,
+.pdf-table-delete-row:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.pdf-table-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pdf-table-add-row,
+.pdf-table-add-col {
+  background: transparent;
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: var(--ds-fs-meta);
+  padding: 3px 8px;
+}
+
+.pdf-table-add-row:hover,
+.pdf-table-add-col:hover {
+  background: rgba(26, 26, 26, 0.06);
+  color: var(--ds-fg);
+}
+
+/* pdf-chart widget */
+.pdf-chart {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-width: 60%;
+  min-width: 240px;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-chart.is-collapsed .pdf-chart-body {
+  display: none;
+}
+
+.pdf-chart-header {
+  align-items: center;
+  background: rgba(246, 248, 250, 0.96);
+  border-bottom: 1px solid rgba(26, 26, 26, 0.14);
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-chart-header:active {
+  cursor: grabbing;
+}
+
+.pdf-chart-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+.pdf-chart-toggle,
+.pdf-chart-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+}
+
+.pdf-chart-toggle {
+  font-size: 0.7rem;
+  min-height: 28px;
+  min-width: 22px;
+}
+
+.pdf-chart-delete {
+  font-size: 1rem;
+  min-height: 28px;
+  min-width: 28px;
+}
+
+.pdf-chart-toggle:hover,
+.pdf-chart-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-chart-body {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+/* sprint-13/slice-5: chart type select */
+.pdf-chart-type-select {
+  background: var(--ds-surface, #fff);
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  padding: 3px 6px;
+}
+
+.pdf-chart-input-guide {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+}
+
+.pdf-chart-function-controls {
+  align-items: end;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pdf-chart-function-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  grid-column: 1 / -1;
+}
+
+.pdf-chart-function-field,
+.pdf-chart-point-field {
+  display: grid;
+  gap: 2px;
+}
+
+.pdf-chart-function-field span,
+.pdf-chart-point-field span {
+  color: var(--ds-fg-soft);
+  font-size: 0.68rem;
+  line-height: 1;
+}
+
+.pdf-chart-function-field input,
+.pdf-chart-function-field select {
+  background: transparent;
+  border: 1px solid var(--ds-rule);
+  border-radius: 3px;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-width: 0;
+  padding: 2px 5px;
+}
+
+.pdf-chart-function-field input[readonly] {
+  background: rgba(26, 26, 26, 0.03);
+  color: var(--ds-fg-soft);
+}
+
+.pdf-chart-function-fill,
+.pdf-chart-function-clear {
+  background: transparent;
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: var(--ds-fs-meta);
+  min-width: 0;
+  padding: 3px 8px;
+}
+
+.pdf-chart-function-fill:hover,
+.pdf-chart-function-clear:hover {
+  background: rgba(26, 26, 26, 0.06);
+  color: var(--ds-fg);
+}
+
+.pdf-chart-function-clear:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* sprint-13/slice-5: data point rows */
+.pdf-chart-data {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.pdf-chart-point {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+.pdf-chart-point-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.pdf-chart-point-x {
+  background: transparent;
+  border: 1px solid var(--ds-rule);
+  border-radius: 3px;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-width: 0;
+  padding: 2px 5px;
+  width: 100%;
+}
+
+.pdf-chart-point-value {
+  background: transparent;
+  border: 1px solid var(--ds-rule);
+  border-radius: 3px;
+  color: var(--ds-fg);
+  flex: 1;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  padding: 2px 5px;
+  width: 100%;
+}
+
+.pdf-chart-function-field input:focus,
+.pdf-chart-function-field select:focus,
+.pdf-chart-point-x:focus,
+.pdf-chart-point-value:focus {
+  outline: 1px solid var(--ds-accent);
+}
+
+.pdf-chart-point-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.pdf-chart-point-delete:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.pdf-chart-point-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pdf-chart-add-point,
+.pdf-chart-clear-points {
+  background: transparent;
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: var(--ds-fs-meta);
+  padding: 3px 8px;
+}
+
+.pdf-chart-add-point:hover,
+.pdf-chart-clear-points:hover {
+  background: rgba(26, 26, 26, 0.06);
+  color: var(--ds-fg);
+}
+
+.pdf-chart-clear-points:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+@media (max-width: 720px) {
+  .pdf-chart-function-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.pdf-chart-preview {
+  color: var(--ds-accent);
+  display: inline-block;
+  height: 120px;
+  width: 100%;
+}
+
+.pdf-chart-preview text {
+  fill: var(--ds-fg-soft);
 }
 
 /* sprint-11/slice-1 R1: inspector aside — collapsed hides from layout flow. */

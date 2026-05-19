@@ -314,7 +314,7 @@ PR 사이 working tree 가 깨지지 않도록 각 PR 끝에 빌드/smoke 통과
 | AC10 (R10 secret/PII) | §11 단락 | (a) production secret 주입 + (b) `.env.example` only + (c) `.gitignore` 패턴 ≥ 4 (실제 ≥ 6) + (d) fixture local-only + (e) synthetic 입증 모두 명시. (e) 의 grep 정규식은 `plan.md` AC10 (e) 참조 (자기-grep 회피). round 5 self-CPO 의 실측 evidence 인용. |
 | AC11 (R11 service exposure) | §12 표 | 행 6. 노출 분류 + production 가용 컬럼 모두 채움. mysql/localstack 의 "Local-dev only" 명시. |
 | AC12 (R12 security regression) | §13 표 | 행 6. 6 keyword 모두 첫 컬럼에 등장. |
-| Gate 4 round 1 finding 인계 (ops lens) | §6 현재-vs-다음-sprint 노트 (F2) + §18 ops appendix 6 subsection (F1) + §15 #7 운영 ADR 의무 (F2 의 deferred 항목) | F1 (rollback / recovery / observability / blast radius / deploy / env matrix minimum 가정) → §18.1~§18.6. F2 (compose/storage-provider 불일치) → §6 노트 분리. F3 (report.md placeholder) → `docs/solon/root-module-frontend/20260509/report.md` 작성. |
+| Gate 4 round 1 finding 인계 (ops lens) | §6 현재-vs-다음-sprint 노트 (F2) + §18 ops appendix 6 subsection (F1) + §15 #7 운영 ADR 의무 (F2 의 deferred 항목) | F1 (rollback / recovery / observability / blast radius / deploy / env matrix minimum 가정) → §18.1~§18.6. F2 (compose/storage-provider 불일치) → §6 노트 분리. F3 (report.md placeholder) → `docs/solon/platform/architecture/root-module-frontend-redistribution/20260509/report.md` 작성. |
 
 self-CPO = PASS. cross review (`sfs review --gate 4 --executor codex`) 진행 가능.
 

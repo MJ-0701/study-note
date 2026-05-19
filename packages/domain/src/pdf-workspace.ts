@@ -1,7 +1,7 @@
 // PdfWorkspaceTool union.
 // sprint-11 이전: "read" | "sticky" | "pen"
 // sprint-12 확장: "eraser" | "text" | "checklist"
-// sprint-13 reserved (실 기능 분리 예정): "table" | "chart"
+// sprint-13 확장: "table" | "chart"
 //
 // NOTE: main.ts 의 LocalPdfTool / isPdfWorkspaceTool 는 slice-2 에서 이 union 과 동기화.
 export type PdfWorkspaceTool =
@@ -10,7 +10,22 @@ export type PdfWorkspaceTool =
   | "pen"
   | "eraser"
   | "text"
-  | "checklist";
+  | "checklist"
+  | "table"
+  | "chart";
+
+export function isPdfWorkspaceTool(tool: unknown): tool is PdfWorkspaceTool {
+  return (
+    tool === "read" ||
+    tool === "sticky" ||
+    tool === "pen" ||
+    tool === "eraser" ||
+    tool === "text" ||
+    tool === "checklist" ||
+    tool === "table" ||
+    tool === "chart"
+  );
+}
 
 export type PdfEraserShape = "circle" | "square" | "triangle" | "line";
 
@@ -91,6 +106,35 @@ export interface PdfChecklist {
 }
 
 // ---------------------------------------------------------------------------
+// sprint-13 신규 annotation types
+// ---------------------------------------------------------------------------
+
+export interface PdfTable {
+  id: string;
+  subjectId: string;
+  page: number;                          // 1-based PDF page
+  position: { x: number; y: number };    // normalized 0..1
+  content: string;                       // markdown table source
+  collapsed: boolean;                    // default true
+  createdAt: string;                     // ISO string
+  updatedAt: string;
+}
+
+export type PdfChartType = "sparkline";
+
+export interface PdfChart {
+  id: string;
+  subjectId: string;
+  page: number;                          // 1-based PDF page
+  position: { x: number; y: number };    // normalized 0..1
+  content: string;                       // CSV source
+  chartType: PdfChartType;
+  collapsed: boolean;                    // default true
+  createdAt: string;                     // ISO string
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // Existing types (unchanged)
 // ---------------------------------------------------------------------------
 
@@ -134,7 +178,7 @@ export interface PdfMaterialDraft {
   updatedAt?: string;
 }
 
-// SubjectPdfWorkspace: sprint-12 확장 — textBoxes + checklists 추가 (기존 sticky/ink BC).
+// SubjectPdfWorkspace: sprint-13 확장 — tables + charts 추가 (기존 sticky/ink/text/checklist BC).
 export interface SubjectPdfWorkspace {
   subjectId: string;
   material?: PdfMaterialDraft;
@@ -145,6 +189,9 @@ export interface SubjectPdfWorkspace {
   // sprint-12 신규 슬라이스
   textBoxes: PdfTextBox[];
   checklists: PdfChecklist[];
+  // sprint-13 신규 슬라이스
+  tables: PdfTable[];
+  charts: PdfChart[];
   updatedAt: string;
 }
 
@@ -167,6 +214,8 @@ export function createEmptyPdfWorkspace(subjectId: string): SubjectPdfWorkspace 
     eraserSize: DEFAULT_ERASER_SIZE,
     textBoxes: [],
     checklists: [],
+    tables: [],
+    charts: [],
     updatedAt: new Date().toISOString()
   };
 }
@@ -488,6 +537,142 @@ export function deleteChecklist(
 }
 
 // ---------------------------------------------------------------------------
+// sprint-13 — PdfTable reducers (R2)
+// Algorithm: O(1) immutable spread. content cap = 10000 chars (truncate).
+// move: 범위 외 좌표 → normalizePdfPoint 로 clamp (0..1).
+// ---------------------------------------------------------------------------
+
+const TABLE_CONTENT_CAP = 10000;
+
+function randomFourHex(): string {
+  return Math.floor(Math.random() * 0x10000)
+    .toString(16)
+    .padStart(4, "0");
+}
+
+export function createTable(input: {
+  subjectId: string;
+  page: number;
+  position: { x: number; y: number };
+}): PdfTable {
+  const now = new Date().toISOString();
+
+  return {
+    id: `table-${Date.now()}-${randomFourHex()}`,
+    subjectId: input.subjectId,
+    page: input.page,
+    position: normalizePdfPoint(input.position.x, input.position.y),
+    content: "",
+    collapsed: true,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export function updateTableContent(
+  table: PdfTable,
+  content: string
+): PdfTable {
+  return {
+    ...table,
+    content: content.slice(0, TABLE_CONTENT_CAP),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function moveTable(
+  table: PdfTable,
+  position: { x: number; y: number }
+): PdfTable {
+  return {
+    ...table,
+    position: normalizePdfPoint(position.x, position.y),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function deleteTable(
+  tables: PdfTable[],
+  id: string
+): PdfTable[] {
+  return tables.filter((table) => table.id !== id);
+}
+
+export function toggleTableCollapsed(table: PdfTable): PdfTable {
+  return {
+    ...table,
+    collapsed: !table.collapsed,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+// ---------------------------------------------------------------------------
+// sprint-13 — PdfChart reducers (R3)
+// Algorithm: O(1) immutable spread. content cap = 5000 chars (truncate).
+// move: 범위 외 좌표 → normalizePdfPoint 로 clamp (0..1).
+// ---------------------------------------------------------------------------
+
+const CHART_CONTENT_CAP = 5000;
+const DEFAULT_CHART_TYPE: PdfChartType = "sparkline";
+
+export function createChart(input: {
+  subjectId: string;
+  page: number;
+  position: { x: number; y: number };
+}): PdfChart {
+  const now = new Date().toISOString();
+
+  return {
+    id: `chart-${Date.now()}-${randomFourHex()}`,
+    subjectId: input.subjectId,
+    page: input.page,
+    position: normalizePdfPoint(input.position.x, input.position.y),
+    content: "",
+    chartType: DEFAULT_CHART_TYPE,
+    collapsed: true,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+export function updateChartContent(
+  chart: PdfChart,
+  content: string
+): PdfChart {
+  return {
+    ...chart,
+    content: content.slice(0, CHART_CONTENT_CAP),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function moveChart(
+  chart: PdfChart,
+  position: { x: number; y: number }
+): PdfChart {
+  return {
+    ...chart,
+    position: normalizePdfPoint(position.x, position.y),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function deleteChart(
+  charts: PdfChart[],
+  id: string
+): PdfChart[] {
+  return charts.filter((chart) => chart.id !== id);
+}
+
+export function toggleChartCollapsed(chart: PdfChart): PdfChart {
+  return {
+    ...chart,
+    collapsed: !chart.collapsed,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+// ---------------------------------------------------------------------------
 // sprint-12/slice-4 — Eraser widget reducers
 // ---------------------------------------------------------------------------
 
@@ -531,17 +716,19 @@ export function setEraserSize(
 }
 
 // ---------------------------------------------------------------------------
-// sprint-12 AC9-c — hydration fail-closed helper (R5)
+// sprint-12/13 AC9-c — hydration fail-closed helper (R5)
 //
 // hydrateSubjectPdfWorkspace(raw): SubjectPdfWorkspace
 //   - raw 가 object 아님 / null → createEmptyPdfWorkspace("<unknown>")
-//   - 각 slice (stickyNotes, inkStrokes, textBoxes, checklists) 가 array 아님 → []
+//   - 각 slice (stickyNotes, inkStrokes, textBoxes, checklists, tables, charts) 가 array 아님 → []
 //   - 각 entry 검증:
 //     textBox: position.x/y finite + 0..1, size.width/height finite + 0..1,
 //              content string (cap 5000), id/subjectId/updatedAt/createdAt non-empty string,
 //              page positive integer → 범위 외 entry skip.
 //     checklist: position.x/y finite + 0..1, items array (cap 100 truncate),
 //                items[].label string (cap 500), items[].checked boolean coercion.
+//     table/chart: position.x/y finite + 0..1, content string (cap 10000/5000),
+//                  collapsed === false 만 false, chartType enum 외 sparkline default.
 //     stickyNotes / inkStrokes: array 이면 그대로 pass-through (기존 BC; corrupt 시 drop).
 //   - 1개 항목 corrupt = 해당 entry skip, 나머지 보존 (전체 wipe X).
 //
@@ -683,6 +870,97 @@ function validateChecklist(raw: unknown): PdfChecklist | null {
   };
 }
 
+function validateTable(raw: unknown): PdfTable | null {
+  if (raw === null || typeof raw !== "object") {
+    return null;
+  }
+
+  const r = raw as Record<string, unknown>;
+
+  if (
+    !isNonEmptyString(r.id) ||
+    !isNonEmptyString(r.subjectId) ||
+    !isPositiveInteger(r.page) ||
+    !isNonEmptyString(r.createdAt) ||
+    !isNonEmptyString(r.updatedAt)
+  ) {
+    return null;
+  }
+
+  if (r.position === null || typeof r.position !== "object") {
+    return null;
+  }
+
+  const pos = r.position as Record<string, unknown>;
+
+  if (!isFiniteNormalized(pos.x) || !isFiniteNormalized(pos.y)) {
+    return null;
+  }
+
+  if (typeof r.content !== "string") {
+    return null;
+  }
+
+  return {
+    id: r.id,
+    subjectId: r.subjectId,
+    page: r.page,
+    position: { x: pos.x, y: pos.y },
+    content: r.content.slice(0, TABLE_CONTENT_CAP),
+    collapsed: r.collapsed === false ? false : true,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt
+  };
+}
+
+function normalizeChartType(chartType: unknown): PdfChartType {
+  return chartType === "sparkline" ? chartType : DEFAULT_CHART_TYPE;
+}
+
+function validateChart(raw: unknown): PdfChart | null {
+  if (raw === null || typeof raw !== "object") {
+    return null;
+  }
+
+  const r = raw as Record<string, unknown>;
+
+  if (
+    !isNonEmptyString(r.id) ||
+    !isNonEmptyString(r.subjectId) ||
+    !isPositiveInteger(r.page) ||
+    !isNonEmptyString(r.createdAt) ||
+    !isNonEmptyString(r.updatedAt)
+  ) {
+    return null;
+  }
+
+  if (r.position === null || typeof r.position !== "object") {
+    return null;
+  }
+
+  const pos = r.position as Record<string, unknown>;
+
+  if (!isFiniteNormalized(pos.x) || !isFiniteNormalized(pos.y)) {
+    return null;
+  }
+
+  if (typeof r.content !== "string") {
+    return null;
+  }
+
+  return {
+    id: r.id,
+    subjectId: r.subjectId,
+    page: r.page,
+    position: { x: pos.x, y: pos.y },
+    content: r.content.slice(0, CHART_CONTENT_CAP),
+    chartType: normalizeChartType(r.chartType),
+    collapsed: r.collapsed === false ? false : true,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt
+  };
+}
+
 export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
   if (raw === null || raw === undefined || typeof raw !== "object") {
     return createEmptyPdfWorkspace("<unknown>");
@@ -715,6 +993,18 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
         .filter((cl): cl is PdfChecklist => cl !== null)
     : [];
 
+  const tables: PdfTable[] = Array.isArray(r.tables)
+    ? r.tables
+        .map(validateTable)
+        .filter((table): table is PdfTable => table !== null)
+    : [];
+
+  const charts: PdfChart[] = Array.isArray(r.charts)
+    ? r.charts
+        .map(validateChart)
+        .filter((chart): chart is PdfChart => chart !== null)
+    : [];
+
   const material = r.material as PdfMaterialDraft | undefined;
   const updatedAt =
     typeof r.updatedAt === "string" ? r.updatedAt : new Date().toISOString();
@@ -728,6 +1018,8 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
     eraserSize: normalizeEraserSize(r.eraserSize),
     textBoxes,
     checklists,
+    tables,
+    charts,
     updatedAt
   };
 }
