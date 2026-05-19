@@ -2446,7 +2446,9 @@ function clearPdfAnnotations(subjectId: string): void {
   updatePdfWorkspace(subjectId, (workspace) => ({
     ...workspace,
     stickyNotes: [],
-    inkStrokes: []
+    inkStrokes: [],
+    textBoxes: [],
+    checklists: []
   }));
 }
 
