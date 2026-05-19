@@ -79,6 +79,10 @@ import {
 } from "@study-note/domain";
 import "./styles.css";
 
+const isNodeRuntime =
+  typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
+const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
+
 type Route =
   | { name: "home" }
   | { name: "intake" }
@@ -130,6 +134,25 @@ type AuthBootState = "checking" | "ready";
 
 type AuthMode = "login" | "signup";
 
+export type InspectorDrillType = "sticky" | "ink" | "textbox" | "checklist" | "table" | "chart";
+
+export type InspectorDrillState = Record<InspectorDrillType, boolean>;
+
+interface PendingDrillHighlight {
+  subjectId: string;
+  drillType: InspectorDrillType;
+  annotationId: string;
+  remainingAttempts: number;
+  expiresAt: number;
+}
+
+interface ActiveDrillHighlight {
+  subjectId: string;
+  drillType: InspectorDrillType;
+  annotationId: string;
+  expiresAt: number;
+}
+
 type LoginFeedback =
   | {
       kind: "error" | "success";
@@ -139,13 +162,22 @@ type LoginFeedback =
   | undefined;
 
 const notebookStorageKey = "study-note.notebook.v2";
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
+const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
-let notebook = loadStoredNotebook();
-let pdfWorkspaceStore = loadPdfWorkspaceStore();
+const DRILL_HIGHLIGHT_DURATION_MS = 1500;
+const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
+const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
+const DRILL_HIGHLIGHT_EXPIRES_MS = 4000;
+let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
+let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
-let inspectorOpen = readInspectorOpen();
+let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
+let inspectorDrill: InspectorDrillState = readInspectorDrill();
+let pendingDrillHighlight: PendingDrillHighlight | null = null;
+const activeDrillHighlights = new Map<string, ActiveDrillHighlight>();
+const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -230,7 +262,7 @@ let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
 let pendingPdfRetry: { file: File; subjectId: string; intent: MaterialUploadIntent } | undefined;
 let quickNote: QuickNote | undefined;
-const app = document.querySelector<HTMLDivElement>("#app");
+const app = isBrowserRuntime ? document.querySelector<HTMLDivElement>("#app") : null;
 
 interface ActiveInkStroke {
   subjectId: string;
@@ -240,7 +272,7 @@ interface ActiveInkStroke {
   livePolyline: SVGPolylineElement;
 }
 
-if (!app) {
+if (isBrowserRuntime && !app) {
   throw new Error("App mount target #app is missing");
 }
 
@@ -251,6 +283,10 @@ const appRoot = app;
 // 재생성 → blob URL 재로드 → 점멸. morphdom = element-level diff, iframe element 의
 // src attribute 가 동일하면 setAttribute 호출 X → iframe reload 0 = 점멸 해결.
 function renderInto(html: string): void {
+  if (!appRoot) {
+    return;
+  }
+
   // morphdom 가 wrapper element 의 children 만 diff 적용.
   const wrapper = document.createElement("div");
   wrapper.id = appRoot.id;
@@ -275,6 +311,8 @@ function renderInto(html: string): void {
   });
   refreshTableWidgets();
   refreshChartWidgets();
+  applyQueuedDrillHighlight();
+  refreshActiveDrillHighlights();
 }
 
 function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
@@ -295,20 +333,187 @@ function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
   );
 }
 
-document.addEventListener("change", handleDocumentChange);
-document.addEventListener("click", handleDocumentClick);
-document.addEventListener("input", handleDocumentInput);
-document.addEventListener("load", handleDocumentLoad, true);
-document.addEventListener("submit", handleDocumentSubmit);
-document.addEventListener("pointerdown", handleDocumentPointerDown);
-document.addEventListener("pointermove", handleDocumentPointerMove);
-document.addEventListener("pointerup", handleDocumentPointerUp);
-document.addEventListener("pointercancel", handleDocumentPointerUp);
-window.addEventListener("hashchange", renderApp);
-renderApp();
+function getDrillHighlightSelector(type: InspectorDrillType): string {
+  if (type === "sticky") return "[data-note-id]";
+  if (type === "ink") return "[data-stroke-id]";
+  if (type === "textbox") return "[data-textbox-id]";
+  if (type === "checklist") return "[data-checklist-id]";
+  if (type === "table") return "[data-table-id]";
+  return "[data-chart-id]";
+}
 
-// slice-2: always rehydrate from server — cookie carries the session token.
-void revalidateStoredSession();
+function getDrillHighlightDatasetKey(type: InspectorDrillType): string {
+  if (type === "sticky") return "noteId";
+  if (type === "ink") return "strokeId";
+  if (type === "textbox") return "textboxId";
+  if (type === "checklist") return "checklistId";
+  if (type === "table") return "tableId";
+  return "chartId";
+}
+
+function getElementDataset(element: Element): Record<string, string | undefined> {
+  return (element as HTMLElement | SVGElement).dataset as Record<string, string | undefined>;
+}
+
+function findDrillHighlightElement(
+  container: ParentNode,
+  drillType: InspectorDrillType,
+  annotationId: string
+): Element | null {
+  const selector = getDrillHighlightSelector(drillType);
+  const datasetKey = getDrillHighlightDatasetKey(drillType);
+  return Array.from(container.querySelectorAll(selector))
+    .find((element) => getElementDataset(element)[datasetKey] === annotationId) ?? null;
+}
+
+export function applyPendingDrillHighlight(
+  container: ParentNode,
+  drillType: InspectorDrillType,
+  annotationId: string
+): boolean {
+  const element = findDrillHighlightElement(container, drillType, annotationId);
+
+  if (!element) {
+    return false;
+  }
+
+  if (typeof element.scrollIntoView === "function") {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  element.classList.add("is-highlight-pulse");
+  setTimeout(() => {
+    element.classList.remove("is-highlight-pulse");
+  }, DRILL_HIGHLIGHT_DURATION_MS);
+  return true;
+}
+
+function findPdfAnnotationSurface(container: ParentNode, subjectId: string): ParentNode | null {
+  return Array.from(container.querySelectorAll("[data-pdf-annotation-surface]"))
+    .find((element) => getElementDataset(element).subjectId === subjectId) ?? null;
+}
+
+function getDrillHighlightKey(target: Pick<ActiveDrillHighlight, "subjectId" | "drillType" | "annotationId">): string {
+  return `${target.subjectId}:${target.drillType}:${target.annotationId}`;
+}
+
+function applyTrackedDrillHighlight(target: ActiveDrillHighlight, shouldScroll: boolean): boolean {
+  if (!appRoot) {
+    return false;
+  }
+
+  const remainingMs = target.expiresAt - Date.now();
+  const key = getDrillHighlightKey(target);
+
+  if (remainingMs <= 0) {
+    activeDrillHighlights.delete(key);
+    activeDrillHighlightTimers.delete(key);
+    return false;
+  }
+
+  const surface = findPdfAnnotationSurface(appRoot, target.subjectId);
+  const element = surface
+    ? findDrillHighlightElement(surface, target.drillType, target.annotationId)
+    : null;
+
+  if (!element) {
+    return false;
+  }
+
+  if (shouldScroll && typeof element.scrollIntoView === "function") {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  element.classList.add("is-highlight-pulse");
+  activeDrillHighlights.set(key, target);
+
+  const previousTimer = activeDrillHighlightTimers.get(key);
+  if (previousTimer) {
+    clearTimeout(previousTimer);
+  }
+
+  const timer = setTimeout(() => {
+    const currentSurface = appRoot ? findPdfAnnotationSurface(appRoot, target.subjectId) : null;
+    const currentElement = currentSurface
+      ? findDrillHighlightElement(currentSurface, target.drillType, target.annotationId)
+      : null;
+    currentElement?.classList.remove("is-highlight-pulse");
+    activeDrillHighlights.delete(key);
+    activeDrillHighlightTimers.delete(key);
+  }, Math.max(0, remainingMs));
+
+  activeDrillHighlightTimers.set(key, timer);
+  return true;
+}
+
+function refreshActiveDrillHighlights(): void {
+  for (const target of activeDrillHighlights.values()) {
+    applyTrackedDrillHighlight(target, false);
+  }
+}
+
+function scheduleDrillHighlightRetry(target: PendingDrillHighlight): void {
+  queueMicrotask(() => {
+    setTimeout(() => {
+      if (pendingDrillHighlight === target) {
+        applyQueuedDrillHighlight();
+      }
+    }, DRILL_HIGHLIGHT_RETRY_DELAY_MS);
+  });
+}
+
+function applyQueuedDrillHighlight(): void {
+  if (!pendingDrillHighlight || !appRoot) {
+    return;
+  }
+
+  const target = pendingDrillHighlight;
+
+  if (Date.now() > target.expiresAt) {
+    pendingDrillHighlight = null;
+    return;
+  }
+
+  const surface = findPdfAnnotationSurface(appRoot, target.subjectId);
+  const applied = surface
+    ? applyTrackedDrillHighlight({
+        subjectId: target.subjectId,
+        drillType: target.drillType,
+        annotationId: target.annotationId,
+        expiresAt: Date.now() + DRILL_HIGHLIGHT_DURATION_MS
+      }, true)
+    : false;
+
+  if (applied) {
+    pendingDrillHighlight = null;
+    return;
+  }
+
+  target.remainingAttempts -= 1;
+  if (target.remainingAttempts <= 0) {
+    pendingDrillHighlight = null;
+    return;
+  }
+
+  scheduleDrillHighlightRetry(target);
+}
+
+if (isBrowserRuntime) {
+  document.addEventListener("change", handleDocumentChange);
+  document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("input", handleDocumentInput);
+  document.addEventListener("load", handleDocumentLoad, true);
+  document.addEventListener("submit", handleDocumentSubmit);
+  document.addEventListener("pointerdown", handleDocumentPointerDown);
+  document.addEventListener("pointermove", handleDocumentPointerMove);
+  document.addEventListener("pointerup", handleDocumentPointerUp);
+  document.addEventListener("pointercancel", handleDocumentPointerUp);
+  window.addEventListener("hashchange", renderApp);
+  renderApp();
+
+  // slice-2: always rehydrate from server — cookie carries the session token.
+  void revalidateStoredSession();
+}
 
 // sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
 // Only reads/writes key "studyNote.pdfWorkspace.inspectorOpen".
@@ -324,6 +529,65 @@ function writeInspectorOpen(value: boolean): void {
   try {
     localStorage.setItem("studyNote.pdfWorkspace.inspectorOpen", JSON.stringify(value === true));
   } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
+}
+
+function getDefaultInspectorDrill(): InspectorDrillState {
+  return {
+    sticky: false,
+    ink: false,
+    textbox: false,
+    checklist: false,
+    table: false,
+    chart: false
+  };
+}
+
+function normalizeInspectorDrillType(value: string | undefined): InspectorDrillType | null {
+  return value === "sticky" ||
+    value === "ink" ||
+    value === "textbox" ||
+    value === "checklist" ||
+    value === "table" ||
+    value === "chart"
+    ? value
+    : null;
+}
+
+export function readInspectorDrill(): InspectorDrillState {
+  const base = getDefaultInspectorDrill();
+
+  try {
+    const raw = localStorage.getItem(inspectorDrillStorageKey);
+    if (raw === null) return base;
+    const parsed = JSON.parse(raw) as Partial<Record<InspectorDrillType, unknown>>;
+
+    return {
+      sticky: parsed.sticky === true,
+      ink: parsed.ink === true,
+      textbox: parsed.textbox === true,
+      checklist: parsed.checklist === true,
+      table: parsed.table === true,
+      chart: parsed.chart === true
+    };
+  } catch {
+    return base;
+  }
+}
+
+export function writeInspectorDrill(value: InspectorDrillState): void {
+  try {
+    localStorage.setItem(inspectorDrillStorageKey, JSON.stringify(value));
+  } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
+}
+
+export function toggleInspectorDrillState(
+  value: InspectorDrillState,
+  type: InspectorDrillType
+): InspectorDrillState {
+  return {
+    ...value,
+    [type]: !value[type]
+  };
 }
 
 function loadStoredNotebook(): StudyNotebook {
@@ -665,6 +929,71 @@ function handleDocumentChange(event: Event): void {
   target.value = "";
 }
 
+export type DrillItemClickResult =
+  | {
+      ok: true;
+      subjectId: string;
+      annotationId: string;
+      drillType: InspectorDrillType;
+      pageNumber: number;
+      queued: true;
+    }
+  | { ok: false; reason: "missing-button" | "missing-dataset" | "invalid-type" | "invalid-page" };
+
+export function handleDrillItemClick(
+  target: Element,
+  options: {
+    now?: () => number;
+    requestPage?: (subjectId: string, pageNumber: number) => void;
+    commitPage?: (subjectId: string, pageNumber: number) => void;
+    render?: () => void;
+  } = {}
+): DrillItemClickResult {
+  const closest = (target as { closest?: (selector: string) => Element | null }).closest;
+  const button = typeof closest === "function"
+    ? closest.call(target, '[data-action="select-drill-item"]')
+    : target;
+
+  if (!button || getElementDataset(button).action !== "select-drill-item") {
+    return { ok: false, reason: "missing-button" };
+  }
+
+  const dataset = getElementDataset(button);
+  const subjectId = dataset.subjectId;
+  const annotationId = dataset.annotationId;
+  const drillType = normalizeInspectorDrillType(dataset.drillType);
+  const rawPageNumber = Number(dataset.pageNumber);
+
+  if (!subjectId || !annotationId) {
+    return { ok: false, reason: "missing-dataset" };
+  }
+
+  if (!drillType) {
+    return { ok: false, reason: "invalid-type" };
+  }
+
+  if (!Number.isFinite(rawPageNumber) || rawPageNumber <= 0) {
+    return { ok: false, reason: "invalid-page" };
+  }
+
+  const pageNumber = Math.floor(rawPageNumber);
+  pendingDrillHighlight = {
+    subjectId,
+    drillType,
+    annotationId,
+    remainingAttempts: DRILL_HIGHLIGHT_MAX_ATTEMPTS,
+    expiresAt: (options.now ?? Date.now)() + DRILL_HIGHLIGHT_EXPIRES_MS
+  };
+
+  (options.requestPage ?? requestPdfPage)(subjectId, pageNumber);
+  // Drill navigation must change selectedPage immediately; requestPdfPage may wait
+  // for native PDF iframe readiness before committing normal toolbar transitions.
+  (options.commitPage ?? setPdfPage)(subjectId, pageNumber);
+  (options.render ?? renderApp)();
+
+  return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
+}
+
 function handleDocumentClick(event: MouseEvent): void {
   const target = event.target;
 
@@ -755,10 +1084,27 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   // sprint-11/slice-1 R1/R2: toggle inspector open/close + localStorage persistence.
+  if (quickNoteButton?.dataset.action === "toggle-inspector-drill") {
+    const type = normalizeInspectorDrillType(quickNoteButton.dataset.drillType);
+
+    if (type) {
+      inspectorDrill = toggleInspectorDrillState(inspectorDrill, type);
+      writeInspectorDrill(inspectorDrill);
+      renderApp();
+    }
+
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "toggle-pdf-inspector") {
     inspectorOpen = !inspectorOpen;
     writeInspectorOpen(inspectorOpen);
     renderApp();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "select-drill-item") {
+    handleDrillItemClick(quickNoteButton);
     return;
   }
 
@@ -2274,7 +2620,7 @@ type LocalPdfTool = PdfWorkspaceTool;
 // so chart type is persisted as a type: prefix line in chart.content (free-string field).
 // Pattern mirrors LocalPdfTool widening for eraser.
 type LocalChartType = "xy" | "bar" | "trig";
-type LocalChartFunction = "sin" | "cos";
+type LocalChartFunction = "sin" | "cos" | "tan";
 
 const CHART_TYPE_PREFIX = "type:";
 const CHART_PLOT_LEFT = 6;
@@ -2290,7 +2636,7 @@ const CHART_PLANE_COLOR = "#111111";
  * Format: "type:<chartType>\n<x>,<y>\n..."
  * When chartType is "xy", prefix is omitted for backward compat with existing content.
  */
-function encodeChartContent(chartType: LocalChartType, points: CsvSeriesPoint[]): string {
+function encodeChartContent(chartType: LocalChartType | LocalChartFunction, points: CsvSeriesPoint[]): string {
   const csv = serializeCsv(points);
   if (chartType === "xy") {
     return csv;
@@ -2304,7 +2650,11 @@ function encodeChartContent(chartType: LocalChartType, points: CsvSeriesPoint[])
  * First line of "type:<chartType>" is consumed as metadata; rest is CSV.
  * Legacy "line"/"sparkline" content is normalized to the user-facing xy chart.
  */
-function decodeChartContent(content: string): { chartType: LocalChartType; points: CsvSeriesPoint[] } {
+function inferChartFunctionType(points: CsvSeriesPoint[]): LocalChartFunction {
+  return points.some((point) => Math.abs(point.value) > 1) ? "tan" : "sin";
+}
+
+function decodeChartContent(content: string): { chartType: LocalChartType; points: CsvSeriesPoint[]; functionType?: LocalChartFunction } {
   const trimmed = content.trimStart();
 
   if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
@@ -2313,8 +2663,18 @@ function decodeChartContent(content: string): { chartType: LocalChartType; point
       ? trimmed.slice(CHART_TYPE_PREFIX.length)
       : trimmed.slice(CHART_TYPE_PREFIX.length, newline);
     const csv = newline < 0 ? "" : trimmed.slice(newline + 1);
+    const points = parseCsvSeries(csv);
+
+    if (typeStr === "sin" || typeStr === "cos" || typeStr === "tan") {
+      return { chartType: "trig", points, functionType: typeStr };
+    }
+
     const chartType: LocalChartType = typeStr === "bar" || typeStr === "trig" ? typeStr : "xy";
-    return { chartType, points: parseCsvSeries(csv) };
+    return {
+      chartType,
+      points,
+      functionType: chartType === "trig" ? inferChartFunctionType(points) : undefined
+    };
   }
 
   return { chartType: "xy", points: parseCsvSeries(content) };
@@ -3342,7 +3702,7 @@ function applyFillChartFunction(subjectId: string, chartId: string): void {
   const config = readChartFunctionConfigFromDom(chartId);
   if (!config) return;
   const points = buildFunctionChartPoints(config.functionType, config.xMin, config.xMax, config.samples);
-  const content = encodeChartContent("trig", points);
+  const content = encodeChartContent(config.functionType, points);
   const prev = chartPointDebounceMap.get(chartId);
   if (prev) clearTimeout(prev);
   chartPointDebounceMap.delete(chartId);
@@ -3867,7 +4227,7 @@ function appendChartLine(
   return line;
 }
 
-function appendChartCoordinatePlane(
+export function appendChartCoordinatePlane(
   parent: SVGElement,
   xMin: number,
   xMax: number,
@@ -3934,6 +4294,37 @@ function appendChartCoordinatePlane(
     dataValue: "y"
   });
 
+  [0, 0.25, 0.5, 0.75, 1].forEach((ratio) => {
+    const cx = CHART_PLOT_LEFT + CHART_PLOT_WIDTH * ratio;
+    const xValue = xMin + xRange * ratio;
+    const tick = document.createElementNS(SVG_NS, "text");
+    tick.setAttribute("x", cx.toFixed(2));
+    tick.setAttribute("y", String(xAxisY >= CHART_PLOT_BOTTOM - 1 ? xAxisY - 1 : xAxisY + 2.6));
+    tick.setAttribute("font-size", "2.8");
+    tick.setAttribute("fill", CHART_PLANE_COLOR);
+    tick.setAttribute("opacity", "0.75");
+    tick.setAttribute("text-anchor", ratio === 0 ? "start" : ratio === 1 ? "end" : "middle");
+    tick.setAttribute("data-chart-axis-tick", "x");
+    tick.textContent = formatChartNumber(xValue);
+    parent.append(tick);
+  });
+
+  [0, 0.25, 0.5, 0.75, 1].forEach((ratio) => {
+    const cy = CHART_PLOT_TOP + CHART_PLOT_HEIGHT * ratio;
+    const yValue = yMax - yRange * ratio;
+    const isLeftEdgeAxis = yAxisX <= CHART_PLOT_LEFT + 1;
+    const tick = document.createElementNS(SVG_NS, "text");
+    tick.setAttribute("x", String(isLeftEdgeAxis ? yAxisX + 1.2 : yAxisX - 1.2));
+    tick.setAttribute("y", String(cy + 0.9));
+    tick.setAttribute("font-size", "2.8");
+    tick.setAttribute("fill", CHART_PLANE_COLOR);
+    tick.setAttribute("opacity", "0.75");
+    tick.setAttribute("text-anchor", isLeftEdgeAxis ? "start" : "end");
+    tick.setAttribute("data-chart-axis-tick", "y");
+    tick.textContent = formatChartNumber(yValue);
+    parent.append(tick);
+  });
+
   const xLabel = document.createElementNS(SVG_NS, "text");
   xLabel.setAttribute("x", "96");
   xLabel.setAttribute("y", String(xAxisY >= CHART_PLOT_BOTTOM - 1 ? CHART_PLOT_BOTTOM - 1.2 : xAxisY + 3.8));
@@ -3976,10 +4367,37 @@ function mapCoordinateChartPoints(
   }));
 }
 
-function buildPolylineChartSvg(
+export function splitCoordsByJump(
+  coords: Array<{ x: number; y: number; point: CsvSeriesPoint }>,
+  pixelJumpThreshold: number = 15
+): Array<Array<{ x: number; y: number; point: CsvSeriesPoint }>> {
+  const segments: Array<Array<{ x: number; y: number; point: CsvSeriesPoint }>> = [];
+  let current: Array<{ x: number; y: number; point: CsvSeriesPoint }> = [];
+  for (let i = 0; i < coords.length; i++) {
+    const cur = coords[i];
+    if (!cur) continue;
+    if (current.length === 0) {
+      current.push(cur);
+      continue;
+    }
+    const prev = current[current.length - 1];
+    if (prev && Math.abs(cur.y - prev.y) > pixelJumpThreshold) {
+      segments.push(current);
+      current = [cur];
+    } else {
+      current.push(cur);
+    }
+  }
+  if (current.length > 0) {
+    segments.push(current);
+  }
+  return segments;
+}
+
+export function buildPolylineChartSvg(
   parent: SVGElement,
   points: CsvSeriesPoint[],
-  options: { markers: boolean; yBounds?: { min: number; max: number } }
+  options: { markers: boolean; labels?: boolean; discontinuous?: boolean; yBounds?: { min: number; max: number } }
 ): void {
   parent.replaceChildren();
   parent.setAttribute("viewBox", "0 0 100 30");
@@ -4019,21 +4437,31 @@ function buildPolylineChartSvg(
     circle.setAttribute("r", "2");
     circle.setAttribute("fill", "currentColor");
     parent.append(circle);
-    appendChartLabel(parent, coord.point, coord.x, coords.length);
+    if (options.labels !== false) {
+      appendChartLabel(parent, coord.point, coord.x, coords.length);
+    }
     return;
   }
 
-  const polyline = document.createElementNS(SVG_NS, "polyline");
-  polyline.setAttribute(
-    "points",
-    coords.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
-  );
-  polyline.setAttribute("fill", "none");
-  polyline.setAttribute("stroke", "currentColor");
-  polyline.setAttribute("stroke-width", "1.6");
-  polyline.setAttribute("stroke-linecap", "round");
-  polyline.setAttribute("stroke-linejoin", "round");
-  parent.append(polyline);
+  const renderPolyline = (segment: Array<{ x: number; y: number; point: CsvSeriesPoint }>) => {
+    const polyline = document.createElementNS(SVG_NS, "polyline");
+    polyline.setAttribute(
+      "points",
+      segment.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
+    );
+    polyline.setAttribute("fill", "none");
+    polyline.setAttribute("stroke", "currentColor");
+    polyline.setAttribute("stroke-width", "1.6");
+    polyline.setAttribute("stroke-linecap", "round");
+    polyline.setAttribute("stroke-linejoin", "round");
+    parent.append(polyline);
+  };
+
+  if (options.discontinuous === true) {
+    splitCoordsByJump(coords).forEach(renderPolyline);
+  } else {
+    renderPolyline(coords);
+  }
 
   coords.forEach((coord, index) => {
     if (options.markers) {
@@ -4045,21 +4473,21 @@ function buildPolylineChartSvg(
       parent.append(circle);
     }
 
-    if (shouldRenderChartLabel(index, coords.length)) {
+    if (options.labels !== false && shouldRenderChartLabel(index, coords.length)) {
       appendChartLabel(parent, coord.point, coord.x, coords.length);
     }
   });
 }
 
 function normalizeChartFunction(rawFunction: string | undefined): LocalChartFunction {
-  if (rawFunction === "cos") {
+  if (rawFunction === "cos" || rawFunction === "tan") {
     return rawFunction;
   }
 
   return "sin";
 }
 
-function buildFunctionChartPoints(
+export function buildFunctionChartPoints(
   functionType: LocalChartFunction,
   xMin: number,
   xMax: number,
@@ -4070,14 +4498,17 @@ function buildFunctionChartPoints(
   const safeSamples = Math.min(121, Math.max(2, Math.round(samples)));
   const evaluate = (x: number): number => {
     if (functionType === "cos") return Math.cos(x);
+    if (functionType === "tan") return Math.tan(x);
     return Math.sin(x);
   };
+  const yMin = functionType === "tan" ? -10 : -1;
+  const yMax = functionType === "tan" ? 10 : 1;
 
   return Array.from({ length: safeSamples }, (_, index) => {
     const x = safeMin + ((safeMax - safeMin) * index) / (safeSamples - 1);
     const y = evaluate(x);
     return { label: formatChartNumber(x), value: Number.isFinite(y) ? Number(y.toFixed(4)) : 0 };
-  }).filter((point) => Number.isFinite(point.value) && point.value >= -1 && point.value <= 1);
+  }).filter((point) => Number.isFinite(point.value) && point.value >= yMin && point.value <= yMax);
 }
 
 function readChartFunctionConfigFromDom(chartId: string): {
@@ -4114,8 +4545,18 @@ function buildCoordinateLineChartSvg(parent: SVGElement, points: CsvSeriesPoint[
   buildPolylineChartSvg(parent, points, { markers: true });
 }
 
-function buildTrigChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
-  buildPolylineChartSvg(parent, points, { markers: false, yBounds: { min: -1, max: 1 } });
+export function buildTrigChartSvg(
+  parent: SVGElement,
+  points: CsvSeriesPoint[],
+  functionType: LocalChartFunction
+): void {
+  const isTan = functionType === "tan";
+  buildPolylineChartSvg(parent, points, {
+    markers: false,
+    labels: false,
+    discontinuous: isTan,
+    yBounds: isTan ? { min: -10, max: 10 } : { min: -1, max: 1 }
+  });
 }
 
 /**
@@ -4182,11 +4623,16 @@ function buildBarChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
 /**
  * Dispatches to the right SVG builder based on LocalChartType.
  */
-function buildChartSvg(parent: SVGElement, chartType: LocalChartType, points: CsvSeriesPoint[]): void {
+function buildChartSvg(
+  parent: SVGElement,
+  chartType: LocalChartType,
+  points: CsvSeriesPoint[],
+  functionType: LocalChartFunction = "sin"
+): void {
   if (chartType === "bar") {
     buildBarChartSvg(parent, points);
   } else if (chartType === "trig") {
-    buildTrigChartSvg(parent, points);
+    buildTrigChartSvg(parent, points, functionType);
   } else {
     buildCoordinateLineChartSvg(parent, points);
   }
@@ -4322,7 +4768,12 @@ function refreshTableWidgets(): void {
 
 // sprint-13/slice-5: refreshChartPreview updates SVG preview in-place after point input.
 // Called in debounce-free path (input event immediate feedback).
-function refreshChartPreview(chartId: string, chartType: LocalChartType, points: CsvSeriesPoint[]): void {
+function refreshChartPreview(
+  chartId: string,
+  chartType: LocalChartType,
+  points: CsvSeriesPoint[],
+  functionType?: LocalChartFunction
+): void {
   const preview = document.querySelector<SVGElement>(
     `[data-chart-preview-id="${chartId}"]`
   );
@@ -4331,7 +4782,7 @@ function refreshChartPreview(chartId: string, chartType: LocalChartType, points:
     return;
   }
 
-  buildChartSvg(preview, chartType, points);
+  buildChartSvg(preview, chartType, points, functionType);
 }
 
 function refreshChartWidgets(): void {
@@ -4924,6 +5375,182 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+const DRILL_LABEL_LIMIT = 30;
+const DRILL_LIST_LIMIT = 50;
+
+function formatDrillSnippet(value: string | undefined, emptyLabel: string): string {
+  const trimmed = (value ?? "").trim();
+  const text = trimmed.length > 0 ? trimmed.slice(0, DRILL_LABEL_LIMIT) : emptyLabel;
+  return escapeHtml(text);
+}
+
+function getDrillPageNumber(type: InspectorDrillType, item: unknown): number {
+  const candidate = item as { page?: unknown; pageNumber?: unknown };
+  const rawPage = type === "sticky" || type === "ink" ? candidate.pageNumber : candidate.page;
+  const page = Number(rawPage);
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
+function getStickyDrillText(note: SubjectPdfWorkspace["stickyNotes"][number]): string {
+  const blocks = Array.isArray(note.blocks) ? note.blocks : [];
+  return blocks.find((block) => block.content.trim().length > 0)?.content ?? blocks[0]?.content ?? "";
+}
+
+function getChecklistDrillText(checklist: PdfChecklist): string {
+  const items = Array.isArray(checklist.items) ? checklist.items : [];
+  return items.find((item) => item.label.trim().length > 0)?.label ?? items[0]?.label ?? "";
+}
+
+function getTableDrillText(table: PdfTable): string {
+  const parsed = parseMarkdownTable(table.content);
+  const cells = parsed ? [...parsed.headers, ...parsed.rows.flat()] : [];
+  return cells.find((cell) => cell.trim().length > 0) ?? "";
+}
+
+function getChartDrillTypeLabel(content: string): string {
+  const trimmed = content.trimStart();
+  if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
+    const newline = trimmed.indexOf("\n");
+    const rawType = (newline < 0 ? trimmed.slice(CHART_TYPE_PREFIX.length) : trimmed.slice(CHART_TYPE_PREFIX.length, newline)).trim();
+    if (rawType === "sin" || rawType === "cos" || rawType === "tan" || rawType === "bar" || rawType === "xy" || rawType === "trig") {
+      return rawType;
+    }
+  }
+
+  return decodeChartContent(content).chartType;
+}
+
+export function formatDrillLabel(type: InspectorDrillType, item: unknown, index: number = 0): string {
+  const pageNumber = getDrillPageNumber(type, item);
+
+  if (type === "sticky") {
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getStickyDrillText(item as SubjectPdfWorkspace["stickyNotes"][number]), "(빈 메모)")}`;
+  }
+
+  if (type === "textbox") {
+    const textBox = item as Partial<PdfTextBox>;
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(typeof textBox.content === "string" ? textBox.content : "", "(빈 텍스트)")}`;
+  }
+
+  if (type === "checklist") {
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getChecklistDrillText(item as PdfChecklist), "(빈 체크리스트)")}`;
+  }
+
+  if (type === "table") {
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getTableDrillText(item as PdfTable), "(빈 표)")}`;
+  }
+
+  if (type === "chart") {
+    const chart = item as Partial<PdfChart>;
+    const content = typeof chart.content === "string" ? chart.content : "";
+    const typeLabel = getChartDrillTypeLabel(content);
+    const pointCount = decodeChartContent(content).points.length;
+    return `페이지 ${pageNumber} · ${escapeHtml(typeLabel)} (${pointCount} points)`;
+  }
+
+  const stroke = item as Partial<PdfInkStroke>;
+  const pointCount = Array.isArray(stroke.points) ? stroke.points.length : 0;
+  return `페이지 ${pageNumber} · stroke #${index + 1} (점 ${pointCount}개)`;
+}
+
+interface InspectorDrillEntry {
+  id: string;
+  index: number;
+  item: unknown;
+  pageNumber: number;
+}
+
+function getDrillItemId(type: InspectorDrillType, item: unknown, index: number): string {
+  const candidate = item as { id?: unknown; strokeId?: unknown };
+  const id = typeof candidate.id === "string"
+    ? candidate.id
+    : typeof candidate.strokeId === "string"
+      ? candidate.strokeId
+      : "";
+  return id.length > 0 ? id : `${type}-${index}`;
+}
+
+function getInspectorDrillEntries(type: InspectorDrillType, workspace: SubjectPdfWorkspace): InspectorDrillEntry[] {
+  const items: unknown[] =
+    type === "sticky" ? workspace.stickyNotes :
+    type === "ink" ? workspace.inkStrokes :
+    type === "textbox" ? workspace.textBoxes :
+    type === "checklist" ? workspace.checklists :
+    type === "table" ? workspace.tables :
+    workspace.charts;
+
+  return items
+    .map((item, index) => ({
+      id: getDrillItemId(type, item, index),
+      index,
+      item,
+      pageNumber: getDrillPageNumber(type, item)
+    }))
+    .sort((a, b) => a.pageNumber - b.pageNumber || a.index - b.index);
+}
+
+export function renderDrillList(
+  type: InspectorDrillType,
+  workspace: SubjectPdfWorkspace,
+  subjectId: string
+): string {
+  const entries = getInspectorDrillEntries(type, workspace);
+  const visible = entries.slice(0, DRILL_LIST_LIMIT);
+  const hiddenCount = entries.length - visible.length;
+  const itemsHtml = visible.length > 0
+    ? visible.map((entry) => `
+        <li>
+          <button
+            type="button"
+            class="pdf-inspector-drill-item"
+            data-action="select-drill-item"
+            data-drill-type="${escapeHtml(type)}"
+            data-subject-id="${escapeHtml(subjectId)}"
+            data-annotation-id="${escapeHtml(entry.id)}"
+            data-page-number="${escapeHtml(String(entry.pageNumber))}"
+          >${formatDrillLabel(type, entry.item, entry.index)}</button>
+        </li>
+      `).join("")
+    : `<li class="pdf-inspector-drill-empty">없음</li>`;
+  const moreHtml = hiddenCount > 0
+    ? `<li class="pdf-inspector-drill-more">+ ${hiddenCount}개 더 있음</li>`
+    : "";
+
+  return `
+    <ul class="pdf-inspector-drill-list" data-drill-type="${escapeHtml(type)}">
+      ${itemsHtml}
+      ${moreHtml}
+    </ul>
+  `;
+}
+
+function renderInspectorStatRow(
+  type: InspectorDrillType,
+  label: string,
+  count: number,
+  workspace: SubjectPdfWorkspace,
+  subjectId: string
+): string {
+  const isExpanded = inspectorDrill[type] === true;
+
+  return `
+    <div class="pdf-inspector-stat-row">
+      <button
+        type="button"
+        class="pdf-inspector-drill-toggle"
+        data-action="toggle-inspector-drill"
+        data-drill-type="${escapeHtml(type)}"
+        aria-expanded="${isExpanded ? "true" : "false"}"
+      >
+        <span class="pdf-inspector-stat-label">${escapeHtml(label)}</span>
+        <span class="pdf-inspector-stat-count">${count}개</span>
+        <span class="pdf-inspector-drill-caret" aria-hidden="true">▾</span>
+      </button>
+      ${isExpanded ? renderDrillList(type, workspace, subjectId) : ""}
+    </div>
+  `;
+}
+
 function getPdfFrameKey(materialId: string, pageNumber: number): string {
   return `pdf-frame:${materialId}:${pageNumber}`;
 }
@@ -4966,7 +5593,7 @@ function renderPdfFrameStack(
   return getPdfFramePages(selectedPage, material.pageCount, pending).map((pageNumber) => {
     const isActive = pageNumber === selectedPage;
     const frameKey = getPdfFrameKey(materialId, pageNumber);
-    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=FitH`;
+    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=Fit`;
     const preloadAttrs = isActive ? "" : ' aria-hidden="true" tabindex="-1"';
 
     return `<iframe
@@ -5022,6 +5649,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
     (chart) => chart.page === selectedPage
   );
   const inputId = `pdf-file-${subject.id}`;
+  const selectedPageLabel = escapeHtml(String(selectedPage));
 
   return `
     <section class="subject-page-hero">
@@ -5062,6 +5690,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
     </section>
 
     <section class="pdf-workspace" aria-labelledby="pdf-workspace-title">
+      ${objectUrl ? `
+        <div class="pdf-page-binding-notice" role="note" aria-live="polite">
+          <strong class="pdf-page-binding-notice__title">현재 페이지 ${selectedPageLabel}</strong>
+          <span class="pdf-page-binding-notice__body">보이는 화면에 다른 페이지가 함께 나와도 메모/필기는 현재 페이지에만 저장됩니다. 다른 페이지에 메모하려면 페이지를 먼저 이동하세요.</span>
+        </div>
+      ` : ""}
       <div class="pdf-workspace-header">
         <div>
           <p class="meta">§2 — PDF viewer + annotation layer</p>
@@ -5104,6 +5738,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             data-subject-id="${subject.id}"
             data-page-number="${selectedPage}"
           >
+            ${objectUrl ? `
+              <div class="pdf-surface-page-badge" aria-hidden="true" data-current-page-badge="true">페이지 ${selectedPageLabel}</div>
+              <div class="pdf-surface-page-end" aria-hidden="true">
+                <span class="pdf-surface-page-end__label">↑ 페이지 ${selectedPageLabel} 영역 끝 — 그 아래는 다음 페이지 미리보기</span>
+              </div>
+            ` : ""}
             <svg class="ink-layer" viewBox="0 0 1000 1414" preserveAspectRatio="none" aria-hidden="true">
               ${pageStrokes.map(renderInkStroke).join("")}
             </svg>
@@ -5124,14 +5764,14 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
         >
           <p class="meta">§3 — 저장 상태</p>
           <h3>로컬 annotation</h3>
-          <dl>
-            <div><dt>포스트잇</dt><dd>${workspace.stickyNotes.length}개</dd></div>
-            <div><dt>펜 stroke</dt><dd>${workspace.inkStrokes.length}개</dd></div>
-            <div><dt>텍스트 박스</dt><dd>${workspace.textBoxes.length}개</dd></div>
-            <div><dt>체크리스트</dt><dd>${workspace.checklists.length}개</dd></div>
-            <div><dt>표</dt><dd>${workspace.tables.length}개</dd></div>
-            <div><dt>그래프</dt><dd>${workspace.charts.length}개</dd></div>
-            <div><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
+          <dl class="pdf-inspector-stats">
+            ${renderInspectorStatRow("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id)}
+            ${renderInspectorStatRow("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id)}
+            ${renderInspectorStatRow("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id)}
+            ${renderInspectorStatRow("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id)}
+            ${renderInspectorStatRow("table", "표", workspace.tables.length, workspace, subject.id)}
+            ${renderInspectorStatRow("chart", "그래프", workspace.charts.length, workspace, subject.id)}
+            <div class="pdf-inspector-stat-row pdf-inspector-stat-row--plain"><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">
             <strong>PDF 원문은 backend material storage가 기준입니다.</strong>
@@ -5554,7 +6194,7 @@ function renderChartMount(subjectId: string, chart: PdfChart): string {
 function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   const isCollapsed = chart.collapsed !== false;
   const bodyId = "pdf-chart-body-" + chart.id;
-  const { chartType, points } = decodeChartContent(chart.content);
+  const { chartType, points, functionType } = decodeChartContent(chart.content);
 
   const article = document.createElement("article");
   article.className = "pdf-chart" + (isCollapsed ? " is-collapsed" : "");
@@ -5629,7 +6269,7 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   const inputGuide = document.createElement("div");
   inputGuide.className = "pdf-chart-input-guide";
   inputGuide.textContent = chartType === "trig"
-    ? "sin/cos 선택 후 x 범위를 정하면 y=f(x)로 계산합니다. y축 범위는 -1~1로 고정됩니다."
+    ? "sin/cos/tan 선택 후 x 범위를 정하면 y=f(x)로 계산합니다. tan 은 ±π/2 근방에서 path 가 끊어집니다."
     : chartType === "bar"
       ? "각 항목의 x 라벨과 y 값을 직접 입력합니다."
       : "각 행의 x 좌표와 y 좌표를 직접 입력합니다. 예: (-1, 1), (0, 0), (1, 1).";
@@ -5639,7 +6279,7 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   preview.setAttribute("class", "pdf-chart-preview");
   preview.setAttribute("data-chart-preview-id", chart.id);
   preview.setAttribute("xmlns", SVG_NS);
-  buildChartSvg(preview, chartType, points);
+  buildChartSvg(preview, chartType, points, functionType);
 
   // data point list container
   const dataContainer = document.createElement("div");
@@ -5673,7 +6313,7 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
 
   body.append(typeSelect, inputGuide);
   if (chartType === "trig") {
-    body.append(buildChartFunctionControls(subjectId, chart.id), preview);
+    body.append(buildChartFunctionControls(subjectId, chart.id, functionType ?? "sin"), preview);
   } else {
     body.append(preview, dataContainer, pointActions);
   }
@@ -5681,7 +6321,11 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   return article;
 }
 
-function buildChartFunctionControls(subjectId: string, chartId: string): HTMLElement {
+function buildChartFunctionControls(
+  subjectId: string,
+  chartId: string,
+  selectedFunctionType: LocalChartFunction = "sin"
+): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "pdf-chart-function-controls";
 
@@ -5698,18 +6342,22 @@ function buildChartFunctionControls(subjectId: string, chartId: string): HTMLEle
   fnSelect.dataset.chartId = chartId;
   [
     { value: "sin", label: "sin(x)" },
-    { value: "cos", label: "cos(x)" }
+    { value: "cos", label: "cos(x)" },
+    { value: "tan", label: "tan(x)" }
   ].forEach(({ value, label }) => {
     const opt = document.createElement("option");
     opt.value = value;
     opt.textContent = label;
+    if (value === selectedFunctionType) {
+      opt.selected = true;
+    }
     fnSelect.append(opt);
   });
   fnLabel.append(fnText, fnSelect);
 
   const xMin = buildChartFunctionInput(chartId, "set-chart-function-x-min", "x 최소", "-3.14");
   const xMax = buildChartFunctionInput(chartId, "set-chart-function-x-max", "x 최대", "3.14");
-  const yRange = buildChartFunctionInput(chartId, "show-chart-function-y-range", "y축 범위", "-1 ~ 1", true);
+  const yRange = buildChartFunctionInput(chartId, "show-chart-function-y-range", "y축 범위", "자동 결정", true);
   const samples = buildChartFunctionInput(chartId, "set-chart-function-samples", "샘플 개수", "49");
 
   const fillBtn = document.createElement("button");
@@ -6000,6 +6648,7 @@ function renderInkStroke(stroke: PdfInkStroke): string {
   return `
     <polyline
       class="ink-stroke"
+      data-stroke-id="${escapeHtml(stroke.id)}"
       points="${stroke.points.map(formatSvgPoint).join(" ")}"
       style="stroke: ${stroke.color}; stroke-width: ${stroke.width};"
     />
