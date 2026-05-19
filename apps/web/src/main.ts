@@ -722,18 +722,6 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
-  if (quickNoteButton?.dataset.action === "add-sticky-note") {
-    const subjectId = quickNoteButton.dataset.subjectId;
-    const kind = quickNoteButton.dataset.blockKind as StickyNoteBlockKind | undefined;
-
-    if (subjectId && isStickyNoteBlockKind(kind)) {
-      addStickyNote(subjectId, kind);
-      renderApp();
-    }
-
-    return;
-  }
-
   if (quickNoteButton?.dataset.action === "delete-sticky-note") {
     const subjectId = quickNoteButton.dataset.subjectId;
     const noteId = quickNoteButton.dataset.noteId;
@@ -2453,17 +2441,6 @@ function scheduleEraserRender(): void {
   });
 }
 
-function isStickyNoteBlockKind(
-  kind: string | undefined
-): kind is StickyNoteBlockKind {
-  return (
-    kind === "text" ||
-    kind === "checklist" ||
-    kind === "table" ||
-    kind === "chart-note"
-  );
-}
-
 function movePdfPage(subjectId: string, delta: number): void {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
   const material = workspace.material;
@@ -2866,7 +2843,9 @@ function clearPdfAnnotations(subjectId: string): void {
     stickyNotes: [],
     inkStrokes: [],
     textBoxes: [],
-    checklists: []
+    checklists: [],
+    tables: [],
+    charts: []
   }));
 }
 
