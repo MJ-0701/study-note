@@ -138,6 +138,21 @@ export type InspectorDrillType = "sticky" | "ink" | "textbox" | "checklist" | "t
 
 export type InspectorDrillState = Record<InspectorDrillType, boolean>;
 
+interface PendingDrillHighlight {
+  subjectId: string;
+  drillType: InspectorDrillType;
+  annotationId: string;
+  remainingAttempts: number;
+  expiresAt: number;
+}
+
+interface ActiveDrillHighlight {
+  subjectId: string;
+  drillType: InspectorDrillType;
+  annotationId: string;
+  expiresAt: number;
+}
+
 type LoginFeedback =
   | {
       kind: "error" | "success";
@@ -150,12 +165,19 @@ const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
+const DRILL_HIGHLIGHT_DURATION_MS = 1500;
+const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
+const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
+const DRILL_HIGHLIGHT_EXPIRES_MS = 4000;
 let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
 let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
 let inspectorDrill: InspectorDrillState = readInspectorDrill();
+let pendingDrillHighlight: PendingDrillHighlight | null = null;
+const activeDrillHighlights = new Map<string, ActiveDrillHighlight>();
+const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -289,6 +311,8 @@ function renderInto(html: string): void {
   });
   refreshTableWidgets();
   refreshChartWidgets();
+  applyQueuedDrillHighlight();
+  refreshActiveDrillHighlights();
 }
 
 function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
@@ -307,6 +331,171 @@ function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
     fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
     fromEl.getAttribute("src") !== toEl.getAttribute("src")
   );
+}
+
+function getDrillHighlightSelector(type: InspectorDrillType): string {
+  if (type === "sticky") return "[data-note-id]";
+  if (type === "ink") return "[data-stroke-id]";
+  if (type === "textbox") return "[data-textbox-id]";
+  if (type === "checklist") return "[data-checklist-id]";
+  if (type === "table") return "[data-table-id]";
+  return "[data-chart-id]";
+}
+
+function getDrillHighlightDatasetKey(type: InspectorDrillType): string {
+  if (type === "sticky") return "noteId";
+  if (type === "ink") return "strokeId";
+  if (type === "textbox") return "textboxId";
+  if (type === "checklist") return "checklistId";
+  if (type === "table") return "tableId";
+  return "chartId";
+}
+
+function getElementDataset(element: Element): Record<string, string | undefined> {
+  return (element as HTMLElement | SVGElement).dataset as Record<string, string | undefined>;
+}
+
+function findDrillHighlightElement(
+  container: ParentNode,
+  drillType: InspectorDrillType,
+  annotationId: string
+): Element | null {
+  const selector = getDrillHighlightSelector(drillType);
+  const datasetKey = getDrillHighlightDatasetKey(drillType);
+  return Array.from(container.querySelectorAll(selector))
+    .find((element) => getElementDataset(element)[datasetKey] === annotationId) ?? null;
+}
+
+export function applyPendingDrillHighlight(
+  container: ParentNode,
+  drillType: InspectorDrillType,
+  annotationId: string
+): boolean {
+  const element = findDrillHighlightElement(container, drillType, annotationId);
+
+  if (!element) {
+    return false;
+  }
+
+  if (typeof element.scrollIntoView === "function") {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  element.classList.add("is-highlight-pulse");
+  setTimeout(() => {
+    element.classList.remove("is-highlight-pulse");
+  }, DRILL_HIGHLIGHT_DURATION_MS);
+  return true;
+}
+
+function findPdfAnnotationSurface(container: ParentNode, subjectId: string): ParentNode | null {
+  return Array.from(container.querySelectorAll("[data-pdf-annotation-surface]"))
+    .find((element) => getElementDataset(element).subjectId === subjectId) ?? null;
+}
+
+function getDrillHighlightKey(target: Pick<ActiveDrillHighlight, "subjectId" | "drillType" | "annotationId">): string {
+  return `${target.subjectId}:${target.drillType}:${target.annotationId}`;
+}
+
+function applyTrackedDrillHighlight(target: ActiveDrillHighlight, shouldScroll: boolean): boolean {
+  if (!appRoot) {
+    return false;
+  }
+
+  const remainingMs = target.expiresAt - Date.now();
+  const key = getDrillHighlightKey(target);
+
+  if (remainingMs <= 0) {
+    activeDrillHighlights.delete(key);
+    activeDrillHighlightTimers.delete(key);
+    return false;
+  }
+
+  const surface = findPdfAnnotationSurface(appRoot, target.subjectId);
+  const element = surface
+    ? findDrillHighlightElement(surface, target.drillType, target.annotationId)
+    : null;
+
+  if (!element) {
+    return false;
+  }
+
+  if (shouldScroll && typeof element.scrollIntoView === "function") {
+    element.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  element.classList.add("is-highlight-pulse");
+  activeDrillHighlights.set(key, target);
+
+  const previousTimer = activeDrillHighlightTimers.get(key);
+  if (previousTimer) {
+    clearTimeout(previousTimer);
+  }
+
+  const timer = setTimeout(() => {
+    const currentSurface = appRoot ? findPdfAnnotationSurface(appRoot, target.subjectId) : null;
+    const currentElement = currentSurface
+      ? findDrillHighlightElement(currentSurface, target.drillType, target.annotationId)
+      : null;
+    currentElement?.classList.remove("is-highlight-pulse");
+    activeDrillHighlights.delete(key);
+    activeDrillHighlightTimers.delete(key);
+  }, Math.max(0, remainingMs));
+
+  activeDrillHighlightTimers.set(key, timer);
+  return true;
+}
+
+function refreshActiveDrillHighlights(): void {
+  for (const target of activeDrillHighlights.values()) {
+    applyTrackedDrillHighlight(target, false);
+  }
+}
+
+function scheduleDrillHighlightRetry(target: PendingDrillHighlight): void {
+  queueMicrotask(() => {
+    setTimeout(() => {
+      if (pendingDrillHighlight === target) {
+        applyQueuedDrillHighlight();
+      }
+    }, DRILL_HIGHLIGHT_RETRY_DELAY_MS);
+  });
+}
+
+function applyQueuedDrillHighlight(): void {
+  if (!pendingDrillHighlight || !appRoot) {
+    return;
+  }
+
+  const target = pendingDrillHighlight;
+
+  if (Date.now() > target.expiresAt) {
+    pendingDrillHighlight = null;
+    return;
+  }
+
+  const surface = findPdfAnnotationSurface(appRoot, target.subjectId);
+  const applied = surface
+    ? applyTrackedDrillHighlight({
+        subjectId: target.subjectId,
+        drillType: target.drillType,
+        annotationId: target.annotationId,
+        expiresAt: Date.now() + DRILL_HIGHLIGHT_DURATION_MS
+      }, true)
+    : false;
+
+  if (applied) {
+    pendingDrillHighlight = null;
+    return;
+  }
+
+  target.remainingAttempts -= 1;
+  if (target.remainingAttempts <= 0) {
+    pendingDrillHighlight = null;
+    return;
+  }
+
+  scheduleDrillHighlightRetry(target);
 }
 
 if (isBrowserRuntime) {
@@ -740,6 +929,71 @@ function handleDocumentChange(event: Event): void {
   target.value = "";
 }
 
+export type DrillItemClickResult =
+  | {
+      ok: true;
+      subjectId: string;
+      annotationId: string;
+      drillType: InspectorDrillType;
+      pageNumber: number;
+      queued: true;
+    }
+  | { ok: false; reason: "missing-button" | "missing-dataset" | "invalid-type" | "invalid-page" };
+
+export function handleDrillItemClick(
+  target: Element,
+  options: {
+    now?: () => number;
+    requestPage?: (subjectId: string, pageNumber: number) => void;
+    commitPage?: (subjectId: string, pageNumber: number) => void;
+    render?: () => void;
+  } = {}
+): DrillItemClickResult {
+  const closest = (target as { closest?: (selector: string) => Element | null }).closest;
+  const button = typeof closest === "function"
+    ? closest.call(target, '[data-action="select-drill-item"]')
+    : target;
+
+  if (!button || getElementDataset(button).action !== "select-drill-item") {
+    return { ok: false, reason: "missing-button" };
+  }
+
+  const dataset = getElementDataset(button);
+  const subjectId = dataset.subjectId;
+  const annotationId = dataset.annotationId;
+  const drillType = normalizeInspectorDrillType(dataset.drillType);
+  const rawPageNumber = Number(dataset.pageNumber);
+
+  if (!subjectId || !annotationId) {
+    return { ok: false, reason: "missing-dataset" };
+  }
+
+  if (!drillType) {
+    return { ok: false, reason: "invalid-type" };
+  }
+
+  if (!Number.isFinite(rawPageNumber) || rawPageNumber <= 0) {
+    return { ok: false, reason: "invalid-page" };
+  }
+
+  const pageNumber = Math.floor(rawPageNumber);
+  pendingDrillHighlight = {
+    subjectId,
+    drillType,
+    annotationId,
+    remainingAttempts: DRILL_HIGHLIGHT_MAX_ATTEMPTS,
+    expiresAt: (options.now ?? Date.now)() + DRILL_HIGHLIGHT_EXPIRES_MS
+  };
+
+  (options.requestPage ?? requestPdfPage)(subjectId, pageNumber);
+  // Drill navigation must change selectedPage immediately; requestPdfPage may wait
+  // for native PDF iframe readiness before committing normal toolbar transitions.
+  (options.commitPage ?? setPdfPage)(subjectId, pageNumber);
+  (options.render ?? renderApp)();
+
+  return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
+}
+
 function handleDocumentClick(event: MouseEvent): void {
   const target = event.target;
 
@@ -850,6 +1104,7 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "select-drill-item") {
+    handleDrillItemClick(quickNoteButton);
     return;
   }
 
@@ -6352,6 +6607,7 @@ function renderInkStroke(stroke: PdfInkStroke): string {
   return `
     <polyline
       class="ink-stroke"
+      data-stroke-id="${escapeHtml(stroke.id)}"
       points="${stroke.points.map(formatSvgPoint).join(" ")}"
       style="stroke: ${stroke.color}; stroke-width: ${stroke.width};"
     />

@@ -1355,13 +1355,14 @@ p {
 }
 
 .pdf-stage {
-  aspect-ratio: 1 / 1.414;
   background: var(--ds-bg-soft);
   border: 1px solid var(--ds-rule);
   border-radius: 8px;
-  min-height: 620px;
+  height: 70vh;
+  min-height: 480px;
   overflow: hidden;
   position: relative;
+  width: 100%;
 }
 
 .pdf-frame,
@@ -1472,6 +1473,32 @@ p {
   touch-action: none;
 }
 
+@keyframes pdf-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(253, 230, 138, 0);
+    outline: 2px solid transparent;
+  }
+
+  35% {
+    box-shadow: 0 0 0 8px rgba(253, 230, 138, 0.6);
+    outline: 2px solid rgba(217, 119, 6, 0.65);
+  }
+
+  65% {
+    box-shadow: 0 0 0 4px rgba(253, 230, 138, 0.4);
+    outline: 2px solid rgba(217, 119, 6, 0.5);
+  }
+}
+
+.is-highlight-pulse {
+  animation: pdf-highlight-pulse 1.5s ease-in-out 1;
+  border-radius: 6px;
+  outline: 2px solid rgba(217, 119, 6, 0.65);
+  position: relative;
+  z-index: 4;
+}
+
 .ink-layer {
   block-size: 100%;
   inline-size: 100%;
@@ -1490,6 +1517,11 @@ p {
 
 .ink-stroke.is-live {
   opacity: 0.72;
+}
+
+.ink-stroke.is-highlight-pulse {
+  filter: drop-shadow(0 0 4px rgba(217, 119, 6, 0.75));
+  stroke-width: 3.4;
 }
 
 /* R10: pointer-events: auto — surface 의 is-read-mode pointer-events:none 을 자식에서 override.
@@ -2489,7 +2521,7 @@ body[data-route="pdf-workspace"] .content {
   }
 
   .pdf-stage {
-    min-height: 560px;
+    min-height: 480px;
   }
 
   /* sprint-11/codex-P1: 모바일에서 inspector toggle 노출 유지.
@@ -2554,7 +2586,7 @@ body[data-route="pdf-workspace"] .content {
   }
 
   .pdf-stage {
-    min-height: 500px;
+    min-height: 420px;
   }
 
   .sticky-note {

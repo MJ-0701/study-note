@@ -214,14 +214,40 @@ class StorageShim {
 class TestElement {
   readonly childNodes: TestElement[] = [];
   readonly nodeName: string;
+  readonly classList: {
+    add: (...tokens: string[]) => void;
+    contains: (token: string) => boolean;
+    remove: (...tokens: string[]) => void;
+  };
+  parentNode: TestElement | null = null;
+  scrollIntoViewOptions: unknown;
   private readonly attributes = new Map<string, string>();
+  private readonly classNames = new Set<string>();
   private ownText = "";
 
   constructor(nodeName: string) {
     this.nodeName = nodeName.toLowerCase();
+    this.classList = {
+      add: (...tokens: string[]) => {
+        for (const token of tokens) {
+          if (token.length > 0) this.classNames.add(token);
+        }
+        this.syncClassAttribute();
+      },
+      contains: (token: string) => this.classNames.has(token),
+      remove: (...tokens: string[]) => {
+        for (const token of tokens) {
+          this.classNames.delete(token);
+        }
+        this.syncClassAttribute();
+      }
+    };
   }
 
   append(...nodes: TestElement[]): void {
+    for (const node of nodes) {
+      node.parentNode = this;
+    }
     this.childNodes.push(...nodes);
   }
 
@@ -245,6 +271,12 @@ class TestElement {
 
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value);
+    if (name === "class") {
+      this.classNames.clear();
+      for (const token of value.split(/\s+/).filter(Boolean)) {
+        this.classNames.add(token);
+      }
+    }
   }
 
   get textContent(): string {
@@ -277,6 +309,32 @@ class TestElement {
   querySelectorAll(selector: string): TestElement[] {
     const selectors = selector.split(",").map((item) => item.trim()).filter(Boolean);
     return this.findAll().filter((node) => selectors.some((item) => node.matchesSelector(item)));
+  }
+
+  closest(selector: string): TestElement | null {
+    let current: TestElement | null = this;
+
+    while (current) {
+      if (current.matchesSelector(selector)) {
+        return current;
+      }
+      current = current.parentNode;
+    }
+
+    return null;
+  }
+
+  scrollIntoView(options?: unknown): void {
+    this.scrollIntoViewOptions = options;
+  }
+
+  private syncClassAttribute(): void {
+    if (this.classNames.size > 0) {
+      this.attributes.set("class", Array.from(this.classNames).join(" "));
+      return;
+    }
+
+    this.attributes.delete("class");
   }
 
   private matchesSelector(selector: string): boolean {
@@ -355,7 +413,9 @@ const testDocument = {
 (globalThis as unknown as { localStorage: StorageShim }).localStorage = new StorageShim();
 
 const {
+  applyPendingDrillHighlight,
   formatDrillLabel,
+  handleDrillItemClick,
   readInspectorDrill,
   renderDrillList,
   toggleInspectorDrillState,
@@ -461,6 +521,24 @@ function renderIntoContainer(html: string): TestElement {
   return container;
 }
 
+function withCapturedTimeouts(run: (callbacks: Array<() => void>) => void): void {
+  const timers = globalThis as unknown as { setTimeout: typeof setTimeout };
+  const originalSetTimeout = timers.setTimeout;
+  const callbacks: Array<() => void> = [];
+
+  timers.setTimeout = ((callback: (...args: unknown[]) => void, delay?: number) => {
+    assert.equal(delay, 1500);
+    callbacks.push(() => callback());
+    return 0;
+  }) as unknown as typeof setTimeout;
+
+  try {
+    run(callbacks);
+  } finally {
+    timers.setTimeout = originalSetTimeout;
+  }
+}
+
 describe("inspector drill state", () => {
   test("read/write/toggle uses one localStorage object", () => {
     localStorage.clear();
@@ -478,6 +556,105 @@ describe("inspector drill state", () => {
 
     assert.equal(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}").sticky, true);
     assert.deepEqual(readInspectorDrill(), next);
+  });
+});
+
+describe("handleDrillItemClick", () => {
+  test("dataset을 읽어 page 요청과 highlight queue를 만든다", () => {
+    const button = document.createElement("button") as unknown as TestElement;
+    const label = document.createElement("span") as unknown as TestElement;
+    const pageRequests: Array<[string, number]> = [];
+    const pageCommits: Array<[string, number]> = [];
+    let renderCount = 0;
+
+    button.setAttribute("data-action", "select-drill-item");
+    button.setAttribute("data-subject-id", "subject-1");
+    button.setAttribute("data-annotation-id", "note-1");
+    button.setAttribute("data-drill-type", "sticky");
+    button.setAttribute("data-page-number", "3");
+    button.append(label);
+
+    const result = handleDrillItemClick(label as unknown as Element, {
+      now: () => 1000,
+      requestPage: (subjectId, pageNumber) => pageRequests.push([subjectId, pageNumber]),
+      commitPage: (subjectId, pageNumber) => pageCommits.push([subjectId, pageNumber]),
+      render: () => { renderCount += 1; }
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      subjectId: "subject-1",
+      annotationId: "note-1",
+      drillType: "sticky",
+      pageNumber: 3,
+      queued: true
+    });
+    assert.deepEqual(pageRequests, [["subject-1", 3]]);
+    assert.deepEqual(pageCommits, [["subject-1", 3]]);
+    assert.equal(renderCount, 1);
+  });
+});
+
+describe("applyPendingDrillHighlight", () => {
+  test("matching DOM이 있으면 true 반환하고 is-highlight-pulse class를 붙인다", () => {
+    const container = document.createElement("div") as unknown as TestElement;
+    const note = document.createElement("article") as unknown as TestElement;
+    note.setAttribute("data-note-id", "note-1");
+    container.append(note);
+
+    withCapturedTimeouts(() => {
+      const applied = applyPendingDrillHighlight(container as unknown as ParentNode, "sticky", "note-1");
+
+      assert.equal(applied, true);
+      assert.equal(note.classList.contains("is-highlight-pulse"), true);
+      assert.deepEqual(note.scrollIntoViewOptions, { block: "center", behavior: "smooth" });
+    });
+  });
+
+  test("matching DOM이 없으면 false 반환한다", () => {
+    const container = document.createElement("div") as unknown as TestElement;
+    const applied = applyPendingDrillHighlight(container as unknown as ParentNode, "sticky", "missing");
+
+    assert.equal(applied, false);
+    assert.equal(container.querySelectorAll("[class]").length, 0);
+  });
+
+  test("1500ms 후 is-highlight-pulse class를 제거한다", () => {
+    const container = document.createElement("div") as unknown as TestElement;
+    const note = document.createElement("article") as unknown as TestElement;
+    note.setAttribute("data-note-id", "note-1");
+    container.append(note);
+
+    withCapturedTimeouts((callbacks) => {
+      const applied = applyPendingDrillHighlight(container as unknown as ParentNode, "sticky", "note-1");
+
+      assert.equal(applied, true);
+      assert.equal(note.classList.contains("is-highlight-pulse"), true);
+      assert.equal(callbacks.length, 1);
+
+      callbacks[0]!();
+      assert.equal(note.classList.contains("is-highlight-pulse"), false);
+    });
+  });
+
+  test("morphdom-style replacement 후 같은 data id element에 다시 pulse를 붙인다", () => {
+    const container = document.createElement("div") as unknown as TestElement;
+    const oldNote = document.createElement("article") as unknown as TestElement;
+    const newNote = document.createElement("article") as unknown as TestElement;
+    oldNote.setAttribute("data-note-id", "note-1");
+    newNote.setAttribute("data-note-id", "note-1");
+    container.append(oldNote);
+
+    withCapturedTimeouts(() => {
+      assert.equal(applyPendingDrillHighlight(container as unknown as ParentNode, "sticky", "note-1"), true);
+      assert.equal(oldNote.classList.contains("is-highlight-pulse"), true);
+
+      container.childNodes.splice(0, 1, newNote);
+      newNote.parentNode = container;
+
+      assert.equal(applyPendingDrillHighlight(container as unknown as ParentNode, "sticky", "note-1"), true);
+      assert.equal(newNote.classList.contains("is-highlight-pulse"), true);
+    });
   });
 });
 
