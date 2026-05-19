@@ -17,6 +17,7 @@ import { describe, it } from "node:test";
 import {
   // Union
   type PdfWorkspaceTool,
+  isPdfWorkspaceTool,
   // TextBox
   createTextBox,
   updateTextBoxContent,
@@ -31,6 +32,18 @@ import {
   deleteChecklistItem,
   moveChecklist,
   deleteChecklist,
+  // Table
+  createTable,
+  updateTableContent,
+  moveTable,
+  deleteTable,
+  toggleTableCollapsed,
+  // Chart
+  createChart,
+  updateChartContent,
+  moveChart,
+  deleteChart,
+  toggleChartCollapsed,
   // Eraser
   setEraserShape,
   setEraserSize,
@@ -53,13 +66,16 @@ describe("R1: PdfWorkspaceTool union 확장", () => {
       "eraser",
       "text",
       "checklist",
+      "table",
+      "chart",
     ];
-    assert.equal(values.length, 6);
+    assert.equal(values.length, 8);
   });
 
-  // isPdfWorkspaceTool 은 main.ts 안에 정의되어 있어 domain 테스트에서 직접 import 불가.
-  // 해당 함수의 업데이트는 slice-2 책임 (main.ts 동기화).
-  // 여기서는 union type 자체만 검증.
+  it("isPdfWorkspaceTool: table/chart 신규 tool 을 허용함", () => {
+    assert.equal(isPdfWorkspaceTool("table"), true);
+    assert.equal(isPdfWorkspaceTool("chart"), true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -355,6 +371,135 @@ describe("R4: PdfChecklist reducers", () => {
 });
 
 // ---------------------------------------------------------------------------
+// sprint-13 R2 — PdfTable reducers
+// ---------------------------------------------------------------------------
+describe("R2: PdfTable reducers", () => {
+  it("createTable: 기본값 — 빈 content, collapsed = true", () => {
+    const table = createTable({
+      subjectId: "sub-table",
+      page: 2,
+      position: { x: 0.25, y: 0.75 },
+    });
+
+    assert.match(table.id, /^table-\d+-[0-9a-f]{4}$/);
+    assert.equal(table.subjectId, "sub-table");
+    assert.equal(table.page, 2);
+    assert.equal(table.position.x, 0.25);
+    assert.equal(table.position.y, 0.75);
+    assert.equal(table.content, "");
+    assert.equal(table.collapsed, true);
+    assert.ok(typeof table.createdAt === "string");
+    assert.ok(typeof table.updatedAt === "string");
+  });
+
+  it("createTable: position 범위 외 → clamp", () => {
+    const table = createTable({ subjectId: "s", page: 1, position: { x: -1, y: 2 } });
+    assert.equal(table.position.x, 0);
+    assert.equal(table.position.y, 1);
+  });
+
+  it("updateTableContent: 10000자 초과 → 10000자로 truncate", () => {
+    const table = createTable({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const updated = updateTableContent(table, "a".repeat(11000));
+    assert.equal(updated.content.length, 10000);
+    assert.equal(table.content, "", "원본 불변");
+  });
+
+  it("moveTable: 정상 이동 및 범위 외 clamp", () => {
+    const table = createTable({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const moved = moveTable(table, { x: 0.4, y: 0.8 });
+    assert.equal(moved.position.x, 0.4);
+    assert.equal(moved.position.y, 0.8);
+
+    const clamped = moveTable(table, { x: -0.1, y: 1.2 });
+    assert.equal(clamped.position.x, 0);
+    assert.equal(clamped.position.y, 1);
+  });
+
+  it("deleteTable: 해당 id 제거, 나머지 보존", () => {
+    const table = createTable({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const other = { ...table, id: "table-other" };
+    const result = deleteTable([table, other], table.id);
+    assert.equal(result.length, 1);
+    const first = result[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.id, "table-other");
+  });
+
+  it("toggleTableCollapsed: collapsed 값을 반전하고 원본은 보존", () => {
+    const table = createTable({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const expanded = toggleTableCollapsed(table);
+    assert.equal(expanded.collapsed, false);
+    assert.equal(table.collapsed, true);
+
+    const collapsed = toggleTableCollapsed(expanded);
+    assert.equal(collapsed.collapsed, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sprint-13 R3 — PdfChart reducers
+// ---------------------------------------------------------------------------
+describe("R3: PdfChart reducers", () => {
+  it("createChart: 기본값 — sparkline, 빈 content, collapsed = true", () => {
+    const chart = createChart({
+      subjectId: "sub-chart",
+      page: 3,
+      position: { x: 0.2, y: 0.6 },
+    });
+
+    assert.match(chart.id, /^chart-\d+-[0-9a-f]{4}$/);
+    assert.equal(chart.subjectId, "sub-chart");
+    assert.equal(chart.page, 3);
+    assert.equal(chart.position.x, 0.2);
+    assert.equal(chart.position.y, 0.6);
+    assert.equal(chart.content, "");
+    assert.equal(chart.chartType, "sparkline");
+    assert.equal(chart.collapsed, true);
+  });
+
+  it("updateChartContent: 5000자 초과 → 5000자로 truncate, chartType 보존", () => {
+    const chart = createChart({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const updated = updateChartContent(chart, "a".repeat(6000));
+    assert.equal(updated.content.length, 5000);
+    assert.equal(updated.chartType, "sparkline");
+    assert.equal(chart.content, "", "원본 불변");
+  });
+
+  it("moveChart: 이동 및 chartType 보존", () => {
+    const chart = createChart({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const moved = moveChart(chart, { x: 0.5, y: 0.7 });
+    assert.equal(moved.position.x, 0.5);
+    assert.equal(moved.position.y, 0.7);
+    assert.equal(moved.chartType, "sparkline");
+
+    const clamped = moveChart(chart, { x: -1, y: 2 });
+    assert.equal(clamped.position.x, 0);
+    assert.equal(clamped.position.y, 1);
+  });
+
+  it("deleteChart: 해당 id 제거, 나머지 보존", () => {
+    const chart = createChart({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const other = { ...chart, id: "chart-other" };
+    const result = deleteChart([chart, other], chart.id);
+    assert.equal(result.length, 1);
+    const first = result[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.id, "chart-other");
+  });
+
+  it("toggleChartCollapsed: collapsed 반전 및 chartType 보존", () => {
+    const chart = createChart({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const expanded = toggleChartCollapsed(chart);
+    assert.equal(expanded.collapsed, false);
+    assert.equal(expanded.chartType, "sparkline");
+
+    const collapsed = toggleChartCollapsed(expanded);
+    assert.equal(collapsed.collapsed, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // R5 — Eraser reducers
 // ---------------------------------------------------------------------------
 describe("R5: Eraser reducers", () => {
@@ -399,6 +544,8 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     const result = hydrateSubjectPdfWorkspace(null);
     assert.deepEqual(result.textBoxes, []);
     assert.deepEqual(result.checklists, []);
+    assert.deepEqual(result.tables, []);
+    assert.deepEqual(result.charts, []);
     assert.deepEqual(result.stickyNotes, []);
     assert.deepEqual(result.inkStrokes, []);
     assert.equal(result.eraserShape, "circle");
@@ -409,22 +556,28 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     const result = hydrateSubjectPdfWorkspace(undefined);
     assert.deepEqual(result.textBoxes, []);
     assert.deepEqual(result.checklists, []);
+    assert.deepEqual(result.tables, []);
+    assert.deepEqual(result.charts, []);
   });
 
   it("number 42 → empty state", () => {
     const result = hydrateSubjectPdfWorkspace(42);
     assert.deepEqual(result.textBoxes, []);
     assert.deepEqual(result.checklists, []);
+    assert.deepEqual(result.tables, []);
+    assert.deepEqual(result.charts, []);
   });
 
   it("string 'abc' → empty state", () => {
     const result = hydrateSubjectPdfWorkspace("abc");
     assert.deepEqual(result.textBoxes, []);
     assert.deepEqual(result.checklists, []);
+    assert.deepEqual(result.tables, []);
+    assert.deepEqual(result.charts, []);
   });
 
   // --- 정상 state + 신규 slice 누락 ---
-  it("정상 stickyNotes + inkStrokes, textBoxes/checklists 누락 → 신규 빈 배열 + 기존 보존", () => {
+  it("정상 stickyNotes + inkStrokes, 신규 slice 누락 → 신규 빈 배열 + 기존 보존", () => {
     const raw = {
       subjectId: "sub-existing",
       stickyNotes: [
@@ -454,6 +607,8 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.equal(result.inkStrokes.length, 1);
     assert.deepEqual(result.textBoxes, []);
     assert.deepEqual(result.checklists, []);
+    assert.deepEqual(result.tables, []);
+    assert.deepEqual(result.charts, []);
     assert.equal(result.eraserShape, "circle");
     assert.equal(result.eraserSize, 16);
   });
@@ -691,6 +846,123 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.equal(cl.collapsed, true, "string 'true' → boolean coercion → true (접힘)");
   });
 
+  // --- table 검증 ---
+  it("table slice 가 array 아님(null/42/'abc') → tables = []", () => {
+    for (const tables of [null, 42, "abc"]) {
+      const result = hydrateSubjectPdfWorkspace({
+        ...buildStateWithTables([]),
+        tables,
+      });
+      assert.deepEqual(result.tables, []);
+    }
+  });
+
+  it("table position.x = NaN → 해당 entry skip, 나머지 보존", () => {
+    const raw = buildStateWithTables([
+      makeRawTable({ position: { x: Number.NaN, y: 0.5 } }),
+      makeRawTable({ position: { x: 0.2, y: 0.4 } }),
+    ]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    assert.equal(result.tables.length, 1);
+    const table = result.tables[0];
+    assert.ok(table !== undefined);
+    assert.equal(table.position.x, 0.2);
+  });
+
+  it("table content 11000자 → 10000자로 truncate", () => {
+    const raw = buildStateWithTables([
+      makeRawTable({ content: "a".repeat(11000) }),
+    ]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    const table = result.tables[0];
+    assert.ok(table !== undefined);
+    assert.equal(table.content.length, 10000);
+  });
+
+  it("table collapsed: 'true' string/missing → true, false → false", () => {
+    const stringValue = hydrateSubjectPdfWorkspace(
+      buildStateWithTables([makeRawTable({ collapsed: "true" })])
+    );
+    const missingValue = hydrateSubjectPdfWorkspace(
+      buildStateWithTables([makeRawTable()])
+    );
+    const falseValue = hydrateSubjectPdfWorkspace(
+      buildStateWithTables([makeRawTable({ collapsed: false })])
+    );
+
+    assert.equal(stringValue.tables[0]?.collapsed, true);
+    assert.equal(missingValue.tables[0]?.collapsed, true);
+    assert.equal(falseValue.tables[0]?.collapsed, false);
+  });
+
+  it("security: table content script 문자열은 domain hydration 을 통과함", () => {
+    const payload = "<script>alert(1)</script>";
+    const result = hydrateSubjectPdfWorkspace(
+      buildStateWithTables([makeRawTable({ content: payload })])
+    );
+    const table = result.tables[0];
+    assert.ok(table !== undefined);
+    assert.equal(table.content, payload);
+  });
+
+  // --- chart 검증 ---
+  it("chart slice 가 array 아님(null/42/'abc') → charts = []", () => {
+    for (const charts of [null, 42, "abc"]) {
+      const result = hydrateSubjectPdfWorkspace({
+        ...buildStateWithCharts([]),
+        charts,
+      });
+      assert.deepEqual(result.charts, []);
+    }
+  });
+
+  it("chart position.x = NaN → 해당 entry skip, 나머지 보존", () => {
+    const raw = buildStateWithCharts([
+      makeRawChart({ position: { x: Number.NaN, y: 0.5 } }),
+      makeRawChart({ position: { x: 0.3, y: 0.6 } }),
+    ]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    assert.equal(result.charts.length, 1);
+    const chart = result.charts[0];
+    assert.ok(chart !== undefined);
+    assert.equal(chart.position.x, 0.3);
+  });
+
+  it("chart content 6000자 → 5000자로 truncate", () => {
+    const raw = buildStateWithCharts([
+      makeRawChart({ content: "a".repeat(6000) }),
+    ]);
+    const result = hydrateSubjectPdfWorkspace(raw);
+    const chart = result.charts[0];
+    assert.ok(chart !== undefined);
+    assert.equal(chart.content.length, 5000);
+  });
+
+  it("chart collapsed: 'true' string/missing → true, false → false", () => {
+    const stringValue = hydrateSubjectPdfWorkspace(
+      buildStateWithCharts([makeRawChart({ collapsed: "true" })])
+    );
+    const missingValue = hydrateSubjectPdfWorkspace(
+      buildStateWithCharts([makeRawChart()])
+    );
+    const falseValue = hydrateSubjectPdfWorkspace(
+      buildStateWithCharts([makeRawChart({ collapsed: false })])
+    );
+
+    assert.equal(stringValue.charts[0]?.collapsed, true);
+    assert.equal(missingValue.charts[0]?.collapsed, true);
+    assert.equal(falseValue.charts[0]?.collapsed, false);
+  });
+
+  it("chartType 이 'sparkline' 외 값이면 sparkline 으로 default", () => {
+    const result = hydrateSubjectPdfWorkspace(
+      buildStateWithCharts([makeRawChart({ chartType: "bar" })])
+    );
+    const chart = result.charts[0];
+    assert.ok(chart !== undefined);
+    assert.equal(chart.chartType, "sparkline");
+  });
+
   // --- 완전한 정상 state round-trip ---
   it("정상 state round-trip: 모든 slice 보존", () => {
     const now = new Date().toISOString();
@@ -724,6 +996,31 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
           updatedAt: now,
         },
       ],
+      tables: [
+        {
+          id: "table-1",
+          subjectId: "sub-round",
+          page: 1,
+          position: { x: 0.2, y: 0.4 },
+          content: "| A | B |",
+          collapsed: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      charts: [
+        {
+          id: "chart-1",
+          subjectId: "sub-round",
+          page: 1,
+          position: { x: 0.3, y: 0.6 },
+          content: "A,1\nB,2",
+          chartType: "sparkline",
+          collapsed: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
       updatedAt: now,
     };
     const result = hydrateSubjectPdfWorkspace(raw);
@@ -740,6 +1037,11 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.ok(firstItem !== undefined);
     assert.equal(firstItem.checked, true);
     assert.equal(cl.collapsed, false, "R11: collapsed: false 명시 → 보존");
+    assert.equal(result.tables.length, 1);
+    assert.equal(result.tables[0]?.content, "| A | B |");
+    assert.equal(result.charts.length, 1);
+    assert.equal(result.charts[0]?.chartType, "sparkline");
+    assert.equal(result.charts[0]?.collapsed, false);
   });
 });
 
@@ -747,10 +1049,12 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
 // createEmptyPdfWorkspace — sprint-12 확장 검증
 // ---------------------------------------------------------------------------
 describe("createEmptyPdfWorkspace: sprint-12 확장", () => {
-  it("textBoxes + checklists + eraser defaults 가 초기화됨", () => {
+  it("textBoxes + checklists + tables + charts + eraser defaults 가 초기화됨", () => {
     const ws = createEmptyPdfWorkspace("sub-test");
     assert.deepEqual(ws.textBoxes, []);
     assert.deepEqual(ws.checklists, []);
+    assert.deepEqual(ws.tables, []);
+    assert.deepEqual(ws.charts, []);
     assert.deepEqual(ws.stickyNotes, []);
     assert.deepEqual(ws.inkStrokes, []);
     assert.equal(ws.eraserShape, "circle");
@@ -796,6 +1100,37 @@ function makeRawChecklist(overrides: Record<string, unknown> = {}): Record<strin
   };
 }
 
+function makeRawTable(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const now = new Date().toISOString();
+  _counter++;
+  return {
+    id: `table-test-${_counter}`,
+    subjectId: "sub-test",
+    page: 1,
+    position: { x: 0.4, y: 0.4 },
+    content: "| A | B |",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+function makeRawChart(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const now = new Date().toISOString();
+  _counter++;
+  return {
+    id: `chart-test-${_counter}`,
+    subjectId: "sub-test",
+    page: 1,
+    position: { x: 0.6, y: 0.6 },
+    content: "A,1\nB,2",
+    chartType: "sparkline",
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
 function buildStateWithTextBoxes(
   textBoxes: Record<string, unknown>[]
 ): Record<string, unknown> {
@@ -805,6 +1140,8 @@ function buildStateWithTextBoxes(
     inkStrokes: [],
     textBoxes,
     checklists: [],
+    tables: [],
+    charts: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -818,6 +1155,38 @@ function buildStateWithChecklists(
     inkStrokes: [],
     textBoxes: [],
     checklists,
+    tables: [],
+    charts: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildStateWithTables(
+  tables: Record<string, unknown>[]
+): Record<string, unknown> {
+  return {
+    subjectId: "sub-test",
+    stickyNotes: [],
+    inkStrokes: [],
+    textBoxes: [],
+    checklists: [],
+    tables,
+    charts: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildStateWithCharts(
+  charts: Record<string, unknown>[]
+): Record<string, unknown> {
+  return {
+    subjectId: "sub-test",
+    stickyNotes: [],
+    inkStrokes: [],
+    textBoxes: [],
+    checklists: [],
+    tables: [],
+    charts,
     updatedAt: new Date().toISOString(),
   };
 }
