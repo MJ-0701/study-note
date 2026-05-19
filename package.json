@@ -19,6 +19,7 @@
     "prisma:generate": "pnpm --filter @study-note/api prisma:generate",
     "prisma:migrate:deploy": "pnpm --filter @study-note/api prisma:migrate:deploy",
     "prisma:seed": "pnpm --filter @study-note/api prisma:seed",
+    "test:domain-pdf-workspace": "node --experimental-strip-types --no-warnings --test packages/domain/__tests__/pdf-workspace.spec.ts",
     "test:web-gate": "node --experimental-strip-types --no-warnings --test apps/web/src/persona-turn/components/gate-state.spec.ts",
     "test:web-onboarding-copy": "node --experimental-strip-types --no-warnings --test apps/web/src/onboarding/secret-handling-copy.spec.ts",
     "test:web-recent-conversations": "node --experimental-strip-types --no-warnings --test apps/web/src/persona-turn/components/recent-conversations.spec.ts",

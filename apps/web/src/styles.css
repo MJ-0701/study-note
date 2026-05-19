@@ -1243,6 +1243,84 @@ p {
   color: var(--ds-bg);
 }
 
+.tool-button:focus-visible {
+  outline: 2px solid var(--ds-accent, #4f46e5);
+  outline-offset: 2px;
+}
+
+/* sprint-12/slice-5: 표/그래프 도구 = sprint-13 까지 disabled placeholder. */
+.tool-button.is-disabled-placeholder {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tool-button.is-disabled-placeholder:hover {
+  background: var(--ds-bg);
+}
+
+.pdf-eraser-subtoolbar {
+  align-items: center;
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: var(--ds-space-sm);
+  padding: 8px 10px;
+}
+
+.pdf-eraser-shape-picker {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-xs);
+}
+
+.eraser-shape-button {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  min-height: 36px;
+  padding: 6px 10px;
+}
+
+.eraser-shape-button:hover {
+  background: #eef6ff;
+}
+
+.eraser-shape-button.active {
+  background: var(--ds-accent);
+  border-color: var(--ds-accent);
+  color: #fff;
+}
+
+.pdf-eraser-size-control {
+  align-items: center;
+  color: var(--ds-fg);
+  display: inline-flex;
+  flex: 1 1 260px;
+  gap: var(--ds-space-sm);
+  min-width: min(100%, 240px);
+}
+
+.pdf-eraser-size-control span {
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pdf-eraser-size-control input {
+  accent-color: var(--ds-accent);
+  flex: 1;
+  min-width: 140px;
+}
+
 /* sprint-11/slice-1 R1: inspector collapse toggle.
    Default (접힘) = single column. Expanded = slim inspector 220-260px. */
 .pdf-workspace-layout {
@@ -1318,11 +1396,10 @@ p {
   touch-action: none;
 }
 
-/* sprint-11/slice-2-refine R10-a: eraser tool — round SVG circle cursor (radius 16px outline).
-   Percent-encoded for Firefox compatibility. Hot-spot at center (17,17) so the erase circle
-   aligns with the pointer tip. touch-action: none required for drag erase on touch devices. */
+/* sprint-12/slice-4: eraser cursor is an inline SVG data URL from main.ts (shape × size).
+   CSS keeps the interaction flags and a crosshair fallback only. */
 .pdf-annotation-surface.is-eraser-mode {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='34'%3E%3Ccircle cx='17' cy='17' r='16' fill='none' stroke='black' stroke-width='1.5'/%3E%3C/svg%3E") 17 17, crosshair;
+  cursor: crosshair;
   pointer-events: auto;
   touch-action: none;
 }
@@ -1347,6 +1424,8 @@ p {
   opacity: 0.72;
 }
 
+/* R10: pointer-events: auto — surface 의 is-read-mode pointer-events:none 을 자식에서 override.
+   부모 surface 가 pointer-events: none 이어도 위젯 ✕ / drag / textarea 는 항상 클릭 가능. */
 .sticky-note {
   background: #fff8c7;
   border: 1px solid #d9c15d;
@@ -1355,6 +1434,7 @@ p {
   display: grid;
   max-width: 240px;
   min-width: 180px;
+  pointer-events: auto;
   position: absolute;
   transform: translate(-8px, -8px);
   z-index: 3;
@@ -1393,6 +1473,289 @@ p {
   min-height: 96px;
   padding: 8px;
   resize: vertical;
+}
+
+/* sprint-12/slice-2 R3: text tool cursor — crosshair to indicate click-to-place. */
+.pdf-annotation-surface.is-text-mode {
+  cursor: text;
+  pointer-events: auto;
+}
+
+/* sprint-12/slice-2 R3: textbox widget.
+   - position: absolute (relative to annotation surface).
+   - drag handle = header bar; body = textarea.
+   - touch-action: none on header prevents scroll conflict (AC §위험-5).
+   R10: pointer-events: auto — surface is-read-mode override. */
+/* sprint-12/slice-7: textbox redesign — macOS Preview 스타일 인라인 텍스트.
+   박스 frame 폐기 (border / bg / shadow 모두 제거). 작은 폰트로 PDF 본문 위 직접 필기.
+   default = no border. hover/focus = minimal dotted border. delete ✕ = hover 시만 노출. */
+.pdf-textbox.is-inline {
+  background: transparent;
+  border: 0;
+  cursor: grab;
+  font-size: 0.875rem; /* ~14px */
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-textbox.is-inline:active {
+  cursor: grabbing;
+}
+
+.pdf-textbox.is-inline:hover {
+  outline: 1px dashed rgba(26, 26, 26, 0.3);
+  outline-offset: 2px;
+}
+
+/* sprint-12/slice-7-refine: drag grip handle. textarea size 가 content fit 라
+   외부 click 영역 0. grip = hover/focus 시만 표시, left side absolute. */
+.pdf-textbox-grip {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(26, 26, 26, 0.2);
+  border-radius: 3px;
+  color: var(--ds-fg-soft);
+  cursor: grab;
+  display: none;
+  font-size: 0.75rem;
+  height: 18px;
+  left: -22px;
+  letter-spacing: -2px;
+  line-height: 16px;
+  padding: 0 2px;
+  position: absolute;
+  top: -2px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-textbox.is-inline:hover .pdf-textbox-grip,
+.pdf-textbox.is-inline:focus-within .pdf-textbox-grip {
+  display: inline-block;
+}
+
+.pdf-textbox-grip:active {
+  cursor: grabbing;
+}
+
+.pdf-textbox-inline-input {
+  background: transparent;
+  border: 0;
+  color: var(--ds-fg);
+  cursor: text;
+  field-sizing: content; /* Chrome 123+ — fallback to manual sizing via rows="1" */
+  font: inherit;
+  font-size: inherit;
+  min-height: 1.4em;
+  min-width: 80px;
+  outline: 0;
+  padding: 0 2px;
+  resize: none;
+  user-select: text;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+
+.pdf-textbox-inline-input:focus {
+  outline: 1px dotted var(--ds-accent, #4f46e5);
+  outline-offset: 2px;
+}
+
+.pdf-textbox-delete {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(26, 26, 26, 0.2);
+  border-radius: 50%;
+  color: var(--ds-fg);
+  cursor: pointer;
+  display: none;
+  font-size: 0.75rem;
+  height: 18px;
+  line-height: 14px;
+  padding: 0;
+  position: absolute;
+  right: -22px;
+  top: -4px;
+  width: 18px;
+}
+
+.pdf-textbox.is-inline:hover .pdf-textbox-delete,
+.pdf-textbox.is-inline:focus-within .pdf-textbox-delete {
+  display: inline-block;
+}
+
+/* sprint-12/slice-3: checklist tool cursor — crosshair to indicate click-to-place. */
+.pdf-annotation-surface.is-checklist-mode {
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
+/* sprint-12/slice-3: checklist widget.
+   - position: absolute (relative to annotation surface).
+   - size: content-based auto expand (no fixed width/height — R4 schema).
+   - drag handle = header bar; items = ul/li with checkbox + text input.
+   - touch-action: none on header prevents scroll conflict.
+   R10: pointer-events: auto — surface is-read-mode override.
+   R11: .is-collapsed = 접힘 상태 (height ≤ 40px; items + add-item 숨김). */
+.pdf-checklist {
+  background: #f0fff4;
+  border: 1px solid #6dbf8a;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+}
+
+/* R11: collapsed state — items 리스트와 add-item 버튼 숨김 (height ≤ 40px = header only). */
+.pdf-checklist.is-collapsed .pdf-checklist-items,
+.pdf-checklist.is-collapsed .pdf-checklist-add-item {
+  display: none;
+}
+
+.pdf-checklist-header {
+  align-items: center;
+  background: #c6f0d4;
+  border-bottom: 1px solid #6dbf8a;
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-checklist-header:active {
+  cursor: grabbing;
+}
+
+.pdf-checklist-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+/* R11: collapse/expand toggle button — ▶/▼ static text, aria-expanded driven. */
+.pdf-checklist-toggle {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  min-height: 28px;
+  min-width: 22px;
+  padding: 0 2px;
+}
+
+.pdf-checklist-toggle:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-checklist-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.pdf-checklist-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-checklist-items {
+  list-style: none;
+  margin: 0;
+  padding: 4px 6px;
+}
+
+.pdf-checklist-item {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.pdf-checklist-item input[type="checkbox"] {
+  cursor: pointer;
+  flex-shrink: 0;
+  height: 14px;
+  margin: 0;
+  width: 14px;
+}
+
+.pdf-checklist-item-label {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--ds-fg);
+  flex: 1;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-width: 80px;
+  outline: 0;
+  padding: 1px 2px;
+}
+
+.pdf-checklist-item-label:focus {
+  border-bottom-color: var(--ds-accent);
+}
+
+.pdf-checklist-item-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+  min-height: 20px;
+  min-width: 20px;
+  opacity: 0;
+  padding: 0;
+  transition: opacity 0.15s;
+}
+
+.pdf-checklist-item:hover .pdf-checklist-item-delete {
+  opacity: 1;
+}
+
+.pdf-checklist-item-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-checklist-add-item {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #6dbf8a;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  padding: 4px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.pdf-checklist-add-item:hover {
+  background: #c6f0d4;
+  color: var(--ds-fg);
 }
 
 /* sprint-11/slice-1 R1: inspector aside — collapsed hides from layout flow. */
