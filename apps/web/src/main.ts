@@ -35,6 +35,7 @@ import {
 import {
   addChecklistItem,
   createChecklist,
+  createChart,
   createInkStroke,
   createPdfMaterialFromBackend,
   createStickyNote,
@@ -42,12 +43,14 @@ import {
   createTextBox,
   deleteChecklist,
   deleteChecklistItem,
+  deleteChart,
   deleteTable,
   deleteTextBox,
   estimatePdfPageCount,
   formatPdfFileSize,
   getSubjectPdfWorkspace,
   hydrateSubjectPdfWorkspace,
+  moveChart,
   moveChecklist,
   moveTable,
   moveTextBox,
@@ -57,11 +60,15 @@ import {
   setEraserSize,
   toggleChecklistCollapsed,
   toggleChecklistItem,
+  toggleChartCollapsed,
   toggleTableCollapsed,
+  updateChartContent,
   updateChecklistItemLabel,
   updateTableContent,
   updateTextBoxContent,
   type PdfChecklist,
+  type PdfChart,
+  type PdfChartType,
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfTable,
@@ -192,6 +199,16 @@ let activeTableDrag: {
   startNormX: number;
   startNormY: number;
 } | undefined;
+// sprint-13/slice-3: tracks an in-progress chart drag (header pointerdown -> pointerup).
+let activeChartDrag: {
+  subjectId: string;
+  chartId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startNormX: number;
+  startNormY: number;
+} | undefined;
 // sprint-12/slice-6: tracks an in-progress sticky note drag (header pointerdown → pointerup).
 // Mirrors textbox/checklist drag — pointermove = DOM 직접 갱신, pointerup = store + renderApp.
 let activeStickyDrag: {
@@ -235,6 +252,7 @@ function renderInto(html: string): void {
   wrapper.innerHTML = html;
   morphdom(appRoot, wrapper, { childrenOnly: true });
   refreshTablePreviews();
+  refreshChartWidgets();
 }
 
 document.addEventListener("change", handleDocumentChange);
@@ -767,6 +785,19 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-13/slice-3: chart delete (entire chart)
+  if (quickNoteButton?.dataset.action === "delete-chart") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const chartId = quickNoteButton.dataset.chartId;
+
+    if (subjectId && chartId) {
+      removeChart(subjectId, chartId);
+      renderApp();
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3-refine R11: toggle collapse/expand state (mode-agnostic)
   if (quickNoteButton?.dataset.action === "toggle-checklist-collapsed") {
     const subjectId = quickNoteButton.dataset.subjectId;
@@ -792,6 +823,19 @@ function handleDocumentClick(event: MouseEvent): void {
 
     if (subjectId && tableId) {
       applyTableCollapseToggle(subjectId, tableId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-13/slice-3: chart collapse/expand state (mode-agnostic)
+  if (quickNoteButton?.dataset.action === "toggle-chart-collapsed") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const chartId = quickNoteButton.dataset.chartId;
+
+    if (subjectId && chartId) {
+      applyChartCollapseToggle(subjectId, chartId);
       renderApp();
     }
 
@@ -1087,6 +1131,19 @@ function handleDocumentInput(event: Event): void {
     return;
   }
 
+  // sprint-13/slice-3: chart CSV update (debounced store write + immediate preview).
+  if (target.dataset.action === "update-chart-content") {
+    const subjectId = target.dataset.subjectId;
+    const chartId = target.dataset.chartId;
+
+    if (subjectId && chartId) {
+      refreshChartPreview(chartId, target.value);
+      scheduleChartContentUpdate(subjectId, chartId, target.value);
+    }
+
+    return;
+  }
+
   // sprint-12/slice-3: checklist item label update (debounced 300ms)
   // AC9-e: value set via DOM property, not innerHTML. No renderApp in debounced callback.
   // AC9-g: label not logged, not in data-*, not in title/aria-label.
@@ -1252,7 +1309,40 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox, .pdf-checklist, .pdf-table")) {
+  // sprint-13/slice-3: chart header drag — same pattern as table drag.
+  const chartDragHandle = target.closest<HTMLElement>("[data-action='chart-drag-handle']");
+
+  if (chartDragHandle && !target.closest("button") && !target.closest("textarea") && !target.closest("input")) {
+    const subjectIdForDrag = surface.dataset.subjectId;
+    const chartIdForDrag = chartDragHandle.dataset.chartId;
+
+    if (subjectIdForDrag && chartIdForDrag) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const chart = workspace.charts.find((item) => item.id === chartIdForDrag);
+
+      if (chart) {
+        event.preventDefault();
+        try {
+          chartDragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic events may not support setPointerCapture
+        }
+        activeChartDrag = {
+          subjectId: subjectIdForDrag,
+          chartId: chartIdForDrag,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startNormX: chart.position.x,
+          startNormY: chart.position.y
+        };
+      }
+    }
+
+    return;
+  }
+
+  if (target.closest("a, button, input, label, textarea, .sticky-note, .pdf-textbox, .pdf-checklist, .pdf-table, .pdf-chart")) {
     return;
   }
 
@@ -1302,6 +1392,15 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-13/slice-2: table tool — click-to-place a new table at the surface point.
   if ((material.selectedTool as LocalPdfTool) === "table") {
     addTable(subjectId, point);
+    setPdfTool(subjectId, "read");
+    renderApp();
+    event.preventDefault();
+    return;
+  }
+
+  // sprint-13/slice-3: chart tool — click-to-place a new chart at the surface point.
+  if ((material.selectedTool as LocalPdfTool) === "chart") {
+    addChart(subjectId, point);
     setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
@@ -1501,6 +1600,35 @@ function handleDocumentPointerMove(event: PointerEvent): void {
     return;
   }
 
+  // sprint-13/slice-3: chart drag — same pattern as table drag.
+  if (activeChartDrag && activeChartDrag.pointerId === event.pointerId) {
+    const { subjectId, chartId, startClientX, startClientY, startNormX, startNormY } = activeChartDrag;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      const dy = (event.clientY - startClientY) / rect.height;
+      applyChartMove(subjectId, chartId, { x: startNormX + dx, y: startNormY + dy });
+      const el = document.querySelector<HTMLElement>(`[data-chart-id="${chartId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const chart = workspace.charts.find((item) => item.id === chartId);
+
+        if (chart) {
+          el.style.left = `${chart.position.x * 100}%`;
+          el.style.top = `${chart.position.y * 100}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
@@ -1575,6 +1703,13 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-13/slice-2: clear table drag state on pointer release.
   if (activeTableDrag && activeTableDrag.pointerId === event.pointerId) {
     activeTableDrag = undefined;
+    renderApp(); // final re-render to settle position
+    return;
+  }
+
+  // sprint-13/slice-3: clear chart drag state on pointer release.
+  if (activeChartDrag && activeChartDrag.pointerId === event.pointerId) {
+    activeChartDrag = undefined;
     renderApp(); // final re-render to settle position
     return;
   }
@@ -2587,6 +2722,79 @@ function applyTableCollapseToggle(subjectId: string, tableId: string): void {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// sprint-13/slice-3 — PdfChart store operations
+// Pattern mirrors PdfTable store operations.
+// ---------------------------------------------------------------------------
+
+function addChart(
+  subjectId: string,
+  position: { x: number; y: number }
+): void {
+  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const page = workspace.material?.selectedPage ?? 1;
+  const chart = createChart({ subjectId, page, position });
+
+  updatePdfWorkspace(subjectId, (current) => ({
+    ...current,
+    charts: [...current.charts, chart]
+  }));
+}
+
+function removeChart(subjectId: string, chartId: string): void {
+  const prev = chartContentDebounceMap.get(chartId);
+  if (prev) clearTimeout(prev);
+  chartContentDebounceMap.delete(chartId);
+
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: deleteChart(workspace.charts, chartId)
+  }));
+}
+
+function applyChartMove(
+  subjectId: string,
+  chartId: string,
+  position: { x: number; y: number }
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: workspace.charts.map((chart) =>
+      chart.id === chartId ? moveChart(chart, position) : chart
+    )
+  }));
+}
+
+const chartContentDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleChartContentUpdate(
+  subjectId: string,
+  chartId: string,
+  content: string
+): void {
+  const prev = chartContentDebounceMap.get(chartId);
+  if (prev) clearTimeout(prev);
+  const handle = setTimeout(() => {
+    chartContentDebounceMap.delete(chartId);
+    updatePdfWorkspace(subjectId, (workspace) => ({
+      ...workspace,
+      charts: workspace.charts.map((chart) =>
+        chart.id === chartId ? updateChartContent(chart, content) : chart
+      )
+    }));
+  }, 300);
+  chartContentDebounceMap.set(chartId, handle);
+}
+
+function applyChartCollapseToggle(subjectId: string, chartId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: workspace.charts.map((chart) =>
+      chart.id === chartId ? toggleChartCollapsed(chart) : chart
+    )
+  }));
+}
+
 // sprint-12/slice-6: sticky note move (inline reducer — no domain moveStickyNote yet).
 // anchor field (not position) is the sticky note's normalized coordinate.
 function applyStickyMove(
@@ -2924,6 +3132,116 @@ function subjectPdfWorkspacePath(subject: SubjectNote): string {
   return `#/subjects/${subject.id}/pdf-workspace`;
 }
 
+interface CsvSeriesPoint {
+  label: string;
+  value: number;
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function parseCsvSeries(source: string): CsvSeriesPoint[] {
+  if (source.trim().length === 0) {
+    return [];
+  }
+
+  return source.split(/\r?\n/).reduce<CsvSeriesPoint[]>((points, line) => {
+    const commaIndex = line.indexOf(",");
+
+    if (commaIndex < 0) {
+      return points;
+    }
+
+    const label = line.slice(0, commaIndex).trim();
+    const rawValue = line.slice(commaIndex + 1).trim();
+    const value = Number(rawValue);
+
+    if (!Number.isFinite(value)) {
+      return points;
+    }
+
+    points.push({ label, value });
+    return points;
+  }, []);
+}
+
+function buildSparklineSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
+  parent.replaceChildren();
+  parent.setAttribute("viewBox", "0 0 100 30");
+
+  const safePoints = points.filter((point) => Number.isFinite(point.value));
+
+  if (safePoints.length === 0) {
+    return;
+  }
+
+  const values = safePoints.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  const toY = (value: number): number => {
+    if (range === 0) {
+      return 15;
+    }
+
+    const ratio = Math.min(1, Math.max(0, (value - min) / range));
+    return 22 - ratio * 18;
+  };
+  const toX = (index: number): number =>
+    safePoints.length === 1 ? 50 : (index / (safePoints.length - 1)) * 100;
+  const appendLabel = (point: CsvSeriesPoint, x: number): void => {
+    const label = document.createElementNS(SVG_NS, "text");
+    label.setAttribute("x", x.toFixed(2));
+    label.setAttribute("y", "29");
+    label.setAttribute("font-size", "4");
+    const textAnchor = safePoints.length === 1
+      ? "middle"
+      : x <= 0
+        ? "start"
+        : x >= 100
+          ? "end"
+          : "middle";
+    label.setAttribute("text-anchor", textAnchor);
+    label.textContent = point.label;
+    parent.append(label);
+  };
+
+  if (safePoints.length === 1) {
+    const point = safePoints[0];
+    if (!point) {
+      return;
+    }
+
+    const circle = document.createElementNS(SVG_NS, "circle");
+    const x = 50;
+    const y = 15;
+    circle.setAttribute("cx", x.toFixed(2));
+    circle.setAttribute("cy", y.toFixed(2));
+    circle.setAttribute("r", "2");
+    parent.append(circle);
+    appendLabel(point, x);
+    return;
+  }
+
+  const coords = safePoints.map((point, index) => {
+    const x = toX(index);
+    const y = toY(point.value);
+    return { point, x, y };
+  });
+  const polyline = document.createElementNS(SVG_NS, "polyline");
+  polyline.setAttribute(
+    "points",
+    coords.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
+  );
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "currentColor");
+  polyline.setAttribute("stroke-width", "1.6");
+  polyline.setAttribute("stroke-linecap", "round");
+  polyline.setAttribute("stroke-linejoin", "round");
+  parent.append(polyline);
+
+  coords.forEach((coord) => appendLabel(coord.point, coord.x));
+}
+
 interface ParsedMarkdownTable {
   headers: string[];
   rows: string[][];
@@ -3082,6 +3400,44 @@ function refreshTablePreviews(): void {
       if (tableId) {
         refreshTablePreview(tableId);
       }
+    });
+}
+
+function refreshChartPreview(chartId: string, source?: string): void {
+  const preview = document.querySelector<SVGElement>(
+    `[data-chart-preview-id="${chartId}"]`
+  );
+
+  if (!preview) {
+    return;
+  }
+
+  const textarea = document.querySelector<HTMLTextAreaElement>(
+    `textarea[data-action="update-chart-content"][data-chart-id="${chartId}"]`
+  );
+  buildSparklineSvg(preview, parseCsvSeries(source ?? textarea?.value ?? ""));
+}
+
+function refreshChartWidgets(): void {
+  document
+    .querySelectorAll<HTMLElement>("[data-chart-mount-id]")
+    .forEach((mount) => {
+      const subjectId = mount.dataset.subjectId;
+      const chartId = mount.dataset.chartMountId;
+
+      if (!subjectId || !chartId) {
+        return;
+      }
+
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+      const chart = workspace.charts.find((item) => item.id === chartId);
+
+      if (!chart) {
+        mount.remove();
+        return;
+      }
+
+      mount.replaceWith(renderChart(subjectId, chart));
     });
 }
 
@@ -3687,6 +4043,10 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const pageTables = workspace.tables.filter(
     (table) => table.page === selectedPage
   );
+  // sprint-13/slice-3: filter charts for current page
+  const pageCharts = workspace.charts.filter(
+    (chart) => chart.page === selectedPage
+  );
   const inputId = `pdf-file-${subject.id}`;
 
   return `
@@ -3782,6 +4142,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             ${pageTextBoxes.map((tb) => renderTextBox(subject.id, tb)).join("")}
             ${pageChecklists.map((cl) => renderChecklist(subject.id, cl)).join("")}
             ${pageTables.map((table) => renderTable(subject.id, table)).join("")}
+            ${pageCharts.map((chart) => renderChartMount(subject.id, chart)).join("")}
           </div>
         </div>
 
@@ -3799,6 +4160,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             <div><dt>텍스트 박스</dt><dd>${workspace.textBoxes.length}개</dd></div>
             <div><dt>체크리스트</dt><dd>${workspace.checklists.length}개</dd></div>
             <div><dt>표</dt><dd>${workspace.tables.length}개</dd></div>
+            <div><dt>그래프</dt><dd>${workspace.charts.length}개</dd></div>
             <div><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">
@@ -3901,7 +4263,7 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "text", selectedTool, "텍스트 박스")}
         ${renderToolButton(subjectId, "checklist", selectedTool, "체크리스트")}
         ${renderToolButton(subjectId, "table", selectedTool, "표")}
-        ${renderDisabledToolButton("그래프", "그래프 도구 — sprint-13 예정")}
+        ${renderToolButton(subjectId, "chart", selectedTool, "그래프")}
       </div>
       ${selectedTool === "eraser" ? renderEraserSubToolbar(subjectId, eraserShape, eraserSize, disabled) : ""}
     </div>
@@ -4021,25 +4383,6 @@ function renderToolButton(
     </button>
   `;
 }
-
-// sprint-12/slice-5: sprint-13 까지 미구현 도구 (표/그래프) 의 disabled placeholder.
-// 클릭 무동작. tooltip / aria-label 으로 사용자에게 미래 도입 예정 표시.
-function renderDisabledToolButton(label: string, ariaLabel: string): string {
-  const escapedLabel = escapeHtml(label);
-  const escapedAria = escapeHtml(ariaLabel);
-  return `
-    <button
-      class="tool-button is-disabled-placeholder"
-      type="button"
-      disabled
-      aria-label="${escapedAria}"
-      title="${escapedAria}"
-    >
-      ${escapedLabel}
-    </button>
-  `;
-}
-
 
 function renderStickyNote(subjectId: string, note: SubjectPdfWorkspace["stickyNotes"][number]): string {
   const block = note.blocks[0];
@@ -4224,6 +4567,92 @@ function renderChecklist(subjectId: string, cl: PdfChecklist): string {
       >+ 항목 추가</button>
     </div>
   `;
+}
+
+function renderChartMount(subjectId: string, chart: PdfChart): string {
+  return `
+    <div
+      data-chart-mount-id="${escapeHtml(chart.id)}"
+      data-subject-id="${escapeHtml(subjectId)}"
+    ></div>
+  `;
+}
+
+function renderChartTitle(chartType: PdfChartType): string {
+  switch (chartType) {
+    case "sparkline":
+      return "그래프";
+  }
+}
+
+function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
+  const isCollapsed = chart.collapsed !== false;
+  const bodyId = "pdf-chart-body-" + chart.id;
+  const article = document.createElement("article");
+  article.className = "pdf-chart" + (isCollapsed ? " is-collapsed" : "");
+  article.dataset.chartId = chart.id;
+  article.style.left = String(chart.position.x * 100) + "%";
+  article.style.top = String(chart.position.y * 100) + "%";
+
+  const header = document.createElement("div");
+  header.className = "pdf-chart-header";
+  header.dataset.action = "chart-drag-handle";
+  header.dataset.chartId = chart.id;
+  header.setAttribute("aria-label", "그래프 이동");
+  header.setAttribute("role", "button");
+  header.tabIndex = 0;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "pdf-chart-toggle";
+  toggle.dataset.action = "toggle-chart-collapsed";
+  toggle.dataset.subjectId = subjectId;
+  toggle.dataset.chartId = chart.id;
+  toggle.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+  toggle.setAttribute("aria-controls", bodyId);
+  toggle.setAttribute("aria-label", isCollapsed ? "그래프 펼치기" : "그래프 접기");
+  toggle.textContent = isCollapsed ? "▶" : "▼";
+
+  const title = document.createElement("span");
+  title.className = "pdf-chart-title";
+  title.textContent = renderChartTitle(chart.chartType);
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "pdf-chart-delete";
+  remove.dataset.action = "delete-chart";
+  remove.dataset.subjectId = subjectId;
+  remove.dataset.chartId = chart.id;
+  remove.setAttribute("aria-label", "그래프 삭제");
+  remove.textContent = "✕";
+
+  header.append(toggle, title, remove);
+
+  const body = document.createElement("div");
+  body.className = "pdf-chart-body";
+  body.id = bodyId;
+  body.dataset.hiddenWhenCollapsed = "";
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "pdf-chart-input";
+  textarea.dataset.action = "update-chart-content";
+  textarea.dataset.subjectId = subjectId;
+  textarea.dataset.chartId = chart.id;
+  textarea.setAttribute("placeholder", "2026-01,100\n2026-02,200");
+  textarea.setAttribute("rows", "4");
+  textarea.textContent = chart.content;
+  textarea.value = chart.content;
+
+  const preview = document.createElementNS(SVG_NS, "svg");
+  preview.setAttribute("class", "pdf-chart-preview");
+  preview.setAttribute("data-chart-preview-id", chart.id);
+  preview.setAttribute("xmlns", SVG_NS);
+  preview.setAttribute("viewBox", "0 0 100 30");
+  buildSparklineSvg(preview, parseCsvSeries(chart.content));
+
+  body.append(textarea, preview);
+  article.append(header, body);
+  return article;
 }
 
 // sprint-13/slice-2: table widget renderer.

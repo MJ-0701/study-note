@@ -1887,6 +1887,107 @@ p {
   white-space: pre-wrap;
 }
 
+/* pdf-chart widget */
+.pdf-chart {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(26, 26, 26, 0.1);
+  display: flex;
+  flex-direction: column;
+  max-width: 60%;
+  min-width: 240px;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+}
+
+.pdf-chart.is-collapsed .pdf-chart-body {
+  display: none;
+}
+
+.pdf-chart-header {
+  align-items: center;
+  background: rgba(246, 248, 250, 0.96);
+  border-bottom: 1px solid rgba(26, 26, 26, 0.14);
+  border-radius: 5px 5px 0 0;
+  cursor: grab;
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-chart-header:active {
+  cursor: grabbing;
+}
+
+.pdf-chart-title {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+}
+
+.pdf-chart-toggle,
+.pdf-chart-delete {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+}
+
+.pdf-chart-toggle {
+  font-size: 0.7rem;
+  min-height: 28px;
+  min-width: 22px;
+}
+
+.pdf-chart-delete {
+  font-size: 1rem;
+  min-height: 28px;
+  min-width: 28px;
+}
+
+.pdf-chart-toggle:hover,
+.pdf-chart-delete:hover {
+  background: rgba(26, 26, 26, 0.08);
+  color: var(--ds-fg);
+}
+
+.pdf-chart-body {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.pdf-chart-input {
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  color: var(--ds-fg);
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  min-height: 80px;
+  min-width: 220px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.pdf-chart-preview {
+  color: var(--ds-accent);
+  display: inline-block;
+  height: 60px;
+  width: 200px;
+}
+
+.pdf-chart-preview text {
+  fill: var(--ds-fg-soft);
+}
+
 /* sprint-11/slice-1 R1: inspector aside — collapsed hides from layout flow. */
 .pdf-inspector {
   align-self: start;
