@@ -872,10 +872,45 @@ test("buildTrigChartSvg: 축 눈금 라벨은 있지만 데이터 포인트 라�
     { label: "-1.5708", value: -1 },
     { label: "0", value: 0 },
     { label: "1.5708", value: 1 }
-  ]);
+  ], "sin");
 
   assert(parent.querySelectorAll("[data-chart-axis-tick]").length > 0);
   assert.equal(parent.querySelectorAll("[data-chart-point-label]").length, 0);
+});
+
+test("buildTrigChartSvg: sin sparse sample은 단일 polyline으로 연결한다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  buildMainTrigChartSvg(parent, [
+    { label: "-1.5708", value: -1 },
+    { label: "1.5708", value: 1 }
+  ], "sin");
+
+  const polylines = (parent as unknown as TestSvgElement).findByNodeName("polyline");
+  assert.equal(polylines.length, 1);
+  assert.equal((polylines[0]?.getAttribute("points") ?? "").trim().split(/\s+/).length, 2);
+});
+
+test("buildTrigChartSvg: cos sparse sample도 단일 polyline으로 연결한다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  buildMainTrigChartSvg(parent, [
+    { label: "0", value: 1 },
+    { label: "3.1416", value: -1 }
+  ], "cos");
+
+  const polylines = (parent as unknown as TestSvgElement).findByNodeName("polyline");
+  assert.equal(polylines.length, 1);
+  assert.equal((polylines[0]?.getAttribute("points") ?? "").trim().split(/\s+/).length, 2);
+});
+
+test("buildTrigChartSvg: tan 은 큰 점프에서 polyline을 분리한다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  buildMainTrigChartSvg(parent, [
+    { label: "-1.4", value: -10 },
+    { label: "0", value: 10 },
+    { label: "1.4", value: -10 }
+  ], "tan");
+
+  assert((parent as unknown as TestSvgElement).findByNodeName("polyline").length >= 2);
 });
 
 test("buildFunctionChartPoints: tan(0) ≈ 0", () => {

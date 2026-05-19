@@ -2636,7 +2636,7 @@ const CHART_PLANE_COLOR = "#111111";
  * Format: "type:<chartType>\n<x>,<y>\n..."
  * When chartType is "xy", prefix is omitted for backward compat with existing content.
  */
-function encodeChartContent(chartType: LocalChartType, points: CsvSeriesPoint[]): string {
+function encodeChartContent(chartType: LocalChartType | LocalChartFunction, points: CsvSeriesPoint[]): string {
   const csv = serializeCsv(points);
   if (chartType === "xy") {
     return csv;
@@ -2650,7 +2650,11 @@ function encodeChartContent(chartType: LocalChartType, points: CsvSeriesPoint[])
  * First line of "type:<chartType>" is consumed as metadata; rest is CSV.
  * Legacy "line"/"sparkline" content is normalized to the user-facing xy chart.
  */
-function decodeChartContent(content: string): { chartType: LocalChartType; points: CsvSeriesPoint[] } {
+function inferChartFunctionType(points: CsvSeriesPoint[]): LocalChartFunction {
+  return points.some((point) => Math.abs(point.value) > 1) ? "tan" : "sin";
+}
+
+function decodeChartContent(content: string): { chartType: LocalChartType; points: CsvSeriesPoint[]; functionType?: LocalChartFunction } {
   const trimmed = content.trimStart();
 
   if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
@@ -2659,8 +2663,18 @@ function decodeChartContent(content: string): { chartType: LocalChartType; point
       ? trimmed.slice(CHART_TYPE_PREFIX.length)
       : trimmed.slice(CHART_TYPE_PREFIX.length, newline);
     const csv = newline < 0 ? "" : trimmed.slice(newline + 1);
+    const points = parseCsvSeries(csv);
+
+    if (typeStr === "sin" || typeStr === "cos" || typeStr === "tan") {
+      return { chartType: "trig", points, functionType: typeStr };
+    }
+
     const chartType: LocalChartType = typeStr === "bar" || typeStr === "trig" ? typeStr : "xy";
-    return { chartType, points: parseCsvSeries(csv) };
+    return {
+      chartType,
+      points,
+      functionType: chartType === "trig" ? inferChartFunctionType(points) : undefined
+    };
   }
 
   return { chartType: "xy", points: parseCsvSeries(content) };
@@ -3688,7 +3702,7 @@ function applyFillChartFunction(subjectId: string, chartId: string): void {
   const config = readChartFunctionConfigFromDom(chartId);
   if (!config) return;
   const points = buildFunctionChartPoints(config.functionType, config.xMin, config.xMax, config.samples);
-  const content = encodeChartContent("trig", points);
+  const content = encodeChartContent(config.functionType, points);
   const prev = chartPointDebounceMap.get(chartId);
   if (prev) clearTimeout(prev);
   chartPointDebounceMap.delete(chartId);
@@ -4531,13 +4545,17 @@ function buildCoordinateLineChartSvg(parent: SVGElement, points: CsvSeriesPoint[
   buildPolylineChartSvg(parent, points, { markers: true });
 }
 
-export function buildTrigChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
-  const hasTanRangePoint = points.some((point) => Math.abs(point.value) > 1);
+export function buildTrigChartSvg(
+  parent: SVGElement,
+  points: CsvSeriesPoint[],
+  functionType: LocalChartFunction
+): void {
+  const isTan = functionType === "tan";
   buildPolylineChartSvg(parent, points, {
     markers: false,
     labels: false,
-    discontinuous: true,
-    yBounds: hasTanRangePoint ? { min: -10, max: 10 } : { min: -1, max: 1 }
+    discontinuous: isTan,
+    yBounds: isTan ? { min: -10, max: 10 } : { min: -1, max: 1 }
   });
 }
 
@@ -4605,11 +4623,16 @@ function buildBarChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
 /**
  * Dispatches to the right SVG builder based on LocalChartType.
  */
-function buildChartSvg(parent: SVGElement, chartType: LocalChartType, points: CsvSeriesPoint[]): void {
+function buildChartSvg(
+  parent: SVGElement,
+  chartType: LocalChartType,
+  points: CsvSeriesPoint[],
+  functionType: LocalChartFunction = "sin"
+): void {
   if (chartType === "bar") {
     buildBarChartSvg(parent, points);
   } else if (chartType === "trig") {
-    buildTrigChartSvg(parent, points);
+    buildTrigChartSvg(parent, points, functionType);
   } else {
     buildCoordinateLineChartSvg(parent, points);
   }
@@ -4745,7 +4768,12 @@ function refreshTableWidgets(): void {
 
 // sprint-13/slice-5: refreshChartPreview updates SVG preview in-place after point input.
 // Called in debounce-free path (input event immediate feedback).
-function refreshChartPreview(chartId: string, chartType: LocalChartType, points: CsvSeriesPoint[]): void {
+function refreshChartPreview(
+  chartId: string,
+  chartType: LocalChartType,
+  points: CsvSeriesPoint[],
+  functionType?: LocalChartFunction
+): void {
   const preview = document.querySelector<SVGElement>(
     `[data-chart-preview-id="${chartId}"]`
   );
@@ -4754,7 +4782,7 @@ function refreshChartPreview(chartId: string, chartType: LocalChartType, points:
     return;
   }
 
-  buildChartSvg(preview, chartType, points);
+  buildChartSvg(preview, chartType, points, functionType);
 }
 
 function refreshChartWidgets(): void {
@@ -6166,7 +6194,7 @@ function renderChartMount(subjectId: string, chart: PdfChart): string {
 function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   const isCollapsed = chart.collapsed !== false;
   const bodyId = "pdf-chart-body-" + chart.id;
-  const { chartType, points } = decodeChartContent(chart.content);
+  const { chartType, points, functionType } = decodeChartContent(chart.content);
 
   const article = document.createElement("article");
   article.className = "pdf-chart" + (isCollapsed ? " is-collapsed" : "");
@@ -6251,7 +6279,7 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   preview.setAttribute("class", "pdf-chart-preview");
   preview.setAttribute("data-chart-preview-id", chart.id);
   preview.setAttribute("xmlns", SVG_NS);
-  buildChartSvg(preview, chartType, points);
+  buildChartSvg(preview, chartType, points, functionType);
 
   // data point list container
   const dataContainer = document.createElement("div");
@@ -6285,7 +6313,7 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
 
   body.append(typeSelect, inputGuide);
   if (chartType === "trig") {
-    body.append(buildChartFunctionControls(subjectId, chart.id), preview);
+    body.append(buildChartFunctionControls(subjectId, chart.id, functionType ?? "sin"), preview);
   } else {
     body.append(preview, dataContainer, pointActions);
   }
@@ -6293,7 +6321,11 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   return article;
 }
 
-function buildChartFunctionControls(subjectId: string, chartId: string): HTMLElement {
+function buildChartFunctionControls(
+  subjectId: string,
+  chartId: string,
+  selectedFunctionType: LocalChartFunction = "sin"
+): HTMLElement {
   const wrap = document.createElement("div");
   wrap.className = "pdf-chart-function-controls";
 
@@ -6316,6 +6348,9 @@ function buildChartFunctionControls(subjectId: string, chartId: string): HTMLEle
     const opt = document.createElement("option");
     opt.value = value;
     opt.textContent = label;
+    if (value === selectedFunctionType) {
+      opt.selected = true;
+    }
     fnSelect.append(opt);
   });
   fnLabel.append(fnText, fnSelect);
