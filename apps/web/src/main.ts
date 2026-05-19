@@ -134,6 +134,10 @@ type AuthBootState = "checking" | "ready";
 
 type AuthMode = "login" | "signup";
 
+export type InspectorDrillType = "sticky" | "ink" | "textbox" | "checklist" | "table" | "chart";
+
+export type InspectorDrillState = Record<InspectorDrillType, boolean>;
+
 type LoginFeedback =
   | {
       kind: "error" | "success";
@@ -143,6 +147,7 @@ type LoginFeedback =
   | undefined;
 
 const notebookStorageKey = "study-note.notebook.v2";
+const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
 let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
@@ -150,6 +155,7 @@ let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceSt
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
+let inspectorDrill: InspectorDrillState = readInspectorDrill();
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -334,6 +340,65 @@ function writeInspectorOpen(value: boolean): void {
   try {
     localStorage.setItem("studyNote.pdfWorkspace.inspectorOpen", JSON.stringify(value === true));
   } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
+}
+
+function getDefaultInspectorDrill(): InspectorDrillState {
+  return {
+    sticky: false,
+    ink: false,
+    textbox: false,
+    checklist: false,
+    table: false,
+    chart: false
+  };
+}
+
+function normalizeInspectorDrillType(value: string | undefined): InspectorDrillType | null {
+  return value === "sticky" ||
+    value === "ink" ||
+    value === "textbox" ||
+    value === "checklist" ||
+    value === "table" ||
+    value === "chart"
+    ? value
+    : null;
+}
+
+export function readInspectorDrill(): InspectorDrillState {
+  const base = getDefaultInspectorDrill();
+
+  try {
+    const raw = localStorage.getItem(inspectorDrillStorageKey);
+    if (raw === null) return base;
+    const parsed = JSON.parse(raw) as Partial<Record<InspectorDrillType, unknown>>;
+
+    return {
+      sticky: parsed.sticky === true,
+      ink: parsed.ink === true,
+      textbox: parsed.textbox === true,
+      checklist: parsed.checklist === true,
+      table: parsed.table === true,
+      chart: parsed.chart === true
+    };
+  } catch {
+    return base;
+  }
+}
+
+export function writeInspectorDrill(value: InspectorDrillState): void {
+  try {
+    localStorage.setItem(inspectorDrillStorageKey, JSON.stringify(value));
+  } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
+}
+
+export function toggleInspectorDrillState(
+  value: InspectorDrillState,
+  type: InspectorDrillType
+): InspectorDrillState {
+  return {
+    ...value,
+    [type]: !value[type]
+  };
 }
 
 function loadStoredNotebook(): StudyNotebook {
@@ -765,10 +830,26 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   // sprint-11/slice-1 R1/R2: toggle inspector open/close + localStorage persistence.
+  if (quickNoteButton?.dataset.action === "toggle-inspector-drill") {
+    const type = normalizeInspectorDrillType(quickNoteButton.dataset.drillType);
+
+    if (type) {
+      inspectorDrill = toggleInspectorDrillState(inspectorDrill, type);
+      writeInspectorDrill(inspectorDrill);
+      renderApp();
+    }
+
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "toggle-pdf-inspector") {
     inspectorOpen = !inspectorOpen;
     writeInspectorOpen(inspectorOpen);
     renderApp();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "select-drill-item") {
     return;
   }
 
@@ -5005,6 +5086,182 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+const DRILL_LABEL_LIMIT = 30;
+const DRILL_LIST_LIMIT = 50;
+
+function formatDrillSnippet(value: string | undefined, emptyLabel: string): string {
+  const trimmed = (value ?? "").trim();
+  const text = trimmed.length > 0 ? trimmed.slice(0, DRILL_LABEL_LIMIT) : emptyLabel;
+  return escapeHtml(text);
+}
+
+function getDrillPageNumber(type: InspectorDrillType, item: unknown): number {
+  const candidate = item as { page?: unknown; pageNumber?: unknown };
+  const rawPage = type === "sticky" || type === "ink" ? candidate.pageNumber : candidate.page;
+  const page = Number(rawPage);
+  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+}
+
+function getStickyDrillText(note: SubjectPdfWorkspace["stickyNotes"][number]): string {
+  const blocks = Array.isArray(note.blocks) ? note.blocks : [];
+  return blocks.find((block) => block.content.trim().length > 0)?.content ?? blocks[0]?.content ?? "";
+}
+
+function getChecklistDrillText(checklist: PdfChecklist): string {
+  const items = Array.isArray(checklist.items) ? checklist.items : [];
+  return items.find((item) => item.label.trim().length > 0)?.label ?? items[0]?.label ?? "";
+}
+
+function getTableDrillText(table: PdfTable): string {
+  const parsed = parseMarkdownTable(table.content);
+  const cells = parsed ? [...parsed.headers, ...parsed.rows.flat()] : [];
+  return cells.find((cell) => cell.trim().length > 0) ?? "";
+}
+
+function getChartDrillTypeLabel(content: string): string {
+  const trimmed = content.trimStart();
+  if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
+    const newline = trimmed.indexOf("\n");
+    const rawType = (newline < 0 ? trimmed.slice(CHART_TYPE_PREFIX.length) : trimmed.slice(CHART_TYPE_PREFIX.length, newline)).trim();
+    if (rawType === "sin" || rawType === "cos" || rawType === "tan" || rawType === "bar" || rawType === "xy" || rawType === "trig") {
+      return rawType;
+    }
+  }
+
+  return decodeChartContent(content).chartType;
+}
+
+export function formatDrillLabel(type: InspectorDrillType, item: unknown, index: number = 0): string {
+  const pageNumber = getDrillPageNumber(type, item);
+
+  if (type === "sticky") {
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getStickyDrillText(item as SubjectPdfWorkspace["stickyNotes"][number]), "(빈 메모)")}`;
+  }
+
+  if (type === "textbox") {
+    const textBox = item as Partial<PdfTextBox>;
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(typeof textBox.content === "string" ? textBox.content : "", "(빈 텍스트)")}`;
+  }
+
+  if (type === "checklist") {
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getChecklistDrillText(item as PdfChecklist), "(빈 체크리스트)")}`;
+  }
+
+  if (type === "table") {
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getTableDrillText(item as PdfTable), "(빈 표)")}`;
+  }
+
+  if (type === "chart") {
+    const chart = item as Partial<PdfChart>;
+    const content = typeof chart.content === "string" ? chart.content : "";
+    const typeLabel = getChartDrillTypeLabel(content);
+    const pointCount = decodeChartContent(content).points.length;
+    return `페이지 ${pageNumber} · ${escapeHtml(typeLabel)} (${pointCount} points)`;
+  }
+
+  const stroke = item as Partial<PdfInkStroke>;
+  const pointCount = Array.isArray(stroke.points) ? stroke.points.length : 0;
+  return `페이지 ${pageNumber} · stroke #${index + 1} (점 ${pointCount}개)`;
+}
+
+interface InspectorDrillEntry {
+  id: string;
+  index: number;
+  item: unknown;
+  pageNumber: number;
+}
+
+function getDrillItemId(type: InspectorDrillType, item: unknown, index: number): string {
+  const candidate = item as { id?: unknown; strokeId?: unknown };
+  const id = typeof candidate.id === "string"
+    ? candidate.id
+    : typeof candidate.strokeId === "string"
+      ? candidate.strokeId
+      : "";
+  return id.length > 0 ? id : `${type}-${index}`;
+}
+
+function getInspectorDrillEntries(type: InspectorDrillType, workspace: SubjectPdfWorkspace): InspectorDrillEntry[] {
+  const items: unknown[] =
+    type === "sticky" ? workspace.stickyNotes :
+    type === "ink" ? workspace.inkStrokes :
+    type === "textbox" ? workspace.textBoxes :
+    type === "checklist" ? workspace.checklists :
+    type === "table" ? workspace.tables :
+    workspace.charts;
+
+  return items
+    .map((item, index) => ({
+      id: getDrillItemId(type, item, index),
+      index,
+      item,
+      pageNumber: getDrillPageNumber(type, item)
+    }))
+    .sort((a, b) => a.pageNumber - b.pageNumber || a.index - b.index);
+}
+
+export function renderDrillList(
+  type: InspectorDrillType,
+  workspace: SubjectPdfWorkspace,
+  subjectId: string
+): string {
+  const entries = getInspectorDrillEntries(type, workspace);
+  const visible = entries.slice(0, DRILL_LIST_LIMIT);
+  const hiddenCount = entries.length - visible.length;
+  const itemsHtml = visible.length > 0
+    ? visible.map((entry) => `
+        <li>
+          <button
+            type="button"
+            class="pdf-inspector-drill-item"
+            data-action="select-drill-item"
+            data-drill-type="${escapeHtml(type)}"
+            data-subject-id="${escapeHtml(subjectId)}"
+            data-annotation-id="${escapeHtml(entry.id)}"
+            data-page-number="${escapeHtml(String(entry.pageNumber))}"
+          >${formatDrillLabel(type, entry.item, entry.index)}</button>
+        </li>
+      `).join("")
+    : `<li class="pdf-inspector-drill-empty">없음</li>`;
+  const moreHtml = hiddenCount > 0
+    ? `<li class="pdf-inspector-drill-more">+ ${hiddenCount}개 더 있음</li>`
+    : "";
+
+  return `
+    <ul class="pdf-inspector-drill-list" data-drill-type="${escapeHtml(type)}">
+      ${itemsHtml}
+      ${moreHtml}
+    </ul>
+  `;
+}
+
+function renderInspectorStatRow(
+  type: InspectorDrillType,
+  label: string,
+  count: number,
+  workspace: SubjectPdfWorkspace,
+  subjectId: string
+): string {
+  const isExpanded = inspectorDrill[type] === true;
+
+  return `
+    <div class="pdf-inspector-stat-row">
+      <button
+        type="button"
+        class="pdf-inspector-drill-toggle"
+        data-action="toggle-inspector-drill"
+        data-drill-type="${escapeHtml(type)}"
+        aria-expanded="${isExpanded ? "true" : "false"}"
+      >
+        <span class="pdf-inspector-stat-label">${escapeHtml(label)}</span>
+        <span class="pdf-inspector-stat-count">${count}개</span>
+        <span class="pdf-inspector-drill-caret" aria-hidden="true">▾</span>
+      </button>
+      ${isExpanded ? renderDrillList(type, workspace, subjectId) : ""}
+    </div>
+  `;
+}
+
 function getPdfFrameKey(materialId: string, pageNumber: number): string {
   return `pdf-frame:${materialId}:${pageNumber}`;
 }
@@ -5047,7 +5304,7 @@ function renderPdfFrameStack(
   return getPdfFramePages(selectedPage, material.pageCount, pending).map((pageNumber) => {
     const isActive = pageNumber === selectedPage;
     const frameKey = getPdfFrameKey(materialId, pageNumber);
-    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=FitH`;
+    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=Fit`;
     const preloadAttrs = isActive ? "" : ' aria-hidden="true" tabindex="-1"';
 
     return `<iframe
@@ -5103,6 +5360,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
     (chart) => chart.page === selectedPage
   );
   const inputId = `pdf-file-${subject.id}`;
+  const selectedPageLabel = escapeHtml(String(selectedPage));
 
   return `
     <section class="subject-page-hero">
@@ -5143,6 +5401,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
     </section>
 
     <section class="pdf-workspace" aria-labelledby="pdf-workspace-title">
+      ${objectUrl ? `
+        <div class="pdf-page-binding-notice" role="note" aria-live="polite">
+          <strong class="pdf-page-binding-notice__title">현재 페이지 ${selectedPageLabel}</strong>
+          <span class="pdf-page-binding-notice__body">보이는 화면에 다른 페이지가 함께 나와도 메모/필기는 현재 페이지에만 저장됩니다. 다른 페이지에 메모하려면 페이지를 먼저 이동하세요.</span>
+        </div>
+      ` : ""}
       <div class="pdf-workspace-header">
         <div>
           <p class="meta">§2 — PDF viewer + annotation layer</p>
@@ -5185,6 +5449,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             data-subject-id="${subject.id}"
             data-page-number="${selectedPage}"
           >
+            ${objectUrl ? `
+              <div class="pdf-surface-page-badge" aria-hidden="true" data-current-page-badge="true">페이지 ${selectedPageLabel}</div>
+              <div class="pdf-surface-page-end" aria-hidden="true">
+                <span class="pdf-surface-page-end__label">↑ 페이지 ${selectedPageLabel} 영역 끝 — 그 아래는 다음 페이지 미리보기</span>
+              </div>
+            ` : ""}
             <svg class="ink-layer" viewBox="0 0 1000 1414" preserveAspectRatio="none" aria-hidden="true">
               ${pageStrokes.map(renderInkStroke).join("")}
             </svg>
@@ -5205,14 +5475,14 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
         >
           <p class="meta">§3 — 저장 상태</p>
           <h3>로컬 annotation</h3>
-          <dl>
-            <div><dt>포스트잇</dt><dd>${workspace.stickyNotes.length}개</dd></div>
-            <div><dt>펜 stroke</dt><dd>${workspace.inkStrokes.length}개</dd></div>
-            <div><dt>텍스트 박스</dt><dd>${workspace.textBoxes.length}개</dd></div>
-            <div><dt>체크리스트</dt><dd>${workspace.checklists.length}개</dd></div>
-            <div><dt>표</dt><dd>${workspace.tables.length}개</dd></div>
-            <div><dt>그래프</dt><dd>${workspace.charts.length}개</dd></div>
-            <div><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
+          <dl class="pdf-inspector-stats">
+            ${renderInspectorStatRow("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id)}
+            ${renderInspectorStatRow("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id)}
+            ${renderInspectorStatRow("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id)}
+            ${renderInspectorStatRow("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id)}
+            ${renderInspectorStatRow("table", "표", workspace.tables.length, workspace, subject.id)}
+            ${renderInspectorStatRow("chart", "그래프", workspace.charts.length, workspace, subject.id)}
+            <div class="pdf-inspector-stat-row pdf-inspector-stat-row--plain"><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">
             <strong>PDF 원문은 backend material storage가 기준입니다.</strong>
