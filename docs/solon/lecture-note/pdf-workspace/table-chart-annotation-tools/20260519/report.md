@@ -51,6 +51,14 @@ PDF 페이지 이동 점멸은 native PDF viewer 한계로 현 시점 수용하�
 - `curl -I http://127.0.0.1/` -> HTTP 200
 - `curl -s http://127.0.0.1:3001/api/health` -> `{"ok":true,"service":"study-note-backend","storageProvider":"s3"}`
 
+## 리뷰
+
+- GitHub `@codex review` -> PASS (`Didn't find any major issues`)
+- Gate 6 자체 CPO review (`codex`, security lens) -> PASS
+- Gate 6 cross-review (`gemini`, security lens) -> PASS
+- Gate 6 cross-review (`claude`, security lens) -> PASS
+- 공통 warning: 일부 리뷰는 같은 도구 계열 evidence를 포함하므로 independence warning이 남았지만, production source excerpt와 PR diff grep evidence로 blocking 아님으로 판정됐다.
+
 ## 남은 리스크
 
 - PDF 페이지 이동 점멸은 완전 해결되지 않았다.
