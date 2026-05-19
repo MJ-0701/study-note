@@ -4,7 +4,126 @@
 //   node --experimental-strip-types --no-warnings --test apps/web/src/__tests__/chart-tool.spec.ts
 
 import { strict as assert } from "node:assert";
-import { describe, it } from "node:test";
+import { register } from "node:module";
+import { describe, it, test } from "node:test";
+import { pathToFileURL } from "node:url";
+
+register(
+  "data:text/javascript," + encodeURIComponent(`
+    export async function resolve(specifier, context, nextResolve) {
+      if (specifier === "@study-note/domain") {
+        return { url: "study-note-test:domain", shortCircuit: true };
+      }
+      if (specifier === "./api/materials") {
+        return { url: "study-note-test:materials", shortCircuit: true };
+      }
+      if (
+        specifier === "./data/sampleLectureNote" ||
+        specifier === "./data/intakeGuide" ||
+        specifier === "./data/classSchedule"
+      ) {
+        return { url: "study-note-test:data", shortCircuit: true };
+      }
+
+      try {
+        return await nextResolve(specifier, context);
+      } catch (error) {
+        const withoutQuery = specifier.split(/[?#]/, 1)[0] ?? specifier;
+        if (
+          (specifier.startsWith("./") || specifier.startsWith("../")) &&
+          !/\\.[A-Za-z0-9]+$/.test(withoutQuery)
+        ) {
+          return nextResolve(specifier + ".ts", context);
+        }
+        throw error;
+      }
+    }
+
+    export async function load(url, context, nextLoad) {
+      if (url === "study-note-test:domain") {
+        return {
+          format: "module",
+          shortCircuit: true,
+          source: \`
+            export const pdfWorkspaceStorageKey = "study-note.pdf-workspace.test";
+            export function getConceptById() { return undefined; }
+            export function getIntegrityWarnings() { return []; }
+            export function getKeywordById() { return undefined; }
+            export function getNotebookCoverage() { return { percentage: 0 }; }
+            export function getQuestionById() { return undefined; }
+            export function getSourceById() { return undefined; }
+            export function getSubjectCoverage() { return { percentage: 0 }; }
+            export function applyWeekNoteImport(value) { return value; }
+            export function sanitizeWeekNoteImportPayload(value) { return value; }
+            export function validateWeekNoteImportPayload() { return { ok: true }; }
+            export function addChecklistItem(value) { return value; }
+            export function createChecklist() { return {}; }
+            export function createChart() { return {}; }
+            export function createInkStroke() { return {}; }
+            export function createPdfMaterialFromBackend() { return {}; }
+            export function createStickyNote() { return {}; }
+            export function createTable() { return {}; }
+            export function createTextBox() { return {}; }
+            export function deleteChecklist(value) { return value; }
+            export function deleteChecklistItem(value) { return value; }
+            export function deleteChart(value) { return value; }
+            export function deleteTable(value) { return value; }
+            export function deleteTextBox(value) { return value; }
+            export function estimatePdfPageCount() { return 1; }
+            export function formatPdfFileSize() { return "0 B"; }
+            export function getSubjectPdfWorkspace() { return undefined; }
+            export function hydrateSubjectPdfWorkspace(value) { return value; }
+            export function moveChart(value) { return value; }
+            export function moveChecklist(value) { return value; }
+            export function moveTable(value) { return value; }
+            export function moveTextBox(value) { return value; }
+            export function normalizePdfPoint(value) { return value; }
+            export function setEraserShape(value) { return value; }
+            export function setEraserSize(value) { return value; }
+            export function toggleChecklistCollapsed(value) { return value; }
+            export function toggleChecklistItem(value) { return value; }
+            export function toggleChartCollapsed(value) { return value; }
+            export function toggleTableCollapsed(value) { return value; }
+            export function updateChartContent(value) { return value; }
+            export function updateChecklistItemLabel(value) { return value; }
+            export function updateTableContent(value) { return value; }
+            export function updateTextBoxContent(value) { return value; }
+          \`
+        };
+      }
+      if (url === "study-note-test:materials") {
+        return {
+          format: "module",
+          shortCircuit: true,
+          source: \`
+            export class MaterialApiError extends Error {}
+            export function createMaterialUploadIntent() { return Promise.resolve({}); }
+            export function fetchPdfMaterialFile() { return Promise.resolve(new Blob()); }
+            export function listPdfMaterials() { return Promise.resolve([]); }
+            export function uploadMaterialFile() { return Promise.resolve({}); }
+          \`
+        };
+      }
+      if (url === "study-note-test:data") {
+        return {
+          format: "module",
+          shortCircuit: true,
+          source: \`
+            export const sampleLectureNote = { subjects: [] };
+            export const localIntakeGuide = [];
+            export const classSchedule = [];
+            export function scheduleRangeLabel() { return ""; }
+          \`
+        };
+      }
+      if (url.endsWith(".css")) {
+        return { format: "module", shortCircuit: true, source: "export default {};" };
+      }
+      return nextLoad(url, context);
+    }
+  `),
+  pathToFileURL(process.cwd() + "/")
+);
 
 interface CsvSeriesPoint {
   label: string;
@@ -69,6 +188,24 @@ class TestSvgElement {
 
     return result;
   }
+
+  findAll(): TestSvgElement[] {
+    return this.childNodes.flatMap((child) => [child, ...child.findAll()]);
+  }
+
+  querySelectorAll(selector: string): TestSvgElement[] {
+    const attrMatch = selector.match(/^\[([^=\]]+)(?:="([^"]*)")?\]$/);
+    if (!attrMatch) {
+      return [];
+    }
+
+    const attrName = attrMatch[1]!;
+    const attrValue = attrMatch[2];
+    return this.findAll().filter((node) => {
+      const value = node.getAttribute(attrName);
+      return attrValue === undefined ? value !== null : value === attrValue;
+    });
+  }
 }
 
 function escapeText(value: string): string {
@@ -79,6 +216,10 @@ function escapeText(value: string): string {
 }
 
 const testDocument = {
+  createElement(tagName: string): TestSvgElement {
+    return new TestSvgElement(tagName);
+  },
+
   createElementNS(_namespace: string, tagName: string): TestSvgElement {
     return new TestSvgElement(tagName);
   }
@@ -92,6 +233,14 @@ const testDocument = {
   document: typeof testDocument;
   SVGElement: typeof TestSvgElement;
 }).SVGElement = TestSvgElement;
+
+const {
+  appendChartCoordinatePlane: appendMainChartCoordinatePlane,
+  buildFunctionChartPoints,
+  buildPolylineChartSvg,
+  buildTrigChartSvg: buildMainTrigChartSvg,
+  splitCoordsByJump
+} = await import("../main.ts");
 
 function parseCsvSeries(source: string): CsvSeriesPoint[] {
   if (source.trim().length === 0) {
@@ -156,8 +305,6 @@ interface CoordinateChartPoint {
   xValue: number;
   yValue: number;
 }
-
-type LocalChartFunction = "sin" | "cos";
 
 const CHART_PLOT_LEFT = 6;
 const CHART_PLOT_RIGHT = 94;
@@ -343,7 +490,7 @@ function mapCoordinateChartPoints(
   }));
 }
 
-function buildPolylineChartSvg(
+function buildLocalPolylineChartSvg(
   parent: TestSvgElement,
   points: CsvSeriesPoint[],
   options: { markers: boolean; yBounds?: { min: number; max: number } }
@@ -414,32 +561,11 @@ function buildPolylineChartSvg(
 }
 
 function buildCoordinateLineChartSvg(parent: TestSvgElement, points: CsvSeriesPoint[]): void {
-  buildPolylineChartSvg(parent, points, { markers: true });
+  buildLocalPolylineChartSvg(parent, points, { markers: true });
 }
 
 function buildTrigChartSvg(parent: TestSvgElement, points: CsvSeriesPoint[]): void {
-  buildPolylineChartSvg(parent, points, { markers: false, yBounds: { min: -1, max: 1 } });
-}
-
-function buildFunctionChartPoints(
-  functionType: LocalChartFunction,
-  xMin: number,
-  xMax: number,
-  samples: number
-): CsvSeriesPoint[] {
-  const safeMin = Number.isFinite(xMin) ? xMin : -Math.PI;
-  const safeMax = Number.isFinite(xMax) && xMax > safeMin ? xMax : Math.PI;
-  const safeSamples = Math.min(121, Math.max(2, Math.round(samples)));
-  const evaluate = (x: number): number => {
-    if (functionType === "cos") return Math.cos(x);
-    return Math.sin(x);
-  };
-
-  return Array.from({ length: safeSamples }, (_, index) => {
-    const x = safeMin + ((safeMax - safeMin) * index) / (safeSamples - 1);
-    const y = evaluate(x);
-    return { label: formatChartNumber(x), value: Number.isFinite(y) ? Number(y.toFixed(4)) : 0 };
-  }).filter((point) => Number.isFinite(point.value) && point.value >= -1 && point.value <= 1);
+  buildLocalPolylineChartSvg(parent, points, { markers: false, yBounds: { min: -1, max: 1 } });
 }
 
 function newSvg(): TestSvgElement {
@@ -694,4 +820,80 @@ describe("buildTrigChartSvg", () => {
       "(1.5708, 1)"
     ]);
   });
+});
+
+test("buildPolylineChartSvg: labels=false 면 좌표 텍스트 라벨 미생성", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  const points = [
+    { label: "0", value: 0 }, { label: "0.5", value: 0.5 }, { label: "1", value: 1 }
+  ];
+  buildPolylineChartSvg(parent, points, { markers: false, labels: false, yBounds: { min: -1, max: 1 } });
+  assert.equal(parent.querySelectorAll("[data-chart-point-label]").length, 0);
+});
+
+test("appendChartCoordinatePlane: x/y 축 눈금 숫자 라벨이 렌더링된다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  appendMainChartCoordinatePlane(parent, -1, 1, -1, 1);
+
+  const xTicks = Array.from(parent.querySelectorAll("[data-chart-axis-tick=\"x\"]"));
+  const yTicks = Array.from(parent.querySelectorAll("[data-chart-axis-tick=\"y\"]"));
+  assert(xTicks.length >= 4);
+  assert(yTicks.length >= 4);
+  assert([...xTicks, ...yTicks].some((tick) => Number.isFinite(Number(tick.textContent))));
+});
+
+test("buildTrigChartSvg: 축 눈금 라벨은 있지만 데이터 포인트 라벨은 없다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  buildMainTrigChartSvg(parent, [
+    { label: "-1.5708", value: -1 },
+    { label: "0", value: 0 },
+    { label: "1.5708", value: 1 }
+  ]);
+
+  assert(parent.querySelectorAll("[data-chart-axis-tick]").length > 0);
+  assert.equal(parent.querySelectorAll("[data-chart-point-label]").length, 0);
+});
+
+test("buildFunctionChartPoints: tan(0) ≈ 0", () => {
+  const points = buildFunctionChartPoints("tan", -0.1, 0.1, 3);
+  assert.equal(points.length, 3);
+  const center = points[1]!;
+  assert(Math.abs(center.value) < 0.01);
+});
+
+test("buildFunctionChartPoints: tan 발산 근방 (|y|>10) sample 제거", () => {
+  const points = buildFunctionChartPoints("tan", -1.6, 1.6, 41);
+  for (const p of points) {
+    assert(Math.abs(p.value) <= 10);
+  }
+});
+
+test("buildFunctionChartPoints: tan 은 -1~1 밖 값 (예: 5) 도 보존 (sin/cos 만 -1~1 clamp)", () => {
+  const points = buildFunctionChartPoints("tan", 1.2, 1.4, 5);
+  const hasOutOfSinRange = points.some((p) => Math.abs(p.value) > 1);
+  assert.equal(hasOutOfSinRange, true);
+});
+
+test("splitCoordsByJump: 큰 y 점프에서 segment 분리", () => {
+  const coords = [
+    { x: 10, y: 5, point: { label: "a", value: 1 } },
+    { x: 20, y: 6, point: { label: "b", value: 1 } },
+    { x: 30, y: 28, point: { label: "c", value: 1 } },
+    { x: 40, y: 27, point: { label: "d", value: 1 } }
+  ];
+  const segs = splitCoordsByJump(coords, 15);
+  assert.equal(segs.length, 2);
+  assert.equal(segs[0]!.length, 2);
+  assert.equal(segs[1]!.length, 2);
+});
+
+test("splitCoordsByJump: 작은 점프만 있으면 1개 segment", () => {
+  const coords = [
+    { x: 10, y: 5, point: { label: "a", value: 1 } },
+    { x: 20, y: 6, point: { label: "b", value: 1 } },
+    { x: 30, y: 7, point: { label: "c", value: 1 } }
+  ];
+  const segs = splitCoordsByJump(coords, 15);
+  assert.equal(segs.length, 1);
+  assert.equal(segs[0]!.length, 3);
 });

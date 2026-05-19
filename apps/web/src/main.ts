@@ -79,6 +79,10 @@ import {
 } from "@study-note/domain";
 import "./styles.css";
 
+const isNodeRuntime =
+  typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
+const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
+
 type Route =
   | { name: "home" }
   | { name: "intake" }
@@ -139,13 +143,13 @@ type LoginFeedback =
   | undefined;
 
 const notebookStorageKey = "study-note.notebook.v2";
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
-let notebook = loadStoredNotebook();
-let pdfWorkspaceStore = loadPdfWorkspaceStore();
+let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
+let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
-let inspectorOpen = readInspectorOpen();
+let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -230,7 +234,7 @@ let loginFeedback: LoginFeedback;
 // slice-2: stash last pending upload for retry CTA
 let pendingPdfRetry: { file: File; subjectId: string; intent: MaterialUploadIntent } | undefined;
 let quickNote: QuickNote | undefined;
-const app = document.querySelector<HTMLDivElement>("#app");
+const app = isBrowserRuntime ? document.querySelector<HTMLDivElement>("#app") : null;
 
 interface ActiveInkStroke {
   subjectId: string;
@@ -240,7 +244,7 @@ interface ActiveInkStroke {
   livePolyline: SVGPolylineElement;
 }
 
-if (!app) {
+if (isBrowserRuntime && !app) {
   throw new Error("App mount target #app is missing");
 }
 
@@ -251,6 +255,10 @@ const appRoot = app;
 // 재생성 → blob URL 재로드 → 점멸. morphdom = element-level diff, iframe element 의
 // src attribute 가 동일하면 setAttribute 호출 X → iframe reload 0 = 점멸 해결.
 function renderInto(html: string): void {
+  if (!appRoot) {
+    return;
+  }
+
   // morphdom 가 wrapper element 의 children 만 diff 적용.
   const wrapper = document.createElement("div");
   wrapper.id = appRoot.id;
@@ -295,20 +303,22 @@ function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
   );
 }
 
-document.addEventListener("change", handleDocumentChange);
-document.addEventListener("click", handleDocumentClick);
-document.addEventListener("input", handleDocumentInput);
-document.addEventListener("load", handleDocumentLoad, true);
-document.addEventListener("submit", handleDocumentSubmit);
-document.addEventListener("pointerdown", handleDocumentPointerDown);
-document.addEventListener("pointermove", handleDocumentPointerMove);
-document.addEventListener("pointerup", handleDocumentPointerUp);
-document.addEventListener("pointercancel", handleDocumentPointerUp);
-window.addEventListener("hashchange", renderApp);
-renderApp();
+if (isBrowserRuntime) {
+  document.addEventListener("change", handleDocumentChange);
+  document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("input", handleDocumentInput);
+  document.addEventListener("load", handleDocumentLoad, true);
+  document.addEventListener("submit", handleDocumentSubmit);
+  document.addEventListener("pointerdown", handleDocumentPointerDown);
+  document.addEventListener("pointermove", handleDocumentPointerMove);
+  document.addEventListener("pointerup", handleDocumentPointerUp);
+  document.addEventListener("pointercancel", handleDocumentPointerUp);
+  window.addEventListener("hashchange", renderApp);
+  renderApp();
 
-// slice-2: always rehydrate from server — cookie carries the session token.
-void revalidateStoredSession();
+  // slice-2: always rehydrate from server — cookie carries the session token.
+  void revalidateStoredSession();
+}
 
 // sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
 // Only reads/writes key "studyNote.pdfWorkspace.inspectorOpen".
@@ -2274,7 +2284,7 @@ type LocalPdfTool = PdfWorkspaceTool;
 // so chart type is persisted as a type: prefix line in chart.content (free-string field).
 // Pattern mirrors LocalPdfTool widening for eraser.
 type LocalChartType = "xy" | "bar" | "trig";
-type LocalChartFunction = "sin" | "cos";
+type LocalChartFunction = "sin" | "cos" | "tan";
 
 const CHART_TYPE_PREFIX = "type:";
 const CHART_PLOT_LEFT = 6;
@@ -3867,7 +3877,7 @@ function appendChartLine(
   return line;
 }
 
-function appendChartCoordinatePlane(
+export function appendChartCoordinatePlane(
   parent: SVGElement,
   xMin: number,
   xMax: number,
@@ -3934,6 +3944,37 @@ function appendChartCoordinatePlane(
     dataValue: "y"
   });
 
+  [0, 0.25, 0.5, 0.75, 1].forEach((ratio) => {
+    const cx = CHART_PLOT_LEFT + CHART_PLOT_WIDTH * ratio;
+    const xValue = xMin + xRange * ratio;
+    const tick = document.createElementNS(SVG_NS, "text");
+    tick.setAttribute("x", cx.toFixed(2));
+    tick.setAttribute("y", String(xAxisY >= CHART_PLOT_BOTTOM - 1 ? xAxisY - 1 : xAxisY + 2.6));
+    tick.setAttribute("font-size", "2.8");
+    tick.setAttribute("fill", CHART_PLANE_COLOR);
+    tick.setAttribute("opacity", "0.75");
+    tick.setAttribute("text-anchor", ratio === 0 ? "start" : ratio === 1 ? "end" : "middle");
+    tick.setAttribute("data-chart-axis-tick", "x");
+    tick.textContent = formatChartNumber(xValue);
+    parent.append(tick);
+  });
+
+  [0, 0.25, 0.5, 0.75, 1].forEach((ratio) => {
+    const cy = CHART_PLOT_TOP + CHART_PLOT_HEIGHT * ratio;
+    const yValue = yMax - yRange * ratio;
+    const isLeftEdgeAxis = yAxisX <= CHART_PLOT_LEFT + 1;
+    const tick = document.createElementNS(SVG_NS, "text");
+    tick.setAttribute("x", String(isLeftEdgeAxis ? yAxisX + 1.2 : yAxisX - 1.2));
+    tick.setAttribute("y", String(cy + 0.9));
+    tick.setAttribute("font-size", "2.8");
+    tick.setAttribute("fill", CHART_PLANE_COLOR);
+    tick.setAttribute("opacity", "0.75");
+    tick.setAttribute("text-anchor", isLeftEdgeAxis ? "start" : "end");
+    tick.setAttribute("data-chart-axis-tick", "y");
+    tick.textContent = formatChartNumber(yValue);
+    parent.append(tick);
+  });
+
   const xLabel = document.createElementNS(SVG_NS, "text");
   xLabel.setAttribute("x", "96");
   xLabel.setAttribute("y", String(xAxisY >= CHART_PLOT_BOTTOM - 1 ? CHART_PLOT_BOTTOM - 1.2 : xAxisY + 3.8));
@@ -3976,10 +4017,37 @@ function mapCoordinateChartPoints(
   }));
 }
 
-function buildPolylineChartSvg(
+export function splitCoordsByJump(
+  coords: Array<{ x: number; y: number; point: CsvSeriesPoint }>,
+  pixelJumpThreshold: number = 15
+): Array<Array<{ x: number; y: number; point: CsvSeriesPoint }>> {
+  const segments: Array<Array<{ x: number; y: number; point: CsvSeriesPoint }>> = [];
+  let current: Array<{ x: number; y: number; point: CsvSeriesPoint }> = [];
+  for (let i = 0; i < coords.length; i++) {
+    const cur = coords[i];
+    if (!cur) continue;
+    if (current.length === 0) {
+      current.push(cur);
+      continue;
+    }
+    const prev = current[current.length - 1];
+    if (prev && Math.abs(cur.y - prev.y) > pixelJumpThreshold) {
+      segments.push(current);
+      current = [cur];
+    } else {
+      current.push(cur);
+    }
+  }
+  if (current.length > 0) {
+    segments.push(current);
+  }
+  return segments;
+}
+
+export function buildPolylineChartSvg(
   parent: SVGElement,
   points: CsvSeriesPoint[],
-  options: { markers: boolean; yBounds?: { min: number; max: number } }
+  options: { markers: boolean; labels?: boolean; yBounds?: { min: number; max: number } }
 ): void {
   parent.replaceChildren();
   parent.setAttribute("viewBox", "0 0 100 30");
@@ -4019,21 +4087,26 @@ function buildPolylineChartSvg(
     circle.setAttribute("r", "2");
     circle.setAttribute("fill", "currentColor");
     parent.append(circle);
-    appendChartLabel(parent, coord.point, coord.x, coords.length);
+    if (options.labels !== false) {
+      appendChartLabel(parent, coord.point, coord.x, coords.length);
+    }
     return;
   }
 
-  const polyline = document.createElementNS(SVG_NS, "polyline");
-  polyline.setAttribute(
-    "points",
-    coords.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
-  );
-  polyline.setAttribute("fill", "none");
-  polyline.setAttribute("stroke", "currentColor");
-  polyline.setAttribute("stroke-width", "1.6");
-  polyline.setAttribute("stroke-linecap", "round");
-  polyline.setAttribute("stroke-linejoin", "round");
-  parent.append(polyline);
+  const segments = splitCoordsByJump(coords);
+  segments.forEach((segment) => {
+    const polyline = document.createElementNS(SVG_NS, "polyline");
+    polyline.setAttribute(
+      "points",
+      segment.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
+    );
+    polyline.setAttribute("fill", "none");
+    polyline.setAttribute("stroke", "currentColor");
+    polyline.setAttribute("stroke-width", "1.6");
+    polyline.setAttribute("stroke-linecap", "round");
+    polyline.setAttribute("stroke-linejoin", "round");
+    parent.append(polyline);
+  });
 
   coords.forEach((coord, index) => {
     if (options.markers) {
@@ -4045,21 +4118,21 @@ function buildPolylineChartSvg(
       parent.append(circle);
     }
 
-    if (shouldRenderChartLabel(index, coords.length)) {
+    if (options.labels !== false && shouldRenderChartLabel(index, coords.length)) {
       appendChartLabel(parent, coord.point, coord.x, coords.length);
     }
   });
 }
 
 function normalizeChartFunction(rawFunction: string | undefined): LocalChartFunction {
-  if (rawFunction === "cos") {
+  if (rawFunction === "cos" || rawFunction === "tan") {
     return rawFunction;
   }
 
   return "sin";
 }
 
-function buildFunctionChartPoints(
+export function buildFunctionChartPoints(
   functionType: LocalChartFunction,
   xMin: number,
   xMax: number,
@@ -4070,14 +4143,17 @@ function buildFunctionChartPoints(
   const safeSamples = Math.min(121, Math.max(2, Math.round(samples)));
   const evaluate = (x: number): number => {
     if (functionType === "cos") return Math.cos(x);
+    if (functionType === "tan") return Math.tan(x);
     return Math.sin(x);
   };
+  const yMin = functionType === "tan" ? -10 : -1;
+  const yMax = functionType === "tan" ? 10 : 1;
 
   return Array.from({ length: safeSamples }, (_, index) => {
     const x = safeMin + ((safeMax - safeMin) * index) / (safeSamples - 1);
     const y = evaluate(x);
     return { label: formatChartNumber(x), value: Number.isFinite(y) ? Number(y.toFixed(4)) : 0 };
-  }).filter((point) => Number.isFinite(point.value) && point.value >= -1 && point.value <= 1);
+  }).filter((point) => Number.isFinite(point.value) && point.value >= yMin && point.value <= yMax);
 }
 
 function readChartFunctionConfigFromDom(chartId: string): {
@@ -4114,8 +4190,13 @@ function buildCoordinateLineChartSvg(parent: SVGElement, points: CsvSeriesPoint[
   buildPolylineChartSvg(parent, points, { markers: true });
 }
 
-function buildTrigChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
-  buildPolylineChartSvg(parent, points, { markers: false, yBounds: { min: -1, max: 1 } });
+export function buildTrigChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
+  const hasTanRangePoint = points.some((point) => Math.abs(point.value) > 1);
+  buildPolylineChartSvg(parent, points, {
+    markers: false,
+    labels: false,
+    yBounds: hasTanRangePoint ? { min: -10, max: 10 } : { min: -1, max: 1 }
+  });
 }
 
 /**
@@ -5629,7 +5710,7 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   const inputGuide = document.createElement("div");
   inputGuide.className = "pdf-chart-input-guide";
   inputGuide.textContent = chartType === "trig"
-    ? "sin/cos 선택 후 x 범위를 정하면 y=f(x)로 계산합니다. y축 범위는 -1~1로 고정됩니다."
+    ? "sin/cos/tan 선택 후 x 범위를 정하면 y=f(x)로 계산합니다. tan 은 ±π/2 근방에서 path 가 끊어집니다."
     : chartType === "bar"
       ? "각 항목의 x 라벨과 y 값을 직접 입력합니다."
       : "각 행의 x 좌표와 y 좌표를 직접 입력합니다. 예: (-1, 1), (0, 0), (1, 1).";
@@ -5698,7 +5779,8 @@ function buildChartFunctionControls(subjectId: string, chartId: string): HTMLEle
   fnSelect.dataset.chartId = chartId;
   [
     { value: "sin", label: "sin(x)" },
-    { value: "cos", label: "cos(x)" }
+    { value: "cos", label: "cos(x)" },
+    { value: "tan", label: "tan(x)" }
   ].forEach(({ value, label }) => {
     const opt = document.createElement("option");
     opt.value = value;
@@ -5709,7 +5791,7 @@ function buildChartFunctionControls(subjectId: string, chartId: string): HTMLEle
 
   const xMin = buildChartFunctionInput(chartId, "set-chart-function-x-min", "x 최소", "-3.14");
   const xMax = buildChartFunctionInput(chartId, "set-chart-function-x-max", "x 최대", "3.14");
-  const yRange = buildChartFunctionInput(chartId, "show-chart-function-y-range", "y축 범위", "-1 ~ 1", true);
+  const yRange = buildChartFunctionInput(chartId, "show-chart-function-y-range", "y축 범위", "자동 결정", true);
   const samples = buildChartFunctionInput(chartId, "set-chart-function-samples", "샘플 개수", "49");
 
   const fillBtn = document.createElement("button");
