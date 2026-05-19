@@ -68,7 +68,6 @@ import {
   updateTextBoxContent,
   type PdfChecklist,
   type PdfChart,
-  type PdfChartType,
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfTable,
@@ -141,6 +140,7 @@ type LoginFeedback =
 
 const notebookStorageKey = "study-note.notebook.v2";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const PDF_FRAME_READY_DELAY_MS = 180;
 let notebook = loadStoredNotebook();
 let pdfWorkspaceStore = loadPdfWorkspaceStore();
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
@@ -156,6 +156,11 @@ const activePdfObjectUrls = new Map<string, string>();
 const activePdfObjectUrlMaterialIds = new Map<string, string>();
 const activePdfPreviewLoads = new Set<string>();
 const failedPdfPreviewLoadKeys = new Set<string>();
+const loadedPdfFrameKeys = new Set<string>();
+const pdfFrameReadyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let pendingPdfPageTransition:
+  | { subjectId: string; materialId: string; fromPage: number; toPage: number }
+  | undefined;
 let activeInkStroke: ActiveInkStroke | undefined;
 // sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
 // Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
@@ -250,14 +255,50 @@ function renderInto(html: string): void {
   const wrapper = document.createElement("div");
   wrapper.id = appRoot.id;
   wrapper.innerHTML = html;
-  morphdom(appRoot, wrapper, { childrenOnly: true });
-  refreshTablePreviews();
+  morphdom(appRoot, wrapper, {
+    childrenOnly: true,
+    getNodeKey(node) {
+      if (node instanceof HTMLElement && node.dataset.pdfFrameKey) {
+        return node.dataset.pdfFrameKey;
+      }
+
+      return node instanceof Element ? node.id : undefined;
+    },
+    onBeforeElUpdated(fromEl, toEl) {
+      if (shouldReplacePdfFrame(fromEl, toEl)) {
+        fromEl.replaceWith(toEl.cloneNode(true));
+        return false;
+      }
+
+      return true;
+    }
+  });
+  refreshTableWidgets();
   refreshChartWidgets();
+}
+
+function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
+  if (fromEl.tagName !== "IFRAME" || toEl.tagName !== "IFRAME") {
+    return false;
+  }
+
+  const fromFrame = fromEl as HTMLElement;
+  const toFrame = toEl as HTMLElement;
+
+  if (fromFrame.dataset.pdfFrame !== "true" || toFrame.dataset.pdfFrame !== "true") {
+    return false;
+  }
+
+  return (
+    fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
+    fromEl.getAttribute("src") !== toEl.getAttribute("src")
+  );
 }
 
 document.addEventListener("change", handleDocumentChange);
 document.addEventListener("click", handleDocumentClick);
 document.addEventListener("input", handleDocumentInput);
+document.addEventListener("load", handleDocumentLoad, true);
 document.addEventListener("submit", handleDocumentSubmit);
 document.addEventListener("pointerdown", handleDocumentPointerDown);
 document.addEventListener("pointermove", handleDocumentPointerMove);
@@ -342,6 +383,7 @@ function setActivePdfObjectUrl(
   objectUrl: string
 ): void {
   clearActivePdfObjectUrl(subjectId);
+  clearPdfFrameReadiness();
 
   activePdfObjectUrls.set(subjectId, objectUrl);
   activePdfObjectUrlMaterialIds.set(subjectId, materialId);
@@ -365,6 +407,14 @@ function revokeAllPdfObjectUrls(): void {
   activePdfObjectUrlMaterialIds.clear();
   activePdfPreviewLoads.clear();
   failedPdfPreviewLoadKeys.clear();
+  clearPdfFrameReadiness();
+}
+
+function clearPdfFrameReadiness(): void {
+  pdfFrameReadyTimers.forEach((timer) => clearTimeout(timer));
+  pdfFrameReadyTimers.clear();
+  loadedPdfFrameKeys.clear();
+  pendingPdfPageTransition = undefined;
 }
 
 async function revalidateStoredSession(): Promise<void> {
@@ -510,6 +560,42 @@ function updatePdfWorkspace(
 function handleDocumentChange(event: Event): void {
   const target = event.target;
 
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) {
+    return;
+  }
+
+  // sprint-13/slice-5/6: chart input mode select — re-encode content with new type + current points.
+  if (target instanceof HTMLSelectElement && target.dataset.action === "update-chart-type") {
+    const subjectId = target.dataset.subjectId;
+    const chartId = target.dataset.chartId;
+
+    if (subjectId && chartId) {
+      const rawType = target.value;
+      const chartType: LocalChartType = rawType === "bar" || rawType === "trig" ? rawType : "xy";
+      const article = target.closest<HTMLElement>("[data-chart-id]");
+      const hasPointEditor = Boolean(article?.querySelector("[data-chart-point-count]"));
+      const current = readChartDataFromDom(chartId);
+      const storedChart = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId).charts.find(
+        (chart) => chart.id === chartId
+      );
+      const storedPoints = storedChart ? decodeChartContent(storedChart.content).points : [];
+      const points = hasPointEditor ? (current?.points ?? storedPoints) : storedPoints;
+      const content = encodeChartContent(chartType, points);
+      const prev = chartPointDebounceMap.get(chartId);
+      if (prev) clearTimeout(prev);
+      chartPointDebounceMap.delete(chartId);
+      updatePdfWorkspace(subjectId, (workspace) => ({
+        ...workspace,
+        charts: workspace.charts.map((chart) =>
+          chart.id === chartId ? updateChartContent(chart, content) : chart
+        )
+      }));
+      renderApp();
+    }
+
+    return;
+  }
+
   if (!(target instanceof HTMLInputElement)) {
     return;
   }
@@ -531,7 +617,7 @@ function handleDocumentChange(event: Event): void {
     const pageNumber = Number(target.value);
 
     if (subjectId && Number.isInteger(pageNumber)) {
-      setPdfPage(subjectId, pageNumber);
+      requestPdfPage(subjectId, pageNumber);
       renderApp();
     }
 
@@ -780,6 +866,108 @@ function handleDocumentClick(event: MouseEvent): void {
 
     if (subjectId && chartId) {
       removeChart(subjectId, chartId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-13/slice-5: table row/col structural add/delete
+  if (quickNoteButton?.dataset.action === "add-table-row") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const tableId = quickNoteButton.dataset.tableId;
+
+    if (subjectId && tableId) {
+      applyAddTableRow(subjectId, tableId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "add-table-column") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const tableId = quickNoteButton.dataset.tableId;
+
+    if (subjectId && tableId) {
+      applyAddTableColumn(subjectId, tableId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "delete-table-row") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const tableId = quickNoteButton.dataset.tableId;
+    const rowIndex = Number(quickNoteButton.dataset.row ?? "-1");
+
+    if (subjectId && tableId && rowIndex >= 0) {
+      applyDeleteTableRow(subjectId, tableId, rowIndex);
+      renderApp();
+    }
+
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "delete-table-column") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const tableId = quickNoteButton.dataset.tableId;
+    const colIndex = Number(quickNoteButton.dataset.col ?? "-1");
+
+    if (subjectId && tableId && colIndex >= 0) {
+      applyDeleteTableColumn(subjectId, tableId, colIndex);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-13/slice-5: chart point add/delete
+  if (quickNoteButton?.dataset.action === "add-chart-point") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const chartId = quickNoteButton.dataset.chartId;
+
+    if (subjectId && chartId) {
+      applyAddChartPoint(subjectId, chartId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "delete-chart-point") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const chartId = quickNoteButton.dataset.chartId;
+    const pointIndex = Number(quickNoteButton.dataset.pointIdx ?? "-1");
+
+    if (subjectId && chartId && pointIndex >= 0) {
+      applyDeleteChartPoint(subjectId, chartId, pointIndex);
+      renderApp();
+    }
+
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "clear-chart-points") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const chartId = quickNoteButton.dataset.chartId;
+
+    if (subjectId && chartId) {
+      applyClearChartPoints(subjectId, chartId);
+      renderApp();
+    }
+
+    return;
+  }
+
+  // sprint-13/slice-6: generate coordinate points from a small trig function.
+  if (quickNoteButton?.dataset.action === "fill-chart-function") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const chartId = quickNoteButton.dataset.chartId;
+
+    if (subjectId && chartId) {
+      applyFillChartFunction(subjectId, chartId);
       renderApp();
     }
 
@@ -1106,27 +1294,68 @@ function handleDocumentInput(event: Event): void {
     return;
   }
 
-  // sprint-13/slice-2: table markdown update (debounced store write + immediate preview).
-  if (target.dataset.action === "update-table-content") {
+  // sprint-13/slice-5: table cell input (header or data) — debounced store write.
+  // No renderApp in callback to preserve focus (sprint-12 R1 pattern).
+  if (target.dataset.action === "update-table-cell") {
     const subjectId = target.dataset.subjectId;
     const tableId = target.dataset.tableId;
 
     if (subjectId && tableId) {
-      refreshTablePreview(tableId, target.value);
-      scheduleTableContentUpdate(subjectId, tableId, target.value);
+      // Collect all current cell values from DOM, serialize, then debounce store write.
+      const current = readTableDataFromDom(tableId);
+      if (current) {
+        // Override the changed cell with current input value (DOM already reflects it)
+        const kind = target.dataset.cellKind;
+        const colIdx = Number(target.dataset.cellCol);
+        const rowIdx = Number(target.dataset.cellRow ?? "-1");
+
+        if (kind === "header" && colIdx >= 0 && colIdx < current.headers.length) {
+          current.headers[colIdx] = target.value;
+        } else if (kind === "row" && rowIdx >= 0 && rowIdx < current.rows.length && colIdx >= 0) {
+          const row = current.rows[rowIdx];
+          if (row && colIdx < row.length) {
+            row[colIdx] = target.value;
+          }
+        }
+
+        scheduleTableCellUpdate(subjectId, tableId, serializeMarkdownTable(current));
+      }
     }
 
     return;
   }
 
-  // sprint-13/slice-3: chart CSV update (debounced store write + immediate preview).
-  if (target.dataset.action === "update-chart-content") {
+  // sprint-13/slice-5/6: chart point x/y input — debounced store write.
+  if (
+    target.dataset.action === "update-chart-point-x" ||
+    target.dataset.action === "update-chart-point-label" ||
+    target.dataset.action === "update-chart-point-value"
+  ) {
     const subjectId = target.dataset.subjectId;
     const chartId = target.dataset.chartId;
 
     if (subjectId && chartId) {
-      refreshChartPreview(chartId, target.value);
-      scheduleChartContentUpdate(subjectId, chartId, target.value);
+      const current = readChartDataFromDom(chartId);
+      if (current) {
+        const idx = Number(target.dataset.pointIdx ?? "-1");
+        if (idx >= 0 && idx < current.points.length) {
+          const point = current.points[idx];
+          if (point) {
+            if (
+              target.dataset.action === "update-chart-point-x" ||
+              target.dataset.action === "update-chart-point-label"
+            ) {
+              point.label = target.value;
+            } else {
+              point.value = normalizeChartInputValue(target.value);
+            }
+          }
+        }
+
+        const content = encodeChartContent(current.chartType, current.points);
+        refreshChartPreview(chartId, current.chartType, current.points);
+        scheduleChartPointUpdate(subjectId, chartId, content);
+      }
     }
 
     return;
@@ -1144,6 +1373,51 @@ function handleDocumentInput(event: Event): void {
       scheduleChecklistItemLabelUpdate(subjectId, checklistId, itemId, target.value);
     }
   }
+}
+
+function handleDocumentLoad(event: Event): void {
+  const target = event.target;
+
+  if (!(target instanceof HTMLIFrameElement) || target.dataset.pdfFrame !== "true") {
+    return;
+  }
+
+  const frameKey = target.dataset.pdfFrameKey;
+
+  if (!frameKey) {
+    return;
+  }
+
+  const previousTimer = pdfFrameReadyTimers.get(frameKey);
+
+  if (previousTimer) {
+    clearTimeout(previousTimer);
+  }
+
+  const timer = setTimeout(() => {
+    pdfFrameReadyTimers.delete(frameKey);
+    loadedPdfFrameKeys.add(frameKey);
+    completePendingPdfPageTransition(frameKey);
+  }, PDF_FRAME_READY_DELAY_MS);
+
+  pdfFrameReadyTimers.set(frameKey, timer);
+}
+
+function completePendingPdfPageTransition(frameKey: string): void {
+  if (!pendingPdfPageTransition) {
+    return;
+  }
+
+  const pending = pendingPdfPageTransition;
+  const pendingKey = getPdfFrameKey(pending.materialId, pending.toPage);
+
+  if (frameKey !== pendingKey) {
+    return;
+  }
+
+  pendingPdfPageTransition = undefined;
+  setPdfPage(pending.subjectId, pending.toPage);
+  renderApp();
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -1994,6 +2268,58 @@ function updateLiveStroke(): void {
 // LocalPdfTool is now an alias for the domain union (redundant "| eraser" dropped).
 // sprint-13: "table" | "chart" added in domain; slice-2 activates table UI.
 type LocalPdfTool = PdfWorkspaceTool;
+
+// sprint-13/slice-5+: LocalChartType widens domain PdfChartType (legacy one-type chart) to include
+// xy/bar/trig variants. Domain normalizeChartType keeps persisted enum compatibility on hydration,
+// so chart type is persisted as a type: prefix line in chart.content (free-string field).
+// Pattern mirrors LocalPdfTool widening for eraser.
+type LocalChartType = "xy" | "bar" | "trig";
+type LocalChartFunction = "sin" | "cos";
+
+const CHART_TYPE_PREFIX = "type:";
+const CHART_PLOT_LEFT = 6;
+const CHART_PLOT_RIGHT = 94;
+const CHART_PLOT_TOP = 4;
+const CHART_PLOT_BOTTOM = 22;
+const CHART_PLOT_WIDTH = CHART_PLOT_RIGHT - CHART_PLOT_LEFT;
+const CHART_PLOT_HEIGHT = CHART_PLOT_BOTTOM - CHART_PLOT_TOP;
+const CHART_PLANE_COLOR = "#111111";
+
+/**
+ * Encodes LocalChartType + CsvSeriesPoint[] into a single content string.
+ * Format: "type:<chartType>\n<x>,<y>\n..."
+ * When chartType is "xy", prefix is omitted for backward compat with existing content.
+ */
+function encodeChartContent(chartType: LocalChartType, points: CsvSeriesPoint[]): string {
+  const csv = serializeCsv(points);
+  if (chartType === "xy") {
+    return csv;
+  }
+
+  return CHART_TYPE_PREFIX + chartType + "\n" + csv;
+}
+
+/**
+ * Decodes a content string into LocalChartType + CsvSeriesPoint[].
+ * First line of "type:<chartType>" is consumed as metadata; rest is CSV.
+ * Legacy "line"/"sparkline" content is normalized to the user-facing xy chart.
+ */
+function decodeChartContent(content: string): { chartType: LocalChartType; points: CsvSeriesPoint[] } {
+  const trimmed = content.trimStart();
+
+  if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
+    const newline = trimmed.indexOf("\n");
+    const typeStr = newline < 0
+      ? trimmed.slice(CHART_TYPE_PREFIX.length)
+      : trimmed.slice(CHART_TYPE_PREFIX.length, newline);
+    const csv = newline < 0 ? "" : trimmed.slice(newline + 1);
+    const chartType: LocalChartType = typeStr === "bar" || typeStr === "trig" ? typeStr : "xy";
+    return { chartType, points: parseCsvSeries(csv) };
+  }
+
+  return { chartType: "xy", points: parseCsvSeries(content) };
+}
+
 type EraserShape = "circle" | "square" | "triangle" | "line";
 type EraserDragPoint = { x: number; y: number };
 
@@ -2449,7 +2775,40 @@ function movePdfPage(subjectId: string, delta: number): void {
     return;
   }
 
-  setPdfPage(subjectId, material.selectedPage + delta);
+  requestPdfPage(subjectId, material.selectedPage + delta);
+}
+
+function requestPdfPage(subjectId: string, pageNumber: number): void {
+  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const material = workspace.material;
+
+  if (!material) {
+    return;
+  }
+
+  const nextPage = Math.min(material.pageCount, Math.max(1, pageNumber));
+
+  if (nextPage === material.selectedPage) {
+    pendingPdfPageTransition = undefined;
+    setPdfPage(subjectId, nextPage);
+    return;
+  }
+
+  const materialId = material.backendMaterialId ?? "";
+  const frameKey = getPdfFrameKey(materialId, nextPage);
+
+  if (!materialId || loadedPdfFrameKeys.has(frameKey)) {
+    pendingPdfPageTransition = undefined;
+    setPdfPage(subjectId, nextPage);
+    return;
+  }
+
+  pendingPdfPageTransition = {
+    subjectId,
+    materialId,
+    fromPage: material.selectedPage,
+    toPage: nextPage
+  };
 }
 
 function setPdfPage(subjectId: string, pageNumber: number): void {
@@ -2649,6 +3008,10 @@ function removeTable(subjectId: string, tableId: string): void {
   const prev = tableContentDebounceMap.get(tableId);
   if (prev) clearTimeout(prev);
   tableContentDebounceMap.delete(tableId);
+  // sprint-13/slice-5: also cancel any pending cell debounce
+  const prev2 = tableCellDebounceMap.get(tableId);
+  if (prev2) clearTimeout(prev2);
+  tableCellDebounceMap.delete(tableId);
 
   updatePdfWorkspace(subjectId, (workspace) => ({
     ...workspace,
@@ -2669,17 +3032,29 @@ function applyTableMove(
   }));
 }
 
+// tableContentDebounceMap was used by the now-removed scheduleTableContentUpdate (slice-2).
+// slice-5 uses tableCellDebounceMap instead. Kept here as named const for removeTable's
+// clearTimeout call (legacy slice-2 timers may still be in flight during a hot reload).
 const tableContentDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
 
-function scheduleTableContentUpdate(
-  subjectId: string,
-  tableId: string,
-  content: string
-): void {
-  const prev = tableContentDebounceMap.get(tableId);
+function applyTableCollapseToggle(subjectId: string, tableId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: workspace.tables.map((table) =>
+      table.id === tableId ? toggleTableCollapsed(table) : table
+    )
+  }));
+}
+
+// sprint-13/slice-5: per-table debounce for cell-level editing.
+// Key = tableId. No renderApp in callback to avoid focus loss (sprint-12 R1 pattern).
+const tableCellDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleTableCellUpdate(subjectId: string, tableId: string, content: string): void {
+  const prev = tableCellDebounceMap.get(tableId);
   if (prev) clearTimeout(prev);
   const handle = setTimeout(() => {
-    tableContentDebounceMap.delete(tableId);
+    tableCellDebounceMap.delete(tableId);
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
       tables: workspace.tables.map((table) =>
@@ -2687,14 +3062,116 @@ function scheduleTableContentUpdate(
       )
     }));
   }, 300);
-  tableContentDebounceMap.set(tableId, handle);
+  tableCellDebounceMap.set(tableId, handle);
 }
 
-function applyTableCollapseToggle(subjectId: string, tableId: string): void {
+/**
+ * Reads current in-memory table data from the DOM inputs and returns the edited ParsedMarkdownTable.
+ * Used by add/delete row/col reducers which must collect all current cell values before mutating.
+ */
+function readTableDataFromDom(tableId: string): ParsedMarkdownTable | null {
+  const article = document.querySelector<HTMLElement>(`[data-table-id="${tableId}"]`);
+  if (!article) return null;
+
+  const headerInputs = Array.from(
+    article.querySelectorAll<HTMLInputElement>(`input[data-action="update-table-cell"][data-cell-kind="header"]`)
+  ).sort((a, b) => Number(a.dataset.cellCol) - Number(b.dataset.cellCol));
+
+  const headers = headerInputs.map((inp) => inp.value);
+  if (headers.length === 0) return null;
+
+  const rowCount = Number(
+    article.querySelector<HTMLElement>("[data-table-row-count]")?.dataset.tableRowCount ?? "0"
+  );
+
+  const rows: string[][] = Array.from({ length: rowCount }, (_, rowIdx) =>
+    Array.from({ length: headers.length }, (__, colIdx) => {
+      const inp = article.querySelector<HTMLInputElement>(
+        `input[data-action="update-table-cell"][data-cell-kind="row"][data-cell-row="${rowIdx}"][data-cell-col="${colIdx}"]`
+      );
+      return inp ? inp.value : "";
+    })
+  );
+
+  return { headers, rows };
+}
+
+function applyAddTableRow(subjectId: string, tableId: string): void {
+  const current = readTableDataFromDom(tableId);
+  if (!current) return;
+  const updated: ParsedMarkdownTable = {
+    ...current,
+    rows: [...current.rows, Array(current.headers.length).fill("")]
+  };
+  const content = serializeMarkdownTable(updated);
+  const prev = tableCellDebounceMap.get(tableId);
+  if (prev) clearTimeout(prev);
+  tableCellDebounceMap.delete(tableId);
   updatePdfWorkspace(subjectId, (workspace) => ({
     ...workspace,
     tables: workspace.tables.map((table) =>
-      table.id === tableId ? toggleTableCollapsed(table) : table
+      table.id === tableId ? updateTableContent(table, content) : table
+    )
+  }));
+}
+
+function applyAddTableColumn(subjectId: string, tableId: string): void {
+  const current = readTableDataFromDom(tableId);
+  if (!current) return;
+  const updated: ParsedMarkdownTable = {
+    headers: [...current.headers, ""],
+    rows: current.rows.map((row) => [...row, ""])
+  };
+  const content = serializeMarkdownTable(updated);
+  const prev = tableCellDebounceMap.get(tableId);
+  if (prev) clearTimeout(prev);
+  tableCellDebounceMap.delete(tableId);
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: workspace.tables.map((table) =>
+      table.id === tableId ? updateTableContent(table, content) : table
+    )
+  }));
+}
+
+function applyDeleteTableRow(subjectId: string, tableId: string, rowIndex: number): void {
+  const current = readTableDataFromDom(tableId);
+  if (!current) return;
+  // minimum 0 data rows (cannot delete below 0)
+  if (current.rows.length === 0) return;
+  const updated: ParsedMarkdownTable = {
+    ...current,
+    rows: current.rows.filter((_, i) => i !== rowIndex)
+  };
+  const content = serializeMarkdownTable(updated);
+  const prev = tableCellDebounceMap.get(tableId);
+  if (prev) clearTimeout(prev);
+  tableCellDebounceMap.delete(tableId);
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: workspace.tables.map((table) =>
+      table.id === tableId ? updateTableContent(table, content) : table
+    )
+  }));
+}
+
+function applyDeleteTableColumn(subjectId: string, tableId: string, colIndex: number): void {
+  const current = readTableDataFromDom(tableId);
+  if (!current) return;
+  // minimum 1 column
+  if (current.headers.length <= 1) return;
+  const updated: ParsedMarkdownTable = {
+    headers: current.headers.filter((_, i) => i !== colIndex),
+    rows: current.rows.map((row) => row.filter((_, i) => i !== colIndex))
+  };
+  const content = serializeMarkdownTable(updated);
+  const prev = tableCellDebounceMap.get(tableId);
+  if (prev) clearTimeout(prev);
+  tableCellDebounceMap.delete(tableId);
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    tables: workspace.tables.map((table) =>
+      table.id === tableId ? updateTableContent(table, content) : table
     )
   }));
 }
@@ -2722,6 +3199,10 @@ function removeChart(subjectId: string, chartId: string): void {
   const prev = chartContentDebounceMap.get(chartId);
   if (prev) clearTimeout(prev);
   chartContentDebounceMap.delete(chartId);
+  // sprint-13/slice-5: also cancel any pending point debounce
+  const prev2 = chartPointDebounceMap.get(chartId);
+  if (prev2) clearTimeout(prev2);
+  chartPointDebounceMap.delete(chartId);
 
   updatePdfWorkspace(subjectId, (workspace) => ({
     ...workspace,
@@ -2742,17 +3223,28 @@ function applyChartMove(
   }));
 }
 
+// chartContentDebounceMap was used by removed scheduleChartContentUpdate (slice-3).
+// slice-5 uses chartPointDebounceMap instead. Kept here for removeChart's clearTimeout.
 const chartContentDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
 
-function scheduleChartContentUpdate(
-  subjectId: string,
-  chartId: string,
-  content: string
-): void {
-  const prev = chartContentDebounceMap.get(chartId);
+function applyChartCollapseToggle(subjectId: string, chartId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: workspace.charts.map((chart) =>
+      chart.id === chartId ? toggleChartCollapsed(chart) : chart
+    )
+  }));
+}
+
+// sprint-13/slice-5: per-chart debounce for data-point editing.
+// Key = chartId. No renderApp in callback to avoid focus loss.
+const chartPointDebounceMap = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleChartPointUpdate(subjectId: string, chartId: string, content: string): void {
+  const prev = chartPointDebounceMap.get(chartId);
   if (prev) clearTimeout(prev);
   const handle = setTimeout(() => {
-    chartContentDebounceMap.delete(chartId);
+    chartPointDebounceMap.delete(chartId);
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...workspace,
       charts: workspace.charts.map((chart) =>
@@ -2760,14 +3252,104 @@ function scheduleChartContentUpdate(
       )
     }));
   }, 300);
-  chartContentDebounceMap.set(chartId, handle);
+  chartPointDebounceMap.set(chartId, handle);
 }
 
-function applyChartCollapseToggle(subjectId: string, chartId: string): void {
+/**
+ * Reads current chart data (chartType + points) from the DOM inputs.
+ * Used by structural operations (add/delete point) that must collect all values before mutating.
+ */
+function readChartDataFromDom(chartId: string): { chartType: LocalChartType; points: CsvSeriesPoint[] } | null {
+  const article = document.querySelector<HTMLElement>(`[data-chart-id="${chartId}"]`);
+  if (!article) return null;
+
+  const typeSelect = article.querySelector<HTMLSelectElement>(
+    `select[data-action="update-chart-type"][data-chart-id="${chartId}"]`
+  );
+  const rawType = typeSelect?.value ?? "xy";
+  const chartType: LocalChartType = rawType === "bar" || rawType === "trig" ? rawType : "xy";
+
+  const pointCount = Number(
+    article.querySelector<HTMLElement>("[data-chart-point-count]")?.dataset.chartPointCount ?? "0"
+  );
+  const points: CsvSeriesPoint[] = Array.from({ length: pointCount }, (_, idx) => {
+    const labelInp = article.querySelector<HTMLInputElement>(
+      `input[data-action="update-chart-point-x"][data-point-idx="${idx}"]`
+    ) ?? article.querySelector<HTMLInputElement>(
+      `input[data-action="update-chart-point-label"][data-point-idx="${idx}"]`
+    );
+    const valueInp = article.querySelector<HTMLInputElement>(
+      `input[data-action="update-chart-point-value"][data-point-idx="${idx}"]`
+    );
+    return {
+      label: labelInp ? labelInp.value : "",
+      value: valueInp ? normalizeChartInputValue(valueInp.value) : 0
+    };
+  });
+
+  return { chartType, points };
+}
+
+function applyAddChartPoint(subjectId: string, chartId: string): void {
+  const current = readChartDataFromDom(chartId);
+  if (!current) return;
+  const nextX = getNextChartXValue(current.points);
+  const newPoints = [...current.points, { label: formatChartNumber(nextX), value: 0 }];
+  const content = encodeChartContent(current.chartType, newPoints);
+  const prev = chartPointDebounceMap.get(chartId);
+  if (prev) clearTimeout(prev);
+  chartPointDebounceMap.delete(chartId);
   updatePdfWorkspace(subjectId, (workspace) => ({
     ...workspace,
     charts: workspace.charts.map((chart) =>
-      chart.id === chartId ? toggleChartCollapsed(chart) : chart
+      chart.id === chartId ? updateChartContent(chart, content) : chart
+    )
+  }));
+}
+
+function applyDeleteChartPoint(subjectId: string, chartId: string, pointIndex: number): void {
+  const current = readChartDataFromDom(chartId);
+  if (!current) return;
+  const newPoints = current.points.filter((_, i) => i !== pointIndex);
+  const content = encodeChartContent(current.chartType, newPoints);
+  const prev = chartPointDebounceMap.get(chartId);
+  if (prev) clearTimeout(prev);
+  chartPointDebounceMap.delete(chartId);
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: workspace.charts.map((chart) =>
+      chart.id === chartId ? updateChartContent(chart, content) : chart
+    )
+  }));
+}
+
+function applyClearChartPoints(subjectId: string, chartId: string): void {
+  const current = readChartDataFromDom(chartId);
+  const chartType = current?.chartType ?? "xy";
+  const content = encodeChartContent(chartType, []);
+  const prev = chartPointDebounceMap.get(chartId);
+  if (prev) clearTimeout(prev);
+  chartPointDebounceMap.delete(chartId);
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: workspace.charts.map((chart) =>
+      chart.id === chartId ? updateChartContent(chart, content) : chart
+    )
+  }));
+}
+
+function applyFillChartFunction(subjectId: string, chartId: string): void {
+  const config = readChartFunctionConfigFromDom(chartId);
+  if (!config) return;
+  const points = buildFunctionChartPoints(config.functionType, config.xMin, config.xMax, config.samples);
+  const content = encodeChartContent("trig", points);
+  const prev = chartPointDebounceMap.get(chartId);
+  if (prev) clearTimeout(prev);
+  chartPointDebounceMap.delete(chartId);
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    charts: workspace.charts.map((chart) =>
+      chart.id === chartId ? updateChartContent(chart, content) : chart
     )
   }));
 }
@@ -3124,14 +3706,13 @@ function parseCsvSeries(source: string): CsvSeriesPoint[] {
   }
 
   return source.split(/\r?\n/).reduce<CsvSeriesPoint[]>((points, line) => {
-    const commaIndex = line.indexOf(",");
+    const parsedLine = splitCsvSeriesLine(line);
 
-    if (commaIndex < 0) {
+    if (!parsedLine) {
       return points;
     }
 
-    const label = line.slice(0, commaIndex).trim();
-    const rawValue = line.slice(commaIndex + 1).trim();
+    const [label, rawValue] = parsedLine;
     const value = Number(rawValue);
 
     if (!Number.isFinite(value)) {
@@ -3143,7 +3724,405 @@ function parseCsvSeries(source: string): CsvSeriesPoint[] {
   }, []);
 }
 
-function buildSparklineSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
+function splitCsvSeriesLine(line: string): [label: string, rawValue: string] | null {
+  let label = "";
+
+  for (let index = 0; index < line.length; index++) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === "\\" && (next === "," || next === "\\")) {
+      label += next;
+      index += 1;
+      continue;
+    }
+
+    if (char === ",") {
+      return [label.trim(), line.slice(index + 1).trim()];
+    }
+
+    label += char;
+  }
+
+  return null;
+}
+
+/**
+ * Serializes CsvSeriesPoint[] to CSV string.
+ * Each point becomes "label,value" line. Commas and backslashes in labels are escaped.
+ * O(n) where n = number of points.
+ */
+function serializeCsv(points: CsvSeriesPoint[]): string {
+  return points
+    .map((point) => point.label.replace(/\\/g, "\\\\").replace(/,/g, "\\,") + "," + String(point.value))
+    .join("\n");
+}
+
+function normalizeChartInputValue(rawValue: string): number {
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : 0;
+}
+
+interface CoordinateChartPoint {
+  point: CsvSeriesPoint;
+  xValue: number;
+  yValue: number;
+}
+
+function parseChartXValue(point: CsvSeriesPoint, fallbackIndex: number): number {
+  const x = Number(point.label.trim());
+  return Number.isFinite(x) ? x : fallbackIndex;
+}
+
+function getCoordinateChartPoints(points: CsvSeriesPoint[]): CoordinateChartPoint[] {
+  const safePoints = points.filter((point) => Number.isFinite(point.value));
+  const coordinates = safePoints.map((point, index) => ({
+    point,
+    xValue: parseChartXValue(point, index),
+    yValue: point.value
+  }));
+
+  return coordinates.sort((a, b) => a.xValue - b.xValue);
+}
+
+function getNextChartXValue(points: CsvSeriesPoint[]): number {
+  const xValues = points
+    .map((point, index) => parseChartXValue(point, index))
+    .filter((value) => Number.isFinite(value));
+  if (xValues.length === 0) return 0;
+  return Math.max(...xValues) + 1;
+}
+
+function formatChartNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  return Number(value.toFixed(4)).toString();
+}
+
+function shouldRenderChartLabel(index: number, total: number): boolean {
+  if (total <= 6) return true;
+  return index === 0 || index === Math.floor((total - 1) / 2) || index === total - 1;
+}
+
+function formatChartPointLabel(point: CsvSeriesPoint): string {
+  const xLabel = point.label.trim().length > 0 ? point.label.trim() : "0";
+  return "(" + xLabel + ", " + formatChartNumber(point.value) + ")";
+}
+
+function mapChartXValue(value: number, xMin: number, xMax: number): number {
+  const xRange = xMax - xMin;
+  return xRange === 0 ? 50 : CHART_PLOT_LEFT + ((value - xMin) / xRange) * CHART_PLOT_WIDTH;
+}
+
+function mapChartYValue(value: number, yMin: number, yMax: number): number {
+  const yRange = yMax - yMin;
+  return yRange === 0 ? 15 : CHART_PLOT_BOTTOM - ((value - yMin) / yRange) * CHART_PLOT_HEIGHT;
+}
+
+function appendChartLabel(
+  parent: SVGElement,
+  point: CsvSeriesPoint,
+  x: number,
+  total: number
+): void {
+  const label = document.createElementNS(SVG_NS, "text");
+  label.setAttribute("x", x.toFixed(2));
+  label.setAttribute("y", "29");
+  label.setAttribute("font-size", "4");
+  label.setAttribute("data-chart-point-label", "true");
+  const textAnchor = total === 1
+    ? "middle"
+    : x <= CHART_PLOT_LEFT
+      ? "start"
+      : x >= CHART_PLOT_RIGHT
+        ? "end"
+        : "middle";
+  label.setAttribute("text-anchor", textAnchor);
+  label.textContent = formatChartPointLabel(point);
+  parent.append(label);
+}
+
+function appendChartLine(
+  parent: SVGElement,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  options: { opacity: string; strokeWidth: string; dataName?: string; dataValue?: string }
+): SVGLineElement {
+  const line = document.createElementNS(SVG_NS, "line");
+  line.setAttribute("x1", x1.toFixed(2));
+  line.setAttribute("x2", x2.toFixed(2));
+  line.setAttribute("y1", y1.toFixed(2));
+  line.setAttribute("y2", y2.toFixed(2));
+  line.setAttribute("stroke", CHART_PLANE_COLOR);
+  line.setAttribute("stroke-width", options.strokeWidth);
+  line.setAttribute("opacity", options.opacity);
+  if (options.dataName && options.dataValue) {
+    line.setAttribute(options.dataName, options.dataValue);
+  }
+  parent.append(line);
+  return line;
+}
+
+function appendChartCoordinatePlane(
+  parent: SVGElement,
+  xMin: number,
+  xMax: number,
+  yMin: number,
+  yMax: number
+): void {
+  const xRange = xMax - xMin;
+  const yRange = yMax - yMin;
+
+  const frame = document.createElementNS(SVG_NS, "rect");
+  frame.setAttribute("x", String(CHART_PLOT_LEFT));
+  frame.setAttribute("y", String(CHART_PLOT_TOP));
+  frame.setAttribute("width", String(CHART_PLOT_WIDTH));
+  frame.setAttribute("height", String(CHART_PLOT_HEIGHT));
+  frame.setAttribute("fill", "none");
+  frame.setAttribute("stroke", CHART_PLANE_COLOR);
+  frame.setAttribute("stroke-width", "0.35");
+  frame.setAttribute("opacity", "0.22");
+  frame.setAttribute("data-chart-plane", "frame");
+  parent.append(frame);
+
+  [0.25, 0.5, 0.75].forEach((ratio) => {
+    const x = CHART_PLOT_LEFT + CHART_PLOT_WIDTH * ratio;
+    const y = CHART_PLOT_TOP + CHART_PLOT_HEIGHT * ratio;
+    appendChartLine(parent, x, CHART_PLOT_TOP, x, CHART_PLOT_BOTTOM, {
+      opacity: "0.12",
+      strokeWidth: "0.25",
+      dataName: "data-chart-plane",
+      dataValue: "grid"
+    });
+    appendChartLine(parent, CHART_PLOT_LEFT, y, CHART_PLOT_RIGHT, y, {
+      opacity: "0.12",
+      strokeWidth: "0.25",
+      dataName: "data-chart-plane",
+      dataValue: "grid"
+    });
+  });
+
+  const xAxisY = yRange === 0
+    ? 15
+    : yMin <= 0 && yMax >= 0
+      ? mapChartYValue(0, yMin, yMax)
+      : yMin > 0
+        ? CHART_PLOT_BOTTOM
+        : CHART_PLOT_TOP;
+  const yAxisX = xRange === 0
+    ? 50
+    : xMin <= 0 && xMax >= 0
+      ? mapChartXValue(0, xMin, xMax)
+      : xMin > 0
+        ? CHART_PLOT_LEFT
+        : CHART_PLOT_RIGHT;
+
+  appendChartLine(parent, CHART_PLOT_LEFT, xAxisY, CHART_PLOT_RIGHT, xAxisY, {
+    opacity: "0.7",
+    strokeWidth: "0.75",
+    dataName: "data-chart-axis",
+    dataValue: "x"
+  });
+  appendChartLine(parent, yAxisX, CHART_PLOT_TOP, yAxisX, CHART_PLOT_BOTTOM, {
+    opacity: "0.7",
+    strokeWidth: "0.75",
+    dataName: "data-chart-axis",
+    dataValue: "y"
+  });
+
+  const xLabel = document.createElementNS(SVG_NS, "text");
+  xLabel.setAttribute("x", "96");
+  xLabel.setAttribute("y", String(xAxisY >= CHART_PLOT_BOTTOM - 1 ? CHART_PLOT_BOTTOM - 1.2 : xAxisY + 3.8));
+  xLabel.setAttribute("font-size", "3.8");
+  xLabel.setAttribute("fill", CHART_PLANE_COLOR);
+  xLabel.setAttribute("text-anchor", "start");
+  xLabel.setAttribute("data-chart-axis-label", "x");
+  xLabel.textContent = "X";
+  parent.append(xLabel);
+
+  const yLabel = document.createElementNS(SVG_NS, "text");
+  yLabel.setAttribute("x", String(Math.min(CHART_PLOT_RIGHT - 1.5, Math.max(CHART_PLOT_LEFT + 1.5, yAxisX + 2))));
+  yLabel.setAttribute("y", "3.2");
+  yLabel.setAttribute("font-size", "3.8");
+  yLabel.setAttribute("fill", CHART_PLANE_COLOR);
+  yLabel.setAttribute("text-anchor", "middle");
+  yLabel.setAttribute("data-chart-axis-label", "y");
+  yLabel.textContent = "Y";
+  parent.append(yLabel);
+}
+
+function mapCoordinateChartPoints(
+  points: CoordinateChartPoint[],
+  yBounds?: { min: number; max: number }
+): Array<{
+  point: CsvSeriesPoint;
+  x: number;
+  y: number;
+}> {
+  const xValues = points.map((point) => point.xValue);
+  const yValues = points.map((point) => point.yValue);
+  const xMin = Math.min(...xValues);
+  const xMax = Math.max(...xValues);
+  const yMin = yBounds ? yBounds.min : Math.min(...yValues);
+  const yMax = yBounds ? yBounds.max : Math.max(...yValues);
+  return points.map((point) => ({
+    point: point.point,
+    x: mapChartXValue(point.xValue, xMin, xMax),
+    y: mapChartYValue(point.yValue, yMin, yMax)
+  }));
+}
+
+function buildPolylineChartSvg(
+  parent: SVGElement,
+  points: CsvSeriesPoint[],
+  options: { markers: boolean; yBounds?: { min: number; max: number } }
+): void {
+  parent.replaceChildren();
+  parent.setAttribute("viewBox", "0 0 100 30");
+
+  const coordinates = getCoordinateChartPoints(points);
+
+  if (coordinates.length === 0) {
+    appendChartCoordinatePlane(
+      parent,
+      -1,
+      1,
+      options.yBounds ? options.yBounds.min : -1,
+      options.yBounds ? options.yBounds.max : 1
+    );
+    return;
+  }
+
+  const xValues = coordinates.map((point) => point.xValue);
+  const yValues = coordinates.map((point) => point.yValue);
+  appendChartCoordinatePlane(
+    parent,
+    Math.min(...xValues),
+    Math.max(...xValues),
+    options.yBounds ? options.yBounds.min : Math.min(...yValues),
+    options.yBounds ? options.yBounds.max : Math.max(...yValues)
+  );
+
+  const coords = mapCoordinateChartPoints(coordinates, options.yBounds);
+
+  if (coords.length === 1) {
+    const coord = coords[0];
+    if (!coord) return;
+
+    const circle = document.createElementNS(SVG_NS, "circle");
+    circle.setAttribute("cx", coord.x.toFixed(2));
+    circle.setAttribute("cy", coord.y.toFixed(2));
+    circle.setAttribute("r", "2");
+    circle.setAttribute("fill", "currentColor");
+    parent.append(circle);
+    appendChartLabel(parent, coord.point, coord.x, coords.length);
+    return;
+  }
+
+  const polyline = document.createElementNS(SVG_NS, "polyline");
+  polyline.setAttribute(
+    "points",
+    coords.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
+  );
+  polyline.setAttribute("fill", "none");
+  polyline.setAttribute("stroke", "currentColor");
+  polyline.setAttribute("stroke-width", "1.6");
+  polyline.setAttribute("stroke-linecap", "round");
+  polyline.setAttribute("stroke-linejoin", "round");
+  parent.append(polyline);
+
+  coords.forEach((coord, index) => {
+    if (options.markers) {
+      const circle = document.createElementNS(SVG_NS, "circle");
+      circle.setAttribute("cx", coord.x.toFixed(2));
+      circle.setAttribute("cy", coord.y.toFixed(2));
+      circle.setAttribute("r", "1.35");
+      circle.setAttribute("fill", "currentColor");
+      parent.append(circle);
+    }
+
+    if (shouldRenderChartLabel(index, coords.length)) {
+      appendChartLabel(parent, coord.point, coord.x, coords.length);
+    }
+  });
+}
+
+function normalizeChartFunction(rawFunction: string | undefined): LocalChartFunction {
+  if (rawFunction === "cos") {
+    return rawFunction;
+  }
+
+  return "sin";
+}
+
+function buildFunctionChartPoints(
+  functionType: LocalChartFunction,
+  xMin: number,
+  xMax: number,
+  samples: number
+): CsvSeriesPoint[] {
+  const safeMin = Number.isFinite(xMin) ? xMin : -Math.PI;
+  const safeMax = Number.isFinite(xMax) && xMax > safeMin ? xMax : Math.PI;
+  const safeSamples = Math.min(121, Math.max(2, Math.round(samples)));
+  const evaluate = (x: number): number => {
+    if (functionType === "cos") return Math.cos(x);
+    return Math.sin(x);
+  };
+
+  return Array.from({ length: safeSamples }, (_, index) => {
+    const x = safeMin + ((safeMax - safeMin) * index) / (safeSamples - 1);
+    const y = evaluate(x);
+    return { label: formatChartNumber(x), value: Number.isFinite(y) ? Number(y.toFixed(4)) : 0 };
+  }).filter((point) => Number.isFinite(point.value) && point.value >= -1 && point.value <= 1);
+}
+
+function readChartFunctionConfigFromDom(chartId: string): {
+  functionType: LocalChartFunction;
+  xMin: number;
+  xMax: number;
+  samples: number;
+} | null {
+  const article = document.querySelector<HTMLElement>(`[data-chart-id="${chartId}"]`);
+  if (!article) return null;
+
+  const fn = article.querySelector<HTMLSelectElement>(
+    `select[data-action="select-chart-function"][data-chart-id="${chartId}"]`
+  );
+  const xMin = article.querySelector<HTMLInputElement>(
+    `input[data-action="set-chart-function-x-min"][data-chart-id="${chartId}"]`
+  );
+  const xMax = article.querySelector<HTMLInputElement>(
+    `input[data-action="set-chart-function-x-max"][data-chart-id="${chartId}"]`
+  );
+  const samples = article.querySelector<HTMLInputElement>(
+    `input[data-action="set-chart-function-samples"][data-chart-id="${chartId}"]`
+  );
+
+  return {
+    functionType: normalizeChartFunction(fn?.value),
+    xMin: xMin ? normalizeChartInputValue(xMin.value) : -Math.PI,
+    xMax: xMax ? normalizeChartInputValue(xMax.value) : Math.PI,
+    samples: samples ? normalizeChartInputValue(samples.value) : 49
+  };
+}
+
+function buildCoordinateLineChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
+  buildPolylineChartSvg(parent, points, { markers: true });
+}
+
+function buildTrigChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
+  buildPolylineChartSvg(parent, points, { markers: false, yBounds: { min: -1, max: 1 } });
+}
+
+/**
+ * Renders bar chart SVG into parent. Each point = one <rect> bar, height normalized to viewBox.
+ * viewBox = "0 0 100 30". O(n) where n = number of safe points.
+ */
+function buildBarChartSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
   parent.replaceChildren();
   parent.setAttribute("viewBox", "0 0 100 30");
 
@@ -3157,68 +4136,60 @@ function buildSparklineSvg(parent: SVGElement, points: CsvSeriesPoint[]): void {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min;
-  const toY = (value: number): number => {
+  const toBarHeight = (value: number): number => {
     if (range === 0) {
-      return 15;
+      return 12;
     }
 
     const ratio = Math.min(1, Math.max(0, (value - min) / range));
-    return 22 - ratio * 18;
+    return ratio * 18 + 2;
   };
-  const toX = (index: number): number =>
-    safePoints.length === 1 ? 50 : (index / (safePoints.length - 1)) * 100;
-  const appendLabel = (point: CsvSeriesPoint, x: number): void => {
+
+  const barWidth = safePoints.length === 1 ? 14 : Math.max(2, 90 / safePoints.length - 1);
+  const gap = safePoints.length === 1 ? 0 : (90 - barWidth * safePoints.length) / (safePoints.length - 1);
+  const startX = 5;
+
+  safePoints.forEach((point, index) => {
+    const barH = toBarHeight(point.value);
+    const x = startX + index * (barWidth + (safePoints.length === 1 ? 0 : gap));
+    const y = 22 - barH;
+
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", x.toFixed(2));
+    rect.setAttribute("y", y.toFixed(2));
+    rect.setAttribute("width", barWidth.toFixed(2));
+    rect.setAttribute("height", barH.toFixed(2));
+    rect.setAttribute("fill", "currentColor");
+    parent.append(rect);
+
     const label = document.createElementNS(SVG_NS, "text");
-    label.setAttribute("x", x.toFixed(2));
+    label.setAttribute("x", (x + barWidth / 2).toFixed(2));
     label.setAttribute("y", "29");
     label.setAttribute("font-size", "4");
     const textAnchor = safePoints.length === 1
       ? "middle"
-      : x <= 0
+      : index === 0
         ? "start"
-        : x >= 100
+        : index === safePoints.length - 1
           ? "end"
           : "middle";
     label.setAttribute("text-anchor", textAnchor);
-    label.textContent = point.label;
+    label.textContent = formatChartPointLabel(point);
     parent.append(label);
-  };
-
-  if (safePoints.length === 1) {
-    const point = safePoints[0];
-    if (!point) {
-      return;
-    }
-
-    const circle = document.createElementNS(SVG_NS, "circle");
-    const x = 50;
-    const y = 15;
-    circle.setAttribute("cx", x.toFixed(2));
-    circle.setAttribute("cy", y.toFixed(2));
-    circle.setAttribute("r", "2");
-    parent.append(circle);
-    appendLabel(point, x);
-    return;
-  }
-
-  const coords = safePoints.map((point, index) => {
-    const x = toX(index);
-    const y = toY(point.value);
-    return { point, x, y };
   });
-  const polyline = document.createElementNS(SVG_NS, "polyline");
-  polyline.setAttribute(
-    "points",
-    coords.map((coord) => coord.x.toFixed(2) + "," + coord.y.toFixed(2)).join(" ")
-  );
-  polyline.setAttribute("fill", "none");
-  polyline.setAttribute("stroke", "currentColor");
-  polyline.setAttribute("stroke-width", "1.6");
-  polyline.setAttribute("stroke-linecap", "round");
-  polyline.setAttribute("stroke-linejoin", "round");
-  parent.append(polyline);
+}
 
-  coords.forEach((coord) => appendLabel(coord.point, coord.x));
+/**
+ * Dispatches to the right SVG builder based on LocalChartType.
+ */
+function buildChartSvg(parent: SVGElement, chartType: LocalChartType, points: CsvSeriesPoint[]): void {
+  if (chartType === "bar") {
+    buildBarChartSvg(parent, points);
+  } else if (chartType === "trig") {
+    buildTrigChartSvg(parent, points);
+  } else {
+    buildCoordinateLineChartSvg(parent, points);
+  }
 }
 
 interface ParsedMarkdownTable {
@@ -3310,79 +4281,48 @@ function parseMarkdownTable(source: string): ParsedMarkdownTable | null {
   };
 }
 
-function renderTableElement(parsed: ParsedMarkdownTable): HTMLTableElement {
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const headerRow = document.createElement("tr");
-
-  parsed.headers.forEach((header) => {
-    const th = document.createElement("th");
-    th.textContent = header;
-    headerRow.append(th);
-  });
-
-  thead.append(headerRow);
-  table.append(thead);
-
-  const tbody = document.createElement("tbody");
-
-  parsed.rows.forEach((row) => {
-    const tr = document.createElement("tr");
-
-    row.forEach((value) => {
-      const td = document.createElement("td");
-      td.textContent = value;
-      tr.append(td);
-    });
-
-    tbody.append(tr);
-  });
-
-  table.append(tbody);
-
-  return table;
+/**
+ * Serializes ParsedMarkdownTable back to markdown string.
+ * Pipe chars in cell content are escaped as \|.
+ * Output: "| h1 | h2 |\n|---|---|\n| v1 | v2 |"
+ * O(rows * cols) pure function.
+ */
+function serializeMarkdownTable(parsed: ParsedMarkdownTable): string {
+  const escapeCell = (cell: string): string => cell.replace(/\|/g, "\\|");
+  const headerRow = "| " + parsed.headers.map(escapeCell).join(" | ") + " |";
+  const separator = "|" + parsed.headers.map(() => "---|").join("");
+  const dataRows = parsed.rows.map((row) => "| " + row.map(escapeCell).join(" | ") + " |");
+  return [headerRow, separator, ...dataRows].join("\n");
 }
 
-function buildTablePreviewNode(source: string): HTMLElement {
-  const parsed = parseMarkdownTable(source);
-
-  if (parsed) {
-    return renderTableElement(parsed);
-  }
-
-  const fallback = document.createElement("pre");
-  fallback.textContent = source;
-  return fallback;
-}
-
-function refreshTablePreview(tableId: string, source?: string): void {
-  const preview = document.querySelector<HTMLElement>(
-    `[data-table-preview-id="${tableId}"]`
-  );
-
-  if (!preview) {
-    return;
-  }
-
-  const textarea = document.querySelector<HTMLTextAreaElement>(
-    `textarea[data-action="update-table-content"][data-table-id="${tableId}"]`
-  );
-  preview.replaceChildren(buildTablePreviewNode(source ?? textarea?.value ?? ""));
-}
-
-function refreshTablePreviews(): void {
+// sprint-13/slice-5: refreshTableWidgets replaces data-table-mount-id placeholders
+// with full DOM table widgets (mirrors refreshChartWidgets pattern).
+function refreshTableWidgets(): void {
   document
-    .querySelectorAll<HTMLElement>("[data-table-preview-id]")
-    .forEach((preview) => {
-      const tableId = preview.dataset.tablePreviewId;
+    .querySelectorAll<HTMLElement>("[data-table-mount-id]")
+    .forEach((mount) => {
+      const subjectId = mount.dataset.subjectId;
+      const tableId = mount.dataset.tableMountId;
 
-      if (tableId) {
-        refreshTablePreview(tableId);
+      if (!subjectId || !tableId) {
+        return;
       }
+
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+      const table = workspace.tables.find((item) => item.id === tableId);
+
+      if (!table) {
+        mount.remove();
+        return;
+      }
+
+      mount.replaceWith(renderTable(subjectId, table));
     });
 }
 
-function refreshChartPreview(chartId: string, source?: string): void {
+// sprint-13/slice-5: refreshChartPreview updates SVG preview in-place after point input.
+// Called in debounce-free path (input event immediate feedback).
+function refreshChartPreview(chartId: string, chartType: LocalChartType, points: CsvSeriesPoint[]): void {
   const preview = document.querySelector<SVGElement>(
     `[data-chart-preview-id="${chartId}"]`
   );
@@ -3391,10 +4331,7 @@ function refreshChartPreview(chartId: string, source?: string): void {
     return;
   }
 
-  const textarea = document.querySelector<HTMLTextAreaElement>(
-    `textarea[data-action="update-chart-content"][data-chart-id="${chartId}"]`
-  );
-  buildSparklineSvg(preview, parseCsvSeries(source ?? textarea?.value ?? ""));
+  buildChartSvg(preview, chartType, points);
 }
 
 function refreshChartWidgets(): void {
@@ -3987,6 +4924,64 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function getPdfFrameKey(materialId: string, pageNumber: number): string {
+  return `pdf-frame:${materialId}:${pageNumber}`;
+}
+
+function getPdfFramePages(
+  selectedPage: number,
+  pageCount: number,
+  pending?: { fromPage: number; toPage: number }
+): number[] {
+  const pages = [selectedPage];
+
+  if (selectedPage > 1) {
+    pages.push(selectedPage - 1);
+  }
+
+  if (selectedPage < pageCount) {
+    pages.push(selectedPage + 1);
+  }
+
+  if (pending) {
+    pages.push(pending.fromPage, pending.toPage);
+  }
+
+  return [...new Set(pages)].filter((page) => page >= 1 && page <= pageCount);
+}
+
+function renderPdfFrameStack(
+  subject: SubjectNote,
+  material: NonNullable<SubjectPdfWorkspace["material"]>,
+  objectUrl: string,
+  selectedPage: number
+): string {
+  const materialId = material.backendMaterialId ?? "";
+  const pending =
+    pendingPdfPageTransition?.subjectId === subject.id &&
+    pendingPdfPageTransition.materialId === materialId
+      ? pendingPdfPageTransition
+      : undefined;
+
+  return getPdfFramePages(selectedPage, material.pageCount, pending).map((pageNumber) => {
+    const isActive = pageNumber === selectedPage;
+    const frameKey = getPdfFrameKey(materialId, pageNumber);
+    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=FitH`;
+    const preloadAttrs = isActive ? "" : ' aria-hidden="true" tabindex="-1"';
+
+    return `<iframe
+      class="pdf-frame ${isActive ? "is-active" : "is-preload"}"
+      data-pdf-frame="true"
+      data-pdf-frame-key="${escapeHtml(frameKey)}"
+      data-material-id="${escapeHtml(materialId)}"
+      data-page-number="${pageNumber}"
+      title="${escapeHtml(subject.title)} PDF preview"
+      src="${escapeHtml(frameSrc)}"
+      loading="eager"${preloadAttrs}
+    ></iframe>`;
+  }).join("");
+}
+
 function renderPdfWorkspacePage(subject: SubjectNote): string {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
   const material = workspace.material;
@@ -4095,12 +5090,8 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
       <div class="pdf-workspace-layout${inspectorOpen ? " is-inspector-open" : ""}">
         <div class="pdf-stage" aria-label="${subject.title} PDF page annotation surface">
           ${
-            objectUrl
-              ? `<iframe
-                  class="pdf-frame"
-                  title="${subject.title} PDF preview"
-                  src="${escapeHtml(`${objectUrl}#page=${selectedPage}&toolbar=0&navpanes=0&view=FitH`)}"
-                ></iframe>`
+            objectUrl && material
+              ? renderPdfFrameStack(subject, material, objectUrl, selectedPage)
               : `<div class="pdf-placeholder">
                   <strong>${getPdfPreviewPlaceholderTitle(Boolean(material), isPreviewLoading)}</strong>
                   <span>${getPdfPreviewPlaceholderDetail(Boolean(material), selectedPage)}</span>
@@ -4120,7 +5111,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             ${pageNotes.map((note) => renderStickyNote(subject.id, note)).join("")}
             ${pageTextBoxes.map((tb) => renderTextBox(subject.id, tb)).join("")}
             ${pageChecklists.map((cl) => renderChecklist(subject.id, cl)).join("")}
-            ${pageTables.map((table) => renderTable(subject.id, table)).join("")}
+            ${pageTables.map((table) => renderTableMount(subject.id, table)).join("")}
             ${pageCharts.map((chart) => renderChartMount(subject.id, chart)).join("")}
           </div>
         </div>
@@ -4557,22 +5548,21 @@ function renderChartMount(subjectId: string, chart: PdfChart): string {
   `;
 }
 
-function renderChartTitle(chartType: PdfChartType): string {
-  switch (chartType) {
-    case "sparkline":
-      return "그래프";
-  }
-}
-
+// sprint-13/slice-5+: renderChart rewritten — CSV textarea폐기, x/y coordinate UI + trig mode.
+// Content encoding: "type:<chartType>\n<csv>" — persisted in free-string chart.content field.
+// Domain PdfChartType has a legacy single chart enum; LocalChartType widens to xy|bar|trig.
 function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   const isCollapsed = chart.collapsed !== false;
   const bodyId = "pdf-chart-body-" + chart.id;
+  const { chartType, points } = decodeChartContent(chart.content);
+
   const article = document.createElement("article");
   article.className = "pdf-chart" + (isCollapsed ? " is-collapsed" : "");
   article.dataset.chartId = chart.id;
   article.style.left = String(chart.position.x * 100) + "%";
   article.style.top = String(chart.position.y * 100) + "%";
 
+  // --- header ---
   const header = document.createElement("div");
   header.className = "pdf-chart-header";
   header.dataset.action = "chart-drag-handle";
@@ -4592,9 +5582,9 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   toggle.setAttribute("aria-label", isCollapsed ? "그래프 펼치기" : "그래프 접기");
   toggle.textContent = isCollapsed ? "▶" : "▼";
 
-  const title = document.createElement("span");
-  title.className = "pdf-chart-title";
-  title.textContent = renderChartTitle(chart.chartType);
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "pdf-chart-title";
+  titleSpan.textContent = "그래프";
 
   const remove = document.createElement("button");
   remove.type = "button";
@@ -4605,91 +5595,405 @@ function renderChart(subjectId: string, chart: PdfChart): HTMLElement {
   remove.setAttribute("aria-label", "그래프 삭제");
   remove.textContent = "✕";
 
-  header.append(toggle, title, remove);
+  header.append(toggle, titleSpan, remove);
 
+  // --- body ---
   const body = document.createElement("div");
   body.className = "pdf-chart-body";
   body.id = bodyId;
   body.dataset.hiddenWhenCollapsed = "";
 
-  const textarea = document.createElement("textarea");
-  textarea.className = "pdf-chart-input";
-  textarea.dataset.action = "update-chart-content";
-  textarea.dataset.subjectId = subjectId;
-  textarea.dataset.chartId = chart.id;
-  textarea.setAttribute("placeholder", "2026-01,100\n2026-02,200");
-  textarea.setAttribute("rows", "4");
-  textarea.textContent = chart.content;
-  textarea.value = chart.content;
+  // chart type select
+  const typeSelect = document.createElement("select");
+  typeSelect.className = "pdf-chart-type-select";
+  typeSelect.dataset.action = "update-chart-type";
+  typeSelect.dataset.subjectId = subjectId;
+  typeSelect.dataset.chartId = chart.id;
+  typeSelect.setAttribute("aria-label", "차트 종류");
 
+  const typeOptions: Array<{ value: LocalChartType; label: string }> = [
+    { value: "xy", label: "좌표 직접 입력 (x,y)" },
+    { value: "trig", label: "삼각함수" },
+    { value: "bar", label: "막대" }
+  ];
+  typeOptions.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (value === chartType) {
+      opt.selected = true;
+    }
+    typeSelect.append(opt);
+  });
+
+  const inputGuide = document.createElement("div");
+  inputGuide.className = "pdf-chart-input-guide";
+  inputGuide.textContent = chartType === "trig"
+    ? "sin/cos 선택 후 x 범위를 정하면 y=f(x)로 계산합니다. y축 범위는 -1~1로 고정됩니다."
+    : chartType === "bar"
+      ? "각 항목의 x 라벨과 y 값을 직접 입력합니다."
+      : "각 행의 x 좌표와 y 좌표를 직접 입력합니다. 예: (-1, 1), (0, 0), (1, 1).";
+
+  // SVG preview stays above the generated coordinate rows so function fill does not push it away.
   const preview = document.createElementNS(SVG_NS, "svg");
   preview.setAttribute("class", "pdf-chart-preview");
   preview.setAttribute("data-chart-preview-id", chart.id);
   preview.setAttribute("xmlns", SVG_NS);
-  preview.setAttribute("viewBox", "0 0 100 30");
-  buildSparklineSvg(preview, parseCsvSeries(chart.content));
+  buildChartSvg(preview, chartType, points);
 
-  body.append(textarea, preview);
+  // data point list container
+  const dataContainer = document.createElement("div");
+  dataContainer.className = "pdf-chart-data";
+  // data-chart-point-count is read by readChartDataFromDom to know how many rows to scan
+  dataContainer.dataset.chartPointCount = String(points.length);
+
+  points.forEach((point, idx) => {
+    dataContainer.append(buildChartPointRow(subjectId, chart.id, idx, point));
+  });
+
+  const addPointBtn = document.createElement("button");
+  addPointBtn.type = "button";
+  addPointBtn.className = "pdf-chart-add-point";
+  addPointBtn.dataset.action = "add-chart-point";
+  addPointBtn.dataset.subjectId = subjectId;
+  addPointBtn.dataset.chartId = chart.id;
+  addPointBtn.textContent = "+ 좌표";
+
+  const clearPointsBtn = document.createElement("button");
+  clearPointsBtn.type = "button";
+  clearPointsBtn.className = "pdf-chart-clear-points";
+  clearPointsBtn.dataset.action = "clear-chart-points";
+  clearPointsBtn.dataset.subjectId = subjectId;
+  clearPointsBtn.dataset.chartId = chart.id;
+  clearPointsBtn.textContent = "좌표 전체 지우기";
+
+  const pointActions = document.createElement("div");
+  pointActions.className = "pdf-chart-point-actions";
+  pointActions.append(addPointBtn, clearPointsBtn);
+
+  body.append(typeSelect, inputGuide);
+  if (chartType === "trig") {
+    body.append(buildChartFunctionControls(subjectId, chart.id), preview);
+  } else {
+    body.append(preview, dataContainer, pointActions);
+  }
   article.append(header, body);
   return article;
 }
 
-// sprint-13/slice-2: table widget renderer.
-// Preview is populated after morphdom via renderTableElement(), using DOM API + textContent.
-function renderTable(subjectId: string, table: PdfTable): string {
-  const isCollapsed = table.collapsed !== false;
-  const toggleArrow = isCollapsed ? "▶" : "▼";
-  const bodyId = `pdf-table-body-${table.id}`;
+function buildChartFunctionControls(subjectId: string, chartId: string): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "pdf-chart-function-controls";
 
-  return `
-    <article
-      class="pdf-table${isCollapsed ? " is-collapsed" : ""}"
-      data-table-id="${table.id}"
-      style="left: ${table.position.x * 100}%; top: ${table.position.y * 100}%;"
-    >
-      <div
-        class="pdf-table-header"
-        data-action="table-drag-handle"
-        data-table-id="${table.id}"
-        aria-label="표 이동"
-        role="button"
-        tabindex="0"
-      >
-        <button
-          type="button"
-          class="pdf-table-toggle"
-          data-action="toggle-table-collapsed"
-          data-subject-id="${subjectId}"
-          data-table-id="${table.id}"
-          aria-expanded="${isCollapsed ? "false" : "true"}"
-          aria-controls="${bodyId}"
-          aria-label="${isCollapsed ? "표 펼치기" : "표 접기"}"
-        >${toggleArrow}</button>
-        <span class="pdf-table-title">표</span>
-        <button
-          type="button"
-          class="pdf-table-delete"
-          data-action="delete-table"
-          data-subject-id="${subjectId}"
-          data-table-id="${table.id}"
-          aria-label="표 삭제"
-        >✕</button>
-      </div>
-      <div class="pdf-table-body" id="${bodyId}" data-hidden-when-collapsed>
-        <textarea
-          class="pdf-table-input"
-          data-action="update-table-content"
-          data-subject-id="${subjectId}"
-          data-table-id="${table.id}"
-          placeholder="| 제목 1 | 제목 2 |
-|---|---|
-| 값 1 | 값 2 |"
-          rows="4"
-        >${escapeHtml(table.content)}</textarea>
-        <div class="pdf-table-preview" data-table-preview-id="${table.id}"></div>
-      </div>
-    </article>
-  `;
+  const title = document.createElement("div");
+  title.className = "pdf-chart-function-title";
+  title.textContent = "삼각함수 렌더링";
+
+  const fnLabel = document.createElement("label");
+  fnLabel.className = "pdf-chart-function-field";
+  const fnText = document.createElement("span");
+  fnText.textContent = "함수";
+  const fnSelect = document.createElement("select");
+  fnSelect.dataset.action = "select-chart-function";
+  fnSelect.dataset.chartId = chartId;
+  [
+    { value: "sin", label: "sin(x)" },
+    { value: "cos", label: "cos(x)" }
+  ].forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    fnSelect.append(opt);
+  });
+  fnLabel.append(fnText, fnSelect);
+
+  const xMin = buildChartFunctionInput(chartId, "set-chart-function-x-min", "x 최소", "-3.14");
+  const xMax = buildChartFunctionInput(chartId, "set-chart-function-x-max", "x 최대", "3.14");
+  const yRange = buildChartFunctionInput(chartId, "show-chart-function-y-range", "y축 범위", "-1 ~ 1", true);
+  const samples = buildChartFunctionInput(chartId, "set-chart-function-samples", "샘플 개수", "49");
+
+  const fillBtn = document.createElement("button");
+  fillBtn.type = "button";
+  fillBtn.className = "pdf-chart-function-fill";
+  fillBtn.dataset.action = "fill-chart-function";
+  fillBtn.dataset.subjectId = subjectId;
+  fillBtn.dataset.chartId = chartId;
+  fillBtn.textContent = "그래프 그리기";
+
+  const clearBtn = document.createElement("button");
+  clearBtn.type = "button";
+  clearBtn.className = "pdf-chart-function-clear";
+  clearBtn.dataset.action = "clear-chart-points";
+  clearBtn.dataset.subjectId = subjectId;
+  clearBtn.dataset.chartId = chartId;
+  clearBtn.textContent = "지우기";
+
+  wrap.append(title, fnLabel, xMin, xMax, yRange, samples, fillBtn, clearBtn);
+  return wrap;
+}
+
+function buildChartFunctionInput(
+  chartId: string,
+  action: string,
+  label: string,
+  value: string,
+  readOnly = false
+): HTMLElement {
+  const field = document.createElement("label");
+  field.className = "pdf-chart-function-field";
+  const text = document.createElement("span");
+  text.textContent = label;
+  const input = document.createElement("input");
+  input.type = readOnly ? "text" : "number";
+  if (!readOnly) {
+    input.step = "any";
+  }
+  input.dataset.action = action;
+  input.dataset.chartId = chartId;
+  input.value = value;
+  if (readOnly) {
+    input.readOnly = true;
+  }
+  field.append(text, input);
+  return field;
+}
+
+function buildChartPointRow(
+  subjectId: string,
+  chartId: string,
+  idx: number,
+  point: CsvSeriesPoint
+): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "pdf-chart-point";
+
+  const xField = document.createElement("label");
+  xField.className = "pdf-chart-point-field";
+  const xText = document.createElement("span");
+  xText.textContent = "x";
+  const labelInp = document.createElement("input");
+  labelInp.type = "text";
+  labelInp.inputMode = "decimal";
+  labelInp.className = "pdf-chart-point-x";
+  labelInp.dataset.action = "update-chart-point-x";
+  labelInp.dataset.subjectId = subjectId;
+  labelInp.dataset.chartId = chartId;
+  labelInp.dataset.pointIdx = String(idx);
+  labelInp.setAttribute("aria-label", "x 좌표");
+  labelInp.setAttribute("placeholder", "-3.14");
+  labelInp.value = point.label;
+  xField.append(xText, labelInp);
+
+  const yField = document.createElement("label");
+  yField.className = "pdf-chart-point-field";
+  const yText = document.createElement("span");
+  yText.textContent = "y";
+  const valueInp = document.createElement("input");
+  valueInp.type = "number";
+  valueInp.step = "any";
+  valueInp.className = "pdf-chart-point-value";
+  valueInp.dataset.action = "update-chart-point-value";
+  valueInp.dataset.subjectId = subjectId;
+  valueInp.dataset.chartId = chartId;
+  valueInp.dataset.pointIdx = String(idx);
+  valueInp.setAttribute("aria-label", "y 좌표");
+  valueInp.setAttribute("placeholder", "0");
+  valueInp.value = String(point.value);
+  yField.append(yText, valueInp);
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "pdf-chart-point-delete";
+  deleteBtn.dataset.action = "delete-chart-point";
+  deleteBtn.dataset.subjectId = subjectId;
+  deleteBtn.dataset.chartId = chartId;
+  deleteBtn.dataset.pointIdx = String(idx);
+  deleteBtn.setAttribute("aria-label", "좌표 삭제");
+  deleteBtn.textContent = "✕";
+
+  row.append(xField, yField, deleteBtn);
+  return row;
+}
+
+// sprint-13/slice-5: table widget mount placeholder (mirrors renderChartMount).
+// Table DOM element is built by renderTable() and injected by refreshTableWidgets().
+function renderTableMount(subjectId: string, table: PdfTable): string {
+  return `<div data-table-mount-id="${escapeHtml(table.id)}" data-subject-id="${escapeHtml(subjectId)}"></div>`;
+}
+
+// sprint-13/slice-5: table widget renderer rewritten as DOM API.
+// markdown textarea폐기 → <th><input> per header cell + <td><input> per data cell.
+// Default content = 2x2 table when content is empty or parse fails.
+// data-table-row-count attribute on tbody is read by readTableDataFromDom.
+function renderTable(subjectId: string, table: PdfTable): HTMLElement {
+  const isCollapsed = table.collapsed !== false;
+  const bodyId = "pdf-table-body-" + table.id;
+
+  // Parse stored content; fall back to default 2x2 on empty/parse-fail
+  const DEFAULT_CONTENT = "| 제목 1 | 제목 2 |\n|---|---|\n| 값 1 | 값 2 |";
+  const effectiveContent = table.content.trim().length > 0 ? table.content : DEFAULT_CONTENT;
+  const parsed = parseMarkdownTable(effectiveContent) ?? parseMarkdownTable(DEFAULT_CONTENT) ?? {
+    headers: ["제목 1", "제목 2"],
+    rows: [["값 1", "값 2"]]
+  };
+
+  const article = document.createElement("article");
+  article.className = "pdf-table" + (isCollapsed ? " is-collapsed" : "");
+  article.dataset.tableId = table.id;
+  article.style.left = String(table.position.x * 100) + "%";
+  article.style.top = String(table.position.y * 100) + "%";
+
+  // --- header ---
+  const header = document.createElement("div");
+  header.className = "pdf-table-header";
+  header.dataset.action = "table-drag-handle";
+  header.dataset.tableId = table.id;
+  header.setAttribute("aria-label", "표 이동");
+  header.setAttribute("role", "button");
+  header.tabIndex = 0;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "pdf-table-toggle";
+  toggle.dataset.action = "toggle-table-collapsed";
+  toggle.dataset.subjectId = subjectId;
+  toggle.dataset.tableId = table.id;
+  toggle.setAttribute("aria-expanded", isCollapsed ? "false" : "true");
+  toggle.setAttribute("aria-controls", bodyId);
+  toggle.setAttribute("aria-label", isCollapsed ? "표 펼치기" : "표 접기");
+  toggle.textContent = isCollapsed ? "▶" : "▼";
+
+  const titleSpan = document.createElement("span");
+  titleSpan.className = "pdf-table-title";
+  titleSpan.textContent = "표";
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "pdf-table-delete";
+  remove.dataset.action = "delete-table";
+  remove.dataset.subjectId = subjectId;
+  remove.dataset.tableId = table.id;
+  remove.setAttribute("aria-label", "표 삭제");
+  remove.textContent = "✕";
+
+  header.append(toggle, titleSpan, remove);
+
+  // --- body ---
+  const body = document.createElement("div");
+  body.className = "pdf-table-body";
+  body.id = bodyId;
+  body.dataset.hiddenWhenCollapsed = "";
+
+  // editable <table>
+  const gridTable = document.createElement("table");
+  gridTable.className = "pdf-table-grid";
+
+  // thead: header inputs + delete-column buttons
+  const thead = document.createElement("thead");
+  const headerTr = document.createElement("tr");
+
+  parsed.headers.forEach((headerVal, colIdx) => {
+    const th = document.createElement("th");
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.className = "pdf-table-cell-input";
+    inp.dataset.action = "update-table-cell";
+    inp.dataset.subjectId = subjectId;
+    inp.dataset.tableId = table.id;
+    inp.dataset.cellKind = "header";
+    inp.dataset.cellCol = String(colIdx);
+    inp.value = headerVal;
+    inp.setAttribute("aria-label", `헤더 ${colIdx + 1}`);
+    th.append(inp);
+    headerTr.append(th);
+  });
+
+  // delete-column buttons in header row (last cell = action column)
+  const thColActions = document.createElement("th");
+  thColActions.className = "pdf-table-col-actions";
+  parsed.headers.forEach((_, colIdx) => {
+    const delCol = document.createElement("button");
+    delCol.type = "button";
+    delCol.className = "pdf-table-delete-col";
+    delCol.dataset.action = "delete-table-column";
+    delCol.dataset.subjectId = subjectId;
+    delCol.dataset.tableId = table.id;
+    delCol.dataset.col = String(colIdx);
+    delCol.setAttribute("aria-label", `${colIdx + 1}열 삭제`);
+    delCol.textContent = "✕";
+    thColActions.append(delCol);
+  });
+  headerTr.append(thColActions);
+  thead.append(headerTr);
+  gridTable.append(thead);
+
+  // tbody: data rows + delete-row buttons
+  const tbody = document.createElement("tbody");
+  // data-table-row-count is read by readTableDataFromDom
+  tbody.dataset.tableRowCount = String(parsed.rows.length);
+
+  parsed.rows.forEach((row, rowIdx) => {
+    const tr = document.createElement("tr");
+
+    row.forEach((cellVal, colIdx) => {
+      const td = document.createElement("td");
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.className = "pdf-table-cell-input";
+      inp.dataset.action = "update-table-cell";
+      inp.dataset.subjectId = subjectId;
+      inp.dataset.tableId = table.id;
+      inp.dataset.cellKind = "row";
+      inp.dataset.cellRow = String(rowIdx);
+      inp.dataset.cellCol = String(colIdx);
+      inp.value = cellVal;
+      inp.setAttribute("aria-label", `행 ${rowIdx + 1} 열 ${colIdx + 1}`);
+      td.append(inp);
+      tr.append(td);
+    });
+
+    const tdRowAction = document.createElement("td");
+    tdRowAction.className = "pdf-table-row-actions";
+    const delRow = document.createElement("button");
+    delRow.type = "button";
+    delRow.className = "pdf-table-delete-row";
+    delRow.dataset.action = "delete-table-row";
+    delRow.dataset.subjectId = subjectId;
+    delRow.dataset.tableId = table.id;
+    delRow.dataset.row = String(rowIdx);
+    delRow.setAttribute("aria-label", `${rowIdx + 1}행 삭제`);
+    delRow.textContent = "✕";
+    tdRowAction.append(delRow);
+    tr.append(tdRowAction);
+    tbody.append(tr);
+  });
+
+  gridTable.append(tbody);
+
+  // add row/col buttons
+  const tableActions = document.createElement("div");
+  tableActions.className = "pdf-table-actions";
+
+  const addRowBtn = document.createElement("button");
+  addRowBtn.type = "button";
+  addRowBtn.className = "pdf-table-add-row";
+  addRowBtn.dataset.action = "add-table-row";
+  addRowBtn.dataset.subjectId = subjectId;
+  addRowBtn.dataset.tableId = table.id;
+  addRowBtn.textContent = "+ 행";
+
+  const addColBtn = document.createElement("button");
+  addColBtn.type = "button";
+  addColBtn.className = "pdf-table-add-col";
+  addColBtn.dataset.action = "add-table-column";
+  addColBtn.dataset.subjectId = subjectId;
+  addColBtn.dataset.tableId = table.id;
+  addColBtn.textContent = "+ 열";
+
+  tableActions.append(addRowBtn, addColBtn);
+  body.append(gridTable, tableActions);
+  article.append(header, body);
+  return article;
 }
 
 function renderInkStroke(stroke: PdfInkStroke): string {
