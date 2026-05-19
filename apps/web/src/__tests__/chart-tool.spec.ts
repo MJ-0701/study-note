@@ -831,6 +831,30 @@ test("buildPolylineChartSvg: labels=false 면 좌표 텍스트 라벨 미생성"
   assert.equal(parent.querySelectorAll("[data-chart-point-label]").length, 0);
 });
 
+test("buildPolylineChartSvg: xy 급격한 y 변화도 기본값에서는 단일 polyline으로 연결한다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  buildPolylineChartSvg(parent, [
+    { label: "0", value: -1 },
+    { label: "1", value: 1 },
+    { label: "2", value: -1 }
+  ], { markers: true });
+
+  const polylines = (parent as unknown as TestSvgElement).findByNodeName("polyline");
+  assert.equal(polylines.length, 1);
+  assert.equal((polylines[0]?.getAttribute("points") ?? "").trim().split(/\s+/).length, 3);
+});
+
+test("buildPolylineChartSvg: discontinuous=true 면 큰 y 점프에서 polyline을 분리한다", () => {
+  const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
+  buildPolylineChartSvg(parent, [
+    { label: "0", value: -10 },
+    { label: "1", value: 10 },
+    { label: "2", value: -10 }
+  ], { markers: false, labels: false, discontinuous: true, yBounds: { min: -10, max: 10 } });
+
+  assert((parent as unknown as TestSvgElement).findByNodeName("polyline").length >= 2);
+});
+
 test("appendChartCoordinatePlane: x/y 축 눈금 숫자 라벨이 렌더링된다", () => {
   const parent = document.createElementNS(SVG_NS, "svg") as SVGElement;
   appendMainChartCoordinatePlane(parent, -1, 1, -1, 1);

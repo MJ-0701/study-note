@@ -4383,7 +4383,7 @@ export function splitCoordsByJump(
 export function buildPolylineChartSvg(
   parent: SVGElement,
   points: CsvSeriesPoint[],
-  options: { markers: boolean; labels?: boolean; yBounds?: { min: number; max: number } }
+  options: { markers: boolean; labels?: boolean; discontinuous?: boolean; yBounds?: { min: number; max: number } }
 ): void {
   parent.replaceChildren();
   parent.setAttribute("viewBox", "0 0 100 30");
@@ -4429,8 +4429,7 @@ export function buildPolylineChartSvg(
     return;
   }
 
-  const segments = splitCoordsByJump(coords);
-  segments.forEach((segment) => {
+  const renderPolyline = (segment: Array<{ x: number; y: number; point: CsvSeriesPoint }>) => {
     const polyline = document.createElementNS(SVG_NS, "polyline");
     polyline.setAttribute(
       "points",
@@ -4442,7 +4441,13 @@ export function buildPolylineChartSvg(
     polyline.setAttribute("stroke-linecap", "round");
     polyline.setAttribute("stroke-linejoin", "round");
     parent.append(polyline);
-  });
+  };
+
+  if (options.discontinuous === true) {
+    splitCoordsByJump(coords).forEach(renderPolyline);
+  } else {
+    renderPolyline(coords);
+  }
 
   coords.forEach((coord, index) => {
     if (options.markers) {
@@ -4531,6 +4536,7 @@ export function buildTrigChartSvg(parent: SVGElement, points: CsvSeriesPoint[]):
   buildPolylineChartSvg(parent, points, {
     markers: false,
     labels: false,
+    discontinuous: true,
     yBounds: hasTanRangePoint ? { min: -10, max: 10 } : { min: -1, max: 1 }
   });
 }
