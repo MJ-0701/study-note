@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://study-note-api.bluesea-474361c6.koreacentral.azurecontainerapps.io/api/:path*"
+    }
+  ]
+}
