@@ -1,0 +1,84 @@
+# Solon SFS — FE Release Pipeline (Vercel)
+#
+# 트리거: `fe-v*` 태그 푸시 시에만 production 배포
+# 예: git tag fe-v0.1.0 && git push origin fe-v0.1.0
+#
+# Vercel 의 git push 자동배포는 Project Settings → Build and Deployment →
+# Ignored Build Step = "Don't build anything" 으로 차단된 상태.
+# 모든 production 배포는 본 워크플로우만이 유일한 경로다.
+#
+# 백엔드는 별도 워크플로우 (be-release.yml, `be-v*` 태그) 로 분리 배포.
+
+name: FE Release (Vercel)
+
+on:
+  push:
+    tags:
+      - 'fe-v*'
+
+# 같은 태그/ref 중복 실행 방지 (재푸시·force-push 등)
+concurrency:
+  group: fe-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    name: Deploy ${{ github.ref_name }} to Vercel Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js (20.10.0)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.10.0'
+
+      - name: Enable Corepack and activate pnpm@11.0.9
+        # pnpm 버전은 root package.json 의 packageManager 필드와 일치해야 함
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.9 --activate
+          echo "pnpm version: $(pnpm --version)"
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings (production)
+        # .vercel/ 디렉토리 생성 + production 환경변수 다운로드
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build artifacts for Vercel
+        # Vercel CLI 가 project.json 의 Root Directory (apps/web) 와
+        # Build/Install Command 를 읽어 .vercel/output/ 으로 빌드 결과 생성
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt output to Vercel Production
+        id: deploy
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          echo "::notice title=FE Production Deploy::$DEPLOY_URL"
+
+      - name: Write GitHub Actions summary
+        if: always()
+        run: |
+          {
+            echo "### FE Release \`${{ github.ref_name }}\`"
+            echo ""
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| Tag | \`${{ github.ref_name }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Custom Domain | https://study-note.910701.xyz |"
+            echo "| Vercel Deployment URL | ${{ steps.deploy.outputs.url || 'n/a (deploy step failed)' }} |"
+            echo "| Status | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
