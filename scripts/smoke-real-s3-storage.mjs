@@ -1,30 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
-import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { S3StorageService } from "../apps/api/dist/storage/s3-storage.service.js";
+import { S3StorageService } from "../packages/storage/dist/s3-storage.service.js";
 
 if (process.env.RUN_REAL_S3_SMOKE !== "1") {
   console.log("Real S3 smoke skipped: set RUN_REAL_S3_SMOKE=1 to opt in");
   process.exit(0);
 }
 
-const bucket = requireEnv("S3_BUCKET");
-const region = requireEnv("S3_REGION");
-const endpoint = process.env.S3_ENDPOINT?.trim() || undefined;
-const forcePathStyle = ["1", "true", "yes", "on"].includes(
-  (process.env.S3_FORCE_PATH_STYLE || "").trim().toLowerCase()
-);
-const client = new S3Client({
-  region,
-  ...(endpoint ? { endpoint } : {}),
-  ...(process.env.S3_FORCE_PATH_STYLE ? { forcePathStyle } : {})
-});
-const storage = new S3StorageService(client, {
-  bucket,
-  region,
-  ...(endpoint ? { endpoint } : {}),
-  ...(process.env.S3_FORCE_PATH_STYLE ? { forcePathStyle } : {})
-});
+const storage = S3StorageService.fromEnv(process.env);
 const samplePdf = Buffer.from("%PDF-1.4\n% real s3 smoke\n%%EOF\n");
 const materialId = `real-s3-smoke-${randomUUID()}`;
 const material = {
@@ -63,23 +46,8 @@ try {
   console.log("- uploaded and downloaded a private smoke object through S3StorageService");
 } finally {
   if (uploaded) {
-    await client.send(
-      new DeleteObjectCommand({
-        Bucket: bucket,
-        Key: material.storageKey
-      })
-    );
+    await storage.deleteObject(material.storageKey);
   }
-}
-
-function requireEnv(key) {
-  const value = process.env[key]?.trim();
-
-  if (!value) {
-    throw new Error(`${key} is required when RUN_REAL_S3_SMOKE=1`);
-  }
-
-  return value;
 }
 
 async function readToBuffer(stream) {

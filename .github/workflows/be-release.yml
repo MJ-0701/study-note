@@ -139,6 +139,6 @@ jobs:
             echo "| Container App | \`${{ env.CONTAINER_APP_NAME }}\` |"
             echo "| Resource Group | \`${{ env.RESOURCE_GROUP }}\` |"
             echo "| API URL (기본) | https://study-note-api.bluesea-474361c6.koreacentral.azurecontainerapps.io |"
-            echo "| API URL (커스텀) | https://api.study-note.910701.xyz (SSL bind 후 활성화) |"
+            echo "| API URL (커스텀) | https://study-note.api.910701.xyz |"
             echo "| Status | ${{ job.status }} |"
           } >> "$GITHUB_STEP_SUMMARY"

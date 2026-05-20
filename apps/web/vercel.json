@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://study-note-api.bluesea-474361c6.koreacentral.azurecontainerapps.io/api/:path*"
+      "destination": "https://study-note.api.910701.xyz/api/:path*"
     }
   ]
 }
