@@ -74,3 +74,4 @@ infra/localstack/cache/
 # 팀이 .sfs-local 의 일부를 공유해야 한다면 이 marker 블록 바깥에서 별도 정책으로 opt-in 한다.
 .sfs-local/
 ### END solon-product ###
+.vercel
