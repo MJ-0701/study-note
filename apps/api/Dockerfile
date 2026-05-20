@@ -13,7 +13,11 @@ COPY apps/api ./apps/api
 
 RUN pnpm install --frozen-lockfile --fetch-timeout=600000 --network-concurrency=2
 RUN pnpm --filter @study-note/api prisma:generate
-RUN pnpm --filter @study-note/api build
+# api 와 그의 dependencies 를 topological order 로 한 번에 빌드.
+# 'api...' = api + 그의 의존성 패키지들 (auth, persistence, corpus, persona-engine, storage 등).
+# domain 은 build script 없어서 자동 skip (main 이 src 직접 가리킴).
+# 이전엔 api 만 빌드해서 packages/* 의 dist 가 없어 TS2307 에러 발생했음.
+RUN pnpm --filter "@study-note/api..." build
 
 FROM node:22-alpine AS runner
 
