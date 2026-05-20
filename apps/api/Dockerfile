@@ -50,10 +50,11 @@ COPY --from=builder /app/packages/persistence/dist    ./packages/persistence/dis
 COPY --from=builder /app/packages/persona-engine/dist ./packages/persona-engine/dist
 COPY --from=builder /app/packages/storage/dist        ./packages/storage/dist
 
-# Prisma generated client lives at <root>/node_modules/.prisma/client (default output).
-# `pnpm install --prod` in runner installs @prisma/client package but NOT the generated
-# client artifacts; copy them from builder where `prisma generate` ran.
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# Regenerate Prisma client in runner — `pnpm install --prod` installs @prisma/client
+# but does NOT include the generated client (which `prisma generate` writes alongside
+# @prisma/client in pnpm's isolated layout: .pnpm/@prisma+client@<hash>/node_modules/.prisma).
+# Copying from builder is path-fragile across pnpm versions; regenerating is deterministic.
+RUN pnpm --filter @study-note/api prisma:generate
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
