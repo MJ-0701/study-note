@@ -54,9 +54,9 @@ services:
       s3-service:
         condition: service_healthy
     ports:
-      - "127.0.0.1:3001:3000"
+      - "127.0.0.1:3010:3010"
     environment:
-      - PORT=3000
+      - PORT=3010
       - HOST=0.0.0.0
       - DATABASE_URL=mysql://study_note:study_note@db-service:3306/study_note
       - STORAGE_PROVIDER=${STORAGE_PROVIDER:-s3}

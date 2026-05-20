@@ -204,7 +204,7 @@ endpoint 로 노출. CLI lane 은 그대로 보존, 새로 web 화면 lane 이 �
   # 터미널 1 — (1회) PDF ingest, .env 자동 load
   pnpm --filter @study-note/cli build && node --env-file-if-exists=.env apps/cli/dist/ingest-pdf.js --path "asset/digital_logical_engine/제07장 조합논리회로_2ndE_GT.pdf" --subject digital-engineering
 
-  # 터미널 2 — backend (NestJS, port 3001), .env 자동 load
+  # 터미널 2 — backend (NestJS, port 3010), .env 자동 load
   pnpm --filter @study-note/api prisma:migrate:deploy && pnpm --filter @study-note/api prisma:seed && pnpm --filter @study-note/api build && node --env-file-if-exists=.env apps/api/dist/main.js
 
   # 터미널 3 — frontend (vite, port 5173)

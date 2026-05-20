@@ -5,7 +5,7 @@ This project uses Docker Compose to orchestrate the Frontend, Backend, MySQL, an
 
 ## Prerequisites
 - Docker and Docker Compose installed.
-- Local ports `80`, `3001`, `3306`, and `4566` must be free.
+- Local ports `80`, `3010`, `3306`, and `4566` must be free.
 
 ## Commands
 
@@ -39,7 +39,7 @@ docker compose logs -f
 ### Backend Health & Connectivity
 ```bash
 # Check if backend can reach DB/S3
-curl http://localhost:3001/api/health
+curl http://localhost:3010/api/health
 ```
 
 ### Frontend Accessibility
@@ -53,7 +53,7 @@ docker exec s3-service awslocal s3 ls
 ```
 
 ## Troubleshooting
-- **Port Conflicts**: If port 80 or 3001 is in use, change the `ports` mapping in `docker-compose.yml`.
+- **Port Conflicts**: If port 80 or 3010 is in use, change the `ports` mapping in `docker-compose.yml`.
 - **Database Reset**: If you need to reset the database, run `docker compose down -v`.
 - **LocalStack Init**: The S3 bucket is created automatically on startup via `localstack/init/init-s3.sh`.
 

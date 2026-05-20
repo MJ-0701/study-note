@@ -40,10 +40,25 @@ RUN pnpm install --frozen-lockfile --prod --fetch-timeout=600000 --network-concu
 # the CLI (devDep) is not, so we add it explicitly here.
 RUN npm install -g prisma@6.19.3
 
+# Runtime requires the BUILT dist/ of every workspace package that apps/api depends on.
+# Without these, pnpm symlinks (apps/api/node_modules/@study-note/* → packages/*) resolve
+# to source-only folders, and Node fails: `Cannot find module '.../dist/index.js'` (MODULE_NOT_FOUND).
+# `domain` is excluded — its package.json points main at src/, so source copy is enough.
+COPY --from=builder /app/packages/auth/dist           ./packages/auth/dist
+COPY --from=builder /app/packages/corpus/dist         ./packages/corpus/dist
+COPY --from=builder /app/packages/persistence/dist    ./packages/persistence/dist
+COPY --from=builder /app/packages/persona-engine/dist ./packages/persona-engine/dist
+COPY --from=builder /app/packages/storage/dist        ./packages/storage/dist
+
+# Prisma generated client lives at <root>/node_modules/.prisma/client (default output).
+# `pnpm install --prod` in runner installs @prisma/client package but NOT the generated
+# client artifacts; copy them from builder where `prisma generate` ran.
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
 # Entrypoint: DB wait → migrate deploy → optional seed → exec app
 COPY --chmod=0755 apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
 
-EXPOSE 3000
+EXPOSE 3010
 ENTRYPOINT ["sh", "/app/apps/api/docker-entrypoint.sh"]

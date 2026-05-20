@@ -67,7 +67,7 @@ if (subcommand === "up") {
       `DATABASE_URL=${db.databaseUrl}`,
       `COMPOSE_PROJECT=${db.composeProject}`,
       `SESSION_TOKEN_PEPPER=${db.sessionTokenPepper}`,
-      `PORT=3001`,
+      `PORT=3010`,
       `HOST=0.0.0.0`,
       `STUDY_NOTE_LLM_TIMEOUT_MS=120000`,
       // sprint-2 round 4 plan §3 AC10(d) — storage provider fail-closed 가 require 하므로

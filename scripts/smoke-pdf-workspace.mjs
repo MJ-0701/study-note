@@ -26,7 +26,7 @@ const AUTH_LEGACY_LOCALSTORAGE_KEY = "study-note.auth-session.v1";
 const SESSION_COOKIE_NAME = "study_note_session";
 
 const chromePath = resolveChromePath();
-const backendPort = 3001 + Math.floor(Math.random() * 1000);
+const backendPort = 3010 + Math.floor(Math.random() * 1000);
 const backendBaseUrl = `http://127.0.0.1:${backendPort}/api`;
 const vitePort = 5173 + Math.floor(Math.random() * 1000);
 const viteBaseUrl = `http://127.0.0.1:${vitePort}`;
