@@ -37,16 +37,23 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Setup Node.js (20.10.0)
+      - name: Setup Node.js (22 LTS)
+        # 로컬 .nvmrc = 20.10.0 이지만, CI 는 22 LTS 사용.
+        # 이유: pnpm@11.0.9 corepack shim 이 Node >=20.18.1 필요
+        #       (20.10.0 에서 'Invalid host defined options' 로 죽음).
+        #       Vercel CLI deps (oxc-transform, rolldown, srvx, undici 등) 도
+        #       모두 Node >=20.18.1 / >=20.19.0 요구.
+        # 로컬도 향후 .nvmrc 22 정렬 권장 (별도 결정).
         uses: actions/setup-node@v4
         with:
-          node-version: '20.10.0'
+          node-version: '22'
 
       - name: Enable Corepack and activate pnpm@11.0.9
         # pnpm 버전은 root package.json 의 packageManager 필드와 일치해야 함
         run: |
           corepack enable
           corepack prepare pnpm@11.0.9 --activate
+          echo "node version: $(node --version)"
           echo "pnpm version: $(pnpm --version)"
 
       - name: Install Vercel CLI
