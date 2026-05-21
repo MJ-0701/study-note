@@ -6995,30 +6995,18 @@ function renderSubjectPage(subject: SubjectNote): string {
       </div>
     </section>
 
-    ${renderQuickNotePanel(subject, ["subject"])}
-
     <section class="metric-grid" aria-label="${subject.title} 현황">
       ${renderMetric("키워드 반영률", `${coverage.coverageRate}%`, `${coverage.covered}/${coverage.total}개 반영`)}
       ${renderMetric("수업일", `${subject.weekNotes.length}개 노트`, "날짜별 노트")}
       ${renderMetric("시험 범위", subject.summary.weekRange, subject.examLabel)}
     </section>
 
-    ${renderSubjectDepthNav(subject, subjectMaterials)}
-
-    <section aria-labelledby="summary-title">
-      <p class="meta">§1 — 과목 개요</p>
-      <h2 id="summary-title">전체 요약</h2>
-      <div class="summary-grid">
-        ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
-        ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
-        ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
-      </div>
-    </section>
+    ${renderSubjectLearningFlow(subject, subjectMaterials)}
 
     <section aria-labelledby="weekly-title">
-      <p class="meta">§2 — 강의별 자료</p>
-      <h2 id="weekly-title">강의별 PDF와 수업 노트</h2>
-      <p class="lede">PDF 한 개를 한 강의 자료로 보고, 관련 수업일 노트와 요약을 이 아래에서 이어 봅니다.</p>
+      <p class="meta">§1 — 수업</p>
+      <h2 id="weekly-title">수업 듣기</h2>
+      <p class="lede">강의 PDF를 열어 수업을 듣고, 수업일별 노트로 바로 이어갑니다.</p>
       <div class="week-card-grid">
         ${subject.weekNotes.map((week) => renderWeekCard(subject, week)).join("")}
       </div>
@@ -7026,8 +7014,21 @@ function renderSubjectPage(subject: SubjectNote): string {
 
     ${renderQuickNotePanel(subject, ["week"])}
 
+    <section aria-labelledby="summary-title">
+      <p class="meta">§2 — 요약본</p>
+      <h2 id="summary-title">요약본 정리</h2>
+      <p class="lede">수업을 듣고 난 뒤 시험 범위, 복습 전략, 취약 포인트를 한 장 요약으로 정리합니다.</p>
+      <div class="summary-grid">
+        ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
+        ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
+        ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
+      </div>
+    </section>
+
+    ${renderQuickNotePanel(subject, ["subject"])}
+
     <section aria-labelledby="keywords-title">
-      <p class="meta">§3 — 현재 요약</p>
+      <p class="meta">§2-1 — 요약본 점검</p>
       <h2 id="keywords-title">교수님 키워드 반영 상태</h2>
       <div class="keyword-grid">
         ${subject.requiredKeywords.map((keyword) => renderKeyword(keyword, subject)).join("")}
@@ -7043,6 +7044,8 @@ function renderSubjectPage(subject: SubjectNote): string {
         ${mustKnowConcepts.map((concept) => renderConcept(concept, subject)).join("")}
       </div>
     </section>
+
+    ${renderSubjectMcpPanel(subject)}
 
     <section aria-labelledby="sources-title">
       <p class="meta">§5 — 자료 범위</p>
@@ -7061,30 +7064,101 @@ function renderSubjectPage(subject: SubjectNote): string {
   `;
 }
 
-function renderSubjectDepthNav(subject: SubjectNote, materials: PdfMaterialDraft[]): string {
+function renderSubjectLearningFlow(subject: SubjectNote, materials: PdfMaterialDraft[]): string {
+  const persona = PERSONA_BY_SUBJECT[subject.id];
+  const personaLabel = persona?.nick ? `${persona.nick} 호출` : "교수님 페르소나 호출";
+
   return `
-    <section class="subject-depth-nav" aria-labelledby="subject-depth-title">
+    <section class="subject-learning-flow" aria-labelledby="subject-learning-flow-title">
       <div>
-        <p class="meta">과목 안에서 보기</p>
-        <h2 id="subject-depth-title">요약과 강의 자료를 나눠 보기</h2>
-        <p class="lede">과목 전체 흐름은 전체 요약에서 보고, PDF는 강의별 자료로 들어가서 필기와 함께 확인합니다.</p>
+        <p class="meta">과목 학습 플로우</p>
+        <h2 id="subject-learning-flow-title">수업 → 요약본 → MCP 호출</h2>
+        <p class="lede">강의 PDF로 수업을 듣고, 요약본을 만든 뒤, 막히는 부분은 교수님 페르소나에게 바로 물어봅니다.</p>
       </div>
-      <div class="subject-depth-nav__grid">
-        <button class="subject-depth-card" type="button" data-action="scroll-subject-section" data-target-id="summary-title">
-          <span>전체 요약</span>
-          <strong>${subject.examLabel}</strong>
-          <small>시험 범위와 복습 전략</small>
-        </button>
-        <button class="subject-depth-card" type="button" data-action="scroll-subject-section" data-target-id="weekly-title">
-          <span>강의별 자료</span>
-          <strong>${materials.length}개 PDF · ${subject.weekNotes.length}개 노트</strong>
-          <small>강의 PDF와 수업일 노트</small>
-        </button>
-        <button class="subject-depth-card" type="button" data-action="scroll-subject-section" data-target-id="keywords-title">
-          <span>현재 요약</span>
-          <strong>${subject.requiredKeywords.length}개 키워드</strong>
-          <small>교수님 키워드 반영 상태</small>
-        </button>
+      <div class="subject-learning-flow__grid">
+        <article class="subject-flow-card">
+          <p class="meta">1단계</p>
+          <h3>수업</h3>
+          <p>강의 PDF를 열고 수업을 들으면서 필요한 페이지에 바로 필기합니다.</p>
+          <div class="subject-flow-card__meta">${materials.length}개 PDF · ${subject.weekNotes.length}개 수업 노트</div>
+          <div class="subject-flow-card__actions">
+            <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">수업 PDF 열기</a>
+            ${renderSubjectFlowUploadControl(subject)}
+          </div>
+        </article>
+        <article class="subject-flow-card">
+          <p class="meta">2단계</p>
+          <h3>요약본</h3>
+          <p>수업을 듣고 난 뒤 시험 범위와 교수님 키워드를 내 언어로 다시 정리합니다.</p>
+          <div class="subject-flow-card__meta">${subject.requiredKeywords.length}개 키워드 · ${subject.summary.mustKnowConceptIds.length}개 핵심 개념</div>
+          <div class="subject-flow-card__actions">
+            <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${escapeHtml(subject.id)}">요약본 만들기</button>
+            <button class="secondary-action" type="button" data-action="scroll-subject-section" data-target-id="summary-title">요약본 보기</button>
+          </div>
+        </article>
+        <article class="subject-flow-card">
+          <p class="meta">3단계</p>
+          <h3>MCP 호출</h3>
+          <p>정리하다가 막히는 개념은 과목 교수님 페르소나에게 이어서 질문합니다.</p>
+          <div class="subject-flow-card__meta">${persona?.active ? "호출 가능" : "준비 중"} · ${personaLabel}</div>
+          <div class="subject-flow-card__actions">
+            ${renderSubjectPersonaFlowAction(subject)}
+            <button class="secondary-action" type="button" data-action="scroll-subject-section" data-target-id="keywords-title">질문거리 점검</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderSubjectFlowUploadControl(subject: SubjectNote): string {
+  if (!canManagePdfMaterials()) {
+    return `<span class="secondary-action is-disabled">관리자 업로드</span>`;
+  }
+
+  const inputId = `subject-flow-upload-${subject.id}`;
+
+  return `
+    <input
+      id="${inputId}"
+      class="file-input"
+      type="file"
+      accept="application/pdf,.pdf"
+      data-action="import-pdf-material"
+      data-subject-id="${escapeHtml(subject.id)}"
+    />
+    <label class="secondary-action" for="${inputId}">새 PDF 업로드</label>
+  `;
+}
+
+function renderSubjectPersonaFlowAction(subject: SubjectNote): string {
+  const persona = PERSONA_BY_SUBJECT[subject.id];
+
+  if (persona?.active) {
+    return `<a class="action-button" href="/persona-turn.html?subject=${encodeURIComponent(subject.id)}">${persona.nick} 호출</a>`;
+  }
+
+  return `<span class="action-button is-disabled" aria-disabled="true">${persona?.nick ?? "교수님"} 준비 중</span>`;
+}
+
+function renderSubjectMcpPanel(subject: SubjectNote): string {
+  const persona = PERSONA_BY_SUBJECT[subject.id];
+
+  return `
+    <section aria-labelledby="mcp-title" class="subject-mcp-panel">
+      <p class="meta">§3 — MCP 호출</p>
+      <h2 id="mcp-title">교수님 페르소나에게 질문하기</h2>
+      <p class="lede">요약본을 만들다가 설명이 막히는 개념은 과목별 교수님 페르소나에게 이어서 질문합니다.</p>
+      <div class="subject-mcp-callout">
+        <div>
+          <strong>${persona?.nick ?? subject.title} ${persona?.active ? "호출 가능" : "호출 준비 중"}</strong>
+          <p>${persona?.active
+            ? "현재 요약본과 키워드를 보면서 모르는 부분을 바로 질문할 수 있습니다."
+            : "이 과목 페르소나는 아직 준비 중입니다. 먼저 요약본을 만들고 질문거리를 정리하세요."}</p>
+        </div>
+        ${persona?.active
+          ? `<a class="action-button" href="/persona-turn.html?subject=${encodeURIComponent(subject.id)}">${persona.nick} 호출</a>`
+          : `<button class="secondary-action" type="button" data-action="generate-subject-note" data-subject-id="${escapeHtml(subject.id)}">질문거리 정리</button>`}
       </div>
     </section>
   `;
@@ -7194,16 +7268,13 @@ function renderPdfSubjectLibrarySection(
         </div>
         <span class="pdf-count-pill">${materials.length}개 자료</span>
       </div>
-      ${
-        materials.length > 0
-          ? `<div class="pdf-material-slider" aria-label="${subject.title} PDF 자료 슬라이더">
-              ${materials.map((material) => renderPdfMaterialCard(subject, material, {
-                isCurrent: false,
-                compact: false
-              })).join("")}
-            </div>`
-          : renderPdfSubjectEmptyCard(subject)
-      }
+      <div class="pdf-material-slider" aria-label="${subject.title} PDF 자료 슬라이더">
+        ${renderPdfLibraryUploadCard(subject, materials.length)}
+        ${materials.map((material) => renderPdfMaterialCard(subject, material, {
+          isCurrent: false,
+          compact: false
+        })).join("")}
+      </div>
     </section>
   `;
 }
@@ -7236,16 +7307,35 @@ function renderSubjectPdfMaterialBrowser(
   `;
 }
 
-function renderPdfSubjectEmptyCard(subject: SubjectNote): string {
-  const canManageMaterials = canManagePdfMaterials();
+function renderPdfLibraryUploadCard(subject: SubjectNote, materialCount: number): string {
+  if (!canManagePdfMaterials()) {
+    return `
+      <article class="pdf-upload-card is-readonly">
+        <p class="meta">${escapeHtml(subject.title)}</p>
+        <h4>새 자료 요청</h4>
+        <p>PDF 업로드는 관리자만 가능합니다. 필요한 강의자료가 없으면 관리자에게 요청하세요.</p>
+        <a class="secondary-link" href="${subjectPdfWorkspacePath(subject)}">${materialCount > 0 ? "공유 자료 보기" : "작업공간 열기"}</a>
+      </article>
+    `;
+  }
+
+  const inputId = `pdf-library-upload-${subject.id}`;
 
   return `
-    <article class="pdf-empty-card">
-      <strong>아직 등록된 PDF가 없습니다.</strong>
-      <p>${canManageMaterials ? "관리자 계정으로 이 과목의 첫 자료를 업로드하세요." : "관리자가 자료를 올리면 이곳에 표시됩니다."}</p>
-      <a class="secondary-link" href="${subjectPdfWorkspacePath(subject)}">
-        ${canManageMaterials ? "업로드 화면 열기" : "작업공간 열기"}
-      </a>
+    <article class="pdf-upload-card">
+      <input
+        id="${inputId}"
+        class="file-input"
+        type="file"
+        accept="application/pdf,.pdf"
+        data-action="import-pdf-material"
+        data-subject-id="${escapeHtml(subject.id)}"
+      />
+      <label class="pdf-upload-card__label" for="${inputId}">
+        <span>새 PDF 업로드</span>
+        <strong>${escapeHtml(subject.title)} 수업 자료 추가</strong>
+        <small>${materialCount > 0 ? `${materialCount}개 자료에 이어 추가합니다.` : "첫 강의 PDF를 바로 올립니다."}</small>
+      </label>
     </article>
   `;
 }

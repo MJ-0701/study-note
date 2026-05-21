@@ -401,6 +401,7 @@ section + section {
   max-width: var(--ds-measure);
 }
 
+.subject-learning-flow,
 .subject-depth-nav {
   border-bottom: 1px solid var(--ds-rule);
   border-top: 1px solid var(--ds-rule);
@@ -409,24 +410,54 @@ section + section {
   padding: var(--ds-space-lg) 0;
 }
 
+.subject-learning-flow__grid,
 .subject-depth-nav__grid {
   display: grid;
   gap: var(--ds-space-sm);
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.subject-flow-card,
 .subject-depth-card {
   background: var(--ds-bg);
   border: 1px solid var(--ds-rule);
   border-radius: 8px;
   color: var(--ds-fg);
-  cursor: pointer;
   display: grid;
   font: inherit;
   gap: var(--ds-space-xs);
-  min-height: 132px;
+  min-height: 188px;
   padding: var(--ds-space-md);
   text-align: left;
+}
+
+.subject-depth-card {
+  cursor: pointer;
+  min-height: 132px;
+}
+
+.subject-flow-card h3 {
+  font-size: var(--ds-fs-h3);
+  margin: 0;
+}
+
+.subject-flow-card p {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  margin: 0;
+}
+
+.subject-flow-card__meta {
+  color: var(--ds-muted);
+  font-size: var(--ds-fs-meta);
+}
+
+.subject-flow-card__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-xs);
+  margin-top: auto;
 }
 
 .subject-depth-card:hover,
@@ -444,6 +475,21 @@ section + section {
 .subject-depth-card strong {
   font-size: var(--ds-fs-body);
   font-weight: 600;
+}
+
+.subject-mcp-callout {
+  align-items: center;
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  display: flex;
+  gap: var(--ds-space-md);
+  justify-content: space-between;
+  padding: var(--ds-space-md);
+}
+
+.subject-mcp-callout p {
+  color: var(--ds-fg-soft);
+  margin: var(--ds-space-xs) 0 0;
 }
 
 h1,
@@ -802,6 +848,14 @@ p {
 
 .secondary-action:hover {
   background: var(--ds-bg-soft);
+}
+
+.action-button.is-disabled,
+.secondary-action.is-disabled {
+  color: var(--ds-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+  pointer-events: none;
 }
 
 .file-role-card h3 {
@@ -1283,6 +1337,48 @@ p {
   scroll-snap-type: x mandatory;
   scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
+}
+
+.pdf-upload-card {
+  border: 1px dashed var(--ds-accent);
+  border-radius: 8px;
+  display: grid;
+  flex: 0 0 min(82vw, 320px);
+  min-height: 172px;
+  scroll-snap-align: start;
+}
+
+.pdf-upload-card.is-readonly {
+  border-color: var(--ds-rule);
+  padding: var(--ds-space-md);
+}
+
+.pdf-upload-card__label {
+  cursor: pointer;
+  display: grid;
+  gap: var(--ds-space-xs);
+  padding: var(--ds-space-md);
+}
+
+.pdf-upload-card__label:hover,
+.pdf-upload-card__label:focus-visible {
+  background: var(--ds-accent-soft);
+  outline: 0;
+}
+
+.pdf-upload-card__label span,
+.pdf-upload-card small,
+.pdf-upload-card p {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  margin: 0;
+}
+
+.pdf-upload-card__label strong,
+.pdf-upload-card h4 {
+  color: var(--ds-fg);
+  font-size: var(--ds-fs-body);
+  font-weight: 600;
 }
 
 .pdf-material-card,
@@ -2671,6 +2767,7 @@ body[data-route="pdf-workspace"] .content {
   .upload-section,
   .flow-section,
   .concept-row,
+  .subject-learning-flow__grid,
   .subject-depth-nav__grid,
   .subject-heading,
   .week-note-grid,
@@ -2728,6 +2825,11 @@ body[data-route="pdf-workspace"] .content {
 
   .pdf-material-card__actions .action-button {
     width: 100%;
+  }
+
+  .subject-mcp-callout {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   /* sprint-11/codex-P1: 모바일에서 inspector toggle 노출 유지.

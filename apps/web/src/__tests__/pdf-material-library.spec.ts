@@ -40,7 +40,20 @@ describe("PDF material library UI", () => {
     assert.match(indexBlock, /과목별 PDF/);
     assert.match(indexBlock, /renderPdfSubjectLibrarySection/);
     assert.match(sectionBlock, /pdf-material-slider/);
-    assert.match(sectionBlock, /renderPdfSubjectEmptyCard/);
+    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(subject, materials\.length\)/);
+  });
+
+  it("lets admins upload a new PDF directly from each subject library section", () => {
+    const sectionBlock = getFunctionBlock("renderPdfSubjectLibrarySection");
+    const uploadCardBlock = getFunctionBlock("renderPdfLibraryUploadCard");
+
+    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(subject, materials\.length\)/);
+    assert.match(uploadCardBlock, /pdf-library-upload-\$\{subject\.id\}/);
+    assert.match(uploadCardBlock, /data-action="import-pdf-material"/);
+    assert.match(uploadCardBlock, /data-subject-id="\$\{escapeHtml\(subject\.id\)\}"/);
+    assert.match(uploadCardBlock, /새 PDF 업로드/);
+    assert.match(uploadCardBlock, /수업 자료 추가/);
+    assert.match(uploadCardBlock, /PDF 업로드는 관리자만 가능합니다/);
   });
 
   it("uses material cards with shared-source labels and an explicit open action", () => {
@@ -138,25 +151,37 @@ describe("PDF material library UI", () => {
     assert.match(mobileBlock, /\.pdf-material-card__actions \.action-button\s*\{\s*width:\s*100%;/m);
   });
 
-  it("adds a subject-level depth navigation for summary, lecture materials, and current recap", () => {
+  it("adds the subject learning flow: class, summary note, then MCP call", () => {
     const subjectBlock = getFunctionBlock("renderSubjectPage");
-    const depthNavBlock = getFunctionBlock("renderSubjectDepthNav");
+    const flowBlock = getFunctionBlock("renderSubjectLearningFlow");
+    const flowUploadBlock = getFunctionBlock("renderSubjectFlowUploadControl");
+    const mcpPanelBlock = getFunctionBlock("renderSubjectMcpPanel");
     const clickBlock = mainTs.slice(
       mainTs.indexOf('quickNoteButton?.dataset.action === "scroll-subject-section"'),
       mainTs.indexOf('quickNoteButton?.dataset.action === "open-pdf-material"')
     );
 
-    assert.match(subjectBlock, /renderSubjectDepthNav\(subject, subjectMaterials\)/);
-    assert.match(subjectBlock, /전체 요약/);
-    assert.match(subjectBlock, /강의별 PDF와 수업 노트/);
-    assert.match(subjectBlock, /PDF 한 개를 한 강의 자료로 보고/);
-    assert.match(subjectBlock, /현재 요약/);
-    assert.match(depthNavBlock, /과목 안에서 보기/);
-    assert.match(depthNavBlock, /data-target-id="summary-title"/);
-    assert.match(depthNavBlock, /data-target-id="weekly-title"/);
-    assert.match(depthNavBlock, /data-target-id="keywords-title"/);
+    assert.match(subjectBlock, /renderSubjectLearningFlow\(subject, subjectMaterials\)/);
+    assert.match(subjectBlock, /§1 — 수업/);
+    assert.match(subjectBlock, /수업 듣기/);
+    assert.match(subjectBlock, /§2 — 요약본/);
+    assert.match(subjectBlock, /요약본 정리/);
+    assert.match(subjectBlock, /renderSubjectMcpPanel\(subject\)/);
+    assert.match(flowBlock, /수업 → 요약본 → MCP 호출/);
+    assert.match(flowBlock, /<h3>수업<\/h3>/);
+    assert.match(flowBlock, /수업 PDF 열기/);
+    assert.match(flowBlock, /renderSubjectFlowUploadControl\(subject\)/);
+    assert.match(flowUploadBlock, /새 PDF 업로드/);
+    assert.match(flowUploadBlock, /data-action="import-pdf-material"/);
+    assert.match(flowBlock, /<h3>요약본<\/h3>/);
+    assert.match(flowBlock, /요약본 만들기/);
+    assert.match(flowBlock, /<h3>MCP 호출<\/h3>/);
+    assert.match(flowBlock, /renderSubjectPersonaFlowAction\(subject\)/);
+    assert.match(mcpPanelBlock, /교수님 페르소나에게 질문하기/);
+    assert.match(mcpPanelBlock, /persona-turn\.html\?subject=/);
     assert.match(clickBlock, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-    assert.match(css, /\.subject-depth-nav/);
-    assert.match(css, /\.subject-depth-card/);
+    assert.match(css, /\.subject-learning-flow/);
+    assert.match(css, /\.subject-flow-card/);
+    assert.match(css, /\.subject-mcp-callout/);
   });
 });
