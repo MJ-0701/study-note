@@ -527,7 +527,13 @@ if (isBrowserRuntime) {
   document.addEventListener("pointerup", handleDocumentPointerUp);
   document.addEventListener("pointercancel", handleDocumentPointerUp);
   document.addEventListener("keydown", handleDocumentKeyDown);
-  window.addEventListener("hashchange", renderApp);
+  window.addEventListener("hashchange", () => {
+    // sprint-1/S2: close transient overlays on route change so they do not
+    // bleed across pages (the hotkey help modal is only meaningful on the PDF
+    // workspace).
+    hotkeyHelpModalOpen = false;
+    renderApp();
+  });
   renderApp();
 
   // slice-2: always rehydrate from server — cookie carries the session token.
@@ -683,6 +689,10 @@ function clearAuthSession(): void {
   authSession = undefined;
   clearAuthBootTimers();
   revokeAllPdfObjectUrls();
+  // sprint-1/S2 fix (codex P2): drop transient overlays that should not survive
+  // a session reset. Without this the hotkey help modal could persist into the
+  // post-login render and lock the shell in `inert`.
+  hotkeyHelpModalOpen = false;
 }
 
 function clearAuthBootTimers(): void {
@@ -1500,6 +1510,19 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  if (quickNoteButton?.dataset.action === "close-hotkey-help") {
+    hotkeyHelpModalOpen = false;
+    renderApp();
+    return;
+  }
+
+  if (target instanceof HTMLElement && target.dataset.action === "close-hotkey-help-backdrop") {
+    // Click on the backdrop element itself (not bubbled from the inner panel).
+    hotkeyHelpModalOpen = false;
+    renderApp();
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "dismiss-notebook-storage-error") {
     notebookStorageError = undefined;
     notebookStorageErrorReported = false;
@@ -2299,6 +2322,34 @@ const PDF_TOOL_HOTKEYS: Record<string, LocalPdfTool> = {
   KeyG: "chart"
 };
 
+// sprint-1/S2: visible badge labels for each tool. Lookup by tool id.
+const PDF_TOOL_HOTKEY_LABELS: Partial<Record<LocalPdfTool, string>> = {
+  read: "R",
+  sticky: "S",
+  pen: "P",
+  eraser: "E",
+  text: "T",
+  checklist: "C",
+  table: "B",
+  chart: "G"
+};
+
+// sprint-1/S2 fix (codex P2): map by the produced character so layouts where
+// the physical "KeyR" code does not produce "R" (Dvorak / AZERTY) still match
+// what the badge advertises. Lookup uses lowercased event.key.
+const PDF_TOOL_KEY_LABEL_LOOKUP: Record<string, LocalPdfTool> = {
+  r: "read",
+  s: "sticky",
+  p: "pen",
+  e: "eraser",
+  t: "text",
+  c: "checklist",
+  b: "table",
+  g: "chart"
+};
+
+let hotkeyHelpModalOpen = false;
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -2328,6 +2379,41 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   }
 
   const hasMetaOrCtrl = event.metaKey || event.ctrlKey;
+
+  // === sprint-1/S2 modal close keys — always processed regardless of state ===
+
+  // Esc closes the hotkey help modal first, regardless of focus.
+  if (event.code === "Escape" && hotkeyHelpModalOpen) {
+    event.preventDefault();
+    hotkeyHelpModalOpen = false;
+    renderApp();
+    return;
+  }
+
+  // "?" toggles the help modal. Match by event.key === "?" first so any layout
+  // that actually produced the "?" character — including ones where AltGr is
+  // required (Windows/Linux reports AltGr as Ctrl+Alt) — opens the modal as
+  // advertised. Fall back to the US-layout Shift+Slash code combo when the
+  // produced key is not "?" (codex P2 fix-2).
+  if (
+    !isEditableTarget(event.target) &&
+    (
+      event.key === "?" ||
+      (!hasMetaOrCtrl && !event.altKey && event.shiftKey && event.code === "Slash")
+    )
+  ) {
+    event.preventDefault();
+    hotkeyHelpModalOpen = !hotkeyHelpModalOpen;
+    renderApp();
+    return;
+  }
+
+  // sprint-1/S2 fix (codex P2): when the help modal is open, all other hotkeys
+  // are suppressed. Otherwise workspace state could change behind the dialog
+  // (page flip, tool switch) while the user is reading shortcut help.
+  if (hotkeyHelpModalOpen) {
+    return;
+  }
 
   // sprint-1/S1 fix (codex P2): match by event.key as well as event.code so the
   // shortcut works on non-US layouts where "[" / "]" are produced via AltGr or
@@ -2365,7 +2451,15 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  const tool = PDF_TOOL_HOTKEYS[event.code];
+  // sprint-1/S2 fix-2 (codex P1): try event.key (the produced character) FIRST
+  // so the visible R/S/P... badge matches actual behavior on non-QWERTY layouts
+  // (e.g., Dvorak: physical "KeyR" position produces another letter — code
+  // lookup would pick the wrong tool first). event.code is the fallback for
+  // Korean IME on QWERTY where event.key may carry the composed value.
+  // event.key is lowercased so CapsLock/Shift do not break the lookup.
+  const tool =
+    PDF_TOOL_KEY_LABEL_LOOKUP[event.key.toLowerCase()] ??
+    PDF_TOOL_HOTKEYS[event.code];
   if (!tool) {
     return;
   }
@@ -5561,8 +5655,14 @@ function weekPath(subject: SubjectNote, week: WeekNote): string {
 }
 
 function renderShell(sidebar: string, mainContent: string, crumb: string): string {
+  // sprint-1/S2 fix (codex P2): only apply `inert` when the help modal will
+  // actually render. The modal is gated by both `hotkeyHelpModalOpen` and the
+  // current route being the PDF workspace; if either is false the inert flag
+  // would lock the shell without a visible dialog to close it.
+  const modalWillRender = hotkeyHelpModalOpen && !!getActivePdfWorkspaceSubjectId();
+  const shellInertAttr = modalWillRender ? " inert" : "";
   return `
-    <div class="app-shell">
+    <div class="app-shell"${shellInertAttr}>
       ${sidebar}
       <div class="main-area">
         <header class="topbar">
@@ -5579,6 +5679,7 @@ function renderShell(sidebar: string, mainContent: string, crumb: string): strin
         </footer>
       </div>
     </div>
+    ${renderHotkeyHelpModal()}
   `;
 }
 
@@ -5591,6 +5692,61 @@ function renderNotebookStorageBanner(): string {
     <div class="storage-error-banner" role="alert">
       <p>${escapeHtml(notebookStorageError)}</p>
       <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
+    </div>
+  `;
+}
+
+// sprint-1/S2: hotkey help modal — listed shortcuts so users do not have to memorise.
+function renderHotkeyHelpModal(): string {
+  if (!hotkeyHelpModalOpen) {
+    return "";
+  }
+
+  // sprint-1/S2 fix (codex P2): only render the modal on the PDF workspace
+  // route. Outside it the keyboard handler returns early and the user would be
+  // unable to close the modal, while the shell `inert` attribute would lock
+  // navigation. Defensive — hashchange already clears the flag, but a stale
+  // flag from a non-shell path (auth reset, direct deep-link) is possible.
+  if (!getActivePdfWorkspaceSubjectId()) {
+    return "";
+  }
+
+  const rows: Array<[string, string]> = [
+    ["R", "읽기"],
+    ["S", "포스트잇"],
+    ["P", "펜"],
+    ["E", "지우개"],
+    ["T", "텍스트 박스"],
+    ["C", "체크리스트"],
+    ["B", "표"],
+    ["G", "그래프"],
+    ["Cmd/Ctrl + [", "이전 페이지"],
+    ["Cmd/Ctrl + ]", "다음 페이지"],
+    ["?", "이 도움말 열기 / 닫기"],
+    ["Esc", "도움말 닫기"]
+  ];
+
+  const body = rows
+    .map(
+      ([key, action]) => `
+        <li>
+          <kbd class="tool-button__key">${escapeHtml(key)}</kbd>
+          <span>${escapeHtml(action)}</span>
+        </li>
+      `
+    )
+    .join("");
+
+  return `
+    <div class="hotkey-help-modal" role="dialog" aria-modal="true" aria-labelledby="hotkey-help-title" data-action="close-hotkey-help-backdrop">
+      <div class="hotkey-help-modal__panel" role="document">
+        <header class="hotkey-help-modal__header">
+          <h2 id="hotkey-help-title">단축키 도움말</h2>
+          <button class="text-button" type="button" data-action="close-hotkey-help" autofocus>닫기</button>
+        </header>
+        <ul class="hotkey-help-modal__list">${body}</ul>
+        <p class="hotkey-help-modal__hint">PDF 작업공간에서 동작합니다. 입력 중에는 단일 키 단축키가 일시 비활성화됩니다.</p>
+      </div>
     </div>
   `;
 }
@@ -6809,6 +6965,14 @@ function renderToolButton(
   selectedTool: LocalPdfTool,
   label: string
 ): string {
+  // sprint-1/S2: append <kbd> badge if the tool has a single-key hotkey.
+  // Visible label and aria-keyshortcuts both expose the hotkey to users and AT.
+  const hotkey = PDF_TOOL_HOTKEY_LABELS[tool];
+  const badgeHtml = hotkey
+    ? ` <kbd class="tool-button__key" aria-hidden="true">${hotkey}</kbd>`
+    : "";
+  const ariaShortcut = hotkey ? ` aria-keyshortcuts="${hotkey}"` : "";
+
   return `
     <button
       class="tool-button ${selectedTool === tool ? "active" : ""}"
@@ -6816,9 +6980,9 @@ function renderToolButton(
       data-action="set-pdf-tool"
       data-subject-id="${subjectId}"
       data-tool="${tool}"
-      aria-pressed="${selectedTool === tool ? "true" : "false"}"
+      aria-pressed="${selectedTool === tool ? "true" : "false"}"${ariaShortcut}
     >
-      ${label}
+      <span class="tool-button__label">${label}</span>${badgeHtml}
     </button>
   `;
 }
