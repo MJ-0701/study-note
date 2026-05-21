@@ -90,6 +90,9 @@ type Route =
   | { name: "intake" }
   | { name: "pdf-workspaces" }
   | { name: "subject"; subjectId: string }
+  | { name: "subject-class"; subjectId: string }
+  | { name: "subject-summary"; subjectId: string }
+  | { name: "subject-mcp"; subjectId: string }
   | { name: "subject-intake"; subjectId: string }
   | { name: "pdf-workspace"; subjectId: string }
   | { name: "week"; subjectId: string; weekId: string };
@@ -1269,18 +1272,6 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "retry-session-check") {
     void revalidateStoredSession();
-    return;
-  }
-
-  if (quickNoteButton?.dataset.action === "scroll-subject-section") {
-    const targetId = quickNoteButton.dataset.targetId;
-    const targetSection = targetId ? document.getElementById(targetId) : undefined;
-
-    if (targetSection) {
-      event.preventDefault();
-      targetSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-
     return;
   }
 
@@ -4179,6 +4170,9 @@ function renderApp(): void {
   document.body.dataset.route = route.name;
   const subject =
     route.name === "subject" ||
+    route.name === "subject-class" ||
+    route.name === "subject-summary" ||
+    route.name === "subject-mcp" ||
     route.name === "subject-intake" ||
     route.name === "pdf-workspace" ||
     route.name === "week"
@@ -4258,11 +4252,29 @@ function renderApp(): void {
     return;
   }
 
-  if (route.name === "subject" && subject) {
+  if ((route.name === "subject" || route.name === "subject-class") && subject) {
     renderInto(renderShell(
       renderSubjectSidebar(subject, route),
-      renderSubjectPage(subject),
-      `${subject.title} / 총정리`
+      renderSubjectClassPage(subject),
+      `${subject.title} / 수업`
+    ));
+    return;
+  }
+
+  if (route.name === "subject-summary" && subject) {
+    renderInto(renderShell(
+      renderSubjectSidebar(subject, route),
+      renderSubjectSummaryPage(subject),
+      `${subject.title} / 요약본`
+    ));
+    return;
+  }
+
+  if (route.name === "subject-mcp" && subject) {
+    renderInto(renderShell(
+      renderSubjectSidebar(subject, route),
+      renderSubjectMcpPage(subject),
+      `${subject.title} / MCP 호출`
     ));
     return;
   }
@@ -4296,6 +4308,18 @@ function parseRoute(hash: string): Route {
     return { name: "pdf-workspace", subjectId: parts[1] };
   }
 
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "class") {
+    return { name: "subject-class", subjectId: parts[1] };
+  }
+
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "summary") {
+    return { name: "subject-summary", subjectId: parts[1] };
+  }
+
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "mcp") {
+    return { name: "subject-mcp", subjectId: parts[1] };
+  }
+
   if (parts[0] === "subjects" && parts[1]) {
     return { name: "subject", subjectId: parts[1] };
   }
@@ -4315,8 +4339,16 @@ function intakePath(): string {
   return "#/intake";
 }
 
-function subjectPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}`;
+function subjectClassPath(subject: SubjectNote): string {
+  return `#/subjects/${subject.id}/class`;
+}
+
+function subjectSummaryPath(subject: SubjectNote): string {
+  return `#/subjects/${subject.id}/summary`;
+}
+
+function subjectMcpPath(subject: SubjectNote): string {
+  return `#/subjects/${subject.id}/mcp`;
 }
 
 function subjectIntakePath(subject: SubjectNote): string {
@@ -5207,8 +5239,7 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
         <p class="group-label">과목 공부</p>
         <nav>
           ${studyNotebook.subjects.map((subject) => `
-            <a href="${subjectPath(subject)}">${subject.title}</a>
-            ${renderPersonaSubLink(subject.id)}
+            <a href="${subjectClassPath(subject)}">${subject.title}</a>
           `).join("")}
         </nav>
       </div>
@@ -5251,43 +5282,46 @@ const PERSONA_BY_SUBJECT: Record<string, { nick: string; active: boolean }> = {
   "computer-introduction": { nick: "컴론이", active: false }
 };
 
-const PERSONA_SUB_BASE = "padding-left:24px;font-size:13px";
-const PERSONA_SUB_DISABLED = `${PERSONA_SUB_BASE};opacity:0.45;cursor:not-allowed;pointer-events:none`;
-const PERSONA_SUB_ACTIVE = `${PERSONA_SUB_BASE};color:#3b6ef5`;
-
-function renderPersonaSubLink(subjectId: string): string {
-  const p = PERSONA_BY_SUBJECT[subjectId];
-  if (!p) return "";
-  if (p.active) {
-    return `<a class="persona-sub-link" style="${PERSONA_SUB_ACTIVE}" href="/persona-turn.html?subject=${subjectId}">↳ ${p.nick} 호출</a>`;
-  }
-  return `<a class="persona-sub-link" style="${PERSONA_SUB_DISABLED}" aria-disabled="true" tabindex="-1">↳ ${p.nick} 호출 (준비 중)</a>`;
-}
-
 function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
   const currentSession =
     route.name === "week"
       ? subject.weekNotes.find((week) => week.id === route.weekId)
       : undefined;
+  const isClassRoute = route.name === "subject" || route.name === "subject-class" || route.name === "week";
 
   return `
     <aside class="sidebar" aria-label="${subject.title} 학습 내비게이션">
       <a class="wordmark" href="#/">study-note</a>
       <div class="sidebar-group sidebar-group--subjects">
         <p class="group-label">${subject.title}</p>
+        <nav class="subject-sidebar-depth" aria-label="${subject.title} 하위 화면">
+          <a class="subject-sidebar-depth__link ${isClassRoute ? "active" : ""}" href="${subjectClassPath(subject)}">
+            <span>1</span>
+            <strong>수업</strong>
+          </a>
+          <a class="subject-sidebar-depth__link ${route.name === "subject-summary" ? "active" : ""}" href="${subjectSummaryPath(subject)}">
+            <span>2</span>
+            <strong>요약본</strong>
+          </a>
+          <a class="subject-sidebar-depth__link ${route.name === "subject-mcp" ? "active" : ""}" href="${subjectMcpPath(subject)}">
+            <span>3</span>
+            <strong>MCP 호출</strong>
+          </a>
+        </nav>
+      </div>
+      <details class="sidebar-details subject-week-details" ${isClassRoute ? "open" : ""}>
+        <summary>수업일별 노트</summary>
         <nav>
-          <a class="${route.name === "subject" ? "active" : ""}" href="${subjectPath(subject)}">과목 총정리</a>
-          <a class="${route.name === "pdf-workspace" ? "active" : ""}" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간</a>
-          ${renderPersonaSubLink(subject.id)}
           ${subject.weekNotes.map((week) => `
             <a class="${route.name === "week" && route.weekId === week.id ? "active" : ""}" href="${weekPath(subject, week)}">${week.label}</a>
           `).join("")}
         </nav>
-      </div>
+      </details>
       <div class="sidebar-group sidebar-group--workspaces">
         <p class="group-label">PDF 작업공간</p>
         <nav>
-          <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
+          <a class="${route.name === "pdf-workspace" ? "active" : ""}" href="${subjectPdfWorkspacePath(subject)}">${subject.title} 작업공간</a>
+          <a class="${route.name === "pdf-workspaces" ? "active" : ""}" href="#/pdf-workspaces">전체 작업공간</a>
         </nav>
       </div>
       ${renderClassSchedule(currentSession?.label)}
@@ -5296,8 +5330,7 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
         <nav>
           <a href="#/">전체 현황</a>
           ${notebook.subjects.map((item) => `
-            <a class="${item.id === subject.id && route.name === "subject" ? "active" : ""}" href="${subjectPath(item)}">${item.title}</a>
-            ${renderPersonaSubLink(item.id)}
+            <a class="${item.id === subject.id ? "active" : ""}" href="${subjectClassPath(item)}">${item.title}</a>
           `).join("")}
         </nav>
       </div>
@@ -5360,7 +5393,7 @@ function renderHome(studyNotebook: StudyNotebook): string {
         <div class="hero-actions">
           ${
             firstSubject
-              ? `<a class="action-link" href="${subjectPath(firstSubject)}">첫 과목 공부하기</a>`
+              ? `<a class="action-link" href="${subjectClassPath(firstSubject)}">첫 과목 공부하기</a>`
               : ""
           }
           <a class="secondary-link" href="${intakePath()}">자료 투입 가이드</a>
@@ -5524,7 +5557,7 @@ function renderSubjectIntakeGuide(subject: SubjectNote): string {
         이 화면은 ${subject.title} 전용입니다.
         JSON의 <code>subjectId</code>가 <code>${subject.id}</code>일 때만 반영합니다.
       </p>
-      <p><a href="${subjectPath(subject)}">← ${subject.title} 총정리로 돌아가기</a></p>
+      <p><a href="${subjectClassPath(subject)}">← ${subject.title} 수업으로 돌아가기</a></p>
     </section>
 
     <section class="upload-section" aria-labelledby="json-upload-title">
@@ -5963,7 +5996,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
       <p class="lede">
         관리자가 올린 공유 PDF를 열고, 내 필기와 메모는 사용자별 작업공간에 따로 저장합니다.
       </p>
-      <p><a href="${subjectPath(subject)}">← ${subject.title} 총정리로 돌아가기</a></p>
+      <p><a href="${subjectClassPath(subject)}">← ${subject.title} 수업으로 돌아가기</a></p>
     </section>
 
     <section class="upload-section pdf-upload-section" aria-labelledby="pdf-upload-title">
@@ -6974,9 +7007,37 @@ function renderInkStroke(stroke: PdfInkStroke): string {
   `;
 }
 
-function renderSubjectPage(subject: SubjectNote): string {
-  const coverage = getSubjectCoverage(subject);
+function renderSubjectClassPage(subject: SubjectNote): string {
   const subjectMaterials = getSubjectPdfMaterials(subject.id);
+
+  return `
+    <section class="subject-page-hero">
+      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
+      <h1>${subject.title} 수업</h1>
+      <p class="lede">관리자가 올린 강의 PDF를 열고, 수업일별 노트로 이어갑니다. PDF가 이미 있어도 새 자료를 계속 추가할 수 있습니다.</p>
+      <div class="hero-actions">
+        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
+        <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약본으로 이동</a>
+      </div>
+    </section>
+
+    ${renderPdfSubjectLibrarySection(subject, subjectMaterials)}
+
+    <section aria-labelledby="weekly-title">
+      <p class="meta">수업일별 노트</p>
+      <h2 id="weekly-title">강의별 PDF와 수업 노트</h2>
+      <p class="lede">PDF 자료를 본 뒤 필요한 날짜의 수업 노트로 들어가 정리합니다.</p>
+      <div class="week-card-grid">
+        ${subject.weekNotes.map((week) => renderWeekCard(subject, week)).join("")}
+      </div>
+    </section>
+
+    ${renderQuickNotePanel(subject, ["week"])}
+  `;
+}
+
+function renderSubjectSummaryPage(subject: SubjectNote): string {
+  const coverage = getSubjectCoverage(subject);
   const mustKnowConcepts = subject.summary.mustKnowConceptIds
     .map((conceptId) => getConceptById(subject, conceptId))
     .filter((concept): concept is Concept => Boolean(concept));
@@ -6984,14 +7045,14 @@ function renderSubjectPage(subject: SubjectNote): string {
   return `
     <section class="subject-page-hero">
       <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h1>${subject.title} 총정리</h1>
+      <h1>${subject.title} 요약본</h1>
       <p class="lede">${subject.summary.goal}</p>
       <div class="hero-actions">
         <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${subject.id}">
           10분 정리노트 만들기
         </button>
-        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
-        <a class="action-link" href="${subjectIntakePath(subject)}">${subject.title} 자료 넣기</a>
+        <a class="secondary-link" href="${subjectClassPath(subject)}">수업 자료 보기</a>
+        <a class="secondary-link" href="${subjectMcpPath(subject)}">MCP 호출로 이동</a>
       </div>
     </section>
 
@@ -7001,21 +7062,8 @@ function renderSubjectPage(subject: SubjectNote): string {
       ${renderMetric("시험 범위", subject.summary.weekRange, subject.examLabel)}
     </section>
 
-    ${renderSubjectLearningFlow(subject, subjectMaterials)}
-
-    <section aria-labelledby="weekly-title">
-      <p class="meta">§1 — 수업</p>
-      <h2 id="weekly-title">수업 듣기</h2>
-      <p class="lede">강의 PDF를 열어 수업을 듣고, 수업일별 노트로 바로 이어갑니다.</p>
-      <div class="week-card-grid">
-        ${subject.weekNotes.map((week) => renderWeekCard(subject, week)).join("")}
-      </div>
-    </section>
-
-    ${renderQuickNotePanel(subject, ["week"])}
-
     <section aria-labelledby="summary-title">
-      <p class="meta">§2 — 요약본</p>
+      <p class="meta">과목 요약</p>
       <h2 id="summary-title">요약본 정리</h2>
       <p class="lede">수업을 듣고 난 뒤 시험 범위, 복습 전략, 취약 포인트를 한 장 요약으로 정리합니다.</p>
       <div class="summary-grid">
@@ -7028,7 +7076,7 @@ function renderSubjectPage(subject: SubjectNote): string {
     ${renderQuickNotePanel(subject, ["subject"])}
 
     <section aria-labelledby="keywords-title">
-      <p class="meta">§2-1 — 요약본 점검</p>
+      <p class="meta">요약본 점검</p>
       <h2 id="keywords-title">교수님 키워드 반영 상태</h2>
       <div class="keyword-grid">
         ${subject.requiredKeywords.map((keyword) => renderKeyword(keyword, subject)).join("")}
@@ -7038,17 +7086,15 @@ function renderSubjectPage(subject: SubjectNote): string {
     ${renderQuickNotePanel(subject, ["keyword"])}
 
     <section aria-labelledby="concepts-title">
-      <p class="meta">§4 — 핵심 개념</p>
+      <p class="meta">필수 개념</p>
       <h2 id="concepts-title">과목 핵심 개념</h2>
       <div class="concept-list">
         ${mustKnowConcepts.map((concept) => renderConcept(concept, subject)).join("")}
       </div>
     </section>
 
-    ${renderSubjectMcpPanel(subject)}
-
     <section aria-labelledby="sources-title">
-      <p class="meta">§5 — 자료 범위</p>
+      <p class="meta">자료 범위</p>
       <h2 id="sources-title">자료와 공개 범위</h2>
       <div class="source-grid">
         ${subject.sources.map((source) => `
@@ -7064,81 +7110,46 @@ function renderSubjectPage(subject: SubjectNote): string {
   `;
 }
 
-function renderSubjectLearningFlow(subject: SubjectNote, materials: PdfMaterialDraft[]): string {
+function renderSubjectMcpPage(subject: SubjectNote): string {
   const persona = PERSONA_BY_SUBJECT[subject.id];
-  const personaLabel = persona?.nick ? `${persona.nick} 호출` : "교수님 페르소나 호출";
+  const questions = subject.weekNotes
+    .flatMap((week) => week.exampleQuestionIds)
+    .map((questionId) => getQuestionById(subject, questionId))
+    .filter((question): question is ExampleQuestion => Boolean(question));
 
   return `
-    <section class="subject-learning-flow" aria-labelledby="subject-learning-flow-title">
-      <div>
-        <p class="meta">과목 학습 플로우</p>
-        <h2 id="subject-learning-flow-title">수업 → 요약본 → MCP 호출</h2>
-        <p class="lede">강의 PDF로 수업을 듣고, 요약본을 만든 뒤, 막히는 부분은 교수님 페르소나에게 바로 물어봅니다.</p>
+    <section class="subject-page-hero">
+      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
+      <h1>${subject.title} MCP 호출</h1>
+      <p class="lede">요약본을 만들다가 막히는 개념을 과목 교수님 페르소나에게 물어보기 전, 질문할 키워드와 예제 문제를 정리합니다.</p>
+      <div class="hero-actions">
+        ${persona?.active
+          ? `<a class="action-button" href="/persona-turn.html?subject=${encodeURIComponent(subject.id)}">${persona.nick} 호출</a>`
+          : `<button class="action-button is-disabled" type="button" aria-disabled="true">${persona?.nick ?? "교수님"} 준비 중</button>`}
+        <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약본으로 돌아가기</a>
       </div>
-      <div class="subject-learning-flow__grid">
-        <article class="subject-flow-card">
-          <p class="meta">1단계</p>
-          <h3>수업</h3>
-          <p>강의 PDF를 열고 수업을 들으면서 필요한 페이지에 바로 필기합니다.</p>
-          <div class="subject-flow-card__meta">${materials.length}개 PDF · ${subject.weekNotes.length}개 수업 노트</div>
-          <div class="subject-flow-card__actions">
-            <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">수업 PDF 열기</a>
-            ${renderSubjectFlowUploadControl(subject)}
-          </div>
-        </article>
-        <article class="subject-flow-card">
-          <p class="meta">2단계</p>
-          <h3>요약본</h3>
-          <p>수업을 듣고 난 뒤 시험 범위와 교수님 키워드를 내 언어로 다시 정리합니다.</p>
-          <div class="subject-flow-card__meta">${subject.requiredKeywords.length}개 키워드 · ${subject.summary.mustKnowConceptIds.length}개 핵심 개념</div>
-          <div class="subject-flow-card__actions">
-            <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${escapeHtml(subject.id)}">요약본 만들기</button>
-            <button class="secondary-action" type="button" data-action="scroll-subject-section" data-target-id="summary-title">요약본 보기</button>
-          </div>
-        </article>
-        <article class="subject-flow-card">
-          <p class="meta">3단계</p>
-          <h3>MCP 호출</h3>
-          <p>정리하다가 막히는 개념은 과목 교수님 페르소나에게 이어서 질문합니다.</p>
-          <div class="subject-flow-card__meta">${persona?.active ? "호출 가능" : "준비 중"} · ${personaLabel}</div>
-          <div class="subject-flow-card__actions">
-            ${renderSubjectPersonaFlowAction(subject)}
-            <button class="secondary-action" type="button" data-action="scroll-subject-section" data-target-id="keywords-title">질문거리 점검</button>
-          </div>
-        </article>
+    </section>
+
+    ${renderSubjectMcpPanel(subject)}
+
+    <section aria-labelledby="mcp-question-title">
+      <p class="meta">질문거리 점검</p>
+      <h2 id="mcp-question-title">막히기 쉬운 포인트</h2>
+      <div class="summary-grid">
+        ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
+        ${renderSummaryBlock("교수님 키워드", subject.requiredKeywords.map((keyword) => keyword.label).join(", "))}
+        ${renderSummaryBlock("질문 전 확인", "PDF 원문과 내 요약본을 먼저 열어 근거 페이지를 확인합니다.")}
+      </div>
+    </section>
+
+    <section aria-labelledby="mcp-examples-title">
+      <p class="meta">예제 문제</p>
+      <h2 id="mcp-examples-title">질문으로 바꿔볼 문제</h2>
+      <div class="question-list">
+        ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
       </div>
     </section>
   `;
-}
-
-function renderSubjectFlowUploadControl(subject: SubjectNote): string {
-  if (!canManagePdfMaterials()) {
-    return `<span class="secondary-action is-disabled">관리자 업로드</span>`;
-  }
-
-  const inputId = `subject-flow-upload-${subject.id}`;
-
-  return `
-    <input
-      id="${inputId}"
-      class="file-input"
-      type="file"
-      accept="application/pdf,.pdf"
-      data-action="import-pdf-material"
-      data-subject-id="${escapeHtml(subject.id)}"
-    />
-    <label class="secondary-action" for="${inputId}">새 PDF 업로드</label>
-  `;
-}
-
-function renderSubjectPersonaFlowAction(subject: SubjectNote): string {
-  const persona = PERSONA_BY_SUBJECT[subject.id];
-
-  if (persona?.active) {
-    return `<a class="action-button" href="/persona-turn.html?subject=${encodeURIComponent(subject.id)}">${persona.nick} 호출</a>`;
-  }
-
-  return `<span class="action-button is-disabled" aria-disabled="true">${persona?.nick ?? "교수님"} 준비 중</span>`;
 }
 
 function renderSubjectMcpPanel(subject: SubjectNote): string {
@@ -7146,7 +7157,7 @@ function renderSubjectMcpPanel(subject: SubjectNote): string {
 
   return `
     <section aria-labelledby="mcp-title" class="subject-mcp-panel">
-      <p class="meta">§3 — MCP 호출</p>
+      <p class="meta">교수님 페르소나</p>
       <h2 id="mcp-title">교수님 페르소나에게 질문하기</h2>
       <p class="lede">요약본을 만들다가 설명이 막히는 개념은 과목별 교수님 페르소나에게 이어서 질문합니다.</p>
       <div class="subject-mcp-callout">
@@ -7187,7 +7198,7 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
         <button class="action-button" type="button" data-action="generate-week-note" data-subject-id="${subject.id}" data-week-id="${week.id}">
           이 수업일 정리노트 만들기
         </button>
-        <a class="action-link" href="${subjectPath(subject)}">과목 총정리로 돌아가기</a>
+        <a class="action-link" href="${subjectClassPath(subject)}">수업으로 돌아가기</a>
       </div>
     </section>
 
@@ -7452,7 +7463,7 @@ function renderSubjectCard(subject: SubjectNote): string {
       <p>${subject.summary.goal}</p>
       <div class="subject-card-footer">
         <span>${coverage.coverageRate}% 키워드 반영</span>
-        <a href="${subjectPath(subject)}">과목 들어가기</a>
+        <a href="${subjectClassPath(subject)}">과목 들어가기</a>
       </div>
     </article>
   `;

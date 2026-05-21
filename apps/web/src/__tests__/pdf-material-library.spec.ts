@@ -145,43 +145,55 @@ describe("PDF material library UI", () => {
     assert.match(sliderBlock, /scroll-snap-type:\s*x\s+mandatory;/);
     assert.match(cardBlock, /flex:\s*0\s+0\s+min\(82vw,\s*360px\);/);
     assert.match(cardBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/);
-    assert.match(mobileBlock, /\.subject-depth-nav__grid,\s*\n\s*\.subject-heading,/);
+    assert.match(css, /\.subject-sidebar-depth__link/);
+    assert.match(mobileBlock, /\.subject-heading,\s*\n\s*\.week-note-grid,/);
     assert.match(mobileBlock, /\.pdf-library-summary,\s*\n\s*\.pdf-material-card,/);
     assert.match(mobileBlock, /grid-template-columns:\s*1fr;/);
     assert.match(mobileBlock, /\.pdf-material-card__actions \.action-button\s*\{\s*width:\s*100%;/m);
   });
 
-  it("adds the subject learning flow: class, summary note, then MCP call", () => {
-    const subjectBlock = getFunctionBlock("renderSubjectPage");
-    const flowBlock = getFunctionBlock("renderSubjectLearningFlow");
-    const flowUploadBlock = getFunctionBlock("renderSubjectFlowUploadControl");
+  it("routes each subject through sidebar-owned class, summary, and MCP screens", () => {
+    const routeBlock = getFunctionBlock("parseRoute");
+    const renderAppBlock = getFunctionBlock("renderApp");
+    const sidebarBlock = getFunctionBlock("renderSubjectSidebar");
+    const classBlock = getFunctionBlock("renderSubjectClassPage");
+    const summaryBlock = getFunctionBlock("renderSubjectSummaryPage");
+    const mcpPageBlock = getFunctionBlock("renderSubjectMcpPage");
     const mcpPanelBlock = getFunctionBlock("renderSubjectMcpPanel");
-    const clickBlock = mainTs.slice(
-      mainTs.indexOf('quickNoteButton?.dataset.action === "scroll-subject-section"'),
-      mainTs.indexOf('quickNoteButton?.dataset.action === "open-pdf-material"')
-    );
 
-    assert.match(subjectBlock, /renderSubjectLearningFlow\(subject, subjectMaterials\)/);
-    assert.match(subjectBlock, /§1 — 수업/);
-    assert.match(subjectBlock, /수업 듣기/);
-    assert.match(subjectBlock, /§2 — 요약본/);
-    assert.match(subjectBlock, /요약본 정리/);
-    assert.match(subjectBlock, /renderSubjectMcpPanel\(subject\)/);
-    assert.match(flowBlock, /수업 → 요약본 → MCP 호출/);
-    assert.match(flowBlock, /<h3>수업<\/h3>/);
-    assert.match(flowBlock, /수업 PDF 열기/);
-    assert.match(flowBlock, /renderSubjectFlowUploadControl\(subject\)/);
-    assert.match(flowUploadBlock, /새 PDF 업로드/);
-    assert.match(flowUploadBlock, /data-action="import-pdf-material"/);
-    assert.match(flowBlock, /<h3>요약본<\/h3>/);
-    assert.match(flowBlock, /요약본 만들기/);
-    assert.match(flowBlock, /<h3>MCP 호출<\/h3>/);
-    assert.match(flowBlock, /renderSubjectPersonaFlowAction\(subject\)/);
+    assert.match(routeBlock, /parts\[2\] === "class"/);
+    assert.match(routeBlock, /name: "subject-class"/);
+    assert.match(routeBlock, /parts\[2\] === "summary"/);
+    assert.match(routeBlock, /name: "subject-summary"/);
+    assert.match(routeBlock, /parts\[2\] === "mcp"/);
+    assert.match(routeBlock, /name: "subject-mcp"/);
+    assert.match(renderAppBlock, /route\.name === "subject" \|\|\s*\n\s*route\.name === "subject-class"/);
+    assert.match(renderAppBlock, /renderSubjectClassPage\(subject\)/);
+    assert.match(renderAppBlock, /renderSubjectSummaryPage\(subject\)/);
+    assert.match(renderAppBlock, /renderSubjectMcpPage\(subject\)/);
+    assert.match(sidebarBlock, /subject-sidebar-depth/);
+    assert.match(sidebarBlock, /subjectClassPath\(subject\)/);
+    assert.match(sidebarBlock, /<strong>수업<\/strong>/);
+    assert.match(sidebarBlock, /subjectSummaryPath\(subject\)/);
+    assert.match(sidebarBlock, /<strong>요약본<\/strong>/);
+    assert.match(sidebarBlock, /subjectMcpPath\(subject\)/);
+    assert.match(sidebarBlock, /<strong>MCP 호출<\/strong>/);
+    assert.match(sidebarBlock, /route\.name === "subject-summary"/);
+    assert.match(sidebarBlock, /route\.name === "subject-mcp"/);
+    assert.match(classBlock, /renderPdfSubjectLibrarySection\(subject, subjectMaterials\)/);
+    assert.match(classBlock, /PDF가 이미 있어도 새 자료를 계속 추가/);
+    assert.match(classBlock, /수업일별 노트/);
+    assert.match(summaryBlock, /<h1>\$\{subject\.title\} 요약본<\/h1>/);
+    assert.match(summaryBlock, /generate-subject-note/);
+    assert.match(summaryBlock, /교수님 키워드 반영 상태/);
+    assert.match(mcpPageBlock, /<h1>\$\{subject\.title\} MCP 호출<\/h1>/);
+    assert.match(mcpPageBlock, /persona-turn\.html\?subject=/);
+    assert.match(mcpPageBlock, /질문거리 점검/);
     assert.match(mcpPanelBlock, /교수님 페르소나에게 질문하기/);
-    assert.match(mcpPanelBlock, /persona-turn\.html\?subject=/);
-    assert.match(clickBlock, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
-    assert.match(css, /\.subject-learning-flow/);
-    assert.match(css, /\.subject-flow-card/);
     assert.match(css, /\.subject-mcp-callout/);
+    assert.doesNotMatch(mainTs, /function renderSubjectLearningFlow/);
+    assert.doesNotMatch(mainTs, /subject-learning-flow/);
+    assert.doesNotMatch(css, /\.subject-learning-flow/);
+    assert.doesNotMatch(css, /\.subject-flow-card/);
   });
 });
