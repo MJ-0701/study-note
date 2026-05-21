@@ -180,9 +180,13 @@ const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
 const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
 const DRILL_HIGHLIGHT_EXPIRES_MS = 4000;
 const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
-const AUTH_SESSION_REQUEST_TIMEOUT_MS = 12000;
-const AUTH_SESSION_RETRY_DELAY_MS = 2500;
-const AUTH_SESSION_MAX_AUTO_RETRIES = 2;
+// ACA scale-to-zero cold start can take ~30s on first hit. Keep the per-request
+// timeout above that so /v1/auth/me does not abort prematurely; the "waking"
+// banner already shows after AUTH_SESSION_WAKE_NOTICE_DELAY_MS so the user sees
+// progress while we wait.
+const AUTH_SESSION_REQUEST_TIMEOUT_MS = 45000;
+const AUTH_SESSION_RETRY_DELAY_MS = 3000;
+const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
 let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
