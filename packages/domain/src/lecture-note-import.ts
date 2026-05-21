@@ -143,6 +143,14 @@ export function applyWeekNoteImport(
     throw new Error(`Unknown subjectId: ${payload.subjectId}`);
   }
 
+  const existingWeekNote = subject.weekNotes.find(
+    (item) => item.id === payload.weekNote.id
+  );
+  const mergedWeekNote: WeekNote = {
+    ...payload.weekNote,
+    userNotes: payload.weekNote.userNotes ?? existingWeekNote?.userNotes
+  };
+
   const updatedSubject: SubjectNote = {
     ...subject,
     sources: upsertById(subject.sources, payload.sourceMaterials),
@@ -155,7 +163,7 @@ export function applyWeekNoteImport(
       subject.exampleQuestions,
       payload.exampleQuestions
     ),
-    weekNotes: upsertById(subject.weekNotes, [payload.weekNote])
+    weekNotes: upsertById(subject.weekNotes, [mergedWeekNote])
   };
 
   const updatedNotebook: StudyNotebook = {
