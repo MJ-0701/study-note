@@ -2373,15 +2373,37 @@ function togglePdfFullscreen(): void {
   if (!target) {
     return;
   }
+
+  // sprint-1/S3 fix (codex P2): the unprefixed Fullscreen API is not universal
+  // (notably iOS Safari and older WebKit). Probe the methods before invoking
+  // them so a missing API does not throw synchronously from the click/keydown
+  // handler.
   if (isPdfWorkspaceFullscreen()) {
-    void document.exitFullscreen().catch((error) => {
-      console.warn("[study-note] exitFullscreen failed:", error);
-    });
+    if (typeof document.exitFullscreen !== "function") {
+      console.warn("[study-note] document.exitFullscreen unavailable");
+      return;
+    }
+    try {
+      void document.exitFullscreen().catch((error) => {
+        console.warn("[study-note] exitFullscreen failed:", error);
+      });
+    } catch (error) {
+      console.warn("[study-note] exitFullscreen threw:", error);
+    }
     return;
   }
-  void target.requestFullscreen().catch((error) => {
-    console.warn("[study-note] requestFullscreen failed:", error);
-  });
+
+  if (typeof target.requestFullscreen !== "function") {
+    console.warn("[study-note] Element.requestFullscreen unavailable");
+    return;
+  }
+  try {
+    void target.requestFullscreen().catch((error) => {
+      console.warn("[study-note] requestFullscreen failed:", error);
+    });
+  } catch (error) {
+    console.warn("[study-note] requestFullscreen threw:", error);
+  }
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
