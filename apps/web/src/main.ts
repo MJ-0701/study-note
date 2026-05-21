@@ -1963,6 +1963,18 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     return;
   }
 
+  if (action === "attach-pdf-to-week") {
+    event.preventDefault();
+    const formData = new FormData(target);
+    const subjectId = target.dataset.subjectId ?? "";
+    const weekLabel = target.dataset.weekLabel ?? "";
+    const materialId = String(formData.get("materialId") ?? "").trim();
+    if (subjectId && weekLabel && materialId) {
+      void assignPdfMaterialClassDate(subjectId, materialId, weekLabel);
+    }
+    return;
+  }
+
   if (action !== "login" && action !== "signup") {
     return;
   }
@@ -4537,7 +4549,14 @@ function renderApp(): void {
 
 function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
-  const parts = path.split("/").filter(Boolean);
+  const rawParts = path.split("/").filter(Boolean);
+  const parts = rawParts.map((part) => {
+    try {
+      return decodeURIComponent(part);
+    } catch {
+      return part;
+    }
+  });
 
   if (parts[0] === "subjects" && parts[1] && parts[2] === "weeks" && parts[3]) {
     return { name: "week", subjectId: parts[1], weekId: parts[3] };
@@ -7314,7 +7333,7 @@ function renderSubjectClassPage(subject: SubjectNote): string {
       <p class="lede">날짜별 카드에서 수업 상세, 요약 상세, 연결된 PDF 수를 확인합니다.</p>
       <div class="class-day-grid">
         ${subject.weekNotes.map((week) =>
-          renderClassDayCard(subject, week, getPdfMaterialsForWeek(subject, week, subjectMaterials))
+          renderClassDayCard(subject, week, subjectMaterials)
         ).join("")}
       </div>
     </section>
@@ -7353,6 +7372,8 @@ function renderClassDayCard(
   week: WeekNote,
   materials: PdfMaterialDraft[]
 ): string {
+  const linkedMaterials = getPdfMaterialsForWeek(subject, week, materials);
+
   return `
     <article class="class-day-card">
       <div>
@@ -7361,15 +7382,60 @@ function renderClassDayCard(
         <p>${week.focus}</p>
       </div>
       <div class="class-day-card__stats">
-        <span>${materials.length}개 PDF</span>
+        <span>${linkedMaterials.length}개 PDF</span>
         <span>${week.requiredKeywordIds.length}개 키워드</span>
       </div>
-      ${renderClassDayPdfLinks(subject, materials)}
+      ${renderClassDayPdfLinks(subject, linkedMaterials)}
+      ${renderClassDayPdfAttachControl(subject, materials, week.label)}
       <div class="week-card-actions">
         <a class="action-button" href="${weekPath(subject, week)}">수업 상세</a>
         <a class="secondary-link" href="${weekSummaryPath(subject, week)}">요약 상세</a>
       </div>
     </article>
+  `;
+}
+
+function renderClassDayPdfAttachControl(
+  subject: SubjectNote,
+  materials: PdfMaterialDraft[],
+  weekLabel: string
+): string {
+  const unassigned = materials.filter((material) =>
+    isUnconfirmedPdfClassDate(subject, material.classDate)
+  );
+  const options = unassigned.map((material) =>
+    `<option value="${escapeHtml(getPdfMaterialKey(material))}">${escapeHtml(material.fileName)}</option>`
+  ).join("");
+
+  if (!canManagePdfMaterials()) {
+    return `
+      <form class="class-day-card__attach" data-action="attach-pdf-to-week" data-subject-id="${escapeHtml(subject.id)}" data-week-label="${escapeHtml(weekLabel)}">
+        <label>
+          <span>${escapeHtml("PDF 연결")}</span>
+          <select name="materialId" disabled>
+            ${options || `<option value="">${escapeHtml("연결 가능한 PDF 없음")}</option>`}
+          </select>
+        </label>
+        <button class="secondary-action" type="submit" disabled>${escapeHtml("연결")}</button>
+        <p class="class-day-card__empty">${escapeHtml("PDF 연결은 운영자 권한이 필요합니다.")}</p>
+      </form>
+    `;
+  }
+
+  if (unassigned.length === 0) {
+    return `<p class="class-day-card__empty">${escapeHtml("연결 가능한 미지정 PDF가 없습니다. 먼저 PDF 작업공간에서 업로드하세요.")}</p>`;
+  }
+
+  return `
+    <form class="class-day-card__attach" data-action="attach-pdf-to-week" data-subject-id="${escapeHtml(subject.id)}" data-week-label="${escapeHtml(weekLabel)}">
+      <label>
+        <span>${escapeHtml("PDF 연결")}</span>
+        <select name="materialId">
+          ${options}
+        </select>
+      </label>
+      <button class="secondary-action" type="submit">${escapeHtml("연결")}</button>
+    </form>
   `;
 }
 
