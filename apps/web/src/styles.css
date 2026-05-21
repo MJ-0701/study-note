@@ -1109,6 +1109,23 @@ p {
   font-size: var(--ds-fs-meta);
 }
 
+.storage-error-banner {
+  align-items: start;
+  background: #fef2f2;
+  border-bottom: 1px solid #fecaca;
+  color: #991b1b;
+  display: flex;
+  gap: var(--ds-space-sm);
+  justify-content: space-between;
+  padding: var(--ds-space-sm) var(--ds-space-md);
+}
+
+.storage-error-banner p {
+  margin: 0;
+  font-size: var(--ds-fs-meta);
+  line-height: 1.5;
+}
+
 .week-user-notes {
   margin: var(--ds-space-lg) 0;
 }

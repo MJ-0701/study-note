@@ -648,19 +648,29 @@ function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
 }
 
 let notebookStorageErrorReported = false;
+let notebookStorageError: string | undefined;
 
-function saveNotebook(nextNotebook: StudyNotebook): void {
+function saveNotebook(nextNotebook: StudyNotebook): boolean {
   try {
     window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
-    notebookStorageErrorReported = false;
-  } catch (error) {
-    // QuotaExceededError, SecurityError (private mode), or other storage failures.
-    // Swallow to keep the UI responsive — high-frequency callers (textarea autosave,
-    // PDF workspace updates) must not throw mid-keystroke.
-    if (!notebookStorageErrorReported) {
-      notebookStorageErrorReported = true;
-      console.warn("[study-note] notebook localStorage save failed:", error);
+    // Recovery: surface banner removal if we had been failing.
+    if (notebookStorageError !== undefined) {
+      notebookStorageError = undefined;
+      notebookStorageErrorReported = false;
+      try { renderApp(); } catch { /* ignore */ }
     }
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[study-note] notebook localStorage save failed:", error);
+    notebookStorageError = `메모/노트가 브라우저 저장공간에 기록되지 않았습니다 (예: 시크릿 모드, 용량 부족). 새로고침 시 변경 내용이 사라질 수 있으므로 저장 가능한 환경으로 옮기거나 새 탭에서 다시 시도하세요. (${message})`;
+    if (!notebookStorageErrorReported) {
+      // First failure — render once to show banner. Subsequent failures within
+      // the same outage do not re-render (avoids focus loss during typing).
+      notebookStorageErrorReported = true;
+      try { renderApp(); } catch { /* ignore */ }
+    }
+    return false;
   }
 }
 
@@ -1479,6 +1489,13 @@ function handleDocumentClick(event: MouseEvent): void {
   if (quickNoteButton?.dataset.action === "auth-tab-signup") {
     authMode = "signup";
     loginFeedback = undefined;
+    renderApp();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "dismiss-notebook-storage-error") {
+    notebookStorageError = undefined;
+    notebookStorageErrorReported = false;
     renderApp();
     return;
   }
@@ -5451,11 +5468,25 @@ function renderShell(sidebar: string, mainContent: string, crumb: string): strin
             <button class="text-button" type="button" data-action="logout">로그아웃</button>
           </div>
         </header>
+        ${renderNotebookStorageBanner()}
         <main class="content">${mainContent}</main>
         <footer class="site-footer">
           study-note · 과목 총정리, 날짜별 노트, 로컬 자료 투입 · 원문 PDF 공개 공유 없음
         </footer>
       </div>
+    </div>
+  `;
+}
+
+function renderNotebookStorageBanner(): string {
+  if (!notebookStorageError) {
+    return "";
+  }
+
+  return `
+    <div class="storage-error-banner" role="alert">
+      <p>${escapeHtml(notebookStorageError)}</p>
+      <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
     </div>
   `;
 }
