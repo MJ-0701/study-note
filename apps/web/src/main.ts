@@ -526,6 +526,7 @@ if (isBrowserRuntime) {
   document.addEventListener("pointermove", handleDocumentPointerMove);
   document.addEventListener("pointerup", handleDocumentPointerUp);
   document.addEventListener("pointercancel", handleDocumentPointerUp);
+  document.addEventListener("keydown", handleDocumentKeyDown);
   window.addEventListener("hashchange", renderApp);
   renderApp();
 
@@ -2281,6 +2282,97 @@ function handleDocumentInput(event: Event): void {
       scheduleChecklistItemLabelUpdate(subjectId, checklistId, itemId, target.value);
     }
   }
+}
+
+// sprint-1/S1: keyboard hotkey dispatch for PDF workspace.
+// Single-letter keys (no modifier) switch tools; Cmd/Ctrl + [ / ] flip pages.
+// Mapping uses event.code so Korean IME state does not affect dispatch.
+
+const PDF_TOOL_HOTKEYS: Record<string, LocalPdfTool> = {
+  KeyR: "read",
+  KeyS: "sticky",
+  KeyP: "pen",
+  KeyE: "eraser",
+  KeyT: "text",
+  KeyC: "checklist",
+  KeyB: "table",
+  KeyG: "chart"
+};
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+    return true;
+  }
+
+  return target.isContentEditable;
+}
+
+function getActivePdfWorkspaceSubjectId(): string | undefined {
+  const route = parseRoute(window.location.hash);
+  return route.name === "pdf-workspace" ? route.subjectId : undefined;
+}
+
+function handleDocumentKeyDown(event: KeyboardEvent): void {
+  if (event.defaultPrevented || event.isComposing) {
+    return;
+  }
+
+  const subjectId = getActivePdfWorkspaceSubjectId();
+  if (!subjectId) {
+    return;
+  }
+
+  const hasMetaOrCtrl = event.metaKey || event.ctrlKey;
+
+  // sprint-1/S1 fix (codex P2): match by event.key as well as event.code so the
+  // shortcut works on non-US layouts where "[" / "]" are produced via AltGr or
+  // mapped to non-bracket physical keys. Do not gate on altKey because AltGr
+  // raises altKey=true on those layouts.
+  //
+  // sprint-1/S1 fix-2 (codex P2): also skip bracket dispatch when typing in an
+  // editable element. On AltGr layouts Chrome/Edge can report ctrlKey=true and
+  // altKey=true while the user enters "[" or "]" into a textbox; without this
+  // guard the page would flip instead of accepting the typed character.
+  if (hasMetaOrCtrl && !event.shiftKey && !isEditableTarget(event.target)) {
+    const isBracketLeft = event.code === "BracketLeft" || event.key === "[";
+    const isBracketRight = event.code === "BracketRight" || event.key === "]";
+
+    if (isBracketLeft) {
+      event.preventDefault();
+      movePdfPage(subjectId, -1);
+      renderApp();
+      return;
+    }
+
+    if (isBracketRight) {
+      event.preventDefault();
+      movePdfPage(subjectId, 1);
+      renderApp();
+      return;
+    }
+  }
+
+  if (hasMetaOrCtrl || event.altKey || event.shiftKey) {
+    return;
+  }
+
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  const tool = PDF_TOOL_HOTKEYS[event.code];
+  if (!tool) {
+    return;
+  }
+
+  event.preventDefault();
+  setPdfTool(subjectId, tool);
+  renderApp();
 }
 
 function handleDocumentLoad(event: Event): void {
