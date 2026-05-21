@@ -167,7 +167,7 @@ try {
   });
 
   const normalJar = createCookieJar();
-  await requestJson("/v1/auth/sign-in", {
+  const normalLogin = await requestJson("/v1/auth/sign-in", {
     method: "POST",
     jar: normalJar,
     body: { name: NORMAL_USER_NAME, studentNumber: NORMAL_USER_STUDENT_NUMBER }
@@ -177,6 +177,38 @@ try {
     403
   );
   console.log("admin route rejects normal user");
+  await assertStatus("normal upload intent is role-denied", () =>
+    request("/materials/upload-intent", {
+      method: "POST",
+      jar: normalJar,
+      body: {
+        subjectId: "digital-engineering",
+        classDate: "2026-05-02",
+        fileName: "normal-upload.pdf",
+        fileSize: 32,
+        pageCount: 1,
+        contentType: "application/pdf"
+      }
+    }),
+    403
+  );
+  await assertStatus("normal file upload is role-denied before lookup", () =>
+    requestBinary("/materials/nonexistent/file", {
+      method: "PUT",
+      jar: normalJar,
+      body: Buffer.from("%PDF- normal upload"),
+      contentType: "application/pdf"
+    }),
+    403
+  );
+  await assertStatus("normal complete upload is role-denied before lookup", () =>
+    request("/materials/nonexistent/complete", {
+      method: "POST",
+      jar: normalJar
+    }),
+    403
+  );
+  console.log("- normal user upload endpoints are role-denied");
 
   const samplePdf = Buffer.from("%PDF-1.4\n% smoke PDF\n%%EOF\n");
   const uploadIntent = await requestJson("/materials/upload-intent", {
@@ -307,6 +339,9 @@ try {
   ) {
     throw new Error("owned material list did not include the created material");
   }
+  if (materials.materials[0]?.uploaderId !== login.userId) {
+    throw new Error("material list did not expose uploaderId alias");
+  }
 
   const annotationPayload = {
     schemaVersion: 1,
@@ -339,6 +374,70 @@ try {
   if (annotation.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !== "backend smoke") {
     throw new Error("annotation snapshot did not persist");
   }
+
+  const normalMaterials = await requestJson("/materials", { jar: normalJar });
+  if (
+    !normalMaterials.materials?.some(
+      (material) =>
+        material.id === materialId &&
+        material.uploadStatus === "uploaded" &&
+        material.uploaderId === login.userId
+    )
+  ) {
+    throw new Error("normal user material list did not include shared uploaded master material");
+  }
+  const normalDetail = await requestJson(`/materials/${materialId}`, { jar: normalJar });
+  if (normalDetail.material?.id !== materialId || normalDetail.material?.uploaderId !== login.userId) {
+    throw new Error("normal user could not read shared material detail");
+  }
+  const normalDownload = await requestJson(`/materials/${materialId}/download`, { jar: normalJar });
+  if (normalDownload.download?.downloadUrl !== `/api/materials/${materialId}/file`) {
+    throw new Error("normal user shared download did not return a backend download target");
+  }
+  const normalDownloadedPdf = await requestBinary(`/materials/${materialId}/file`, { jar: normalJar });
+  if (!normalDownloadedPdf.ok) {
+    throw new Error(`normal shared file download failed with ${normalDownloadedPdf.status}`);
+  }
+  const normalDownloadedBody = Buffer.from(await normalDownloadedPdf.arrayBuffer());
+  if (!normalDownloadedBody.equals(samplePdf)) {
+    throw new Error("normal shared PDF bytes did not match uploaded bytes");
+  }
+  const emptyNormalAnnotation = await requestJson(`/materials/${materialId}/annotation`, { jar: normalJar });
+  if (
+    emptyNormalAnnotation.annotation?.ownerId !== normalLogin.userId ||
+    emptyNormalAnnotation.annotation?.stickyNotes?.length !== 0
+  ) {
+    throw new Error("normal user annotation was not an empty current-user snapshot");
+  }
+  await requestJson(`/materials/${materialId}/annotation`, {
+    method: "PUT",
+    jar: normalJar,
+    body: {
+      schemaVersion: 1,
+      stickyNotes: [
+        {
+          id: "note-normal-smoke",
+          pageNumber: 1,
+          anchor: { x: 0.45, y: 0.2 },
+          blocks: [{ id: "block-normal-smoke", kind: "text", content: "normal smoke" }],
+          updatedAt: new Date().toISOString()
+        }
+      ],
+      inkStrokes: []
+    }
+  });
+  const normalAnnotation = await requestJson(`/materials/${materialId}/annotation`, { jar: normalJar });
+  const masterAnnotationAfterNormalSave = await requestJson(`/materials/${materialId}/annotation`, { jar: masterJar });
+  if (normalAnnotation.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !== "normal smoke") {
+    throw new Error("normal user annotation snapshot did not persist independently");
+  }
+  if (
+    masterAnnotationAfterNormalSave.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !==
+    "backend smoke"
+  ) {
+    throw new Error("normal user annotation overwrote master annotation");
+  }
+  console.log("- normal user reads shared master PDF and keeps independent annotation");
 
   const download = await requestJson(`/materials/${materialId}/download`, { jar: masterJar });
   if (download.download?.downloadUrl !== `/api/materials/${materialId}/file`) {
@@ -423,7 +522,7 @@ try {
     401
   );
 
-  // Second user sign-in (ADMIN role) — for cross-user denial tests.
+  // Second user sign-in (ADMIN role) — admin route and cross-user upload denial tests.
   const secondJar = createCookieJar();
   await requestJson("/v1/auth/sign-in", {
     method: "POST",
@@ -449,14 +548,6 @@ try {
   }
   console.log("admin route accepts admin user");
 
-  await assertStatus("cross-user material access is denied", () =>
-    request(`/materials/${materialId}`, { jar: secondJar }),
-    404
-  );
-  await assertStatus("cross-user download access is denied", () =>
-    request(`/materials/${materialId}/download`, { jar: secondJar }),
-    404
-  );
   await assertStatus("cross-user file upload access is denied", () =>
     requestBinary(`/materials/${materialId}/file`, {
       method: "PUT",
@@ -466,26 +557,7 @@ try {
     }),
     404
   );
-  await assertStatus("cross-user file download access is denied", () =>
-    requestBinary(`/materials/${materialId}/file`, { jar: secondJar }),
-    404
-  );
-  await assertStatus("cross-user annotation read is denied", () =>
-    request(`/materials/${materialId}/annotation`, { jar: secondJar }),
-    404
-  );
-  await assertStatus("cross-user annotation write is denied", () =>
-    request(`/materials/${materialId}/annotation`, {
-      method: "PUT",
-      jar: secondJar,
-      body: annotationPayload
-    }),
-    404
-  );
-  await assertStatus("cross-user export bundle access is denied", () =>
-    request(`/materials/${materialId}/export-bundle`, { jar: secondJar }),
-    404
-  );
+  console.log("- non-owner admin cannot overwrite another uploader's PDF object");
 
   // AC4-amend — backend logs free of raw cookie token
   const backendLogText = backendLogs.join("");
@@ -503,7 +575,9 @@ try {
   console.log("- persisted sessions store tokenHash only, reject expired sessions, and revoke on sign-out");
   console.log("- local mock backend-proxy upload/download stores and returns PDF bytes");
   console.log("- material upload status transitions from pending to uploaded");
-  console.log("- material ownership blocks cross-user material/download/annotation/export access");
+  console.log("- normal user reads shared master/admin PDF materials");
+  console.log("- upload endpoints are limited to master/admin and still owner-scoped for object writes");
+  console.log("- annotation snapshots are isolated per current user");
   console.log("- material metadata and annotation snapshot persist across backend process restart");
   console.log("- export bundle returns original PDF reference plus annotation JSON");
   console.log("- backend stdout/stderr free of raw session tokens");

@@ -84,7 +84,7 @@ export class MaterialsService {
     materialId: string,
     input: UploadFileInput
   ): Promise<PdfMaterialRecord> {
-    const material = await this.getMaterial(ownerId, materialId);
+    const material = await this.getOwnedMaterial(ownerId, materialId);
     const contentType = requirePdfContentType(input.contentType);
     const contentLength = requirePositiveNumber(input.contentLength, "contentLength");
     const maxBytes = getMaxPdfUploadBytes();
@@ -131,7 +131,7 @@ export class MaterialsService {
     });
 
     if (!material) {
-      throw new NotFoundException("PDF material not found");
+      throw materialNotFound();
     }
 
     // Step 2: idempotent — already uploaded, no headObject call needed
@@ -234,7 +234,7 @@ export class MaterialsService {
     });
 
     if (!updated) {
-      throw new NotFoundException("PDF material not found after transition");
+      throw materialNotFound();
     }
 
     return toPdfMaterialRecord(updated);
@@ -243,8 +243,18 @@ export class MaterialsService {
   async listMaterials(ownerId: string): Promise<PdfMaterialRecord[]> {
     const materials = await this.prisma.pdfMaterial.findMany({
       where: {
-        ownerId,
-        deletedAt: null
+        deletedAt: null,
+        OR: [
+          { ownerId },
+          {
+            uploadStatus: "uploaded",
+            owner: {
+              role: {
+                in: ["MASTER", "ADMIN"]
+              }
+            }
+          }
+        ]
       },
       orderBy: {
         createdAt: "desc"
@@ -258,13 +268,23 @@ export class MaterialsService {
     const material = await this.prisma.pdfMaterial.findFirst({
       where: {
         id: materialId,
-        ownerId,
-        deletedAt: null
+        deletedAt: null,
+        OR: [
+          { ownerId },
+          {
+            uploadStatus: "uploaded",
+            owner: {
+              role: {
+                in: ["MASTER", "ADMIN"]
+              }
+            }
+          }
+        ]
       }
     });
 
     if (!material) {
-      throw new NotFoundException("PDF material not found");
+      throw materialNotFound();
     }
 
     return toPdfMaterialRecord(material);
@@ -294,26 +314,32 @@ export class MaterialsService {
     materialId: string,
     input: SaveAnnotationInput
   ): Promise<AnnotationSnapshotRecord> {
-    const material = await this.getMaterial(ownerId, materialId);
+    const material = await this.getUploadedMaterial(ownerId, materialId);
     const savedAt = new Date();
-    const snapshot = await this.prisma.annotationSnapshot.upsert({
+    const existing = await this.prisma.annotationSnapshot.findFirst({
       where: {
-        materialId: material.id
-      },
-      update: {
-        ownerId,
-        schemaVersion: input.schemaVersion,
-        payload: toAnnotationPayload(input),
-        savedAt
-      },
-      create: {
         materialId: material.id,
-        ownerId,
-        schemaVersion: input.schemaVersion,
-        payload: toAnnotationPayload(input),
-        savedAt
+        ownerId
       }
     });
+    const snapshot = existing
+      ? await this.prisma.annotationSnapshot.update({
+          where: { id: existing.id },
+          data: {
+            schemaVersion: input.schemaVersion,
+            payload: toAnnotationPayload(input),
+            savedAt
+          }
+        })
+      : await this.prisma.annotationSnapshot.create({
+          data: {
+            materialId: material.id,
+            ownerId,
+            schemaVersion: input.schemaVersion,
+            payload: toAnnotationPayload(input),
+            savedAt
+          }
+        });
 
     return toAnnotationSnapshotRecord(snapshot);
   }
@@ -322,10 +348,11 @@ export class MaterialsService {
     ownerId: string,
     materialId: string
   ): Promise<AnnotationSnapshotRecord> {
-    const material = await this.getMaterial(ownerId, materialId);
-    const snapshot = await this.prisma.annotationSnapshot.findUnique({
+    const material = await this.getUploadedMaterial(ownerId, materialId);
+    const snapshot = await this.prisma.annotationSnapshot.findFirst({
       where: {
-        materialId: material.id
+        materialId: material.id,
+        ownerId
       }
     });
 
@@ -372,6 +399,22 @@ export class MaterialsService {
       throw new BadGatewayException("PDF storage read failed");
     }
   }
+
+  private async getOwnedMaterial(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
+    const material = await this.prisma.pdfMaterial.findFirst({
+      where: {
+        id: materialId,
+        ownerId,
+        deletedAt: null
+      }
+    });
+
+    if (!material) {
+      throw materialNotFound();
+    }
+
+    return toPdfMaterialRecord(material);
+  }
 }
 
 export function parseUploadIntentBody(body: unknown): CreateUploadIntentInput {
@@ -408,6 +451,13 @@ function requireObject(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function materialNotFound(): NotFoundException {
+  return new NotFoundException({
+    errorCode: "MATERIAL_NOT_FOUND",
+    errorMessage: "PDF material not found"
+  });
 }
 
 function requireString(value: string, name: string): string {

@@ -55,6 +55,7 @@ export function toPdfMaterialRecord(material: PdfMaterialRow): PdfMaterialRecord
   return {
     id: material.id,
     ownerId: material.ownerId,
+    uploaderId: material.ownerId,
     subjectId: material.subjectId,
     classDate: material.classDate,
     fileName: material.fileName,

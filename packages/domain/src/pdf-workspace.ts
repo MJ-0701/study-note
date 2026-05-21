@@ -140,7 +140,9 @@ export interface PdfChart {
 
 export interface PdfMaterialRecord {
   id: string;
+  /** @deprecated Use uploaderId. ownerId remains an uploader/audit alias. */
   ownerId: string;
+  uploaderId: string;
   subjectId: string;
   classDate: string;
   fileName: string;
@@ -256,6 +258,7 @@ export function createPdfMaterialDraft(
 
 export interface BackendPdfMaterialInput {
   id: string;
+  uploaderId?: string;
   subjectId: string;
   classDate: string;
   fileName: string;

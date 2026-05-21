@@ -2,7 +2,9 @@ export type PdfMaterialUploadStatus = "pending" | "uploaded";
 
 export interface PdfMaterialRecord {
   id: string;
+  /** @deprecated Use uploaderId. ownerId remains an uploader/audit alias. */
   ownerId: string;
+  uploaderId: string;
   subjectId: string;
   classDate: string;
   fileName: string;

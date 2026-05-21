@@ -2673,3 +2673,287 @@ body[data-route="pdf-workspace"] .content {
     flex: 0 0 148px;
   }
 }
+
+/* sprint-3/responsive-shell: the earlier 1100px block made every sidebar group
+   a separate horizontal strip. Keep the desktop information structure, but turn
+   tablet/phone navigation into one compact, touch-sized header. */
+@media (max-width: 1100px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  #app,
+  .app-shell,
+  .main-area {
+    min-width: 0;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .sidebar {
+    align-items: center;
+    border-bottom: 1px solid var(--ds-rule);
+    border-right: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ds-space-xs);
+    max-height: none;
+    overflow: visible;
+    padding: 12px clamp(12px, 3vw, 24px);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .wordmark {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin: 0;
+    min-height: 40px;
+    padding: 0 4px;
+  }
+
+  .sidebar-group,
+  .sidebar-details {
+    flex: 0 0 auto;
+    margin: 0;
+    min-width: 0;
+  }
+
+  .sidebar-group--subjects {
+    flex: 1 1 100%;
+    order: 10;
+  }
+
+  .sidebar-group.is-secondary,
+  .group-label,
+  .sidebar-note {
+    display: none;
+  }
+
+  .sidebar nav,
+  .sidebar-details nav {
+    display: flex;
+    gap: var(--ds-space-xs);
+    overflow: visible;
+    padding: 0;
+    scrollbar-width: none;
+  }
+
+  .sidebar nav::-webkit-scrollbar,
+  .sidebar-details nav::-webkit-scrollbar,
+  .schedule-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar-group--subjects nav {
+    margin-inline: -2px;
+    overflow-x: auto;
+    padding: 0 2px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .sidebar-group--subjects nav a {
+    scroll-snap-align: start;
+  }
+
+  .sidebar nav a,
+  .sidebar-details summary {
+    align-items: center;
+    background: var(--ds-bg);
+    border: 1px solid var(--ds-rule);
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+
+  .sidebar nav a.active {
+    border-color: rgba(59, 110, 245, 0.4);
+  }
+
+  .persona-sub-link[aria-disabled="true"] {
+    display: none !important;
+  }
+
+  .sidebar-details[open] {
+    flex: 1 1 100%;
+  }
+
+  .sidebar-details[open] nav,
+  .schedule-list {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sidebar-details[open] nav {
+    padding-top: var(--ds-space-xs);
+  }
+
+  .content {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 820px) {
+  .topbar {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--ds-space-xs);
+    min-height: 44px;
+    padding: 8px clamp(14px, 4vw, 20px);
+  }
+
+  .crumb {
+    flex: 1 1 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-session {
+    flex: 1 1 auto;
+    gap: var(--ds-space-xs);
+    justify-content: space-between;
+    min-width: 0;
+  }
+
+  .topbar-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .content {
+    padding: 28px clamp(14px, 4vw, 24px) 44px;
+  }
+
+  .home-hero {
+    align-items: start;
+    gap: var(--ds-space-md);
+  }
+
+  .home-hero img {
+    max-height: 180px;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .metric-grid,
+  .subject-grid {
+    gap: var(--ds-space-sm);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-card,
+  .subject-card,
+  .week-card {
+    min-height: 0;
+  }
+
+  .metric-card strong {
+    font-size: 1.125rem;
+  }
+
+  .subject-card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--ds-space-xs);
+  }
+
+  .home-split {
+    gap: var(--ds-space-md);
+  }
+}
+
+@media (max-width: 520px) {
+  :root {
+    --ds-fs-display: 1.625rem;
+    --ds-fs-h2: 1.25rem;
+    --ds-fs-h3: 1rem;
+    --ds-space-lg: 28px;
+  }
+
+  .sidebar {
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .wordmark {
+    flex: 1 1 auto;
+    font-size: 1rem;
+    min-height: 36px;
+  }
+
+  .sidebar nav a,
+  .sidebar-details summary {
+    font-size: 0.875rem;
+    min-height: 38px;
+    padding: 7px 10px;
+  }
+
+  .sidebar-group--subjects {
+    margin-top: 2px;
+  }
+
+  .content {
+    padding: 24px 14px 36px;
+  }
+
+  .home-hero {
+    gap: 16px;
+  }
+
+  .home-hero img {
+    max-height: 140px;
+  }
+
+  .hero-actions {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-actions > * {
+    min-width: 0;
+    padding: 9px 10px;
+    text-align: center;
+  }
+
+  .metric-grid {
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-card {
+    padding: 10px;
+  }
+
+  .metric-card strong {
+    font-size: 1rem;
+  }
+
+  .subject-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .site-footer {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .hero-actions,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+}

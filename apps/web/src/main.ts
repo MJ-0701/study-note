@@ -4901,13 +4901,13 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
   return `
     <aside class="sidebar" aria-label="학습 내비게이션">
       <a class="wordmark" href="#/">study-note</a>
-      <div class="sidebar-group">
+      <div class="sidebar-group sidebar-group--home">
         <p class="group-label">홈</p>
         <nav>
           <a class="${route.name === "home" ? "active" : ""}" href="#/">전체 현황</a>
         </nav>
       </div>
-      <div class="sidebar-group">
+      <div class="sidebar-group sidebar-group--subjects">
         <p class="group-label">과목 공부</p>
         <nav>
           ${studyNotebook.subjects.map((subject) => `
@@ -4916,7 +4916,7 @@ function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
           `).join("")}
         </nav>
       </div>
-      <div class="sidebar-group">
+      <div class="sidebar-group sidebar-group--workspaces">
         <p class="group-label">PDF 작업공간</p>
         <nav>
           <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
@@ -4939,7 +4939,7 @@ function renderAdminLink(): string {
   const role = authSession?.user.role;
   if (role !== "master" && role !== "admin") return "";
   return `
-    <div class="sidebar-group">
+    <div class="sidebar-group sidebar-group--admin">
       <p class="group-label">🛡️ 관리자</p>
       <nav>
         <a href="/admin.html" aria-label="관리자 대시보드">사용자 관리</a>
@@ -4963,9 +4963,9 @@ function renderPersonaSubLink(subjectId: string): string {
   const p = PERSONA_BY_SUBJECT[subjectId];
   if (!p) return "";
   if (p.active) {
-    return `<a style="${PERSONA_SUB_ACTIVE}" href="/persona-turn.html?subject=${subjectId}">↳ ${p.nick} 호출</a>`;
+    return `<a class="persona-sub-link" style="${PERSONA_SUB_ACTIVE}" href="/persona-turn.html?subject=${subjectId}">↳ ${p.nick} 호출</a>`;
   }
-  return `<a style="${PERSONA_SUB_DISABLED}" aria-disabled="true" tabindex="-1">↳ ${p.nick} 호출 (준비 중)</a>`;
+  return `<a class="persona-sub-link" style="${PERSONA_SUB_DISABLED}" aria-disabled="true" tabindex="-1">↳ ${p.nick} 호출 (준비 중)</a>`;
 }
 
 function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
@@ -4977,7 +4977,7 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
   return `
     <aside class="sidebar" aria-label="${subject.title} 학습 내비게이션">
       <a class="wordmark" href="#/">study-note</a>
-      <div class="sidebar-group">
+      <div class="sidebar-group sidebar-group--subjects">
         <p class="group-label">${subject.title}</p>
         <nav>
           <a class="${route.name === "subject" ? "active" : ""}" href="${subjectPath(subject)}">과목 총정리</a>
@@ -4988,14 +4988,14 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
           `).join("")}
         </nav>
       </div>
-      <div class="sidebar-group">
+      <div class="sidebar-group sidebar-group--workspaces">
         <p class="group-label">PDF 작업공간</p>
         <nav>
           <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
         </nav>
       </div>
       ${renderClassSchedule(currentSession?.label)}
-      <div class="sidebar-group is-secondary">
+      <div class="sidebar-group sidebar-group--subjects is-secondary">
         <p class="group-label">다른 과목</p>
         <nav>
           <a href="#/">전체 현황</a>

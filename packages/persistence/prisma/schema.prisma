@@ -61,7 +61,7 @@ model PdfMaterial {
   updatedAt   DateTime             @updatedAt
   owner       User                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   subject     Subject              @relation(fields: [subjectId], references: [id])
-  annotation  AnnotationSnapshot?
+  annotations AnnotationSnapshot[]
 
   @@index([ownerId, subjectId, classDate])
   @@index([subjectId])
@@ -69,13 +69,14 @@ model PdfMaterial {
 
 model AnnotationSnapshot {
   id            String      @id @default(cuid())
-  materialId    String      @unique
+  materialId    String
   ownerId       String
   schemaVersion Int
   payload       Json
   savedAt       DateTime    @default(now())
   material      PdfMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
+  @@unique([materialId, ownerId])
   @@index([ownerId])
 }
 

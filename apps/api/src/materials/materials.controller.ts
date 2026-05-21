@@ -13,7 +13,7 @@ import {
   UseGuards
 } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
-import { SessionAuthGuard } from "@study-note/auth";
+import { RoleGuard, Roles, SessionAuthGuard } from "@study-note/auth";
 import { MaterialsService, parseAnnotationBody, parseUploadIntentBody } from "./materials.service";
 
 interface AuthenticatedRequest {
@@ -31,6 +31,8 @@ export class MaterialsController {
   constructor(private readonly materials: MaterialsService) {}
 
   @Post("upload-intent")
+  @UseGuards(SessionAuthGuard, RoleGuard)
+  @Roles("master", "admin")
   async createUploadIntent(
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown
@@ -42,6 +44,8 @@ export class MaterialsController {
   }
 
   @Put(":materialId/file")
+  @UseGuards(SessionAuthGuard, RoleGuard)
+  @Roles("master", "admin")
   async uploadFile(
     @Req() request: AuthenticatedUploadRequest,
     @Param("materialId") materialId: string
@@ -57,6 +61,8 @@ export class MaterialsController {
 
   @Post(":materialId/complete")
   @HttpCode(200)
+  @UseGuards(SessionAuthGuard, RoleGuard)
+  @Roles("master", "admin")
   async completeUpload(
     @Req() request: AuthenticatedRequest,
     @Param("materialId") materialId: string
