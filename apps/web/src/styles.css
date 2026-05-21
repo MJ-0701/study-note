@@ -1175,6 +1175,133 @@ p {
   align-items: stretch;
 }
 
+.pdf-library-summary {
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--ds-space-md);
+}
+
+.pdf-library {
+  display: grid;
+  gap: var(--ds-space-lg);
+}
+
+.pdf-subject-section {
+  border-top: 1px solid var(--ds-rule);
+  display: grid;
+  gap: var(--ds-space-md);
+  padding-top: var(--ds-space-md);
+}
+
+.pdf-subject-section__header,
+.pdf-material-browser__header {
+  align-items: start;
+  display: flex;
+  gap: var(--ds-space-sm);
+  justify-content: space-between;
+}
+
+.pdf-subject-section__header h3,
+.pdf-material-browser__header h2 {
+  margin-bottom: 0;
+}
+
+.pdf-count-pill {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 999px;
+  color: var(--ds-fg-soft);
+  flex: 0 0 auto;
+  font-size: var(--ds-fs-meta);
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 6px 10px;
+}
+
+.pdf-material-grid {
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+.pdf-material-list {
+  display: grid;
+  gap: var(--ds-space-sm);
+}
+
+.pdf-material-card,
+.pdf-empty-card {
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--ds-space-md);
+  min-width: 0;
+  padding: var(--ds-space-md);
+}
+
+.pdf-material-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.pdf-material-card.is-current {
+  background: var(--ds-accent-soft);
+  border-color: rgba(59, 110, 245, 0.35);
+}
+
+.pdf-material-card.is-compact {
+  align-items: center;
+  padding: var(--ds-space-sm);
+}
+
+.pdf-material-card__body {
+  min-width: 0;
+}
+
+.pdf-material-card h4 {
+  font-size: var(--ds-fs-body);
+  line-height: 1.45;
+  margin-bottom: var(--ds-space-xs);
+  overflow-wrap: anywhere;
+}
+
+.pdf-material-card p,
+.pdf-empty-card p {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  margin: 0;
+}
+
+.pdf-material-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-xs);
+  margin-top: var(--ds-space-sm);
+}
+
+.pdf-material-card__badges span {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 999px;
+  color: var(--ds-fg-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 4px 8px;
+}
+
+.pdf-material-card__actions {
+  align-items: end;
+  display: flex;
+}
+
+.pdf-material-browser {
+  border-top: 1px solid var(--ds-rule);
+  display: grid;
+  gap: var(--ds-space-md);
+  padding-top: var(--ds-space-lg);
+}
+
 .pdf-workspace {
   border-top: 1px solid var(--ds-rule);
   padding-top: var(--ds-space-lg);
@@ -2488,6 +2615,8 @@ body[data-route="pdf-workspace"] .content {
   .concept-row,
   .subject-heading,
   .week-note-grid,
+  .pdf-library-summary,
+  .pdf-material-card,
   .pdf-workspace-layout {
     grid-template-columns: 1fr;
   }
@@ -2527,6 +2656,19 @@ body[data-route="pdf-workspace"] .content {
 
   .pdf-stage {
     min-height: 480px;
+  }
+
+  .pdf-subject-section__header,
+  .pdf-material-browser__header {
+    flex-direction: column;
+  }
+
+  .pdf-material-card__actions {
+    align-items: stretch;
+  }
+
+  .pdf-material-card__actions .action-button {
+    width: 100%;
   }
 
   /* sprint-11/codex-P1: 모바일에서 inspector toggle 노출 유지.

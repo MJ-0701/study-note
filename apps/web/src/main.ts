@@ -70,6 +70,7 @@ import {
   type PdfChart,
   type PdfInkPoint,
   type PdfInkStroke,
+  type PdfMaterialDraft,
   type PdfTable,
   type PdfTextBox,
   type PdfWorkspaceStore,
@@ -912,10 +913,10 @@ function updatePdfWorkspace(
   updater: (workspace: SubjectPdfWorkspace) => SubjectPdfWorkspace
 ): void {
   const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const updated = {
+  const updated = syncCurrentPdfMaterial({
     ...updater(current),
     updatedAt: new Date().toISOString()
-  };
+  });
 
   pdfWorkspaceStore = {
     workspaces: {
@@ -924,6 +925,131 @@ function updatePdfWorkspace(
     }
   };
   savePdfWorkspaceStore();
+}
+
+function syncCurrentPdfMaterial(workspace: SubjectPdfWorkspace): SubjectPdfWorkspace {
+  if (!workspace.material) {
+    return {
+      ...workspace,
+      materials: getPdfWorkspaceMaterials(workspace)
+    };
+  }
+
+  const materialKey = getPdfMaterialKey(workspace.material);
+  const materials = [
+    workspace.material,
+    ...getPdfWorkspaceMaterials(workspace).filter(
+      (item) => getPdfMaterialKey(item) !== materialKey
+    )
+  ];
+
+  return {
+    ...workspace,
+    materials: sortPdfMaterialsNewestFirst(materials)
+  };
+}
+
+function getPdfMaterialKey(material: PdfMaterialDraft): string {
+  return material.backendMaterialId ?? material.id;
+}
+
+function getPdfWorkspaceMaterials(workspace: SubjectPdfWorkspace): PdfMaterialDraft[] {
+  const seen = new Set<string>();
+  const materials: PdfMaterialDraft[] = [];
+  const candidates = [
+    ...(workspace.material ? [workspace.material] : []),
+    ...((workspace.materials ?? []) as PdfMaterialDraft[])
+  ];
+
+  for (const material of candidates) {
+    const key = getPdfMaterialKey(material);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    materials.push(material);
+  }
+
+  return sortPdfMaterialsNewestFirst(materials);
+}
+
+function sortPdfMaterialsNewestFirst(materials: PdfMaterialDraft[]): PdfMaterialDraft[] {
+  return [...materials].sort((a, b) => {
+    const aTime = Date.parse(a.updatedAt ?? a.uploadedAt);
+    const bTime = Date.parse(b.updatedAt ?? b.uploadedAt);
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  });
+}
+
+function upsertPdfWorkspaceMaterial(
+  workspace: SubjectPdfWorkspace,
+  material: PdfMaterialDraft
+): SubjectPdfWorkspace {
+  const key = getPdfMaterialKey(material);
+  const materials = [
+    material,
+    ...getPdfWorkspaceMaterials(workspace).filter(
+      (item) => getPdfMaterialKey(item) !== key
+    )
+  ];
+
+  return {
+    ...workspace,
+    material,
+    materials: sortPdfMaterialsNewestFirst(materials)
+  };
+}
+
+function replacePdfWorkspaceMaterials(
+  workspace: SubjectPdfWorkspace,
+  backendMaterials: PdfMaterialRecord[]
+): SubjectPdfWorkspace {
+  const existingMaterials = getPdfWorkspaceMaterials(workspace);
+  const existingByKey = new Map(
+    existingMaterials.map((material) => [getPdfMaterialKey(material), material])
+  );
+  const drafts = backendMaterials.map((material) => {
+    const key = material.id;
+    const previous =
+      existingByKey.get(key) ??
+      (workspace.material && getPdfMaterialKey(workspace.material) === key
+        ? workspace.material
+        : undefined);
+
+    return createPdfMaterialFromBackend(material, previous);
+  });
+  const currentKey = workspace.material ? getPdfMaterialKey(workspace.material) : undefined;
+  const selected = currentKey
+    ? drafts.find((material) => getPdfMaterialKey(material) === currentKey)
+    : undefined;
+
+  return {
+    ...workspace,
+    material: selected ?? drafts[0] ?? workspace.material,
+    materials: sortPdfMaterialsNewestFirst(drafts)
+  };
+}
+
+function selectPdfWorkspaceMaterial(subjectId: string, materialId: string): boolean {
+  const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const target = getPdfWorkspaceMaterials(current).find(
+    (material) => getPdfMaterialKey(material) === materialId
+  );
+
+  if (!target) {
+    return false;
+  }
+
+  if (current.material && getPdfMaterialKey(current.material) !== materialId) {
+    clearActivePdfObjectUrl(subjectId);
+  }
+
+  updatePdfWorkspace(subjectId, (workspace) => upsertPdfWorkspaceMaterial(workspace, target));
+  return true;
+}
+
+function getSubjectPdfMaterials(subjectId: string): PdfMaterialDraft[] {
+  return getPdfWorkspaceMaterials(getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId));
 }
 
 function handleDocumentChange(event: Event): void {
@@ -1142,6 +1268,26 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "retry-session-check") {
     void revalidateStoredSession();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "open-pdf-material") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const materialId = quickNoteButton.dataset.materialId;
+    const subject = subjectId
+      ? notebook.subjects.find((item) => item.id === subjectId)
+      : undefined;
+
+    if (subject && materialId && selectPdfWorkspaceMaterial(subject.id, materialId)) {
+      event.preventDefault();
+      const targetHash = subjectPdfWorkspacePath(subject);
+      if (window.location.hash === targetHash) {
+        renderApp();
+      } else {
+        window.location.hash = targetHash;
+      }
+    }
+
     return;
   }
 
@@ -2517,9 +2663,13 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     pendingPdfRetry = { file, subjectId, intent };
 
     clearActivePdfObjectUrl(subjectId);
+    const pendingMaterial = createPdfMaterialFromBackend(intent.material, undefined);
     updatePdfWorkspace(subjectId, (workspace) => ({
-      ...workspace,
-      material: createPdfMaterialFromBackend(intent.material, workspace.material)
+      ...upsertPdfWorkspaceMaterial(workspace, {
+        ...pendingMaterial,
+        selectedPage: workspace.material?.selectedPage ?? pendingMaterial.selectedPage,
+        selectedTool: workspace.material?.selectedTool ?? pendingMaterial.selectedTool
+      })
     }));
     renderApp();
 
@@ -2529,9 +2679,13 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     // Upload success — clear retry state
     pendingPdfRetry = undefined;
 
+    const completedMaterial = createPdfMaterialFromBackend(uploadedMaterial, undefined);
     updatePdfWorkspace(subjectId, (workspace) => ({
-      ...workspace,
-      material: createPdfMaterialFromBackend(uploadedMaterial, workspace.material)
+      ...upsertPdfWorkspaceMaterial(workspace, {
+        ...completedMaterial,
+        selectedPage: workspace.material?.selectedPage ?? completedMaterial.selectedPage,
+        selectedTool: workspace.material?.selectedTool ?? completedMaterial.selectedTool
+      })
     }));
 
     await loadPdfPreviewFromBackend(subjectId, uploadedMaterial, {
@@ -2565,20 +2719,18 @@ async function restoreUploadedPdfMaterialsForSession(
 ): Promise<void> {
   try {
     const materials = await listPdfMaterials(apiBaseUrl);
-    const latestBySubject = new Map<string, PdfMaterialRecord>();
+    const materialsBySubject = new Map<string, PdfMaterialRecord[]>();
 
     materials
       .filter((material) => material.uploadStatus === "uploaded")
       .forEach((material) => {
-        if (!latestBySubject.has(material.subjectId)) {
-          latestBySubject.set(material.subjectId, material);
-        }
+        const existing = materialsBySubject.get(material.subjectId) ?? [];
+        materialsBySubject.set(material.subjectId, [...existing, material]);
       });
 
-    latestBySubject.forEach((material, subjectId) => {
+    materialsBySubject.forEach((subjectMaterials, subjectId) => {
       updatePdfWorkspace(subjectId, (workspace) => ({
-        ...workspace,
-        material: createPdfMaterialFromBackend(material, workspace.material)
+        ...replacePdfWorkspaceMaterials(workspace, subjectMaterials)
       }));
     });
   } catch (error) {
@@ -5749,6 +5901,9 @@ function renderPdfFrameStack(
 function renderPdfWorkspacePage(subject: SubjectNote): string {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
   const material = workspace.material;
+  const subjectMaterials = getSubjectPdfMaterials(subject.id);
+  const currentMaterialKey = material ? getPdfMaterialKey(material) : undefined;
+  const canManageMaterials = canManagePdfMaterials();
   const selectedPage = material?.selectedPage ?? 1;
   // Cast: "eraser" is stored via LocalPdfTool cast in setPdfTool; recover the wider type here.
   const selectedTool = (material?.selectedTool ?? "read") as LocalPdfTool;
@@ -5793,38 +5948,45 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
       <p class="meta">${subject.title} · backend PDF 작업공간</p>
       <h1>${subject.title} PDF 필기</h1>
       <p class="lede">
-        PDF 파일은 로그인된 사용자 backend storage에 저장하고, 미리보기는 인증된 다운로드를 Blob URL로 열어 표시합니다.
-        포스트잇과 펜 stroke는 이번 sprint에서 기존 localStorage 흐름을 유지합니다.
+        관리자가 올린 공유 PDF를 열고, 내 필기와 메모는 사용자별 작업공간에 따로 저장합니다.
       </p>
       <p><a href="${subjectPath(subject)}">← ${subject.title} 총정리로 돌아가기</a></p>
     </section>
 
     <section class="upload-section pdf-upload-section" aria-labelledby="pdf-upload-title">
       <div>
-        <p class="meta">§1 — PDF 선택</p>
-        <h2 id="pdf-upload-title">강의 PDF 업로드</h2>
+        <p class="meta">§1 — 자료 관리</p>
+        <h2 id="pdf-upload-title">${canManageMaterials ? "강의 PDF 업로드" : "공유 자료"}</h2>
         <p class="lede">
-          선택한 PDF는 backend proxy를 통해 저장됩니다.
-          새로고침 후에도 세션이 유효하면 이 과목의 최신 업로드 PDF를 다시 불러옵니다.
+          ${canManageMaterials
+            ? "선택한 PDF는 backend storage에 저장되고, 학생들은 업로드된 자료를 골라 자신의 필기를 남깁니다."
+            : "PDF 업로드는 관리자에게 맡기고, 학생은 등록된 자료를 열어 개인 필기만 저장합니다."}
         </p>
       </div>
       <div class="upload-panel">
-        <input
-          id="${inputId}"
-          class="file-input"
-          type="file"
-          accept="application/pdf,.pdf"
-          data-action="import-pdf-material"
-          data-subject-id="${subject.id}"
-        />
-        <label class="file-drop" for="${inputId}">
-          <strong>${subject.title} PDF 선택 및 업로드</strong>
-          <span>원문은 backend storage에 저장되고, 화면에는 인증 fetch로 받은 Blob 미리보기를 엽니다.</span>
-        </label>
+        ${canManageMaterials
+          ? `<input
+              id="${inputId}"
+              class="file-input"
+              type="file"
+              accept="application/pdf,.pdf"
+              data-action="import-pdf-material"
+              data-subject-id="${subject.id}"
+            />
+            <label class="file-drop" for="${inputId}">
+              <strong>${subject.title} PDF 선택 및 업로드</strong>
+              <span>관리자가 올린 원문 PDF는 모두가 읽고, 필기 데이터는 사용자별로 저장합니다.</span>
+            </label>`
+          : `<div class="policy-block is-standalone">
+              <strong>업로드는 관리자만 가능합니다.</strong>
+              <p>필요한 수업자료가 없으면 관리자에게 업로드를 요청하세요. 등록된 자료는 아래 목록에서 바로 열 수 있습니다.</p>
+            </div>`}
         ${material ? renderPdfMaterialStatus(material, Boolean(objectUrl), isPreviewLoading) : ""}
         ${renderIntakeFeedback("아직 업로드한 PDF 파일이 없습니다.")}
       </div>
     </section>
+
+    ${renderSubjectPdfMaterialBrowser(subject, subjectMaterials, currentMaterialKey)}
 
     <section class="pdf-workspace" aria-labelledby="pdf-workspace-title">
       ${objectUrl ? `
@@ -5835,7 +5997,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
       ` : ""}
       <div class="pdf-workspace-header">
         <div>
-          <p class="meta">§2 — PDF viewer + annotation layer</p>
+          <p class="meta">§3 — PDF viewer + annotation layer</p>
           <h2 id="pdf-workspace-title">페이지 ${selectedPage}${material ? ` / ${material.pageCount}` : ""}</h2>
         </div>
         <div class="pdf-toolbar-row">
@@ -5899,7 +6061,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           aria-label="PDF annotation state"
           aria-hidden="${inspectorOpen ? "false" : "true"}"
         >
-          <p class="meta">§3 — 저장 상태</p>
+          <p class="meta">§4 — 저장 상태</p>
           <h3>로컬 annotation</h3>
           <dl class="pdf-inspector-stats">
             ${renderInspectorStatRow("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id)}
@@ -6932,38 +7094,170 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
   `;
 }
 
-// slice-3: PDF 작업공간 index 페이지 — 4 과목 카드 그리드.
-// 카드 클릭 → #/subjects/<id>/pdf-workspace (subjectPdfWorkspacePath 사용 — BC safe).
 function renderPdfWorkspaceIndex(studyNotebook: StudyNotebook): string {
-  const cards = studyNotebook.subjects
-    .map(
-      (subject) => `
-    <article class="subject-card">
-      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h3>${subject.title}</h3>
-      <p>${subject.summary.goal}</p>
-      <div class="subject-card-footer">
-        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">열기</a>
-      </div>
-    </article>
-  `
-    )
-    .join("");
+  const subjectSummaries = studyNotebook.subjects.map((subject) => ({
+    subject,
+    materials: getSubjectPdfMaterials(subject.id)
+  }));
+  const totalMaterials = subjectSummaries.reduce(
+    (total, item) => total + item.materials.length,
+    0
+  );
+  const activeSubjects = subjectSummaries.filter((item) => item.materials.length > 0).length;
 
   return `
     <section class="subject-page-hero">
-      <p class="meta">PDF 작업공간</p>
-      <h1>과목별 PDF 작업공간</h1>
-      <p class="lede">과목을 선택해 PDF 열람 · 필기 작업공간으로 이동합니다.</p>
+      <p class="meta">PDF 자료실</p>
+      <h1>수업자료 찾기</h1>
+      <p class="lede">관리자가 올린 PDF를 과목별로 골라 열고, 같은 원문 위에 내 필기만 따로 저장합니다.</p>
+      <div class="pdf-library-summary" aria-label="PDF 자료 현황">
+        ${renderMetric("등록 자료", `${totalMaterials}개`, "업로드된 PDF")}
+        ${renderMetric("과목", `${activeSubjects}/${studyNotebook.subjects.length}`, "자료가 있는 과목")}
+        ${renderMetric("필기", "개인별", "PDF 원문과 분리 저장")}
+      </div>
     </section>
     <section aria-labelledby="pdf-workspaces-title">
-      <p class="meta">과목 선택</p>
-      <h2 id="pdf-workspaces-title">작업공간 목록</h2>
-      <div class="subject-grid">
-        ${cards}
+      <p class="meta">자료 목록</p>
+      <h2 id="pdf-workspaces-title">과목별 PDF</h2>
+      <div class="pdf-library">
+        ${subjectSummaries.map(({ subject, materials }) =>
+          renderPdfSubjectLibrarySection(subject, materials)
+        ).join("")}
       </div>
     </section>
   `;
+}
+
+function renderPdfSubjectLibrarySection(
+  subject: SubjectNote,
+  materials: PdfMaterialDraft[]
+): string {
+  return `
+    <section class="pdf-subject-section" aria-labelledby="pdf-subject-${subject.id}">
+      <div class="pdf-subject-section__header">
+        <div>
+          <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
+          <h3 id="pdf-subject-${subject.id}">${subject.title}</h3>
+        </div>
+        <span class="pdf-count-pill">${materials.length}개 자료</span>
+      </div>
+      ${
+        materials.length > 0
+          ? `<div class="pdf-material-grid">
+              ${materials.map((material) => renderPdfMaterialCard(subject, material, {
+                isCurrent: false,
+                compact: false
+              })).join("")}
+            </div>`
+          : renderPdfSubjectEmptyCard(subject)
+      }
+    </section>
+  `;
+}
+
+function renderSubjectPdfMaterialBrowser(
+  subject: SubjectNote,
+  materials: PdfMaterialDraft[],
+  currentMaterialKey: string | undefined
+): string {
+  if (materials.length === 0) {
+    return "";
+  }
+
+  return `
+    <section class="pdf-material-browser" aria-labelledby="subject-pdf-materials-title">
+      <div class="pdf-material-browser__header">
+        <div>
+          <p class="meta">§2 — 자료 선택</p>
+          <h2 id="subject-pdf-materials-title">이 과목의 PDF 자료</h2>
+        </div>
+        <a class="secondary-link" href="#/pdf-workspaces">전체 자료실</a>
+      </div>
+      <div class="pdf-material-list">
+        ${materials.map((material) => renderPdfMaterialCard(subject, material, {
+          isCurrent: currentMaterialKey === getPdfMaterialKey(material),
+          compact: true
+        })).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderPdfSubjectEmptyCard(subject: SubjectNote): string {
+  const canManageMaterials = canManagePdfMaterials();
+
+  return `
+    <article class="pdf-empty-card">
+      <strong>아직 등록된 PDF가 없습니다.</strong>
+      <p>${canManageMaterials ? "관리자 계정으로 이 과목의 첫 자료를 업로드하세요." : "관리자가 자료를 올리면 이곳에 표시됩니다."}</p>
+      <a class="secondary-link" href="${subjectPdfWorkspacePath(subject)}">
+        ${canManageMaterials ? "업로드 화면 열기" : "작업공간 열기"}
+      </a>
+    </article>
+  `;
+}
+
+function renderPdfMaterialCard(
+  subject: SubjectNote,
+  material: PdfMaterialDraft,
+  options: { isCurrent: boolean; compact: boolean }
+): string {
+  const materialKey = getPdfMaterialKey(material);
+  const ownerLabel = getPdfMaterialOwnerLabel(material);
+  const statusLabel = getPdfMaterialStatusLabel(material);
+  const classDate = material.classDate ? ` · ${escapeHtml(material.classDate)}` : "";
+
+  return `
+    <article class="pdf-material-card${options.isCurrent ? " is-current" : ""}${options.compact ? " is-compact" : ""}">
+      <div class="pdf-material-card__body">
+        <p class="meta">${escapeHtml(subject.title)}${classDate}</p>
+        <h4>${escapeHtml(material.fileName)}</h4>
+        <p>${formatPdfFileSize(material.fileSize)} · ${material.pageCount}페이지 · ${statusLabel}</p>
+        <div class="pdf-material-card__badges">
+          <span>${ownerLabel}</span>
+          ${options.isCurrent ? "<span>현재 열림</span>" : ""}
+        </div>
+      </div>
+      <div class="pdf-material-card__actions">
+        <button
+          class="action-button"
+          type="button"
+          data-action="open-pdf-material"
+          data-subject-id="${escapeHtml(subject.id)}"
+          data-material-id="${escapeHtml(materialKey)}"
+        >${options.isCurrent ? "다시 열기" : "열기"}</button>
+      </div>
+    </article>
+  `;
+}
+
+function getPdfMaterialStatusLabel(material: PdfMaterialDraft): string {
+  if (material.uploadStatus === "pending") {
+    return "업로드 중";
+  }
+
+  if (material.uploadStatus === "uploaded") {
+    return "공유 가능";
+  }
+
+  return "로컬";
+}
+
+function getPdfMaterialOwnerLabel(material: PdfMaterialDraft): string {
+  if (material.uploaderId && material.uploaderId === authSession?.user.id) {
+    return "내가 올림";
+  }
+
+  if (material.uploaderId) {
+    return "공유 자료";
+  }
+
+  return material.uploadStatus === "local" ? "로컬 자료" : "업로드 자료";
+}
+
+function canManagePdfMaterials(): boolean {
+  const role = authSession?.user.role.toLowerCase();
+  return role === "master" || role === "admin";
 }
 
 function renderNotFound(): string {

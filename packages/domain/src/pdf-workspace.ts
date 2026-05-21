@@ -167,6 +167,7 @@ export interface AnnotationSnapshotRecord {
 export interface PdfMaterialDraft {
   id: string;
   backendMaterialId?: string;
+  uploaderId?: string;
   subjectId: string;
   classDate?: string;
   fileName: string;
@@ -184,6 +185,7 @@ export interface PdfMaterialDraft {
 export interface SubjectPdfWorkspace {
   subjectId: string;
   material?: PdfMaterialDraft;
+  materials: PdfMaterialDraft[];
   stickyNotes: PdfStickyNote[];
   inkStrokes: PdfInkStroke[];
   eraserShape: PdfEraserShape;
@@ -210,6 +212,7 @@ const MAX_ERASER_SIZE = 64;
 export function createEmptyPdfWorkspace(subjectId: string): SubjectPdfWorkspace {
   return {
     subjectId,
+    materials: [],
     stickyNotes: [],
     inkStrokes: [],
     eraserShape: DEFAULT_ERASER_SHAPE,
@@ -277,6 +280,7 @@ export function createPdfMaterialFromBackend(
   return {
     id: material.id,
     backendMaterialId: material.id,
+    uploaderId: material.uploaderId,
     subjectId: material.subjectId,
     classDate: material.classDate,
     fileName: material.fileName,
@@ -964,6 +968,52 @@ function validateChart(raw: unknown): PdfChart | null {
   };
 }
 
+function validatePdfMaterialDraft(raw: unknown): PdfMaterialDraft | null {
+  if (raw === null || typeof raw !== "object") {
+    return null;
+  }
+
+  const r = raw as Record<string, unknown>;
+
+  if (
+    !isNonEmptyString(r.id) ||
+    !isNonEmptyString(r.subjectId) ||
+    !isNonEmptyString(r.fileName) ||
+    typeof r.fileSize !== "number" ||
+    !Number.isFinite(r.fileSize) ||
+    typeof r.pageCount !== "number" ||
+    !Number.isFinite(r.pageCount) ||
+    !isNonEmptyString(r.uploadedAt)
+  ) {
+    return null;
+  }
+
+  return {
+    id: r.id,
+    backendMaterialId: typeof r.backendMaterialId === "string" ? r.backendMaterialId : undefined,
+    uploaderId: typeof r.uploaderId === "string" ? r.uploaderId : undefined,
+    subjectId: r.subjectId,
+    classDate: typeof r.classDate === "string" ? r.classDate : undefined,
+    fileName: r.fileName,
+    fileSize: Math.max(0, Math.trunc(r.fileSize)),
+    pageCount: Math.max(1, Math.trunc(r.pageCount)),
+    contentType: typeof r.contentType === "string" ? r.contentType : undefined,
+    uploadStatus:
+      r.uploadStatus === "local" ||
+      r.uploadStatus === "pending" ||
+      r.uploadStatus === "uploaded"
+        ? r.uploadStatus
+        : undefined,
+    selectedPage:
+      typeof r.selectedPage === "number" && Number.isFinite(r.selectedPage)
+        ? Math.max(1, Math.trunc(r.selectedPage))
+        : 1,
+    selectedTool: isPdfWorkspaceTool(r.selectedTool) ? r.selectedTool : "read",
+    uploadedAt: r.uploadedAt,
+    updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : undefined
+  };
+}
+
 export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
   if (raw === null || raw === undefined || typeof raw !== "object") {
     return createEmptyPdfWorkspace("<unknown>");
@@ -1008,13 +1058,21 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
         .filter((chart): chart is PdfChart => chart !== null)
     : [];
 
-  const material = r.material as PdfMaterialDraft | undefined;
+  const material = validatePdfMaterialDraft(r.material);
+  const materials: PdfMaterialDraft[] = Array.isArray(r.materials)
+    ? r.materials
+        .map(validatePdfMaterialDraft)
+        .filter((item): item is PdfMaterialDraft => item !== null)
+    : material
+      ? [material]
+      : [];
   const updatedAt =
     typeof r.updatedAt === "string" ? r.updatedAt : new Date().toISOString();
 
   return {
     subjectId,
-    material,
+    material: material ?? materials[0],
+    materials,
     stickyNotes,
     inkStrokes,
     eraserShape: normalizeEraserShape(r.eraserShape),
