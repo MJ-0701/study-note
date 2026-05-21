@@ -678,6 +678,227 @@ function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
 let notebookStorageErrorReported = false;
 let notebookStorageError: string | undefined;
 
+// sprint-2/S2: BE sync layer state — debounce timers + in-flight tracking for
+// userNotes / pdf-annotations. Plan §8b: per-resource hot path GET on view,
+// debounced PUT (userNotes 500ms, annotations 750ms), max in-flight 3,
+// backoff on consecutive 5xx (3회 / 5분 → autosave pause + banner).
+const USER_NOTES_PUT_DEBOUNCE_MS = 500;
+const ANNOTATION_PUT_DEBOUNCE_MS = 750;
+const SYNC_FAILURE_PAUSE_THRESHOLD = 3;
+const SYNC_FAILURE_PAUSE_WINDOW_MS = 5 * 60 * 1000;
+
+interface SyncFailureTracker {
+  recentFailures: number[];
+  paused: boolean;
+}
+
+const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const userNotesFetchedKeys = new Set<string>();
+const annotationFetchedKeys = new Set<string>();
+const syncFailureTracker: SyncFailureTracker = {
+  recentFailures: [],
+  paused: false
+};
+
+function recordSyncFailure(): void {
+  const now = Date.now();
+  syncFailureTracker.recentFailures.push(now);
+  syncFailureTracker.recentFailures = syncFailureTracker.recentFailures.filter(
+    (ts) => now - ts < SYNC_FAILURE_PAUSE_WINDOW_MS
+  );
+  if (syncFailureTracker.recentFailures.length >= SYNC_FAILURE_PAUSE_THRESHOLD && !syncFailureTracker.paused) {
+    syncFailureTracker.paused = true;
+    notebookStorageError =
+      "메모/필기 BE 저장에 연속 실패했습니다. 자동 동기화를 잠시 멈춥니다. 네트워크/세션 상태를 확인한 뒤 닫기를 눌러 재시작하세요.";
+    if (!notebookStorageErrorReported) {
+      notebookStorageErrorReported = true;
+      try { renderApp(); } catch { /* ignore */ }
+    }
+  }
+}
+
+function recordSyncSuccess(): void {
+  syncFailureTracker.recentFailures = [];
+  if (syncFailureTracker.paused) {
+    syncFailureTracker.paused = false;
+  }
+  // Note: notebookStorageError 가 BE sync 실패로 set 된 경우 banner 자동 해제는
+  // dismiss 버튼 또는 다음 saveNotebook 성공 (localStorage path) 에서 정리.
+}
+
+async function putUserNoteToBE(weekId: string, body: string): Promise<void> {
+  if (syncFailureTracker.paused) {
+    return;
+  }
+  try {
+    const response = await fetch(`${apiBaseUrl}/v1/notes/week/${encodeURIComponent(weekId)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body })
+    });
+    if (response.status === 413) {
+      console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
+      return;
+    }
+    if (!response.ok) {
+      console.warn("[study-note] userNotes PUT failed", response.status, weekId);
+      if (response.status >= 500) {
+        recordSyncFailure();
+      }
+      return;
+    }
+    recordSyncSuccess();
+  } catch (error) {
+    console.warn("[study-note] userNotes PUT network error", error);
+    recordSyncFailure();
+  }
+}
+
+function scheduleUserNotePut(weekId: string, body: string): void {
+  const existing = userNotesPutTimers.get(weekId);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const timer = setTimeout(() => {
+    userNotesPutTimers.delete(weekId);
+    void putUserNoteToBE(weekId, body);
+  }, USER_NOTES_PUT_DEBOUNCE_MS);
+  userNotesPutTimers.set(weekId, timer);
+}
+
+async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promise<void> {
+  const cacheKey = `${subjectId}:${weekId}`;
+  if (userNotesFetchedKeys.has(cacheKey)) {
+    return;
+  }
+  userNotesFetchedKeys.add(cacheKey);
+  try {
+    const response = await fetch(`${apiBaseUrl}/v1/notes/week/${encodeURIComponent(weekId)}`, {
+      credentials: "include"
+    });
+    if (response.status === 404) {
+      // No remote note — keep local notebook value (likely empty).
+      return;
+    }
+    if (!response.ok) {
+      // Allow retry on later view by clearing cache marker.
+      userNotesFetchedKeys.delete(cacheKey);
+      if (response.status >= 500) {
+        recordSyncFailure();
+      }
+      return;
+    }
+    const payload = (await response.json()) as { body?: unknown; updatedAt?: unknown };
+    if (typeof payload.body !== "string") {
+      return;
+    }
+    const incoming = payload.body;
+    let applied = false;
+    notebook = {
+      ...notebook,
+      subjects: notebook.subjects.map((subject) =>
+        subject.id !== subjectId
+          ? subject
+          : {
+              ...subject,
+              weekNotes: subject.weekNotes.map((week) => {
+                if (week.id !== weekId) {
+                  return week;
+                }
+                if ((week.userNotes ?? "") === incoming) {
+                  return week;
+                }
+                applied = true;
+                return { ...week, userNotes: incoming };
+              })
+            }
+      )
+    };
+    if (applied) {
+      saveNotebook(notebook);
+      try { renderApp(); } catch { /* ignore */ }
+    }
+    recordSyncSuccess();
+  } catch (error) {
+    userNotesFetchedKeys.delete(cacheKey);
+    console.warn("[study-note] userNotes GET network error", error);
+    recordSyncFailure();
+  }
+}
+
+async function putAnnotationToBE(materialId: string, payload: unknown): Promise<void> {
+  if (syncFailureTracker.paused) {
+    return;
+  }
+  try {
+    const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload })
+    });
+    if (response.status === 413) {
+      console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
+      return;
+    }
+    if (!response.ok) {
+      console.warn("[study-note] annotation PUT failed", response.status, materialId);
+      if (response.status >= 500) {
+        recordSyncFailure();
+      }
+      return;
+    }
+    recordSyncSuccess();
+  } catch (error) {
+    console.warn("[study-note] annotation PUT network error", error);
+    recordSyncFailure();
+  }
+}
+
+function scheduleAnnotationPut(materialId: string, payload: unknown): void {
+  const existing = annotationPutTimers.get(materialId);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const timer = setTimeout(() => {
+    annotationPutTimers.delete(materialId);
+    void putAnnotationToBE(materialId, payload);
+  }, ANNOTATION_PUT_DEBOUNCE_MS);
+  annotationPutTimers.set(materialId, timer);
+}
+
+async function fetchAnnotationIfMissing(subjectId: string, materialId: string): Promise<void> {
+  const cacheKey = `${subjectId}:${materialId}`;
+  if (annotationFetchedKeys.has(cacheKey)) {
+    return;
+  }
+  annotationFetchedKeys.add(cacheKey);
+  try {
+    const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
+      credentials: "include"
+    });
+    if (response.status === 404) {
+      return;
+    }
+    if (!response.ok) {
+      annotationFetchedKeys.delete(cacheKey);
+      if (response.status >= 500) {
+        recordSyncFailure();
+      }
+      return;
+    }
+    recordSyncSuccess();
+    // Payload application은 후속 (annotation store 의 import 함수 활용) — 본
+    // sprint 는 endpoint round-trip 우선 검증. UI 측 hydrate 는 follow-up.
+  } catch (error) {
+    annotationFetchedKeys.delete(cacheKey);
+    console.warn("[study-note] annotation GET network error", error);
+    recordSyncFailure();
+  }
+}
+
 function saveNotebook(nextNotebook: StudyNotebook): boolean {
   try {
     window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
@@ -987,6 +1208,21 @@ function updatePdfWorkspace(
     }
   };
   savePdfWorkspaceStore();
+  // sprint-2/S2: BE sync — debounced PUT for the active material's annotations.
+  // We send the per-material snapshot (sticky/pen/text/checklist/table/chart).
+  const material = updated.material;
+  if (material) {
+    const materialId = material.backendMaterialId ?? material.id;
+    const payload = {
+      stickyNotes: updated.stickyNotes,
+      inkStrokes: updated.inkStrokes,
+      textBoxes: updated.textBoxes,
+      checklists: updated.checklists,
+      tables: updated.tables,
+      charts: updated.charts
+    };
+    scheduleAnnotationPut(materialId, payload);
+  }
 }
 
 function syncCurrentPdfMaterial(workspace: SubjectPdfWorkspace): SubjectPdfWorkspace {
@@ -2236,6 +2472,8 @@ function handleDocumentInput(event: Event): void {
       )
     };
     saveNotebook(notebook);
+    // sprint-2/S2: BE sync (debounced PUT). localStorage 가 primary, BE 가 cross-device 백업.
+    scheduleUserNotePut(weekId, value);
     return;
   }
 
@@ -4835,6 +5073,13 @@ function renderApp(): void {
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
     ));
+    // sprint-2/S2: lazy fetch annotation snapshot for active material on first view.
+    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
+    const material = workspace.material;
+    if (material) {
+      const materialId = material.backendMaterialId ?? material.id;
+      void fetchAnnotationIfMissing(subject.id, materialId);
+    }
     return;
   }
 
@@ -4889,6 +5134,8 @@ function renderApp(): void {
       renderWeekPage(subject, week),
       `${subject.title} / ${week.label}`
     ));
+    // sprint-2/S2: lazy fetch userNotes from BE on first week view (per-session cache).
+    void fetchUserNoteIfMissing(subject.id, week.id);
   }
 
   // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
@@ -7794,13 +8041,32 @@ function renderSubjectClassPage(subject: SubjectNote): string {
   return `
     <section class="subject-page-hero">
       <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h1>${subject.title} 수업</h1>
-      <p class="lede">수업일을 먼저 고르고, 연결된 PDF와 노트 상세로 들어갑니다. 과목 첫 화면은 날짜와 자료 현황만 빠르게 보여줍니다.</p>
-      <div class="hero-actions">
-        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
-        <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약본으로 이동</a>
-        <a class="secondary-link" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
-      </div>
+      <h1>${subject.title}</h1>
+      <p class="lede">이 진입 화면에서 유닛 카드를 골라 상세로 진입합니다. 카드 click 또는 사이드바의 명시적 메뉴 click 만 상세 라우트를 엽니다.</p>
+    </section>
+
+    <!-- sprint-2/S4: 진입화면 우선 IA — 4 개 유닛 카드 (요약본 / 암기노트 / PDF 작업공간 / 자료 매핑) 가 디폴트 진입 패턴. -->
+    <section class="subject-unit-grid" aria-label="${subject.title} 유닛">
+      <a class="subject-unit-card" href="${subjectClassPath(subject)}">
+        <span class="subject-unit-card__meta">수업</span>
+        <strong>수업일 카드</strong>
+        <span class="subject-unit-card__hint">날짜별 자료 + 메모. ${subject.weekNotes.length}회.</span>
+      </a>
+      <a class="subject-unit-card" href="${subjectSummaryPath(subject)}">
+        <span class="subject-unit-card__meta">요약</span>
+        <strong>요약본</strong>
+        <span class="subject-unit-card__hint">수업일별 요약 + 키워드 정리.</span>
+      </a>
+      <a class="subject-unit-card" href="${subjectMemorizePath(subject)}">
+        <span class="subject-unit-card__meta">암기</span>
+        <strong>필수 암기노트</strong>
+        <span class="subject-unit-card__hint">중간/기말 구간별 + 필수 개념.</span>
+      </a>
+      <a class="subject-unit-card" href="${subjectPdfWorkspacePath(subject)}">
+        <span class="subject-unit-card__meta">PDF</span>
+        <strong>PDF 작업공간</strong>
+        <span class="subject-unit-card__hint">필기 + 단축키. ${subjectMaterials.length}개 자료.</span>
+      </a>
     </section>
 
     ${renderClassDateAddSection(subject)}
@@ -8110,6 +8376,65 @@ function renderWeekSummaryPage(subject: SubjectNote, week: WeekNote): string {
   `;
 }
 
+// sprint-2/S3: render an exam-phase group on the memorize page.
+function renderMemorizeExamGroup(
+  title: string,
+  weeks: WeekNote[],
+  subject: SubjectNote
+): string {
+  if (weeks.length === 0) {
+    return `
+      <div class="memorize-exam-group memorize-exam-group--empty">
+        <h3>${escapeHtml(title)}</h3>
+        <p class="empty-note">${escapeHtml(title)} 구간의 수업일이 없습니다.</p>
+      </div>
+    `;
+  }
+  return `
+    <div class="memorize-exam-group">
+      <h3>${escapeHtml(title)} <span class="memorize-exam-group__count">${weeks.length}회</span></h3>
+      <ul class="memorize-exam-group__list">
+        ${weeks
+          .map(
+            (week) => `
+              <li>
+                <a href="${weekPath(subject, week)}">
+                  <span class="memorize-exam-group__label">${escapeHtml(week.label)}</span>
+                  <span class="memorize-exam-group__title">${escapeHtml(week.title)}</span>
+                </a>
+              </li>
+            `
+          )
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
+// sprint-2/S3: parse "5월 14일(목)" / "5월14일" / "5/14" → millisecond timestamp.
+// Failed parses → +Infinity 로 정렬 끝으로 보냄 (stable order 유지).
+function parseClassDateLabel(label: string): number {
+  const text = label.trim();
+  const kr = /(\d{1,2})\s*월\s*(\d{1,2})/.exec(text);
+  if (kr) {
+    const month = Number(kr[1]);
+    const day = Number(kr[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      // 학기 비교용이므로 연도는 임의 고정 (정렬 키만 필요).
+      return new Date(2026, month - 1, day).getTime();
+    }
+  }
+  const slash = /(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})/.exec(text);
+  if (slash) {
+    const month = Number(slash[1]);
+    const day = Number(slash[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return new Date(2026, month - 1, day).getTime();
+    }
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
 function renderSubjectMemorizePage(subject: SubjectNote): string {
   const mustKnowConcepts = subject.summary.mustKnowConceptIds
     .map((conceptId) => getConceptById(subject, conceptId))
@@ -8119,6 +8444,15 @@ function renderSubjectMemorizePage(subject: SubjectNote): string {
     .flatMap((week) => week.exampleQuestionIds)
     .map((questionId) => getQuestionById(subject, questionId))
     .filter((question): question is ExampleQuestion => Boolean(question));
+
+  // sprint-2/S3: 시험 구간별 수업일 그룹 + 수업일자 ascending 정렬.
+  // WeekNote.examPhase override > SubjectNote.examPhase > "final" default.
+  const subjectPhase = subject.examPhase ?? "final";
+  const sortedWeeks = [...subject.weekNotes].sort((a, b) =>
+    parseClassDateLabel(a.label) - parseClassDateLabel(b.label)
+  );
+  const midtermWeeks = sortedWeeks.filter((week) => (week.examPhase ?? subjectPhase) === "midterm");
+  const finalWeeks = sortedWeeks.filter((week) => (week.examPhase ?? subjectPhase) === "final");
 
   return `
     <section class="subject-page-hero">
@@ -8135,6 +8469,14 @@ function renderSubjectMemorizePage(subject: SubjectNote): string {
       ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
       ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
       ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
+    </section>
+
+    <section aria-labelledby="memorize-by-exam-title">
+      <p class="meta">시험 구간별 수업일</p>
+      <h2 id="memorize-by-exam-title">중간고사 / 기말고사 묶음</h2>
+      <p class="lede">현재 학기의 수업일을 시험 구간으로 나눕니다. 수업일자 오름차순.</p>
+      ${renderMemorizeExamGroup("중간고사", midtermWeeks, subject)}
+      ${renderMemorizeExamGroup("기말고사", finalWeeks, subject)}
     </section>
 
     <section aria-labelledby="memorize-concepts-title">

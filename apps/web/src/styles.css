@@ -1109,6 +1109,107 @@ p {
   font-size: var(--ds-fs-meta);
 }
 
+.memorize-exam-group {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  margin: var(--ds-space-sm) 0;
+  padding: var(--ds-space-md);
+}
+
+.memorize-exam-group--empty {
+  background: transparent;
+}
+
+.memorize-exam-group h3 {
+  align-items: baseline;
+  display: flex;
+  font-size: 1rem;
+  gap: 8px;
+  margin: 0 0 var(--ds-space-sm);
+}
+
+.memorize-exam-group__count {
+  color: var(--ds-muted);
+  font-size: var(--ds-fs-meta);
+  font-weight: normal;
+}
+
+.memorize-exam-group__list {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.memorize-exam-group__list a {
+  align-items: baseline;
+  background: #fff;
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-fg);
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+
+.memorize-exam-group__list a:hover {
+  border-color: var(--ds-accent);
+}
+
+.memorize-exam-group__label {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  min-width: 90px;
+}
+
+.memorize-exam-group__title {
+  font-weight: 500;
+}
+
+.subject-unit-grid {
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: var(--ds-space-md) 0;
+}
+
+.subject-unit-card {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  color: var(--ds-fg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--ds-space-md);
+  text-decoration: none;
+  transition: border-color 0.1s ease;
+}
+
+.subject-unit-card:hover {
+  border-color: var(--ds-accent);
+}
+
+.subject-unit-card__meta {
+  color: var(--ds-muted);
+  font-size: var(--ds-fs-meta);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subject-unit-card strong {
+  font-size: 1.05rem;
+}
+
+.subject-unit-card__hint {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+}
+
 .storage-error-banner {
   align-items: start;
   background: #fef2f2;

@@ -11,9 +11,19 @@ import { ConversationController } from "./persona/conversation.controller";
 import { PersonaTurnController } from "./persona/persona-turn.controller";
 import { PrismaModule } from "@study-note/persistence";
 import { createStorageProvider, StoragePort } from "@study-note/storage";
+import { UserNotesModule } from "./user-notes/user-notes.module";
+import { PdfAnnotationsModule } from "./pdf-annotations/pdf-annotations.module";
 
 @Module({
-  imports: [PrismaModule, AuthModule, CorpusModule, PersonaModule, AdminModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    CorpusModule,
+    PersonaModule,
+    AdminModule,
+    UserNotesModule,
+    PdfAnnotationsModule
+  ],
   controllers: [
     AuthController,
     HealthController,
