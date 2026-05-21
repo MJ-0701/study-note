@@ -51,6 +51,7 @@ export interface WeekNote {
   conceptIds: string[];
   exampleQuestionIds: string[];
   reviewStatus: "ready" | "needs-fill";
+  userNotes?: string;
 }
 
 export interface SubjectSummary {

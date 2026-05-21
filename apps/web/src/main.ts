@@ -2127,6 +2127,32 @@ function handleDocumentInput(event: Event): void {
     return;
   }
 
+  if (target.dataset.action === "update-week-user-notes") {
+    const subjectId = target.dataset.subjectId;
+    const weekId = target.dataset.weekId;
+
+    if (!subjectId || !weekId) {
+      return;
+    }
+
+    const value = (target as HTMLTextAreaElement).value;
+    notebook = {
+      ...notebook,
+      subjects: notebook.subjects.map((subject) =>
+        subject.id !== subjectId
+          ? subject
+          : {
+              ...subject,
+              weekNotes: subject.weekNotes.map((week) =>
+                week.id !== weekId ? week : { ...week, userNotes: value }
+              )
+            }
+      )
+    };
+    saveNotebook(notebook);
+    return;
+  }
+
   // sprint-12/slice-2: textbox content update (debounced 300ms)
   if (target.dataset.action === "update-textbox-content") {
     const subjectId = target.dataset.subjectId;
@@ -7782,6 +7808,8 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
 
     ${renderWeekMappedPdfSection(subject, week, materials)}
 
+    ${renderWeekUserNotesSection(subject, week)}
+
     ${renderQuickNotePanel(subject, ["week"])}
 
     <section aria-labelledby="week-overview-title">
@@ -7808,6 +7836,26 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
       <div class="question-list">
         ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
       </div>
+    </section>
+  `;
+}
+
+function renderWeekUserNotesSection(subject: SubjectNote, week: WeekNote): string {
+  const value = week.userNotes ?? "";
+
+  return `
+    <section class="week-user-notes" aria-labelledby="week-user-notes-title">
+      <p class="meta">내 필기</p>
+      <h2 id="week-user-notes-title">자유 메모</h2>
+      <p class="lede">이 수업일에 대한 자유 형식 메모입니다. 입력 즉시 브라우저에 저장됩니다.</p>
+      <textarea
+        class="week-user-notes__textarea"
+        data-action="update-week-user-notes"
+        data-subject-id="${escapeHtml(subject.id)}"
+        data-week-id="${escapeHtml(week.id)}"
+        placeholder="강의 중 떠오른 키워드, 질문, 정리 메모를 자유롭게 적으세요."
+        rows="8"
+      >${escapeHtml(value)}</textarea>
     </section>
   `;
 }
