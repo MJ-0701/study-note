@@ -35,12 +35,20 @@ permissions:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
       - name: Ping /api/health
         run: |
           set -euo pipefail
           URL="https://study-note.910701.xyz/api/health"
           echo "GET ${URL}"
-          curl -fsS --max-time 30 "${URL}" \
+          # ACA cold start can exceed 30s when the container has fully scaled
+          # to zero. Allow up to 90s per attempt and retry twice with backoff
+          # so a single slow wake-up does not surface as a failed run.
+          curl -fsS \
+            --max-time 90 \
+            --retry 2 \
+            --retry-delay 10 \
+            --retry-all-errors \
+            "${URL}" \
             -w "\nstatus:%{http_code} time:%{time_total}s\n"
