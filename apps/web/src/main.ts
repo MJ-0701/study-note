@@ -535,6 +535,18 @@ if (isBrowserRuntime) {
     // sprint-1/S3: re-render so the toolbar button label reflects current
     // fullscreen state ("전체화면" → "전체화면 종료").
     renderApp();
+
+    // hotfix: when exiting fullscreen, scroll back to the PDF workspace section
+    // so the viewport lands where the user entered fullscreen from instead of
+    // jumping to the top of the page.
+    if (!document.fullscreenElement) {
+      queueMicrotask(() => {
+        const target = document.getElementById(PDF_WORKSPACE_ROOT_ID);
+        if (target) {
+          target.scrollIntoView({ block: "start", behavior: "auto" });
+        }
+      });
+    }
   });
   window.addEventListener("hashchange", () => {
     // sprint-1/S2: close transient overlays on route change so they do not
