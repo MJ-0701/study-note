@@ -2386,14 +2386,17 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  // "?" toggles the help modal. We match by event.key === "?" as well as the
-  // US-layout shortcut (Shift+Slash) so non-US/AZERTY/Dvorak users hit the same
-  // shortcut by typing the actual "?" character (codex P2).
+  // "?" toggles the help modal. Match by event.key === "?" first so any layout
+  // that actually produced the "?" character — including ones where AltGr is
+  // required (Windows/Linux reports AltGr as Ctrl+Alt) — opens the modal as
+  // advertised. Fall back to the US-layout Shift+Slash code combo when the
+  // produced key is not "?" (codex P2 fix-2).
   if (
-    !hasMetaOrCtrl &&
-    !event.altKey &&
     !isEditableTarget(event.target) &&
-    (event.key === "?" || (event.shiftKey && event.code === "Slash"))
+    (
+      event.key === "?" ||
+      (!hasMetaOrCtrl && !event.altKey && event.shiftKey && event.code === "Slash")
+    )
   ) {
     event.preventDefault();
     hotkeyHelpModalOpen = !hotkeyHelpModalOpen;
