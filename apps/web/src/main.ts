@@ -526,6 +526,7 @@ if (isBrowserRuntime) {
   document.addEventListener("pointermove", handleDocumentPointerMove);
   document.addEventListener("pointerup", handleDocumentPointerUp);
   document.addEventListener("pointercancel", handleDocumentPointerUp);
+  document.addEventListener("keydown", handleDocumentKeyDown);
   window.addEventListener("hashchange", renderApp);
   renderApp();
 
@@ -2281,6 +2282,85 @@ function handleDocumentInput(event: Event): void {
       scheduleChecklistItemLabelUpdate(subjectId, checklistId, itemId, target.value);
     }
   }
+}
+
+// sprint-1/S1: keyboard hotkey dispatch for PDF workspace.
+// Single-letter keys (no modifier) switch tools; Cmd/Ctrl + [ / ] flip pages.
+// Mapping uses event.code so Korean IME state does not affect dispatch.
+
+const PDF_TOOL_HOTKEYS: Record<string, LocalPdfTool> = {
+  KeyR: "read",
+  KeyS: "sticky",
+  KeyP: "pen",
+  KeyE: "eraser",
+  KeyT: "text",
+  KeyC: "checklist",
+  KeyB: "table",
+  KeyG: "chart"
+};
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+    return true;
+  }
+
+  return target.isContentEditable;
+}
+
+function getActivePdfWorkspaceSubjectId(): string | undefined {
+  const route = parseRoute(window.location.hash);
+  return route.name === "pdf-workspace" ? route.subjectId : undefined;
+}
+
+function handleDocumentKeyDown(event: KeyboardEvent): void {
+  if (event.defaultPrevented || event.isComposing) {
+    return;
+  }
+
+  const subjectId = getActivePdfWorkspaceSubjectId();
+  if (!subjectId) {
+    return;
+  }
+
+  const hasMetaOrCtrl = event.metaKey || event.ctrlKey;
+
+  if (hasMetaOrCtrl && !event.shiftKey && !event.altKey) {
+    if (event.code === "BracketLeft") {
+      event.preventDefault();
+      movePdfPage(subjectId, -1);
+      renderApp();
+      return;
+    }
+
+    if (event.code === "BracketRight") {
+      event.preventDefault();
+      movePdfPage(subjectId, 1);
+      renderApp();
+      return;
+    }
+  }
+
+  if (hasMetaOrCtrl || event.altKey || event.shiftKey) {
+    return;
+  }
+
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  const tool = PDF_TOOL_HOTKEYS[event.code];
+  if (!tool) {
+    return;
+  }
+
+  event.preventDefault();
+  setPdfTool(subjectId, tool);
+  renderApp();
 }
 
 function handleDocumentLoad(event: Event): void {
