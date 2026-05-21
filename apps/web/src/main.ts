@@ -2444,14 +2444,15 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  // sprint-1/S2 fix (codex P2): try event.code first (Korean IME safety —
-  // physical KeyR still maps even when IME consumes event.key), then fall back
-  // to event.key lookup so non-QWERTY layouts (Dvorak / AZERTY) also work as
-  // labelled. event.key is single character for letter keys; lowercase it so
-  // CapsLock and Shift do not break the lookup.
+  // sprint-1/S2 fix-2 (codex P1): try event.key (the produced character) FIRST
+  // so the visible R/S/P... badge matches actual behavior on non-QWERTY layouts
+  // (e.g., Dvorak: physical "KeyR" position produces another letter — code
+  // lookup would pick the wrong tool first). event.code is the fallback for
+  // Korean IME on QWERTY where event.key may carry the composed value.
+  // event.key is lowercased so CapsLock/Shift do not break the lookup.
   const tool =
-    PDF_TOOL_HOTKEYS[event.code] ??
-    PDF_TOOL_KEY_LABEL_LOOKUP[event.key.toLowerCase()];
+    PDF_TOOL_KEY_LABEL_LOOKUP[event.key.toLowerCase()] ??
+    PDF_TOOL_HOTKEYS[event.code];
   if (!tool) {
     return;
   }
