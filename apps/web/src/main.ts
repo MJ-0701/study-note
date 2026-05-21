@@ -7853,6 +7853,7 @@ function renderWeekUserNotesSection(subject: SubjectNote, week: WeekNote): strin
         data-action="update-week-user-notes"
         data-subject-id="${escapeHtml(subject.id)}"
         data-week-id="${escapeHtml(week.id)}"
+        aria-labelledby="week-user-notes-title"
         placeholder="강의 중 떠오른 키워드, 질문, 정리 메모를 자유롭게 적으세요."
         rows="8"
       >${escapeHtml(value)}</textarea>
