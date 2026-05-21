@@ -2372,13 +2372,14 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  // "?" (Shift+Slash on US/KOR keyboards) toggles the modal — opens or closes.
+  // "?" toggles the help modal. We match by event.key === "?" as well as the
+  // US-layout shortcut (Shift+Slash) so non-US/AZERTY/Dvorak users hit the same
+  // shortcut by typing the actual "?" character (codex P2).
   if (
     !hasMetaOrCtrl &&
     !event.altKey &&
-    event.shiftKey &&
-    event.code === "Slash" &&
-    !isEditableTarget(event.target)
+    !isEditableTarget(event.target) &&
+    (event.key === "?" || (event.shiftKey && event.code === "Slash"))
   ) {
     event.preventDefault();
     hotkeyHelpModalOpen = !hotkeyHelpModalOpen;
