@@ -1,13 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { seedSubjects, subjects } from "./seed-subjects.mjs";
 
 const prisma = new PrismaClient();
-
-const subjects = [
-  { id: "digital-engineering", title: "디지털공학개론" },
-  { id: "information-communication", title: "정보통신개론" },
-  { id: "c-language", title: "C언어" },
-  { id: "computer-introduction", title: "컴퓨터개론" }
-];
 
 const users = [
   {
@@ -37,13 +31,7 @@ const users = [
 ];
 
 try {
-  for (const subject of subjects) {
-    await prisma.subject.upsert({
-      where: { id: subject.id },
-      update: { title: subject.title },
-      create: subject
-    });
-  }
+  await seedSubjects(prisma);
 
   for (const user of users) {
     await prisma.user.upsert({

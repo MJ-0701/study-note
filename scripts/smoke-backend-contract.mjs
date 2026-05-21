@@ -210,6 +210,39 @@ try {
   );
   console.log("- normal user upload endpoints are role-denied");
 
+  const unknownSubjectId = `unknown-subject-${randomUUID()}`;
+  const unknownSubjectCountBefore = await prisma.pdfMaterial.count({
+    where: { subjectId: unknownSubjectId }
+  });
+  const unknownSubjectResponse = await request("/materials/upload-intent", {
+    method: "POST",
+    jar: masterJar,
+    body: {
+      subjectId: unknownSubjectId,
+      classDate: "2026-05-02",
+      fileName: "unknown-subject.pdf",
+      fileSize: 32,
+      pageCount: 1,
+      contentType: "application/pdf"
+    }
+  });
+  const unknownSubjectBody = await unknownSubjectResponse.json();
+  if (
+    unknownSubjectResponse.status !== 400 ||
+    !JSON.stringify(unknownSubjectBody).includes("INVALID_SUBJECT")
+  ) {
+    throw new Error(
+      `unknown subject should return 400 INVALID_SUBJECT, got ${unknownSubjectResponse.status}: ${JSON.stringify(unknownSubjectBody)}`
+    );
+  }
+  const unknownSubjectCountAfter = await prisma.pdfMaterial.count({
+    where: { subjectId: unknownSubjectId }
+  });
+  if (unknownSubjectCountAfter !== unknownSubjectCountBefore) {
+    throw new Error("unknown subject upload intent created a PdfMaterial row");
+  }
+  console.log("- upload intent rejects unknown subject without creating material row");
+
   const samplePdf = Buffer.from("%PDF-1.4\n% smoke PDF\n%%EOF\n");
   const uploadIntent = await requestJson("/materials/upload-intent", {
     method: "POST",

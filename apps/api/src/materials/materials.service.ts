@@ -50,13 +50,14 @@ export class MaterialsService {
   async createUploadIntent(ownerId: string, input: CreateUploadIntentInput) {
     const now = new Date().toISOString();
     const materialId = randomUUID();
+    const subjectId = await this.requireExistingSubjectId(input.subjectId);
     const fileName = requirePdfFileName(input.fileName);
     const fileSize = requirePdfUploadFileSize(input.fileSize);
     const material = await this.prisma.pdfMaterial.create({
       data: {
         id: materialId,
         ownerId,
-        subjectId: requireString(input.subjectId, "subjectId"),
+        subjectId,
         classDate: requireString(input.classDate, "classDate"),
         fileName,
         fileSize,
@@ -414,6 +415,23 @@ export class MaterialsService {
     }
 
     return toPdfMaterialRecord(material);
+  }
+
+  private async requireExistingSubjectId(value: string): Promise<string> {
+    const subjectId = requireString(value, "subjectId");
+    const subject = await this.prisma.subject.findUnique({
+      where: { id: subjectId },
+      select: { id: true }
+    });
+
+    if (!subject) {
+      throw new BadRequestException({
+        errorCode: "INVALID_SUBJECT",
+        errorMessage: `Unknown subjectId: ${subjectId}`
+      });
+    }
+
+    return subject.id;
   }
 }
 

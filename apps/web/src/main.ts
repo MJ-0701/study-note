@@ -132,6 +132,8 @@ interface AuthSession {
 
 type AuthBootState = "checking" | "ready";
 
+type AuthBootNotice = "checking" | "waking" | "retryable";
+
 type AuthMode = "login" | "signup";
 
 export type InspectorDrillType = "sticky" | "ink" | "textbox" | "checklist" | "table" | "chart";
@@ -169,6 +171,10 @@ const DRILL_HIGHLIGHT_DURATION_MS = 1500;
 const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
 const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
 const DRILL_HIGHLIGHT_EXPIRES_MS = 4000;
+const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
+const AUTH_SESSION_REQUEST_TIMEOUT_MS = 12000;
+const AUTH_SESSION_RETRY_DELAY_MS = 2500;
+const AUTH_SESSION_MAX_AUTO_RETRIES = 2;
 let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
 let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
@@ -182,6 +188,10 @@ const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
 let authBootState: AuthBootState = "checking";
+let authBootNotice: AuthBootNotice = "checking";
+let authBootRequestId = 0;
+let authBootNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+let authBootRetryTimer: ReturnType<typeof setTimeout> | undefined;
 // slice-3 (sign-up UX): current auth form tab ("login" | "signup").
 let authMode: AuthMode = "login";
 const activePdfObjectUrls = new Map<string, string>();
@@ -637,8 +647,22 @@ function saveNotebook(nextNotebook: StudyNotebook): void {
 // Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
 
 function clearAuthSession(): void {
+  authBootRequestId += 1;
   authSession = undefined;
+  clearAuthBootTimers();
   revokeAllPdfObjectUrls();
+}
+
+function clearAuthBootTimers(): void {
+  if (authBootNoticeTimer) {
+    clearTimeout(authBootNoticeTimer);
+    authBootNoticeTimer = undefined;
+  }
+
+  if (authBootRetryTimer) {
+    clearTimeout(authBootRetryTimer);
+    authBootRetryTimer = undefined;
+  }
 }
 
 function setActivePdfObjectUrl(
@@ -681,17 +705,34 @@ function clearPdfFrameReadiness(): void {
   pendingPdfPageTransition = undefined;
 }
 
-async function revalidateStoredSession(): Promise<void> {
+async function revalidateStoredSession(options: { attempt?: number } = {}): Promise<void> {
+  const attempt = options.attempt ?? 0;
+  const requestId = beginAuthBootRequest();
+
   try {
     // slice-2: cookie-based session rehydration — credentials:include sends the
     // httpOnly study_note_session cookie. No localStorage fallback (F2).
-    const response = await fetch(`${apiBaseUrl}/v1/auth/me`, {
+    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/me`, {
       credentials: "include"
-    });
+    }, AUTH_SESSION_REQUEST_TIMEOUT_MS);
+
+    if (requestId !== authBootRequestId) {
+      return;
+    }
+
+    clearAuthBootTimers();
 
     if (!response.ok) {
-      // 401 = no valid cookie; 503 = auth disabled. Either way: not signed in.
+      if (response.status >= 500) {
+        scheduleAuthBootRetry(attempt);
+        return;
+      }
+
+      // 401/403 = no valid cookie or insufficient auth for /me. Either way:
+      // leave the cold-start lane and show the login page quickly.
+      authSession = undefined;
       authBootState = "ready";
+      authBootNotice = "checking";
       renderApp();
       return;
     }
@@ -699,20 +740,84 @@ async function revalidateStoredSession(): Promise<void> {
     const payload = (await response.json()) as unknown;
 
     if (!isAuthMeResponse(payload)) {
+      authSession = undefined;
       authBootState = "ready";
+      authBootNotice = "checking";
       renderApp();
       return;
     }
 
     authSession = meResponseToSession(payload);
     await restoreUploadedPdfMaterialsForSession(authSession);
+    if (requestId !== authBootRequestId) {
+      return;
+    }
     loginFeedback = undefined;
-  } catch {
-    // Network error — treat as not signed in (don't show error on cold load)
-    authSession = undefined;
-  } finally {
     authBootState = "ready";
+    authBootNotice = "checking";
     renderApp();
+  } catch {
+    if (requestId !== authBootRequestId) {
+      return;
+    }
+
+    clearAuthBootTimers();
+    scheduleAuthBootRetry(attempt);
+  }
+}
+
+function beginAuthBootRequest(): number {
+  const requestId = authBootRequestId + 1;
+  authBootRequestId = requestId;
+  clearAuthBootTimers();
+  authBootState = "checking";
+  authBootNotice = "checking";
+  renderApp();
+
+  authBootNoticeTimer = setTimeout(() => {
+    if (authBootState !== "checking" || requestId !== authBootRequestId) {
+      return;
+    }
+
+    authBootNotice = "waking";
+    renderApp();
+  }, AUTH_SESSION_WAKE_NOTICE_DELAY_MS);
+
+  return requestId;
+}
+
+function scheduleAuthBootRetry(attempt: number): void {
+  authSession = undefined;
+  authBootState = "checking";
+
+  if (attempt >= AUTH_SESSION_MAX_AUTO_RETRIES) {
+    authBootNotice = "retryable";
+    renderApp();
+    return;
+  }
+
+  authBootNotice = "waking";
+  renderApp();
+  authBootRetryTimer = setTimeout(() => {
+    void revalidateStoredSession({ attempt: attempt + 1 });
+  }, AUTH_SESSION_RETRY_DELAY_MS);
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1032,6 +1137,11 @@ function handleDocumentClick(event: MouseEvent): void {
       detail: "다시 학습공간에 들어가려면 로그인하세요."
     };
     renderApp();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "retry-session-check") {
+    void revalidateStoredSession();
     return;
   }
 
@@ -1528,8 +1638,13 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
       const session = meResponseToSession(payload as AuthMeResponse);
       authSession = session;
       authBootState = "ready";
+      authBootNotice = "checking";
+      clearAuthBootTimers();
       // F2: no localStorage — session lives in httpOnly cookie + in-memory only
       await restoreUploadedPdfMaterialsForSession(session);
+      if (authSession !== session) {
+        return;
+      }
       loginFeedback = undefined;
       renderApp();
     } catch (error) {
@@ -4886,12 +5001,34 @@ function renderLoginPage(): string {
 }
 
 function renderSessionCheckPage(): string {
+  const isChecking = authBootNotice === "checking";
+  const isRetryable = authBootNotice === "retryable";
+  const title = isChecking
+    ? "세션 확인 중"
+    : isRetryable
+      ? "서버 응답이 늦어지고 있어요"
+      : "서버를 깨우는 중";
+  const detail = isChecking
+    ? "저장된 로그인 정보를 서버와 확인하고 있습니다."
+    : isRetryable
+      ? "무료 운영 환경이라 첫 요청이 길어질 수 있습니다. 잠시 뒤 다시 확인해 주세요."
+      : "배포 직후에는 백엔드가 깨어나는 데 시간이 조금 걸릴 수 있습니다. 자동으로 다시 확인합니다.";
+
   return `
     <main class="login-screen" data-session-checking="true">
       <section class="login-panel" aria-live="polite" aria-busy="true">
         <p class="meta">SESSION CHECK</p>
-        <h1>세션 확인 중</h1>
-        <p class="lede">저장된 로그인 정보를 서버와 확인하고 있습니다.</p>
+        <h1>${title}</h1>
+        <p class="lede">${detail}</p>
+        ${
+          isChecking
+            ? ""
+            : `<div class="session-check-actions">
+                <button class="secondary-action" type="button" data-action="retry-session-check">
+                  다시 확인
+                </button>
+              </div>`
+        }
       </section>
     </main>
   `;

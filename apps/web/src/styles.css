@@ -150,6 +150,11 @@ code,
   border-color: rgba(38, 122, 69, 0.3);
 }
 
+.session-check-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
 /* slice-3: auth tab toggle (login / sign-up) */
 .auth-tabs {
   border-bottom: 1px solid var(--ds-rule);

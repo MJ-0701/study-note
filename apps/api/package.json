@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json",
     "prisma:generate": "prisma generate --schema ../../packages/persistence/prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema ../../packages/persistence/prisma/schema.prisma",
+    "prisma:seed:subjects": "node ../../packages/persistence/prisma/seed-subjects.mjs",
     "prisma:seed": "node ../../packages/persistence/prisma/seed.mjs"
   },
   "dependencies": {

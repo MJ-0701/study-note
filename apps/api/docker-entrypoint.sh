@@ -6,8 +6,9 @@ set -e
 # Responsibilities:
 #   1. Wait for DB to accept TCP connections (max 60s)
 #   2. Run prisma migrate deploy (exit 1 on failure → docker restart loop)
-#   3. Optionally run seed (STUDY_NOTE_RUN_SEED=true)
-#   4. exec app (PID 1 receives SIGTERM cleanly)
+#   3. Optionally run subject seed (STUDY_NOTE_RUN_SUBJECT_SEED=true, default)
+#   4. Optionally run dev user seed (STUDY_NOTE_RUN_SEED=true)
+#   5. exec app (PID 1 receives SIGTERM cleanly)
 # -------------------------------------------------------------------------
 
 # ------------------------------------------------------------------
@@ -76,7 +77,21 @@ fi
 echo "[entrypoint] prisma migrate deploy complete"
 
 # ------------------------------------------------------------------
-# 3. seed (toggle — dev default true, prod explicit false)
+# 3. subject seed (safe in prod — no dev users)
+# ------------------------------------------------------------------
+if [ "${STUDY_NOTE_RUN_SUBJECT_SEED:-true}" = "true" ]; then
+  echo "[entrypoint] running prisma subject seed (STUDY_NOTE_RUN_SUBJECT_SEED=true)..."
+  if ! pnpm --filter @study-note/api prisma:seed:subjects; then
+    echo "[entrypoint] WARNING: subject seed failed (non-fatal — continuing)" >&2
+  else
+    echo "[entrypoint] subject seed complete"
+  fi
+else
+  echo "[entrypoint] subject seed skipped (STUDY_NOTE_RUN_SUBJECT_SEED=${STUDY_NOTE_RUN_SUBJECT_SEED:-true})"
+fi
+
+# ------------------------------------------------------------------
+# 4. dev seed (toggle — dev default true, prod explicit false)
 # ------------------------------------------------------------------
 if [ "${STUDY_NOTE_RUN_SEED:-false}" = "true" ]; then
   echo "[entrypoint] running prisma seed (STUDY_NOTE_RUN_SEED=true)..."
@@ -90,7 +105,7 @@ else
 fi
 
 # ------------------------------------------------------------------
-# 4. start app — exec so Node is PID 1 and receives SIGTERM directly
+# 5. start app — exec so Node is PID 1 and receives SIGTERM directly
 # ------------------------------------------------------------------
 echo "[entrypoint] starting app..."
 exec node apps/api/dist/main.js
