@@ -689,6 +689,10 @@ function clearAuthSession(): void {
   authSession = undefined;
   clearAuthBootTimers();
   revokeAllPdfObjectUrls();
+  // sprint-1/S2 fix (codex P2): drop transient overlays that should not survive
+  // a session reset. Without this the hotkey help modal could persist into the
+  // post-login render and lock the shell in `inert`.
+  hotkeyHelpModalOpen = false;
 }
 
 function clearAuthBootTimers(): void {
@@ -5651,11 +5655,12 @@ function weekPath(subject: SubjectNote, week: WeekNote): string {
 }
 
 function renderShell(sidebar: string, mainContent: string, crumb: string): string {
-  // sprint-1/S2 fix (codex P2): when the hotkey help dialog is open, mark the
-  // app shell as `inert` so background keyboard/pointer interaction is blocked
-  // for real (matching the aria-modal=true claim). The modal renders as a
-  // sibling of the shell so it stays interactive.
-  const shellInertAttr = hotkeyHelpModalOpen ? " inert" : "";
+  // sprint-1/S2 fix (codex P2): only apply `inert` when the help modal will
+  // actually render. The modal is gated by both `hotkeyHelpModalOpen` and the
+  // current route being the PDF workspace; if either is false the inert flag
+  // would lock the shell without a visible dialog to close it.
+  const modalWillRender = hotkeyHelpModalOpen && !!getActivePdfWorkspaceSubjectId();
+  const shellInertAttr = modalWillRender ? " inert" : "";
   return `
     <div class="app-shell"${shellInertAttr}>
       ${sidebar}
@@ -5694,6 +5699,15 @@ function renderNotebookStorageBanner(): string {
 // sprint-1/S2: hotkey help modal — listed shortcuts so users do not have to memorise.
 function renderHotkeyHelpModal(): string {
   if (!hotkeyHelpModalOpen) {
+    return "";
+  }
+
+  // sprint-1/S2 fix (codex P2): only render the modal on the PDF workspace
+  // route. Outside it the keyboard handler returns early and the user would be
+  // unable to close the modal, while the shell `inert` attribute would lock
+  // navigation. Defensive — hashchange already clears the flag, but a stale
+  // flag from a non-shell path (auth reset, direct deep-link) is possible.
+  if (!getActivePdfWorkspaceSubjectId()) {
     return "";
   }
 
