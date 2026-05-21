@@ -2329,15 +2329,22 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
 
   const hasMetaOrCtrl = event.metaKey || event.ctrlKey;
 
-  if (hasMetaOrCtrl && !event.shiftKey && !event.altKey) {
-    if (event.code === "BracketLeft") {
+  // sprint-1/S1 fix (codex P2): match by event.key as well as event.code so the
+  // shortcut works on non-US layouts where "[" / "]" are produced via AltGr or
+  // mapped to non-bracket physical keys. Do not gate on altKey because AltGr
+  // raises altKey=true on those layouts.
+  if (hasMetaOrCtrl && !event.shiftKey) {
+    const isBracketLeft = event.code === "BracketLeft" || event.key === "[";
+    const isBracketRight = event.code === "BracketRight" || event.key === "]";
+
+    if (isBracketLeft) {
       event.preventDefault();
       movePdfPage(subjectId, -1);
       renderApp();
       return;
     }
 
-    if (event.code === "BracketRight") {
+    if (isBracketRight) {
       event.preventDefault();
       movePdfPage(subjectId, 1);
       renderApp();
