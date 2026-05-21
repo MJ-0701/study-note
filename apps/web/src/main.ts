@@ -1139,12 +1139,18 @@ function addSubjectClassDate(formData: FormData): void {
         : item
     )
   };
-  saveNotebook(notebook);
-  intakeFeedback = {
-    kind: "success",
-    title: "수업일을 추가했습니다.",
-    detail: `${classDate} 카드에서 PDF를 연결하고 요약본을 채울 수 있습니다.`
-  };
+  const saved = saveNotebook(notebook);
+  intakeFeedback = saved
+    ? {
+        kind: "success",
+        title: "수업일을 추가했습니다.",
+        detail: `${classDate} 카드에서 PDF를 연결하고 요약본을 채울 수 있습니다.`
+      }
+    : {
+        kind: "error",
+        title: "수업일을 추가했지만 저장에 실패했습니다.",
+        detail: "브라우저 저장공간 문제로 변경 내용이 새로고침 시 사라질 수 있습니다. 상단 알림을 확인하세요."
+      };
   renderApp();
 }
 
@@ -4425,13 +4431,19 @@ async function importWeekNoteFile(
     }
 
     notebook = result.notebook;
-    saveNotebook(notebook);
-    intakeFeedback = {
-      kind: "success",
-      title: `${result.subject.title} ${result.weekNote.label} 노트를 반영했습니다.`,
-      detail: "브라우저 localStorage에 저장되어 새로고침 후에도 유지됩니다.",
-      href: weekPath(result.subject, result.weekNote)
-    };
+    const saved = saveNotebook(notebook);
+    intakeFeedback = saved
+      ? {
+          kind: "success",
+          title: `${result.subject.title} ${result.weekNote.label} 노트를 반영했습니다.`,
+          detail: "브라우저 localStorage에 저장되어 새로고침 후에도 유지됩니다.",
+          href: weekPath(result.subject, result.weekNote)
+        }
+      : {
+          kind: "error",
+          title: `${result.subject.title} ${result.weekNote.label} 노트가 저장에 실패했습니다.`,
+          detail: "브라우저 저장공간 문제로 변경 내용이 새로고침 시 사라질 수 있습니다. 상단 알림을 확인하세요."
+        };
     renderApp();
   } catch (error) {
     intakeFeedback = {
