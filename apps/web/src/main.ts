@@ -7,6 +7,7 @@ import {
   createMaterialUploadIntent,
   fetchPdfMaterialFile,
   listPdfMaterials,
+  updatePdfMaterialMetadata,
   uploadMaterialFile,
   type MaterialUploadIntent,
   type PdfMaterialRecord
@@ -91,8 +92,10 @@ type Route =
   | { name: "pdf-workspaces" }
   | { name: "subject"; subjectId: string }
   | { name: "subject-class"; subjectId: string }
-  | { name: "subject-summary"; subjectId: string }
+  | { name: "subject-summaries"; subjectId: string }
+  | { name: "subject-summary-detail"; subjectId: string; weekId: string }
   | { name: "subject-mcp"; subjectId: string }
+  | { name: "subject-memorize"; subjectId: string }
   | { name: "subject-intake"; subjectId: string }
   | { name: "pdf-workspace"; subjectId: string }
   | { name: "week"; subjectId: string; weekId: string };
@@ -1056,6 +1059,209 @@ function getSubjectPdfMaterials(subjectId: string): PdfMaterialDraft[] {
   return getPdfWorkspaceMaterials(getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId));
 }
 
+function addSubjectClassDate(formData: FormData): void {
+  const subjectId = String(formData.get("subjectId") ?? "").trim();
+  const classDate = String(formData.get("classDate") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim();
+  const subject = notebook.subjects.find((item) => item.id === subjectId);
+
+  if (!subject) {
+    intakeFeedback = {
+      kind: "error",
+      title: "과목을 찾을 수 없습니다.",
+      detail: "수업일을 추가할 과목을 다시 선택하세요."
+    };
+    renderApp();
+    return;
+  }
+
+  if (!classDate) {
+    intakeFeedback = {
+      kind: "error",
+      title: "수업일을 입력하세요.",
+      detail: "예: 5월 14일(목)처럼 sidebar와 카드에 표시할 날짜를 적어 주세요."
+    };
+    renderApp();
+    return;
+  }
+
+  if (subject.weekNotes.some((week) => week.label === classDate)) {
+    intakeFeedback = {
+      kind: "error",
+      title: "이미 있는 수업일입니다.",
+      detail: `${classDate} 수업일 카드가 이미 있습니다. 기존 카드를 열어 PDF를 연결하세요.`
+    };
+    renderApp();
+    return;
+  }
+
+  const newWeek: WeekNote = {
+    id: createClassDateWeekId(subject.id, classDate),
+    label: classDate,
+    title: title || `${classDate} 수업`,
+    focus: "PDF 자료를 연결하고 수업 요약을 채워야 합니다.",
+    sourceMaterialIds: [],
+    requiredKeywordIds: [],
+    conceptIds: [],
+    exampleQuestionIds: [],
+    reviewStatus: "needs-fill"
+  };
+
+  notebook = {
+    ...notebook,
+    updatedAt: new Date().toISOString().slice(0, 10),
+    subjects: notebook.subjects.map((item) =>
+      item.id === subject.id
+        ? { ...item, weekNotes: [...item.weekNotes, newWeek] }
+        : item
+    )
+  };
+  saveNotebook(notebook);
+  intakeFeedback = {
+    kind: "success",
+    title: "수업일을 추가했습니다.",
+    detail: `${classDate} 카드에서 PDF를 연결하고 요약본을 채울 수 있습니다.`
+  };
+  renderApp();
+}
+
+function createClassDateWeekId(subjectId: string, classDate: string): string {
+  const slug = classDate
+    .trim()
+    .toLowerCase()
+    .replace(/[^0-9a-z가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `week-${subjectId}-${slug || Date.now().toString(36)}-${Date.now().toString(36)}`;
+}
+
+async function assignPdfMaterialClassDate(
+  subjectId: string,
+  materialId: string,
+  classDate: string
+): Promise<void> {
+  const subject = notebook.subjects.find((item) => item.id === subjectId);
+  const material = getSubjectPdfMaterials(subjectId).find(
+    (item) => getPdfMaterialKey(item) === materialId
+  );
+  const nextClassDate = normalizePdfMaterialClassDateValue(classDate);
+
+  if (!subject || !material) {
+    intakeFeedback = {
+      kind: "error",
+      title: "PDF 자료를 찾을 수 없습니다.",
+      detail: "자료 목록을 새로고침한 뒤 다시 시도하세요."
+    };
+    renderApp();
+    return;
+  }
+
+  if (
+    nextClassDate !== PDF_MATERIAL_UNASSIGNED_CLASS_DATE &&
+    !subject.weekNotes.some((week) => week.label === nextClassDate)
+  ) {
+    intakeFeedback = {
+      kind: "error",
+      title: "없는 수업일입니다.",
+      detail: "먼저 수업일을 추가한 뒤 PDF를 연결하세요."
+    };
+    renderApp();
+    return;
+  }
+
+  const previousClassDate = material.classDate;
+  patchPdfWorkspaceMaterial(subjectId, materialId, {
+    classDate: nextClassDate,
+    updatedAt: new Date().toISOString()
+  });
+  intakeFeedback = {
+    kind: "success",
+    title: "PDF 수업일을 저장하는 중입니다.",
+    detail: nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE
+      ? `${material.fileName}의 수업일을 미지정으로 바꿉니다.`
+      : `${material.fileName}을 ${nextClassDate} 수업에 연결합니다.`
+  };
+  renderApp();
+
+  if (!material.backendMaterialId) {
+    intakeFeedback = {
+      kind: "success",
+      title: "로컬 PDF 수업일을 변경했습니다.",
+      detail: "backend에 저장되지 않은 로컬 자료라 현재 브라우저에만 반영됩니다."
+    };
+    renderApp();
+    return;
+  }
+
+  try {
+    const updated = await updatePdfMaterialMetadata(apiBaseUrl, material.backendMaterialId, {
+      classDate: nextClassDate
+    });
+    const updatedDraft = createPdfMaterialFromBackend(updated, {
+      selectedPage: material.selectedPage,
+      selectedTool: material.selectedTool
+    });
+    replacePdfWorkspaceMaterial(subjectId, materialId, updatedDraft);
+    intakeFeedback = {
+      kind: "success",
+      title: "PDF 수업일을 저장했습니다.",
+      detail: nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE
+        ? `${updated.fileName}은 아직 수업일 미지정 상태입니다.`
+        : `${updated.fileName} → ${nextClassDate} 수업으로 연결했습니다.`
+    };
+  } catch (error) {
+    patchPdfWorkspaceMaterial(subjectId, materialId, {
+      classDate: previousClassDate,
+      updatedAt: material.updatedAt
+    });
+    intakeFeedback = {
+      kind: "error",
+      title: "PDF 수업일을 저장하지 못했습니다.",
+      detail: formatMaterialError(error)
+    };
+  }
+
+  renderApp();
+}
+
+function normalizePdfMaterialClassDateValue(value: string): string {
+  const trimmed = value.trim();
+
+  return trimmed || PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
+}
+
+function patchPdfWorkspaceMaterial(
+  subjectId: string,
+  materialId: string,
+  patch: Partial<PdfMaterialDraft>
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    material: workspace.material && getPdfMaterialKey(workspace.material) === materialId
+      ? { ...workspace.material, ...patch }
+      : workspace.material,
+    materials: getPdfWorkspaceMaterials(workspace).map((item) =>
+      getPdfMaterialKey(item) === materialId ? { ...item, ...patch } : item
+    )
+  }));
+}
+
+function replacePdfWorkspaceMaterial(
+  subjectId: string,
+  materialId: string,
+  nextMaterial: PdfMaterialDraft
+): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    material: workspace.material && getPdfMaterialKey(workspace.material) === materialId
+      ? { ...workspace.material, ...nextMaterial }
+      : workspace.material,
+    materials: getPdfWorkspaceMaterials(workspace).map((item) =>
+      getPdfMaterialKey(item) === materialId ? { ...item, ...nextMaterial } : item
+    )
+  }));
+}
+
 function handleDocumentChange(event: Event): void {
   const target = event.target;
 
@@ -1090,6 +1296,17 @@ function handleDocumentChange(event: Event): void {
         )
       }));
       renderApp();
+    }
+
+    return;
+  }
+
+  if (target instanceof HTMLSelectElement && target.dataset.action === "assign-pdf-class-date") {
+    const subjectId = target.dataset.subjectId;
+    const materialId = target.dataset.materialId;
+
+    if (subjectId && materialId) {
+      void assignPdfMaterialClassDate(subjectId, materialId, target.value);
     }
 
     return;
@@ -1739,6 +1956,12 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
   }
 
   const action = target.dataset.action;
+
+  if (action === "add-class-date") {
+    event.preventDefault();
+    addSubjectClassDate(new FormData(target));
+    return;
+  }
 
   if (action !== "login" && action !== "signup") {
     return;
@@ -4171,15 +4394,17 @@ function renderApp(): void {
   const subject =
     route.name === "subject" ||
     route.name === "subject-class" ||
-    route.name === "subject-summary" ||
+    route.name === "subject-summaries" ||
+    route.name === "subject-summary-detail" ||
     route.name === "subject-mcp" ||
+    route.name === "subject-memorize" ||
     route.name === "subject-intake" ||
     route.name === "pdf-workspace" ||
     route.name === "week"
       ? notebook.subjects.find((item) => item.id === route.subjectId)
       : undefined;
   const week =
-    route.name === "week" && subject
+    (route.name === "week" || route.name === "subject-summary-detail") && subject
       ? subject.weekNotes.find((item) => item.id === route.weekId)
       : undefined;
 
@@ -4197,7 +4422,7 @@ function renderApp(): void {
     return;
   }
 
-  if (route.name === "week" && subject && !week) {
+  if ((route.name === "week" || route.name === "subject-summary-detail") && subject && !week) {
     renderInto(renderShell(
       renderSubjectSidebar(subject, route),
       renderNotFound(),
@@ -4261,11 +4486,20 @@ function renderApp(): void {
     return;
   }
 
-  if (route.name === "subject-summary" && subject) {
+  if (route.name === "subject-summaries" && subject) {
     renderInto(renderShell(
       renderSubjectSidebar(subject, route),
-      renderSubjectSummaryPage(subject),
+      renderSubjectSummariesPage(subject),
       `${subject.title} / 요약본`
+    ));
+    return;
+  }
+
+  if (route.name === "subject-summary-detail" && subject && week) {
+    renderInto(renderShell(
+      renderSubjectSidebar(subject, route),
+      renderWeekSummaryPage(subject, week),
+      `${subject.title} / ${week.label} 요약본`
     ));
     return;
   }
@@ -4275,6 +4509,15 @@ function renderApp(): void {
       renderSubjectSidebar(subject, route),
       renderSubjectMcpPage(subject),
       `${subject.title} / MCP 호출`
+    ));
+    return;
+  }
+
+  if (route.name === "subject-memorize" && subject) {
+    renderInto(renderShell(
+      renderSubjectSidebar(subject, route),
+      renderSubjectMemorizePage(subject),
+      `${subject.title} / 필수 암기노트`
     ));
     return;
   }
@@ -4312,12 +4555,24 @@ function parseRoute(hash: string): Route {
     return { name: "subject-class", subjectId: parts[1] };
   }
 
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "summaries" && parts[3]) {
+    return { name: "subject-summary-detail", subjectId: parts[1], weekId: parts[3] };
+  }
+
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "summaries") {
+    return { name: "subject-summaries", subjectId: parts[1] };
+  }
+
   if (parts[0] === "subjects" && parts[1] && parts[2] === "summary") {
-    return { name: "subject-summary", subjectId: parts[1] };
+    return { name: "subject-summaries", subjectId: parts[1] };
   }
 
   if (parts[0] === "subjects" && parts[1] && parts[2] === "mcp") {
     return { name: "subject-mcp", subjectId: parts[1] };
+  }
+
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "memorize") {
+    return { name: "subject-memorize", subjectId: parts[1] };
   }
 
   if (parts[0] === "subjects" && parts[1]) {
@@ -4344,11 +4599,19 @@ function subjectClassPath(subject: SubjectNote): string {
 }
 
 function subjectSummaryPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/summary`;
+  return `#/subjects/${subject.id}/summaries`;
+}
+
+function weekSummaryPath(subject: SubjectNote, week: WeekNote): string {
+  return `#/subjects/${subject.id}/summaries/${week.id}`;
 }
 
 function subjectMcpPath(subject: SubjectNote): string {
   return `#/subjects/${subject.id}/mcp`;
+}
+
+function subjectMemorizePath(subject: SubjectNote): string {
+  return `#/subjects/${subject.id}/memorize`;
 }
 
 function subjectIntakePath(subject: SubjectNote): string {
@@ -5287,36 +5550,16 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
     route.name === "week"
       ? subject.weekNotes.find((week) => week.id === route.weekId)
       : undefined;
-  const isClassRoute = route.name === "subject" || route.name === "subject-class" || route.name === "week";
 
   return `
     <aside class="sidebar" aria-label="${subject.title} 학습 내비게이션">
       <a class="wordmark" href="#/">study-note</a>
       <div class="sidebar-group sidebar-group--subjects">
-        <p class="group-label">${subject.title}</p>
-        <nav class="subject-sidebar-depth" aria-label="${subject.title} 하위 화면">
-          <a class="subject-sidebar-depth__link ${isClassRoute ? "active" : ""}" href="${subjectClassPath(subject)}">
-            <span>1</span>
-            <strong>수업</strong>
-          </a>
-          <a class="subject-sidebar-depth__link ${route.name === "subject-summary" ? "active" : ""}" href="${subjectSummaryPath(subject)}">
-            <span>2</span>
-            <strong>요약본</strong>
-          </a>
-          <a class="subject-sidebar-depth__link ${route.name === "subject-mcp" ? "active" : ""}" href="${subjectMcpPath(subject)}">
-            <span>3</span>
-            <strong>MCP 호출</strong>
-          </a>
+        <p class="group-label">과목 공부</p>
+        <nav aria-label="과목별 학습 화면">
+          ${notebook.subjects.map((item) => renderSubjectNavItem(item, subject, route)).join("")}
         </nav>
       </div>
-      <details class="sidebar-details subject-week-details" ${isClassRoute ? "open" : ""}>
-        <summary>수업일별 노트</summary>
-        <nav>
-          ${subject.weekNotes.map((week) => `
-            <a class="${route.name === "week" && route.weekId === week.id ? "active" : ""}" href="${weekPath(subject, week)}">${week.label}</a>
-          `).join("")}
-        </nav>
-      </details>
       <div class="sidebar-group sidebar-group--workspaces">
         <p class="group-label">PDF 작업공간</p>
         <nav>
@@ -5325,15 +5568,6 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
         </nav>
       </div>
       ${renderClassSchedule(currentSession?.label)}
-      <div class="sidebar-group sidebar-group--subjects is-secondary">
-        <p class="group-label">다른 과목</p>
-        <nav>
-          <a href="#/">전체 현황</a>
-          ${notebook.subjects.map((item) => `
-            <a class="${item.id === subject.id ? "active" : ""}" href="${subjectClassPath(item)}">${item.title}</a>
-          `).join("")}
-        </nav>
-      </div>
       <details class="sidebar-details" ${route.name === "subject-intake" ? "open" : ""}>
         <summary>자료 관리</summary>
         <nav>
@@ -5349,6 +5583,56 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
       ${renderAdminLink()}
     </aside>
   `;
+}
+
+function renderSubjectNavItem(
+  item: SubjectNote,
+  currentSubject: SubjectNote,
+  route: Route
+): string {
+  const isCurrent = item.id === currentSubject.id;
+
+  return `
+    <div class="subject-sidebar-item ${isCurrent ? "is-current" : ""}">
+      <a class="subject-sidebar-parent ${isCurrent ? "is-current" : ""}" href="${subjectClassPath(item)}">${item.title}</a>
+      ${isCurrent ? renderCurrentSubjectDepthNav(item, route) : ""}
+    </div>
+  `;
+}
+
+function renderCurrentSubjectDepthNav(subject: SubjectNote, route: Route): string {
+  return `
+    <div class="subject-sidebar-depth" aria-label="${subject.title} 하위 화면">
+      <a class="subject-sidebar-depth__link ${isSubjectClassRoute(subject, route) ? "active" : ""}" href="${subjectClassPath(subject)}">수업</a>
+      <a class="subject-sidebar-depth__link ${isSubjectSummaryRoute(subject, route) ? "active" : ""}" href="${subjectSummaryPath(subject)}">요약본</a>
+      <a class="subject-sidebar-depth__link ${isSubjectMcpRoute(subject, route) ? "active" : ""}" href="${subjectMcpPath(subject)}">MCP 호출</a>
+      <a class="subject-sidebar-depth__link ${isSubjectMemorizeRoute(subject, route) ? "active" : ""}" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
+    </div>
+  `;
+}
+
+function isSubjectClassRoute(subject: SubjectNote, route: Route): boolean {
+  return (
+    (route.name === "subject" ||
+      route.name === "subject-class" ||
+      route.name === "week") &&
+    route.subjectId === subject.id
+  );
+}
+
+function isSubjectSummaryRoute(subject: SubjectNote, route: Route): boolean {
+  return (
+    (route.name === "subject-summaries" || route.name === "subject-summary-detail") &&
+    route.subjectId === subject.id
+  );
+}
+
+function isSubjectMcpRoute(subject: SubjectNote, route: Route): boolean {
+  return route.name === "subject-mcp" && route.subjectId === subject.id;
+}
+
+function isSubjectMemorizeRoute(subject: SubjectNote, route: Route): boolean {
+  return route.name === "subject-memorize" && route.subjectId === subject.id;
 }
 
 function renderClassSchedule(activeLabel?: string): string {
@@ -7014,45 +7298,120 @@ function renderSubjectClassPage(subject: SubjectNote): string {
     <section class="subject-page-hero">
       <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
       <h1>${subject.title} 수업</h1>
-      <p class="lede">관리자가 올린 강의 PDF를 열고, 수업일별 노트로 이어갑니다. PDF가 이미 있어도 새 자료를 계속 추가할 수 있습니다.</p>
+      <p class="lede">수업일을 먼저 고르고, 연결된 PDF와 노트 상세로 들어갑니다. 과목 첫 화면은 날짜와 자료 현황만 빠르게 보여줍니다.</p>
       <div class="hero-actions">
         <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
         <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약본으로 이동</a>
+        <a class="secondary-link" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
       </div>
     </section>
 
-    ${renderPdfSubjectLibrarySection(subject, subjectMaterials)}
+    ${renderClassDateAddSection(subject)}
 
     <section aria-labelledby="weekly-title">
-      <p class="meta">수업일별 노트</p>
-      <h2 id="weekly-title">강의별 PDF와 수업 노트</h2>
-      <p class="lede">PDF 자료를 본 뒤 필요한 날짜의 수업 노트로 들어가 정리합니다.</p>
-      <div class="week-card-grid">
-        ${subject.weekNotes.map((week) => renderWeekCard(subject, week)).join("")}
+      <p class="meta">수업일 overview</p>
+      <h2 id="weekly-title">수업일별 자료</h2>
+      <p class="lede">날짜별 카드에서 수업 상세, 요약 상세, 연결된 PDF 수를 확인합니다.</p>
+      <div class="class-day-grid">
+        ${subject.weekNotes.map((week) =>
+          renderClassDayCard(subject, week, getPdfMaterialsForWeek(subject, week, subjectMaterials))
+        ).join("")}
       </div>
     </section>
 
-    ${renderQuickNotePanel(subject, ["week"])}
+    ${renderPdfMaterialAssignmentSection(subject, subjectMaterials)}
   `;
 }
 
-function renderSubjectSummaryPage(subject: SubjectNote): string {
+function renderClassDateAddSection(subject: SubjectNote): string {
+  return `
+    <section class="class-date-add-section" aria-labelledby="class-date-add-title">
+      <div>
+        <p class="meta">수업일 추가</p>
+        <h2 id="class-date-add-title">새 수업일 만들기</h2>
+        <p class="lede">선업로드한 PDF를 나중에 정확한 날짜와 연결할 수 있도록 수업일 카드를 먼저 추가합니다.</p>
+      </div>
+      <form class="class-date-form" data-action="add-class-date">
+        <input type="hidden" name="subjectId" value="${escapeHtml(subject.id)}" />
+        <label>
+          <span>수업일</span>
+          <input name="classDate" type="text" placeholder="예: 5월 14일(목)" autocomplete="off" />
+        </label>
+        <label>
+          <span>수업 제목</span>
+          <input name="title" type="text" placeholder="예: 메모리 구조" autocomplete="off" />
+        </label>
+        <button class="action-button" type="submit">수업일 추가</button>
+      </form>
+      ${renderIntakeFeedback("수업일 추가와 PDF 매핑 상태가 여기에 표시됩니다.")}
+    </section>
+  `;
+}
+
+function renderClassDayCard(
+  subject: SubjectNote,
+  week: WeekNote,
+  materials: PdfMaterialDraft[]
+): string {
+  return `
+    <article class="class-day-card">
+      <div>
+        <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
+        <h3>${week.title}</h3>
+        <p>${week.focus}</p>
+      </div>
+      <div class="class-day-card__stats">
+        <span>${materials.length}개 PDF</span>
+        <span>${week.requiredKeywordIds.length}개 키워드</span>
+      </div>
+      <div class="week-card-actions">
+        <a class="action-button" href="${weekPath(subject, week)}">수업 상세</a>
+        <a class="secondary-link" href="${weekSummaryPath(subject, week)}">요약 상세</a>
+      </div>
+    </article>
+  `;
+}
+
+function renderPdfMaterialAssignmentSection(
+  subject: SubjectNote,
+  materials: PdfMaterialDraft[]
+): string {
+  return `
+    <section class="pdf-material-browser" aria-labelledby="pdf-assignment-title">
+      <div class="pdf-material-browser__header">
+        <div>
+          <p class="meta">PDF 수업일 매핑</p>
+          <h2 id="pdf-assignment-title">업로드한 PDF 연결</h2>
+          <p class="lede">PDF는 먼저 올리고, 수업일이 확정되면 여기서 날짜를 지정합니다.</p>
+        </div>
+        <span class="pdf-count-pill">${materials.length}개 자료</span>
+      </div>
+      <div class="pdf-material-slider" aria-label="${subject.title} PDF 수업일 매핑">
+        ${renderPdfLibraryUploadCard(subject, materials.length)}
+        ${materials.map((material) => renderPdfMaterialCard(subject, material, {
+          isCurrent: false,
+          compact: false,
+          showClassDateControl: true
+        })).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderSubjectSummariesPage(subject: SubjectNote): string {
   const coverage = getSubjectCoverage(subject);
-  const mustKnowConcepts = subject.summary.mustKnowConceptIds
-    .map((conceptId) => getConceptById(subject, conceptId))
-    .filter((concept): concept is Concept => Boolean(concept));
 
   return `
     <section class="subject-page-hero">
       <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
       <h1>${subject.title} 요약본</h1>
-      <p class="lede">${subject.summary.goal}</p>
+      <p class="lede">요약본은 수업일별로 들어가서 확인합니다. 시험 직전에는 필수 암기노트만 따로 봅니다.</p>
       <div class="hero-actions">
         <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${subject.id}">
-          10분 정리노트 만들기
+          전체 정리노트 만들기
         </button>
         <a class="secondary-link" href="${subjectClassPath(subject)}">수업 자료 보기</a>
-        <a class="secondary-link" href="${subjectMcpPath(subject)}">MCP 호출로 이동</a>
+        <a class="secondary-link" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
       </div>
     </section>
 
@@ -7062,49 +7421,173 @@ function renderSubjectSummaryPage(subject: SubjectNote): string {
       ${renderMetric("시험 범위", subject.summary.weekRange, subject.examLabel)}
     </section>
 
-    <section aria-labelledby="summary-title">
-      <p class="meta">과목 요약</p>
-      <h2 id="summary-title">요약본 정리</h2>
-      <p class="lede">수업을 듣고 난 뒤 시험 범위, 복습 전략, 취약 포인트를 한 장 요약으로 정리합니다.</p>
+    <section aria-labelledby="summary-list-title">
+      <p class="meta">날짜별 요약</p>
+      <h2 id="summary-list-title">수업일별 요약 목록</h2>
+      <div class="class-day-grid">
+        ${subject.weekNotes.map((week) => renderSummaryDayCard(subject, week)).join("")}
+      </div>
+    </section>
+
+    <section aria-labelledby="summary-course-title">
+      <p class="meta">과목 단위 메모</p>
+      <h2 id="summary-course-title">전체 요약 방향</h2>
       <div class="summary-grid">
         ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
         ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
         ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
       </div>
     </section>
+  `;
+}
 
-    ${renderQuickNotePanel(subject, ["subject"])}
+function renderSummaryDayCard(subject: SubjectNote, week: WeekNote): string {
+  return `
+    <article class="class-day-card">
+      <div>
+        <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
+        <h3>${week.title}</h3>
+        <p>${week.focus}</p>
+      </div>
+      <div class="class-day-card__stats">
+        <span>${week.conceptIds.length}개 개념</span>
+        <span>${week.exampleQuestionIds.length}개 문제</span>
+      </div>
+      <div class="week-card-actions">
+        <a class="action-button" href="${weekSummaryPath(subject, week)}">요약 상세 보기</a>
+        <a class="secondary-link" href="${weekPath(subject, week)}">수업 상세</a>
+      </div>
+    </article>
+  `;
+}
 
-    <section aria-labelledby="keywords-title">
-      <p class="meta">요약본 점검</p>
-      <h2 id="keywords-title">교수님 키워드 반영 상태</h2>
+function renderWeekSummaryPage(subject: SubjectNote, week: WeekNote): string {
+  const keywords = week.requiredKeywordIds
+    .map((keywordId) => getKeywordById(subject, keywordId))
+    .filter((keyword): keyword is RequiredKeyword => Boolean(keyword));
+  const concepts = week.conceptIds
+    .map((conceptId) => getConceptById(subject, conceptId))
+    .filter((concept): concept is Concept => Boolean(concept));
+  const questions = week.exampleQuestionIds
+    .map((questionId) => getQuestionById(subject, questionId))
+    .filter((question): question is ExampleQuestion => Boolean(question));
+  const sources = week.sourceMaterialIds
+    .map((sourceId) => getSourceById(subject, sourceId))
+    .filter((source): source is SourceMaterial => Boolean(source));
+
+  return `
+    <section class="subject-page-hero">
+      <p class="meta">${subject.title} · ${week.label} · 요약본</p>
+      <h1>${week.title} 요약</h1>
+      <p class="lede">${week.focus}</p>
+      <div class="hero-actions">
+        <button class="action-button" type="button" data-action="generate-week-note" data-subject-id="${subject.id}" data-week-id="${week.id}">
+          이 날짜 요약 만들기
+        </button>
+        <a class="secondary-link" href="${weekPath(subject, week)}">수업 상세</a>
+        <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약 목록</a>
+      </div>
+    </section>
+
+    <section class="summary-grid" aria-label="${week.label} 요약 상태">
+      ${renderSummaryBlock("키워드", keywords.map((keyword) => keyword.label).join(", ") || "아직 연결된 키워드가 없습니다.")}
+      ${renderSummaryBlock("개념", concepts.map((concept) => concept.title).join(", ") || "아직 연결된 개념이 없습니다.")}
+      ${renderSummaryBlock("자료", sources.map((source) => source.title).join(", ") || "아직 연결된 자료가 없습니다.")}
+    </section>
+
+    ${renderQuickNotePanel(subject, ["week"])}
+
+    <section aria-labelledby="week-summary-keywords-title">
+      <p class="meta">교수님 키워드</p>
+      <h2 id="week-summary-keywords-title">이 날짜에 반영할 키워드</h2>
       <div class="keyword-grid">
-        ${subject.requiredKeywords.map((keyword) => renderKeyword(keyword, subject)).join("")}
+        ${keywords.map((keyword) => renderKeyword(keyword, subject)).join("") || '<p class="empty-note">아직 연결된 키워드가 없습니다.</p>'}
       </div>
     </section>
 
-    ${renderQuickNotePanel(subject, ["keyword"])}
-
-    <section aria-labelledby="concepts-title">
-      <p class="meta">필수 개념</p>
-      <h2 id="concepts-title">과목 핵심 개념</h2>
+    <section aria-labelledby="week-summary-concepts-title">
+      <p class="meta">요약 상세</p>
+      <h2 id="week-summary-concepts-title">개념 설명</h2>
       <div class="concept-list">
-        ${mustKnowConcepts.map((concept) => renderConcept(concept, subject)).join("")}
+        ${concepts.map((concept) => renderConcept(concept, subject)).join("") || '<p class="empty-note">아직 연결된 개념이 없습니다.</p>'}
       </div>
     </section>
 
-    <section aria-labelledby="sources-title">
-      <p class="meta">자료 범위</p>
-      <h2 id="sources-title">자료와 공개 범위</h2>
+    <section aria-labelledby="week-summary-practice-title">
+      <p class="meta">문제화</p>
+      <h2 id="week-summary-practice-title">시험 전에 바꿔볼 질문</h2>
+      <div class="question-list">
+        ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
+      </div>
+    </section>
+
+    <section aria-labelledby="week-summary-sources-title">
+      <p class="meta">근거 자료</p>
+      <h2 id="week-summary-sources-title">요약 근거</h2>
       <div class="source-grid">
-        ${subject.sources.map((source) => `
+        ${sources.map((source) => `
           <article class="source-row">
             <p class="meta">${formatSourceKind(source.kind)} · ${formatSourceVisibility(source.visibility)}</p>
             <h3>${source.title}</h3>
             <p>${source.note}</p>
             ${source.pages ? `<p class="source-pages">${source.pages}</p>` : ""}
           </article>
-        `).join("")}
+        `).join("") || '<p class="empty-note">아직 연결된 자료가 없습니다.</p>'}
+      </div>
+    </section>
+  `;
+}
+
+function renderSubjectMemorizePage(subject: SubjectNote): string {
+  const mustKnowConcepts = subject.summary.mustKnowConceptIds
+    .map((conceptId) => getConceptById(subject, conceptId))
+    .filter((concept): concept is Concept => Boolean(concept));
+  const missingKeywords = subject.requiredKeywords.filter((keyword) => keyword.status !== "covered");
+  const examQuestions = subject.weekNotes
+    .flatMap((week) => week.exampleQuestionIds)
+    .map((questionId) => getQuestionById(subject, questionId))
+    .filter((question): question is ExampleQuestion => Boolean(question));
+
+  return `
+    <section class="subject-page-hero">
+      <p class="meta">${subject.examLabel} · 시험 직전</p>
+      <h1>${subject.title} 필수 암기노트</h1>
+      <p class="lede">날짜별 요약을 다 본 뒤 마지막으로 암기할 범위, 약한 포인트, 필수 개념만 압축해서 확인합니다.</p>
+      <div class="hero-actions">
+        <a class="action-button" href="${subjectSummaryPath(subject)}">날짜별 요약 보기</a>
+        <a class="secondary-link" href="${subjectMcpPath(subject)}">MCP 호출 준비</a>
+      </div>
+    </section>
+
+    <section class="summary-grid" aria-label="${subject.title} 암기 전략">
+      ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
+      ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
+      ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
+    </section>
+
+    <section aria-labelledby="memorize-concepts-title">
+      <p class="meta">필수 개념</p>
+      <h2 id="memorize-concepts-title">반드시 외울 개념</h2>
+      <div class="concept-list">
+        ${mustKnowConcepts.map((concept) => renderConcept(concept, subject)).join("") || '<p class="empty-note">아직 필수 개념이 없습니다.</p>'}
+      </div>
+    </section>
+
+    <section aria-labelledby="memorize-keywords-title">
+      <p class="meta">빈칸 점검</p>
+      <h2 id="memorize-keywords-title">보강할 교수님 키워드</h2>
+      <div class="keyword-grid">
+        ${(missingKeywords.length > 0 ? missingKeywords : subject.requiredKeywords)
+          .map((keyword) => renderKeyword(keyword, subject))
+          .join("")}
+      </div>
+    </section>
+
+    <section aria-labelledby="memorize-questions-title">
+      <p class="meta">직전 점검</p>
+      <h2 id="memorize-questions-title">말로 풀어볼 질문</h2>
+      <div class="question-list">
+        ${examQuestions.slice(0, 5).map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
       </div>
     </section>
   `;
@@ -7176,6 +7659,7 @@ function renderSubjectMcpPanel(subject: SubjectNote): string {
 }
 
 function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
+  const materials = getPdfMaterialsForWeek(subject, week, getSubjectPdfMaterials(subject.id));
   const keywords = week.requiredKeywordIds
     .map((keywordId) => getKeywordById(subject, keywordId))
     .filter((keyword): keyword is RequiredKeyword => Boolean(keyword));
@@ -7201,6 +7685,8 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
         <a class="action-link" href="${subjectClassPath(subject)}">수업으로 돌아가기</a>
       </div>
     </section>
+
+    ${renderWeekMappedPdfSection(subject, week, materials)}
 
     ${renderQuickNotePanel(subject, ["week"])}
 
@@ -7228,6 +7714,32 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
       <div class="question-list">
         ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
       </div>
+    </section>
+  `;
+}
+
+function renderWeekMappedPdfSection(
+  subject: SubjectNote,
+  week: WeekNote,
+  materials: PdfMaterialDraft[]
+): string {
+  return `
+    <section class="pdf-material-browser" aria-labelledby="week-pdf-title">
+      <div class="pdf-material-browser__header">
+        <div>
+          <p class="meta">연결된 PDF</p>
+          <h2 id="week-pdf-title">${week.label} 수업자료</h2>
+        </div>
+        <a class="secondary-link" href="${subjectClassPath(subject)}">PDF 수업일 매핑</a>
+      </div>
+      ${materials.length > 0
+        ? `<div class="pdf-material-slider is-compact" aria-label="${week.label} 연결 PDF">
+            ${materials.map((material) => renderPdfMaterialCard(subject, material, {
+              isCurrent: false,
+              compact: true
+            })).join("")}
+          </div>`
+        : `<p class="empty-note">아직 이 수업일에 연결된 PDF가 없습니다. 수업 화면에서 PDF 수업일을 지정하세요.</p>`}
     </section>
   `;
 }
@@ -7354,7 +7866,7 @@ function renderPdfLibraryUploadCard(subject: SubjectNote, materialCount: number)
 function renderPdfMaterialCard(
   subject: SubjectNote,
   material: PdfMaterialDraft,
-  options: { isCurrent: boolean; compact: boolean }
+  options: { isCurrent: boolean; compact: boolean; showClassDateControl?: boolean }
 ): string {
   const materialKey = getPdfMaterialKey(material);
   const ownerLabel = getPdfMaterialOwnerLabel(material);
@@ -7373,6 +7885,7 @@ function renderPdfMaterialCard(
           ${classDateIsUnconfirmed ? "<span>나중에 수정</span>" : ""}
           ${options.isCurrent ? "<span>현재 열림</span>" : ""}
         </div>
+        ${options.showClassDateControl ? renderPdfMaterialClassDateControl(subject, material, materialKey) : ""}
       </div>
       <div class="pdf-material-card__actions">
         <button
@@ -7387,10 +7900,41 @@ function renderPdfMaterialCard(
   `;
 }
 
+function renderPdfMaterialClassDateControl(
+  subject: SubjectNote,
+  material: PdfMaterialDraft,
+  materialKey: string
+): string {
+  const selectedValue = getPdfMaterialClassDateValue(material);
+
+  return `
+    <label class="pdf-material-card__field">
+      <span>수업일</span>
+      <select
+        data-action="assign-pdf-class-date"
+        data-subject-id="${escapeHtml(subject.id)}"
+        data-material-id="${escapeHtml(materialKey)}"
+        ${canManagePdfMaterials() ? "" : "disabled"}
+      >
+        <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
+        ${subject.weekNotes.map((week) => `
+          <option value="${escapeHtml(week.label)}" ${selectedValue === week.label ? "selected" : ""}>${escapeHtml(week.label)}</option>
+        `).join("")}
+      </select>
+    </label>
+  `;
+}
+
 function getPdfMaterialClassDateLabel(subject: SubjectNote, material: PdfMaterialDraft): string {
   return isUnconfirmedPdfClassDate(subject, material.classDate)
     ? "수업일 미지정"
     : material.classDate?.trim() ?? "수업일 미지정";
+}
+
+function getPdfMaterialClassDateValue(material: PdfMaterialDraft): string {
+  const trimmed = material.classDate?.trim();
+
+  return trimmed || PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
 }
 
 function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | undefined): boolean {
@@ -7400,7 +7944,21 @@ function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | und
     return true;
   }
 
-  return trimmed === subject.weekNotes[0]?.label;
+  return !subject.weekNotes.some((week) => week.label === trimmed);
+}
+
+function getPdfMaterialsForWeek(
+  subject: SubjectNote,
+  week: WeekNote,
+  materials: PdfMaterialDraft[]
+): PdfMaterialDraft[] {
+  return materials.filter((material) => {
+    const trimmed = material.classDate?.trim();
+
+    return Boolean(trimmed) &&
+      trimmed === week.label &&
+      !isUnconfirmedPdfClassDate(subject, trimmed);
+  });
 }
 
 function getPdfMaterialStatusLabel(material: PdfMaterialDraft): string {
@@ -7480,22 +8038,6 @@ function renderSubjectImportCard(subject: SubjectNote): string {
       <div class="subject-card-footer">
         <span>${coverage.coverageRate}% 키워드 반영</span>
         <a href="${subjectIntakePath(subject)}">자료 넣기</a>
-      </div>
-    </article>
-  `;
-}
-
-function renderWeekCard(subject: SubjectNote, week: WeekNote): string {
-  return `
-    <article class="week-card">
-      <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
-      <h3>${week.title}</h3>
-      <p>${week.focus}</p>
-      <div class="week-card-actions">
-        <button class="inline-action" type="button" data-action="generate-week-note" data-subject-id="${subject.id}" data-week-id="${week.id}">
-          정리노트 만들기
-        </button>
-        <a href="${weekPath(subject, week)}">전체 보기</a>
       </div>
     </article>
   `;

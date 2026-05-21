@@ -180,6 +180,24 @@ export async function completeMaterialUpload(
   );
 }
 
+export async function updatePdfMaterialMetadata(
+  apiBaseUrl: string,
+  materialId: string,
+  input: { classDate: string }
+): Promise<PdfMaterialRecord> {
+  return fetchJson<PdfMaterialRecord>(
+    apiBaseUrl,
+    `/materials/${encodeURIComponent(materialId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(input)
+    }
+  );
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

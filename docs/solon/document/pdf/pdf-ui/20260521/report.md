@@ -1,13 +1,13 @@
 ---
 phase: report
 status: final
-sprint_id: "2026-W21-sprint-4"
+sprint_id: "2026-W21-sprint-8"
 workspace: "pdf-ui"
 handoff_dir: "docs/solon/document/pdf/pdf-ui/20260521"
-goal: "PDF 자료 목록/카드형 탐색 UI 개선"
-created_at: "2026-05-21T13:41:53+09:00"
-last_touched_at: "2026-05-21T13:41:53+09:00"
-closed_at: "2026-05-21T13:41:53+09:00"
+goal: "과목 수업일 기반 PDF 매핑 요약본 필수 암기노트 UI 리팩토링"
+created_at: "2026-05-21T16:41:47+09:00"
+last_touched_at: "2026-05-21T16:45:00+09:00"
+closed_at: "2026-05-21T16:41:47+09:00"
 domain: "document"
 subdomain: "pdf"
 feature: "pdf-ui"
@@ -17,74 +17,52 @@ feature: "pdf-ui"
 
 ## 1. 결과
 
-- 목표: PDF 업로드/필기 화면을 한 과목 중심에서 “과목별 수업자료를 찾아 여는” 자료실 UI로 바꾼다.
+- 목표: 과목 화면을 처음부터 상세 나열하지 않고, 수업일 중심의 카드/list overview와 상세 화면 구조로 재정렬한다.
 - 상태: done
-- 판정: Gate 6 (Review) self CPO PASS, Claude cross review PASS
-- 한 줄 결과: 관리자가 올린 공유 PDF를 학생이 과목별 카드/리스트에서 열고, 개인 필기는 기존 workspace에 남기는 구조로 전환했다.
+- 판정: Gate 3 (Plan) Claude PASS, Gate 6 (Review) Claude PASS.
+- 한 줄 결과: `컴퓨터개론` 같은 과목 row 아래에 `수업 / 요약본 / MCP 호출 / 필수 암기노트` hierarchy를 붙이고, 수업일 추가와 PDF 수업일 매핑을 실제 backend metadata update까지 연결했다.
 
 ## 2. 완료한 것
 
-- `SubjectPdfWorkspace.materials`를 추가해 과목별 PDF 자료 목록을 보존하고, 기존 `material`은 현재 열린 자료로 유지했다.
-- `#/pdf-workspaces`를 `PDF 자료실 / 수업자료 찾기 / 과목별 PDF` 화면으로 개편했다.
-- 각 과목 workspace 안에 `이 과목의 PDF 자료` selector를 추가하고, `열기/다시 열기/현재 열림` 상태를 표시했다.
-- normal user 화면에서는 업로드 UI 대신 `공유 자료` 안내와 `업로드는 관리자만 가능합니다.` 정책 문구를 보여준다.
-- master/admin upload flow는 유지하되, 업로드된 material을 과목별 목록에 upsert하도록 바꿨다.
-- 430px 모바일 폭에서 카드/요약/액션 버튼이 1열로 접히도록 반응형 스타일을 추가했다.
+- `#/subjects/:subjectId/class`는 수업일 카드/list overview, 수업일 추가 form, PDF 수업일 매핑 UI를 보여준다.
+- `#/subjects/:subjectId/summaries`는 날짜별 요약 목록이고, `#/subjects/:subjectId/summaries/:weekId`는 해당 날짜 요약 상세다.
+- `#/subjects/:subjectId/memorize`는 시험 직전 필수 암기노트 page다.
+- subject sidebar는 현재 과목 parent 아래에 하위 메뉴를 들여쓰기 구조로 표시한다.
+- PDF material card에서 수업일 select를 바꾸면 `PATCH /api/materials/:materialId` body `{ classDate }`로 저장한다.
+- backend는 master/admin만 material metadata를 수정할 수 있고, uploader-owned material만 업데이트한다.
 
-## 3. 결정
+## 3. 변경 파일
 
-- 새 PDF별 route는 만들지 않고 기존 `#/subjects/:id/pdf-workspace` route를 유지했다.
-- `material`은 현재 열린 PDF, `materials`는 과목별 전체 PDF 목록으로 의미를 분리했다.
-- PDF 원문은 공유 자료로 취급하고, 개인 필기/메모는 다음 backend WU 전까지 기존 subject workspace 저장 구조를 유지한다.
-- 학생-facing role copy는 `master/admin` 대신 `관리자`로 노출한다.
+- `apps/web/src/main.ts`
+- `apps/web/src/styles.css`
+- `apps/web/src/api/materials.ts`
+- `apps/web/src/__tests__/pdf-material-library.spec.ts`
+- `apps/api/src/materials/materials.controller.ts`
+- `apps/api/src/materials/materials.service.ts`
+- `apps/api/src/materials/__tests__/shared-materials.spec.ts`
 
 ## 4. 검증
 
-- 명령/체크:
-  - `node --experimental-strip-types --no-warnings --test apps/web/src/__tests__/pdf-material-library.spec.ts`
-  - `pnpm test:domain-pdf-workspace`
-  - `pnpm --filter @study-note/api build`
-  - `pnpm --filter @study-note/web build`
-  - `sfs review --gate 6 --executor codex`
-  - `sfs review --gate 6 --executor claude`
-- 결과:
-  - PDF material library regression 6 tests PASS.
-  - domain PDF workspace 90 tests PASS.
-  - API build PASS.
-  - Web build PASS.
-  - Gate 6 self CPO PASS.
-  - Gate 6 Claude cross review PASS.
-- 수동 확인:
-  - Browser 430x932 read verification에서 `PDF 자료실`, 3개 material card, 4개 subject section, overflow 없음 확인.
-  - 과목 workspace에서 material browser 2개, current marker 1개, overflow 없음 확인.
-  - Browser click은 테스트 페이지 보안 정책으로 차단되어, `open-pdf-material` handler는 소스 회귀 테스트로 대체 검증했다.
+- `node --experimental-strip-types --no-warnings --test apps/web/src/__tests__/pdf-material-library.spec.ts` → 11 tests PASS.
+- `pnpm test:backend` → API build + 31 backend tests PASS.
+- `pnpm --filter @study-note/web build` → PASS.
+- `pnpm build` → web + API build PASS.
+- `NODE_PATH=/Users/mj/IdeaProjects/product-image-studio/node_modules node /private/tmp/study-note-sfs8-smoke.cjs` → PASS.
+- Playwright evidence: desktop/mobile overflow false, console errors empty, `patchCalls=[{ "classDate": "5월 14일(목)" }]`.
+- Screenshots: `/private/tmp/study-note-sfs8-desktop.png`, `/private/tmp/study-note-sfs8-mobile.png`.
 
 ## 5. 위험 / 후속
 
-- 위험:
-  - material별 annotation 저장 격리는 아직 구현하지 않았다. 지금은 과목 workspace 안에서 공유 PDF와 개인 필기 모델을 표현하는 UI 단계다.
-  - route noun `#/pdf-workspaces`와 화면 noun `PDF 자료실`이 완전히 같지는 않다.
-  - frontend `uploaderId`, backend `ownerId`, annotation `ownerUserId` 용어군은 다음 PDF-domain WU에서 glossary로 정리하면 좋다.
-- 후속:
-  - 다음 SFS 작업: PDF 업로드 권한을 admin/master 이상으로 제한하고, 학생은 공유 PDF 열람 + 개인 필기 저장만 가능하게 backend policy를 확정한다.
-  - PDF별 annotation 격리/route가 필요하면 별도 WU로 `materialId` 기준 저장 경계를 설계한다.
+- 수업일 추가는 현재 localStorage scope다. 수업일/요약본 서버 persistence는 후속 WU다.
+- PDF 매핑은 기존 `PdfMaterial.classDate` 단일 필드를 사용한다. 다대다 수업일 매핑은 후속 WU다.
+- Gate 6 권고: `parseMaterialMetadataBody`의 non-string coercion은 다음 hardening에서 strict string validation으로 조이는 것이 좋다.
 
 ## 6. 남긴 것 / 접은 것
 
-- 남김: `.sfs-local/sprints/2026-W21-sprint-4/`에 brainstorm/plan/implement/review/log workbench 기록.
-- private archive: 없음.
+- 남김: `.sfs-local/sprints/2026-W21-sprint-8/`에 brainstorm/plan/implement/review/log 기록.
+- 접음: sprint closed by `sfs retro`.
 
 ## 7. 다음
 
-- staged 변경분을 커밋하고 배포하면 frontend 자료실 UI가 반영된다.
-- backend upload policy WU로 넘어간다.
-
-## §8. Next Cycle — Division Activation Recommendations
-
-<!-- solon:division-recommendations:start -->
-- detected: project_size=medium (318 tracked files), domains=0, last_review=pass, infra_signals=7, ui_signals=12
-- recommended action format: update `.sfs-local/divisions.yaml` + record why in `.sfs-local/decisions/<NNNN>-activate-<division>.md`
-- recommend: `qa` activate (light) — regression smoke + AC checks; triggers: review!=pass or medium+ codebase
-- consider: `infra` activate (light) — deploy/observability/rollback checklist; triggers: infra files present or large codebase
-- generated_at: 2026-05-21T13:41:53+09:00 (auto) — edit outside the marker block to preserve manual notes
-<!-- solon:division-recommendations:end -->
+- 변경분을 커밋하고 frontend/backend 배포를 진행한다.
+- 다음 SFS 후보: 수업일/요약본 서버 persistence 또는 PDF annotation을 `materialId` 기준으로 분리 저장.

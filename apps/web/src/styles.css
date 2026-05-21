@@ -401,32 +401,27 @@ section + section {
   max-width: var(--ds-measure);
 }
 
+.subject-sidebar-item {
+  display: grid;
+  gap: 4px;
+}
+
+.sidebar nav a.subject-sidebar-parent.is-current {
+  font-weight: 700;
+}
+
 .subject-sidebar-depth {
-  gap: var(--ds-space-xs);
+  border-left: 1px solid var(--ds-rule);
+  display: grid;
+  gap: 4px;
+  margin-left: var(--ds-space-sm);
+  padding-left: var(--ds-space-sm);
 }
 
 .sidebar nav a.subject-sidebar-depth__link {
-  align-items: center;
-  display: grid;
-  gap: 2px;
-  grid-template-columns: 22px minmax(0, 1fr);
-  min-height: 52px;
-}
-
-.subject-sidebar-depth__link span {
-  align-items: center;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  display: inline-flex;
-  font-size: 0.75rem;
-  font-weight: 600;
-  height: 22px;
-  justify-content: center;
-  width: 22px;
-}
-
-.subject-sidebar-depth__link strong {
-  font-weight: 600;
+  font-size: var(--ds-fs-meta);
+  min-height: 36px;
+  padding: 8px 10px;
 }
 
 .subject-mcp-callout {
@@ -437,6 +432,86 @@ section + section {
   gap: var(--ds-space-md);
   justify-content: space-between;
   padding: var(--ds-space-md);
+}
+
+.class-date-add-section {
+  align-items: end;
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--ds-space-md);
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  padding: var(--ds-space-md);
+}
+
+.class-date-form {
+  align-items: end;
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.class-date-form label,
+.pdf-material-card__field {
+  display: grid;
+  gap: 6px;
+}
+
+.class-date-form span,
+.pdf-material-card__field span {
+  color: var(--ds-fg-muted);
+  font-size: var(--ds-fs-meta);
+}
+
+.class-date-form input,
+.pdf-material-card__field select {
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  color: var(--ds-fg);
+  font: inherit;
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+.class-day-grid {
+  display: grid;
+  gap: var(--ds-space-md);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.class-day-card {
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  display: grid;
+  gap: var(--ds-space-md);
+  min-height: 220px;
+  padding: var(--ds-space-md);
+}
+
+.class-day-card h3 {
+  font-size: var(--ds-fs-subtitle);
+  line-height: 1.35;
+  margin-bottom: var(--ds-space-sm);
+}
+
+.class-day-card p {
+  color: var(--ds-fg-soft);
+  margin: 0;
+}
+
+.class-day-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-xs);
+}
+
+.class-day-card__stats span {
+  border: 1px solid var(--ds-rule);
+  border-radius: 999px;
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  padding: 5px 9px;
 }
 
 .subject-mcp-callout p {
@@ -1394,6 +1469,10 @@ p {
   font-weight: 600;
   line-height: 1.2;
   padding: 4px 8px;
+}
+
+.pdf-material-card__field {
+  margin-top: var(--ds-space-sm);
 }
 
 .pdf-material-card__actions {
@@ -2721,6 +2800,9 @@ body[data-route="pdf-workspace"] .content {
   .concept-row,
   .subject-heading,
   .week-note-grid,
+  .class-date-add-section,
+  .class-date-form,
+  .class-day-grid,
   .pdf-library-summary,
   .pdf-material-card,
   .pdf-workspace-layout {

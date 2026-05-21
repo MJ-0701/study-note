@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import { NotFoundException } from "@nestjs/common";
 import { ROLES_KEY } from "@study-note/auth";
 import { MaterialsController } from "../materials.controller";
-import { MaterialsService } from "../materials.service";
+import { MaterialsService, parseMaterialMetadataBody } from "../materials.service";
 
 interface PdfMaterialRow {
   id: string;
@@ -35,6 +35,7 @@ interface AnnotationRow {
 interface QuerySpy {
   findManyWhere?: unknown;
   findFirstWheres: unknown[];
+  updateArgs?: unknown;
 }
 
 function makeMaterial(overrides: Partial<PdfMaterialRow> = {}): PdfMaterialRow {
@@ -75,7 +76,10 @@ function makeService(options: {
         return options.material ?? null;
       },
       create: async (args: { data: Record<string, unknown> }) => makeMaterial(args.data as Partial<PdfMaterialRow>),
-      update: async (args: { data: Record<string, unknown> }) => makeMaterial(args.data as Partial<PdfMaterialRow>),
+      update: async (args: { where: unknown; data: Record<string, unknown> }) => {
+        queries.updateArgs = args;
+        return makeMaterial(args.data as Partial<PdfMaterialRow>);
+      },
       updateMany: async () => ({ count: 1 })
     },
     annotationSnapshot: {
@@ -144,6 +148,37 @@ describe("Materials shared-read contract", () => {
       Reflect.getMetadata(ROLES_KEY, MaterialsController.prototype.completeUpload),
       ["master", "admin"]
     );
+    assert.deepEqual(
+      Reflect.getMetadata(ROLES_KEY, MaterialsController.prototype.updateMaterialMetadata),
+      ["master", "admin"]
+    );
+  });
+
+  it("updates classDate only for uploader-owned materials", async () => {
+    const { service, queries } = makeService({
+      material: makeMaterial({ ownerId: "admin-1" })
+    });
+
+    const material = await service.updateMaterialMetadata("admin-1", "mat-shared", {
+      classDate: "5월 7일(목)"
+    });
+
+    assert.equal(material.classDate, "5월 7일(목)");
+    assert.deepEqual(queries.findFirstWheres[0], {
+      id: "mat-shared",
+      ownerId: "admin-1",
+      deletedAt: null
+    });
+    assert.deepEqual(queries.updateArgs, {
+      where: { id: "mat-shared" },
+      data: { classDate: "5월 7일(목)" }
+    });
+  });
+
+  it("parses material metadata update body", () => {
+    assert.deepEqual(parseMaterialMetadataBody({ classDate: "metadata-pending" }), {
+      classDate: "metadata-pending"
+    });
   });
 
   it("emits uploaderId as a non-null alias of ownerId", async () => {

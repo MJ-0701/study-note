@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Put,
   Req,
@@ -14,7 +15,7 @@ import {
 } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
 import { RoleGuard, Roles, SessionAuthGuard } from "@study-note/auth";
-import { MaterialsService, parseAnnotationBody, parseUploadIntentBody } from "./materials.service";
+import { MaterialsService, parseAnnotationBody, parseMaterialMetadataBody, parseUploadIntentBody } from "./materials.service";
 
 interface AuthenticatedRequest {
   user: UserProfile;
@@ -85,6 +86,21 @@ export class MaterialsController {
     return {
       material: await this.materials.getMaterial(request.user.id, materialId)
     };
+  }
+
+  @Patch(":materialId")
+  @UseGuards(SessionAuthGuard, RoleGuard)
+  @Roles("master", "admin")
+  async updateMaterialMetadata(
+    @Req() request: AuthenticatedRequest,
+    @Param("materialId") materialId: string,
+    @Body() body: unknown
+  ) {
+    return this.materials.updateMaterialMetadata(
+      request.user.id,
+      materialId,
+      parseMaterialMetadataBody(body)
+    );
   }
 
   @Get(":materialId/file")

@@ -32,6 +32,10 @@ interface SaveAnnotationInput {
   inkStrokes: PdfInkStroke[];
 }
 
+interface UpdateMaterialMetadataInput {
+  classDate: string;
+}
+
 interface UploadFileInput {
   body: Readable;
   contentType: string;
@@ -300,6 +304,22 @@ export class MaterialsService {
     };
   }
 
+  async updateMaterialMetadata(
+    ownerId: string,
+    materialId: string,
+    input: UpdateMaterialMetadataInput
+  ): Promise<PdfMaterialRecord> {
+    const material = await this.getOwnedMaterial(ownerId, materialId);
+    const saved = await this.prisma.pdfMaterial.update({
+      where: { id: material.id },
+      data: {
+        classDate: requireString(input.classDate, "classDate")
+      }
+    });
+
+    return toPdfMaterialRecord(saved);
+  }
+
   async getFile(ownerId: string, materialId: string) {
     const material = await this.getUploadedMaterial(ownerId, materialId);
     const object = await this.readStoredObject(material);
@@ -445,6 +465,14 @@ export function parseUploadIntentBody(body: unknown): CreateUploadIntentInput {
     fileSize: Number(input.fileSize ?? 0),
     pageCount: Number(input.pageCount ?? 1),
     contentType: String(input.contentType ?? "application/pdf")
+  };
+}
+
+export function parseMaterialMetadataBody(body: unknown): UpdateMaterialMetadataInput {
+  const input = requireObject(body);
+
+  return {
+    classDate: String(input.classDate ?? "")
   };
 }
 

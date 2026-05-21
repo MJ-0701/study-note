@@ -69,6 +69,8 @@ describe("PDF material library UI", () => {
     assert.match(cardBlock, /다시 열기/);
     assert.match(cardBlock, /열기/);
     assert.match(cardBlock, /getPdfMaterialClassDateLabel\(subject, material\)/);
+    assert.match(cardBlock, /renderPdfMaterialClassDateControl\(subject, material, materialKey\)/);
+    assert.match(mainTs, /data-action="assign-pdf-class-date"/);
     assert.match(cardBlock, /나중에 수정/);
     assert.match(ownerLabelBlock, /공유 자료/);
     assert.match(statusLabelBlock, /공유 가능/);
@@ -121,7 +123,7 @@ describe("PDF material library UI", () => {
     assert.match(labelBlock, /수업일 미지정/);
     assert.match(unconfirmedBlock, /trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE/);
     assert.match(unconfirmedBlock, /trimmed === "수업일 미지정"/);
-    assert.match(unconfirmedBlock, /trimmed === subject\.weekNotes\[0\]\?\.label/);
+    assert.match(unconfirmedBlock, /!subject\.weekNotes\.some/);
   });
 
   it("maps uploaded PDF materials to the shared-available status label", () => {
@@ -146,46 +148,59 @@ describe("PDF material library UI", () => {
     assert.match(cardBlock, /flex:\s*0\s+0\s+min\(82vw,\s*360px\);/);
     assert.match(cardBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/);
     assert.match(css, /\.subject-sidebar-depth__link/);
+    assert.match(css, /\.class-day-grid/);
     assert.match(mobileBlock, /\.subject-heading,\s*\n\s*\.week-note-grid,/);
-    assert.match(mobileBlock, /\.pdf-library-summary,\s*\n\s*\.pdf-material-card,/);
+    assert.match(mobileBlock, /\.class-day-grid,\s*\n\s*\.pdf-library-summary,/);
     assert.match(mobileBlock, /grid-template-columns:\s*1fr;/);
     assert.match(mobileBlock, /\.pdf-material-card__actions \.action-button\s*\{\s*width:\s*100%;/m);
   });
 
-  it("routes each subject through sidebar-owned class, summary, and MCP screens", () => {
+  it("routes each subject through sidebar-owned class, summaries, MCP, and memorize screens", () => {
     const routeBlock = getFunctionBlock("parseRoute");
     const renderAppBlock = getFunctionBlock("renderApp");
     const sidebarBlock = getFunctionBlock("renderSubjectSidebar");
+    const depthBlock = getFunctionBlock("renderCurrentSubjectDepthNav");
     const classBlock = getFunctionBlock("renderSubjectClassPage");
-    const summaryBlock = getFunctionBlock("renderSubjectSummaryPage");
+    const summariesBlock = getFunctionBlock("renderSubjectSummariesPage");
+    const summaryDetailBlock = getFunctionBlock("renderWeekSummaryPage");
+    const memorizeBlock = getFunctionBlock("renderSubjectMemorizePage");
     const mcpPageBlock = getFunctionBlock("renderSubjectMcpPage");
     const mcpPanelBlock = getFunctionBlock("renderSubjectMcpPanel");
 
     assert.match(routeBlock, /parts\[2\] === "class"/);
     assert.match(routeBlock, /name: "subject-class"/);
-    assert.match(routeBlock, /parts\[2\] === "summary"/);
-    assert.match(routeBlock, /name: "subject-summary"/);
+    assert.match(routeBlock, /parts\[2\] === "summaries"/);
+    assert.match(routeBlock, /name: "subject-summaries"/);
+    assert.match(routeBlock, /name: "subject-summary-detail"/);
     assert.match(routeBlock, /parts\[2\] === "mcp"/);
     assert.match(routeBlock, /name: "subject-mcp"/);
+    assert.match(routeBlock, /parts\[2\] === "memorize"/);
+    assert.match(routeBlock, /name: "subject-memorize"/);
     assert.match(renderAppBlock, /route\.name === "subject" \|\|\s*\n\s*route\.name === "subject-class"/);
     assert.match(renderAppBlock, /renderSubjectClassPage\(subject\)/);
-    assert.match(renderAppBlock, /renderSubjectSummaryPage\(subject\)/);
+    assert.match(renderAppBlock, /renderSubjectSummariesPage\(subject\)/);
+    assert.match(renderAppBlock, /renderWeekSummaryPage\(subject, week\)/);
     assert.match(renderAppBlock, /renderSubjectMcpPage\(subject\)/);
-    assert.match(sidebarBlock, /subject-sidebar-depth/);
-    assert.match(sidebarBlock, /subjectClassPath\(subject\)/);
-    assert.match(sidebarBlock, /<strong>수업<\/strong>/);
-    assert.match(sidebarBlock, /subjectSummaryPath\(subject\)/);
-    assert.match(sidebarBlock, /<strong>요약본<\/strong>/);
-    assert.match(sidebarBlock, /subjectMcpPath\(subject\)/);
-    assert.match(sidebarBlock, /<strong>MCP 호출<\/strong>/);
-    assert.match(sidebarBlock, /route\.name === "subject-summary"/);
-    assert.match(sidebarBlock, /route\.name === "subject-mcp"/);
-    assert.match(classBlock, /renderPdfSubjectLibrarySection\(subject, subjectMaterials\)/);
-    assert.match(classBlock, /PDF가 이미 있어도 새 자료를 계속 추가/);
-    assert.match(classBlock, /수업일별 노트/);
-    assert.match(summaryBlock, /<h1>\$\{subject\.title\} 요약본<\/h1>/);
-    assert.match(summaryBlock, /generate-subject-note/);
-    assert.match(summaryBlock, /교수님 키워드 반영 상태/);
+    assert.match(renderAppBlock, /renderSubjectMemorizePage\(subject\)/);
+    assert.match(sidebarBlock, /renderSubjectNavItem/);
+    assert.match(depthBlock, /subject-sidebar-depth/);
+    assert.match(depthBlock, /subjectClassPath\(subject\)/);
+    assert.match(depthBlock, />수업<\/a>/);
+    assert.match(depthBlock, /subjectSummaryPath\(subject\)/);
+    assert.match(depthBlock, />요약본<\/a>/);
+    assert.match(depthBlock, /subjectMcpPath\(subject\)/);
+    assert.match(depthBlock, />MCP 호출<\/a>/);
+    assert.match(depthBlock, /subjectMemorizePath\(subject\)/);
+    assert.match(depthBlock, />필수 암기노트<\/a>/);
+    assert.doesNotMatch(sidebarBlock, /subject-week-details/);
+    assert.match(classBlock, /renderClassDateAddSection\(subject\)/);
+    assert.match(classBlock, /renderClassDayCard/);
+    assert.match(classBlock, /renderPdfMaterialAssignmentSection\(subject, subjectMaterials\)/);
+    assert.match(summariesBlock, /수업일별 요약 목록/);
+    assert.match(summariesBlock, /renderSummaryDayCard\(subject, week\)/);
+    assert.match(summaryDetailBlock, /이 날짜 요약 만들기/);
+    assert.match(memorizeBlock, /필수 암기노트/);
+    assert.match(memorizeBlock, /반드시 외울 개념/);
     assert.match(mcpPageBlock, /<h1>\$\{subject\.title\} MCP 호출<\/h1>/);
     assert.match(mcpPageBlock, /persona-turn\.html\?subject=/);
     assert.match(mcpPageBlock, /질문거리 점검/);
@@ -195,5 +210,20 @@ describe("PDF material library UI", () => {
     assert.doesNotMatch(mainTs, /subject-learning-flow/);
     assert.doesNotMatch(css, /\.subject-learning-flow/);
     assert.doesNotMatch(css, /\.subject-flow-card/);
+  });
+
+  it("supports adding class dates and updating PDF classDate through API", () => {
+    const submitBlock = getFunctionBlock("handleDocumentSubmit");
+    const addDateBlock = getFunctionBlock("addSubjectClassDate");
+    const assignBlock = getFunctionBlock("assignPdfMaterialClassDate");
+    const apiTs = readFileSync(new URL("../api/materials.ts", import.meta.url), "utf8");
+
+    assert.match(submitBlock, /action === "add-class-date"/);
+    assert.match(addDateBlock, /const newWeek: WeekNote/);
+    assert.match(addDateBlock, /saveNotebook\(notebook\)/);
+    assert.match(assignBlock, /updatePdfMaterialMetadata\(apiBaseUrl, material\.backendMaterialId/);
+    assert.match(apiTs, /export async function updatePdfMaterialMetadata/);
+    assert.match(apiTs, /method: "PATCH"/);
+    assert.match(apiTs, /classDate: string/);
   });
 });
