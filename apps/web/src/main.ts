@@ -2502,11 +2502,18 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   // sprint-1/S3: "F" toggles browser Fullscreen on the PDF workspace container.
   // sprint-1/S3 fix (codex P2): drop auto-repeat to avoid enter/exit oscillation
   // when the user holds the key past the OS key-repeat delay.
+  // sprint-1/S3 fix-2 (codex P2): match event.key first so non-QWERTY layouts
+  // (Dvorak/AZERTY) where the labelled "F" key reports a different event.code
+  // still trigger fullscreen as advertised. event.code is the fallback for
+  // Korean IME on QWERTY (consistent with the tool dispatch path).
+  const isFullscreenKey =
+    (typeof event.key === "string" && event.key.toLowerCase() === "f") ||
+    event.code === "KeyF";
   if (
     !hasMetaOrCtrl &&
     !event.altKey &&
     !event.shiftKey &&
-    event.code === "KeyF" &&
+    isFullscreenKey &&
     !event.repeat &&
     !isEditableTarget(event.target)
   ) {
