@@ -1223,10 +1223,51 @@ p {
    screen and remove outer page padding. */
 #pdf-workspace-root:fullscreen {
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
-  overflow: auto;
-  padding: var(--ds-space-md);
+  overflow: hidden;
+  padding: 8px;
   width: 100vw;
+}
+
+/* Compact header/toolbar in fullscreen so the PDF stage gets most of the
+   viewport. Toolbar wraps to a single row when possible. */
+#pdf-workspace-root:fullscreen .pdf-page-binding-notice {
+  font-size: var(--ds-fs-meta);
+  margin: 0 0 6px;
+  padding: 6px 10px;
+}
+
+#pdf-workspace-root:fullscreen .pdf-workspace-header {
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+#pdf-workspace-root:fullscreen .pdf-workspace-header > div:first-child {
+  display: none; /* hide §3 caption + page heading — page number already shows on PDF */
+}
+
+#pdf-workspace-root:fullscreen .pdf-toolbar {
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+#pdf-workspace-root:fullscreen .pdf-toolbar-row {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#pdf-workspace-root:fullscreen .pdf-workspace-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#pdf-workspace-root:fullscreen .pdf-stage {
+  height: 100%;
+  min-height: 0;
 }
 
 .week-user-notes {

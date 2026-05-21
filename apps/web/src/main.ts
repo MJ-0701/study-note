@@ -6914,10 +6914,27 @@ function renderPdfToolbar(
 ): string {
   const disabled = hasMaterial ? "" : "disabled";
 
+  // sprint-1/S4: surface page-nav hotkeys on the buttons themselves so users do
+  // not have to consult the help modal. Cmd/Ctrl + [ / ] mirrors the dispatcher.
+  const isMacLike =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
+  const modifierLabel = isMacLike ? "⌘" : "Ctrl";
+
   return `
     <div class="pdf-toolbar" aria-label="PDF 작업 도구">
       <div class="pdf-page-controls">
-        <button class="secondary-action" type="button" data-action="pdf-prev-page" data-subject-id="${subjectId}" ${disabled}>이전</button>
+        <button
+          class="secondary-action"
+          type="button"
+          data-action="pdf-prev-page"
+          data-subject-id="${subjectId}"
+          aria-keyshortcuts="${isMacLike ? "Meta" : "Control"}+["
+          ${disabled}
+        >
+          <span class="tool-button__label">이전</span>
+          <kbd class="tool-button__key" aria-hidden="true">${modifierLabel}+[</kbd>
+        </button>
         <label>
           <span>페이지</span>
           <input
@@ -6930,7 +6947,17 @@ function renderPdfToolbar(
             ${disabled}
           />
         </label>
-        <button class="secondary-action" type="button" data-action="pdf-next-page" data-subject-id="${subjectId}" ${disabled}>다음</button>
+        <button
+          class="secondary-action"
+          type="button"
+          data-action="pdf-next-page"
+          data-subject-id="${subjectId}"
+          aria-keyshortcuts="${isMacLike ? "Meta" : "Control"}+]"
+          ${disabled}
+        >
+          <span class="tool-button__label">다음</span>
+          <kbd class="tool-button__key" aria-hidden="true">${modifierLabel}+]</kbd>
+        </button>
       </div>
       <div class="pdf-tool-group" role="group" aria-label="입력 도구">
         ${renderToolButton(subjectId, "read", selectedTool, "읽기")}
