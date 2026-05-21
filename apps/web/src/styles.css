@@ -1218,6 +1218,17 @@ p {
   margin: var(--ds-space-sm) 0 0;
 }
 
+/* sprint-1/S3: PDF workspace fullscreen — the section root becomes the browser
+   fullscreen element. Override background so the white app theme fills the
+   screen and remove outer page padding. */
+#pdf-workspace-root:fullscreen {
+  background: #ffffff;
+  height: 100vh;
+  overflow: auto;
+  padding: var(--ds-space-md);
+  width: 100vw;
+}
+
 .week-user-notes {
   margin: var(--ds-space-lg) 0;
 }
