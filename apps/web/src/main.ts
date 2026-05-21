@@ -2333,7 +2333,12 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   // shortcut works on non-US layouts where "[" / "]" are produced via AltGr or
   // mapped to non-bracket physical keys. Do not gate on altKey because AltGr
   // raises altKey=true on those layouts.
-  if (hasMetaOrCtrl && !event.shiftKey) {
+  //
+  // sprint-1/S1 fix-2 (codex P2): also skip bracket dispatch when typing in an
+  // editable element. On AltGr layouts Chrome/Edge can report ctrlKey=true and
+  // altKey=true while the user enters "[" or "]" into a textbox; without this
+  // guard the page would flip instead of accepting the typed character.
+  if (hasMetaOrCtrl && !event.shiftKey && !isEditableTarget(event.target)) {
     const isBracketLeft = event.code === "BracketLeft" || event.key === "[";
     const isBracketRight = event.code === "BracketRight" || event.key === "]";
 
