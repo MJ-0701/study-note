@@ -43,7 +43,7 @@
 - 이름 + 학번 기반 로그인, `/api/me` session revalidation
 - NestJS backend, Prisma/MySQL persistence
 - PDF material metadata 저장
-- local/mock 또는 S3 storage provider
+- local/mock 또는 S3-compatible storage provider (운영 환경은 Cloudflare R2)
 - backend proxy PDF upload/download
 - frontend PDF workspace backend 연동
 - PDF 위 포스트잇 메모와 펜 stroke local persistence
@@ -68,7 +68,7 @@
 - Frontend: Vite, TypeScript
 - Backend: NestJS
 - Database: MySQL, Prisma
-- Storage: local/mock provider 또는 S3 provider
+- Storage: local/mock provider 또는 S3-compatible provider (운영: Cloudflare R2, `STORAGE_PROVIDER=s3` + `S3_ENDPOINT=...r2.cloudflarestorage.com`)
 - Sprint workflow: Solon Product SFS
 
 리팩토링 후 추가 예정 (다음 sprint 결정에 따라):
