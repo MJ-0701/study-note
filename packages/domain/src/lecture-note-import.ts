@@ -124,7 +124,11 @@ export function sanitizeWeekNoteImportPayload(
       sourceMaterialIds: payload.weekNote.sourceMaterialIds.map(cleanText),
       requiredKeywordIds: payload.weekNote.requiredKeywordIds.map(cleanText),
       conceptIds: payload.weekNote.conceptIds.map(cleanText),
-      exampleQuestionIds: payload.weekNote.exampleQuestionIds.map(cleanText)
+      exampleQuestionIds: payload.weekNote.exampleQuestionIds.map(cleanText),
+      userNotes:
+        typeof payload.weekNote.userNotes === "string"
+          ? payload.weekNote.userNotes.trim()
+          : undefined
     }
   };
 }
@@ -232,6 +236,7 @@ function validateWeekNote(value: unknown, path: string, errors: string[]): void 
   requireStringArray(value.conceptIds, `${path}.conceptIds`, errors);
   requireStringArray(value.exampleQuestionIds, `${path}.exampleQuestionIds`, errors);
   requireEnum(value.reviewStatus, reviewStatuses, `${path}.reviewStatus`, errors);
+  requireOptionalString(value.userNotes, `${path}.userNotes`, errors);
 }
 
 function validateObjectArray(

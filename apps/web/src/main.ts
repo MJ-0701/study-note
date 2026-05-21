@@ -7841,7 +7841,7 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
 }
 
 function renderWeekUserNotesSection(subject: SubjectNote, week: WeekNote): string {
-  const value = week.userNotes ?? "";
+  const value = typeof week.userNotes === "string" ? week.userNotes : "";
 
   return `
     <section class="week-user-notes" aria-labelledby="week-user-notes-title">
