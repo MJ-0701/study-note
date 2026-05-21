@@ -527,6 +527,11 @@ if (isBrowserRuntime) {
   document.addEventListener("pointerup", handleDocumentPointerUp);
   document.addEventListener("pointercancel", handleDocumentPointerUp);
   document.addEventListener("keydown", handleDocumentKeyDown);
+  document.addEventListener("fullscreenchange", () => {
+    // sprint-1/S3: re-render so the toolbar button label reflects current
+    // fullscreen state ("전체화면" → "전체화면 종료").
+    renderApp();
+  });
   window.addEventListener("hashchange", () => {
     // sprint-1/S2: close transient overlays on route change so they do not
     // bleed across pages (the hotkey help modal is only meaningful on the PDF
@@ -1510,6 +1515,11 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  if (quickNoteButton?.dataset.action === "toggle-pdf-fullscreen") {
+    togglePdfFullscreen();
+    return;
+  }
+
   if (quickNoteButton?.dataset.action === "close-hotkey-help") {
     hotkeyHelpModalOpen = false;
     renderApp();
@@ -2350,6 +2360,52 @@ const PDF_TOOL_KEY_LABEL_LOOKUP: Record<string, LocalPdfTool> = {
 
 let hotkeyHelpModalOpen = false;
 
+// sprint-1/S3: Browser Fullscreen API wrapper for the PDF workspace container.
+const PDF_WORKSPACE_ROOT_ID = "pdf-workspace-root";
+
+function isPdfWorkspaceFullscreen(): boolean {
+  const el = document.fullscreenElement;
+  return !!el && el.id === PDF_WORKSPACE_ROOT_ID;
+}
+
+function togglePdfFullscreen(): void {
+  const target = document.getElementById(PDF_WORKSPACE_ROOT_ID);
+  if (!target) {
+    return;
+  }
+
+  // sprint-1/S3 fix (codex P2): the unprefixed Fullscreen API is not universal
+  // (notably iOS Safari and older WebKit). Probe the methods before invoking
+  // them so a missing API does not throw synchronously from the click/keydown
+  // handler.
+  if (isPdfWorkspaceFullscreen()) {
+    if (typeof document.exitFullscreen !== "function") {
+      console.warn("[study-note] document.exitFullscreen unavailable");
+      return;
+    }
+    try {
+      void document.exitFullscreen().catch((error) => {
+        console.warn("[study-note] exitFullscreen failed:", error);
+      });
+    } catch (error) {
+      console.warn("[study-note] exitFullscreen threw:", error);
+    }
+    return;
+  }
+
+  if (typeof target.requestFullscreen !== "function") {
+    console.warn("[study-note] Element.requestFullscreen unavailable");
+    return;
+  }
+  try {
+    void target.requestFullscreen().catch((error) => {
+      console.warn("[study-note] requestFullscreen failed:", error);
+    });
+  } catch (error) {
+    console.warn("[study-note] requestFullscreen threw:", error);
+  }
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -2441,6 +2497,29 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
       renderApp();
       return;
     }
+  }
+
+  // sprint-1/S3: "F" toggles browser Fullscreen on the PDF workspace container.
+  // sprint-1/S3 fix (codex P2): drop auto-repeat to avoid enter/exit oscillation
+  // when the user holds the key past the OS key-repeat delay.
+  // sprint-1/S3 fix-2 (codex P2): match event.key first so non-QWERTY layouts
+  // (Dvorak/AZERTY) where the labelled "F" key reports a different event.code
+  // still trigger fullscreen as advertised. event.code is the fallback for
+  // Korean IME on QWERTY (consistent with the tool dispatch path).
+  const isFullscreenKey =
+    (typeof event.key === "string" && event.key.toLowerCase() === "f") ||
+    event.code === "KeyF";
+  if (
+    !hasMetaOrCtrl &&
+    !event.altKey &&
+    !event.shiftKey &&
+    isFullscreenKey &&
+    !event.repeat &&
+    !isEditableTarget(event.target)
+  ) {
+    event.preventDefault();
+    togglePdfFullscreen();
+    return;
   }
 
   if (hasMetaOrCtrl || event.altKey || event.shiftKey) {
@@ -5722,8 +5801,9 @@ function renderHotkeyHelpModal(): string {
     ["G", "그래프"],
     ["Cmd/Ctrl + [", "이전 페이지"],
     ["Cmd/Ctrl + ]", "다음 페이지"],
+    ["F", "전체화면 토글"],
     ["?", "이 도움말 열기 / 닫기"],
-    ["Esc", "도움말 닫기"]
+    ["Esc", "도움말 닫기 / 전체화면 종료"]
   ];
 
   const body = rows
@@ -6674,7 +6754,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
 
     ${renderSubjectPdfMaterialBrowser(subject, subjectMaterials, currentMaterialKey)}
 
-    <section class="pdf-workspace" aria-labelledby="pdf-workspace-title">
+    <section class="pdf-workspace" id="pdf-workspace-root" aria-labelledby="pdf-workspace-title">
       ${objectUrl ? `
         <div class="pdf-page-binding-notice" role="note" aria-live="polite">
           <strong class="pdf-page-binding-notice__title">현재 페이지 ${selectedPageLabel}</strong>
@@ -6860,8 +6940,28 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "table", selectedTool, "표")}
         ${renderToolButton(subjectId, "chart", selectedTool, "그래프")}
       </div>
+      <div class="pdf-tool-group" role="group" aria-label="화면 전환">
+        ${renderFullscreenToggleButton()}
+      </div>
       ${selectedTool === "eraser" ? renderEraserSubToolbar(subjectId, eraserShape, eraserSize, disabled) : ""}
     </div>
+  `;
+}
+
+function renderFullscreenToggleButton(): string {
+  const active = isPdfWorkspaceFullscreen();
+  const label = active ? "전체화면 종료" : "전체화면";
+  return `
+    <button
+      class="tool-button"
+      type="button"
+      data-action="toggle-pdf-fullscreen"
+      aria-pressed="${active ? "true" : "false"}"
+      aria-keyshortcuts="F"
+    >
+      <span class="tool-button__label">${label}</span>
+      <kbd class="tool-button__key" aria-hidden="true">F</kbd>
+    </button>
   `;
 }
 
