@@ -647,8 +647,21 @@ function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
   );
 }
 
+let notebookStorageErrorReported = false;
+
 function saveNotebook(nextNotebook: StudyNotebook): void {
-  window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
+  try {
+    window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
+    notebookStorageErrorReported = false;
+  } catch (error) {
+    // QuotaExceededError, SecurityError (private mode), or other storage failures.
+    // Swallow to keep the UI responsive — high-frequency callers (textarea autosave,
+    // PDF workspace updates) must not throw mid-keystroke.
+    if (!notebookStorageErrorReported) {
+      notebookStorageErrorReported = true;
+      console.warn("[study-note] notebook localStorage save failed:", error);
+    }
+  }
 }
 
 // slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
