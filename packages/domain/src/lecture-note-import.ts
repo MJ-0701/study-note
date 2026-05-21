@@ -127,7 +127,7 @@ export function sanitizeWeekNoteImportPayload(
       exampleQuestionIds: payload.weekNote.exampleQuestionIds.map(cleanText),
       userNotes:
         typeof payload.weekNote.userNotes === "string"
-          ? payload.weekNote.userNotes.trim()
+          ? payload.weekNote.userNotes
           : undefined
     }
   };
