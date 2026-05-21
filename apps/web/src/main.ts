@@ -5888,33 +5888,25 @@ function renderLoginPage(): string {
 }
 
 function renderSessionCheckPage(): string {
-  const isChecking = authBootNotice === "checking";
+  // hotfix(session): 두 화면 ("세션 확인 중" / "서버를 깨우는 중") 이 깜빡이며
+  // 교차하던 UX 를 단일 화면으로 통일. 항상 동일한 타이틀/안내문을 보여주고,
+  // 자동 retry 가 모두 소진된 retryable 상태에서만 "다시 확인" 버튼을 노출한다.
   const isRetryable = authBootNotice === "retryable";
-  const title = isChecking
-    ? "세션 확인 중"
-    : isRetryable
-      ? "서버 응답이 늦어지고 있어요"
-      : "서버를 깨우는 중";
-  const detail = isChecking
-    ? "저장된 로그인 정보를 서버와 확인하고 있습니다."
-    : isRetryable
-      ? "무료 운영 환경이라 첫 요청이 길어질 수 있습니다. 잠시 뒤 다시 확인해 주세요."
-      : "배포 직후에는 백엔드가 깨어나는 데 시간이 조금 걸릴 수 있습니다. 자동으로 다시 확인합니다.";
 
   return `
     <main class="login-screen" data-session-checking="true">
       <section class="login-panel" aria-live="polite" aria-busy="true">
         <p class="meta">SESSION CHECK</p>
-        <h1>${title}</h1>
-        <p class="lede">${detail}</p>
+        <h1>세션 확인 중</h1>
+        <p class="lede">서버와 로그인 정보를 확인하고 있습니다. 첫 요청은 백엔드가 깨어나는 데 시간이 걸릴 수 있으며 자동으로 다시 확인합니다.</p>
         ${
-          isChecking
-            ? ""
-            : `<div class="session-check-actions">
+          isRetryable
+            ? `<div class="session-check-actions">
                 <button class="secondary-action" type="button" data-action="retry-session-check">
                   다시 확인
                 </button>
               </div>`
+            : ""
         }
       </section>
     </main>
