@@ -124,7 +124,11 @@ export function sanitizeWeekNoteImportPayload(
       sourceMaterialIds: payload.weekNote.sourceMaterialIds.map(cleanText),
       requiredKeywordIds: payload.weekNote.requiredKeywordIds.map(cleanText),
       conceptIds: payload.weekNote.conceptIds.map(cleanText),
-      exampleQuestionIds: payload.weekNote.exampleQuestionIds.map(cleanText)
+      exampleQuestionIds: payload.weekNote.exampleQuestionIds.map(cleanText),
+      userNotes:
+        typeof payload.weekNote.userNotes === "string"
+          ? payload.weekNote.userNotes
+          : undefined
     }
   };
 }
@@ -139,6 +143,14 @@ export function applyWeekNoteImport(
     throw new Error(`Unknown subjectId: ${payload.subjectId}`);
   }
 
+  const existingWeekNote = subject.weekNotes.find(
+    (item) => item.id === payload.weekNote.id
+  );
+  const mergedWeekNote: WeekNote = {
+    ...payload.weekNote,
+    userNotes: payload.weekNote.userNotes ?? existingWeekNote?.userNotes
+  };
+
   const updatedSubject: SubjectNote = {
     ...subject,
     sources: upsertById(subject.sources, payload.sourceMaterials),
@@ -151,7 +163,7 @@ export function applyWeekNoteImport(
       subject.exampleQuestions,
       payload.exampleQuestions
     ),
-    weekNotes: upsertById(subject.weekNotes, [payload.weekNote])
+    weekNotes: upsertById(subject.weekNotes, [mergedWeekNote])
   };
 
   const updatedNotebook: StudyNotebook = {
@@ -232,6 +244,7 @@ function validateWeekNote(value: unknown, path: string, errors: string[]): void 
   requireStringArray(value.conceptIds, `${path}.conceptIds`, errors);
   requireStringArray(value.exampleQuestionIds, `${path}.exampleQuestionIds`, errors);
   requireEnum(value.reviewStatus, reviewStatuses, `${path}.reviewStatus`, errors);
+  requireOptionalString(value.userNotes, `${path}.userNotes`, errors);
 }
 
 function validateObjectArray(

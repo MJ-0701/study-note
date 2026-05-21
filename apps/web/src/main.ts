@@ -647,8 +647,31 @@ function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
   );
 }
 
-function saveNotebook(nextNotebook: StudyNotebook): void {
-  window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
+let notebookStorageErrorReported = false;
+let notebookStorageError: string | undefined;
+
+function saveNotebook(nextNotebook: StudyNotebook): boolean {
+  try {
+    window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
+    // Recovery: surface banner removal if we had been failing.
+    if (notebookStorageError !== undefined) {
+      notebookStorageError = undefined;
+      notebookStorageErrorReported = false;
+      try { renderApp(); } catch { /* ignore */ }
+    }
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[study-note] notebook localStorage save failed:", error);
+    notebookStorageError = `메모/노트가 브라우저 저장공간에 기록되지 않았습니다 (예: 시크릿 모드, 용량 부족). 새로고침 시 변경 내용이 사라질 수 있으므로 저장 가능한 환경으로 옮기거나 새 탭에서 다시 시도하세요. (${message})`;
+    if (!notebookStorageErrorReported) {
+      // First failure — render once to show banner. Subsequent failures within
+      // the same outage do not re-render (avoids focus loss during typing).
+      notebookStorageErrorReported = true;
+      try { renderApp(); } catch { /* ignore */ }
+    }
+    return false;
+  }
 }
 
 // slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
@@ -1116,12 +1139,18 @@ function addSubjectClassDate(formData: FormData): void {
         : item
     )
   };
-  saveNotebook(notebook);
-  intakeFeedback = {
-    kind: "success",
-    title: "수업일을 추가했습니다.",
-    detail: `${classDate} 카드에서 PDF를 연결하고 요약본을 채울 수 있습니다.`
-  };
+  const saved = saveNotebook(notebook);
+  intakeFeedback = saved
+    ? {
+        kind: "success",
+        title: "수업일을 추가했습니다.",
+        detail: `${classDate} 카드에서 PDF를 연결하고 요약본을 채울 수 있습니다.`
+      }
+    : {
+        kind: "error",
+        title: "수업일을 추가했지만 저장에 실패했습니다.",
+        detail: "브라우저 저장공간 문제로 변경 내용이 새로고침 시 사라질 수 있습니다. 상단 알림을 확인하세요."
+      };
   renderApp();
 }
 
@@ -1466,6 +1495,13 @@ function handleDocumentClick(event: MouseEvent): void {
   if (quickNoteButton?.dataset.action === "auth-tab-signup") {
     authMode = "signup";
     loginFeedback = undefined;
+    renderApp();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "dismiss-notebook-storage-error") {
+    notebookStorageError = undefined;
+    notebookStorageErrorReported = false;
     renderApp();
     return;
   }
@@ -2124,6 +2160,32 @@ function handleDocumentInput(event: Event): void {
       )
     }));
 
+    return;
+  }
+
+  if (target.dataset.action === "update-week-user-notes") {
+    const subjectId = target.dataset.subjectId;
+    const weekId = target.dataset.weekId;
+
+    if (!subjectId || !weekId) {
+      return;
+    }
+
+    const value = (target as HTMLTextAreaElement).value;
+    notebook = {
+      ...notebook,
+      subjects: notebook.subjects.map((subject) =>
+        subject.id !== subjectId
+          ? subject
+          : {
+              ...subject,
+              weekNotes: subject.weekNotes.map((week) =>
+                week.id !== weekId ? week : { ...week, userNotes: value }
+              )
+            }
+      )
+    };
+    saveNotebook(notebook);
     return;
   }
 
@@ -4369,13 +4431,19 @@ async function importWeekNoteFile(
     }
 
     notebook = result.notebook;
-    saveNotebook(notebook);
-    intakeFeedback = {
-      kind: "success",
-      title: `${result.subject.title} ${result.weekNote.label} 노트를 반영했습니다.`,
-      detail: "브라우저 localStorage에 저장되어 새로고침 후에도 유지됩니다.",
-      href: weekPath(result.subject, result.weekNote)
-    };
+    const saved = saveNotebook(notebook);
+    intakeFeedback = saved
+      ? {
+          kind: "success",
+          title: `${result.subject.title} ${result.weekNote.label} 노트를 반영했습니다.`,
+          detail: "브라우저 localStorage에 저장되어 새로고침 후에도 유지됩니다.",
+          href: weekPath(result.subject, result.weekNote)
+        }
+      : {
+          kind: "error",
+          title: `${result.subject.title} ${result.weekNote.label} 노트가 저장에 실패했습니다.`,
+          detail: "브라우저 저장공간 문제로 변경 내용이 새로고침 시 사라질 수 있습니다. 상단 알림을 확인하세요."
+        };
     renderApp();
   } catch (error) {
     intakeFeedback = {
@@ -5412,11 +5480,25 @@ function renderShell(sidebar: string, mainContent: string, crumb: string): strin
             <button class="text-button" type="button" data-action="logout">로그아웃</button>
           </div>
         </header>
+        ${renderNotebookStorageBanner()}
         <main class="content">${mainContent}</main>
         <footer class="site-footer">
           study-note · 과목 총정리, 날짜별 노트, 로컬 자료 투입 · 원문 PDF 공개 공유 없음
         </footer>
       </div>
+    </div>
+  `;
+}
+
+function renderNotebookStorageBanner(): string {
+  if (!notebookStorageError) {
+    return "";
+  }
+
+  return `
+    <div class="storage-error-banner" role="alert">
+      <p>${escapeHtml(notebookStorageError)}</p>
+      <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
     </div>
   `;
 }
@@ -7782,6 +7864,8 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
 
     ${renderWeekMappedPdfSection(subject, week, materials)}
 
+    ${renderWeekUserNotesSection(subject, week)}
+
     ${renderQuickNotePanel(subject, ["week"])}
 
     <section aria-labelledby="week-overview-title">
@@ -7808,6 +7892,27 @@ function renderWeekPage(subject: SubjectNote, week: WeekNote): string {
       <div class="question-list">
         ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
       </div>
+    </section>
+  `;
+}
+
+function renderWeekUserNotesSection(subject: SubjectNote, week: WeekNote): string {
+  const value = typeof week.userNotes === "string" ? week.userNotes : "";
+
+  return `
+    <section class="week-user-notes" aria-labelledby="week-user-notes-title">
+      <p class="meta">내 필기</p>
+      <h2 id="week-user-notes-title">자유 메모</h2>
+      <p class="lede">이 수업일에 대한 자유 형식 메모입니다. 입력 즉시 브라우저에 저장됩니다.</p>
+      <textarea
+        class="week-user-notes__textarea"
+        data-action="update-week-user-notes"
+        data-subject-id="${escapeHtml(subject.id)}"
+        data-week-id="${escapeHtml(week.id)}"
+        aria-labelledby="week-user-notes-title"
+        placeholder="강의 중 떠오른 키워드, 질문, 정리 메모를 자유롭게 적으세요."
+        rows="8"
+      >${escapeHtml(value)}</textarea>
     </section>
   `;
 }
