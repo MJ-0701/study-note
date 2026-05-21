@@ -535,6 +535,18 @@ if (isBrowserRuntime) {
     // sprint-1/S3: re-render so the toolbar button label reflects current
     // fullscreen state ("전체화면" → "전체화면 종료").
     renderApp();
+
+    // hotfix: when exiting fullscreen, scroll back to the PDF workspace section
+    // so the viewport lands where the user entered fullscreen from instead of
+    // jumping to the top of the page.
+    if (!document.fullscreenElement) {
+      queueMicrotask(() => {
+        const target = document.getElementById(PDF_WORKSPACE_ROOT_ID);
+        if (target) {
+          target.scrollIntoView({ block: "start", behavior: "auto" });
+        }
+      });
+    }
   });
   window.addEventListener("hashchange", () => {
     // sprint-1/S2: close transient overlays on route change so they do not
@@ -5888,33 +5900,30 @@ function renderLoginPage(): string {
 }
 
 function renderSessionCheckPage(): string {
-  const isChecking = authBootNotice === "checking";
+  // hotfix(session): "세션 확인 중" / "서버를 깨우는 중" 두 화면이 깜빡이며
+  // 교차하던 UX 를 단일 타이틀로 통합. 자동 retry 가 진행되는 동안은 동일한
+  // 안내문을 유지하고, 자동 retry 가 모두 소진된 retryable 상태에서만 안내문이
+  // "수동 재시도 필요" 로 바뀌며 "다시 확인" 버튼이 노출된다 (codex P2 fix —
+  // retryable 에서는 자동 retry 가 멈췄으므로 "자동 확인" 문구는 거짓).
   const isRetryable = authBootNotice === "retryable";
-  const title = isChecking
-    ? "세션 확인 중"
-    : isRetryable
-      ? "서버 응답이 늦어지고 있어요"
-      : "서버를 깨우는 중";
-  const detail = isChecking
-    ? "저장된 로그인 정보를 서버와 확인하고 있습니다."
-    : isRetryable
-      ? "무료 운영 환경이라 첫 요청이 길어질 수 있습니다. 잠시 뒤 다시 확인해 주세요."
-      : "배포 직후에는 백엔드가 깨어나는 데 시간이 조금 걸릴 수 있습니다. 자동으로 다시 확인합니다.";
+  const detail = isRetryable
+    ? "자동 확인이 끝났습니다. 아래 버튼을 눌러 다시 시도해 주세요."
+    : "서버와 로그인 정보를 확인하고 있습니다. 첫 요청은 백엔드가 깨어나는 데 시간이 걸릴 수 있으며 자동으로 다시 확인합니다.";
 
   return `
     <main class="login-screen" data-session-checking="true">
-      <section class="login-panel" aria-live="polite" aria-busy="true">
+      <section class="login-panel" aria-live="polite" aria-busy="${isRetryable ? "false" : "true"}">
         <p class="meta">SESSION CHECK</p>
-        <h1>${title}</h1>
+        <h1>세션 확인 중</h1>
         <p class="lede">${detail}</p>
         ${
-          isChecking
-            ? ""
-            : `<div class="session-check-actions">
+          isRetryable
+            ? `<div class="session-check-actions">
                 <button class="secondary-action" type="button" data-action="retry-session-check">
                   다시 확인
                 </button>
               </div>`
+            : ""
         }
       </section>
     </main>
