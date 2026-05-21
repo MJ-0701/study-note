@@ -83,6 +83,7 @@ import "./styles.css";
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
 const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
+const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending";
 
 type Route =
   | { name: "home" }
@@ -1268,6 +1269,18 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "retry-session-check") {
     void revalidateStoredSession();
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "scroll-subject-section") {
+    const targetId = quickNoteButton.dataset.targetId;
+    const targetSection = targetId ? document.getElementById(targetId) : undefined;
+
+    if (targetSection) {
+      event.preventDefault();
+      targetSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
     return;
   }
 
@@ -2652,7 +2665,7 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     const pageCount = estimatePdfPageCount(await file.arrayBuffer());
     const intent = await createMaterialUploadIntent(apiBaseUrl, {
       subjectId,
-      classDate: getPdfMaterialClassDate(subjectId),
+      classDate: PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
       fileName: file.name,
       fileSize: file.size,
       pageCount,
@@ -2816,12 +2829,6 @@ async function loadPdfPreviewFromBackend(
     activePdfPreviewLoads.delete(loadKey);
     renderApp();
   }
-}
-
-function getPdfMaterialClassDate(subjectId: string): string {
-  const subject = notebook.subjects.find((item) => item.id === subjectId);
-
-  return subject?.weekNotes[0]?.label ?? "subject-workspace";
 }
 
 function handleMaterialAuthError(error: unknown): boolean {
@@ -5902,8 +5909,14 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
   const material = workspace.material;
   const subjectMaterials = getSubjectPdfMaterials(subject.id);
+  const materialCount = subjectMaterials.length;
   const currentMaterialKey = material ? getPdfMaterialKey(material) : undefined;
   const canManageMaterials = canManagePdfMaterials();
+  const uploadTitle = canManageMaterials
+    ? materialCount > 0
+      ? "강의 PDF 추가 업로드"
+      : "강의 PDF 업로드"
+    : "공유 자료";
   const selectedPage = material?.selectedPage ?? 1;
   // Cast: "eraser" is stored via LocalPdfTool cast in setPdfTool; recover the wider type here.
   const selectedTool = (material?.selectedTool ?? "read") as LocalPdfTool;
@@ -5956,10 +5969,10 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
     <section class="upload-section pdf-upload-section" aria-labelledby="pdf-upload-title">
       <div>
         <p class="meta">§1 — 자료 관리</p>
-        <h2 id="pdf-upload-title">${canManageMaterials ? "강의 PDF 업로드" : "공유 자료"}</h2>
+        <h2 id="pdf-upload-title">${uploadTitle}</h2>
         <p class="lede">
           ${canManageMaterials
-            ? "선택한 PDF는 backend storage에 저장되고, 학생들은 업로드된 자료를 골라 자신의 필기를 남깁니다."
+            ? "이미 등록된 자료가 있어도 PDF를 계속 추가할 수 있습니다. 수업일은 자동 배정하지 않고 업로드 후 수정 단계에서 지정합니다."
             : "PDF 업로드는 관리자에게 맡기고, 학생은 등록된 자료를 열어 개인 필기만 저장합니다."}
         </p>
       </div>
@@ -5974,15 +5987,22 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
               data-subject-id="${subject.id}"
             />
             <label class="file-drop" for="${inputId}">
-              <strong>${subject.title} PDF 선택 및 업로드</strong>
-              <span>관리자가 올린 원문 PDF는 모두가 읽고, 필기 데이터는 사용자별로 저장합니다.</span>
+              <strong>${subject.title} PDF ${materialCount > 0 ? "추가 업로드" : "선택 및 업로드"}</strong>
+              <span>날짜와 수업일은 자동으로 정하지 않습니다. 먼저 올리고 나중에 자료 정보에서 수정하세요.</span>
             </label>`
           : `<div class="policy-block is-standalone">
               <strong>업로드는 관리자만 가능합니다.</strong>
               <p>필요한 수업자료가 없으면 관리자에게 업로드를 요청하세요. 등록된 자료는 아래 목록에서 바로 열 수 있습니다.</p>
             </div>`}
+        ${canManageMaterials
+          ? `<div class="pdf-upload-hint">${materialCount > 0
+              ? `현재 ${materialCount}개 자료가 등록되어 있습니다. 새 파일을 선택하면 같은 과목 자료에 추가됩니다.`
+              : "첫 PDF를 올린 뒤에도 이 영역에서 계속 추가 업로드할 수 있습니다."}</div>`
+          : ""}
         ${material ? renderPdfMaterialStatus(material, Boolean(objectUrl), isPreviewLoading) : ""}
-        ${renderIntakeFeedback("아직 업로드한 PDF 파일이 없습니다.")}
+        ${intakeFeedback
+          ? renderIntakeFeedback("PDF 업로드 상태가 여기에 표시됩니다.")
+          : `<div class="import-feedback">${materialCount > 0 ? "새 PDF를 선택하면 이 과목 자료 목록에 추가됩니다." : "아직 업로드한 PDF 파일이 없습니다."}</div>`}
       </div>
     </section>
 
@@ -6956,6 +6976,7 @@ function renderInkStroke(stroke: PdfInkStroke): string {
 
 function renderSubjectPage(subject: SubjectNote): string {
   const coverage = getSubjectCoverage(subject);
+  const subjectMaterials = getSubjectPdfMaterials(subject.id);
   const mustKnowConcepts = subject.summary.mustKnowConceptIds
     .map((conceptId) => getConceptById(subject, conceptId))
     .filter((concept): concept is Concept => Boolean(concept));
@@ -6982,9 +7003,11 @@ function renderSubjectPage(subject: SubjectNote): string {
       ${renderMetric("시험 범위", subject.summary.weekRange, subject.examLabel)}
     </section>
 
+    ${renderSubjectDepthNav(subject, subjectMaterials)}
+
     <section aria-labelledby="summary-title">
-      <p class="meta">§1 — 과목 요약</p>
-      <h2 id="summary-title">시험 전 과목 총정리</h2>
+      <p class="meta">§1 — 과목 개요</p>
+      <h2 id="summary-title">전체 요약</h2>
       <div class="summary-grid">
         ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
         ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
@@ -6993,8 +7016,9 @@ function renderSubjectPage(subject: SubjectNote): string {
     </section>
 
     <section aria-labelledby="weekly-title">
-      <p class="meta">§2 — 날짜별 노트</p>
-      <h2 id="weekly-title">수업일별 노트</h2>
+      <p class="meta">§2 — 강의별 자료</p>
+      <h2 id="weekly-title">강의별 PDF와 수업 노트</h2>
+      <p class="lede">PDF 한 개를 한 강의 자료로 보고, 관련 수업일 노트와 요약을 이 아래에서 이어 봅니다.</p>
       <div class="week-card-grid">
         ${subject.weekNotes.map((week) => renderWeekCard(subject, week)).join("")}
       </div>
@@ -7003,7 +7027,7 @@ function renderSubjectPage(subject: SubjectNote): string {
     ${renderQuickNotePanel(subject, ["week"])}
 
     <section aria-labelledby="keywords-title">
-      <p class="meta">§3 — 필수 키워드</p>
+      <p class="meta">§3 — 현재 요약</p>
       <h2 id="keywords-title">교수님 키워드 반영 상태</h2>
       <div class="keyword-grid">
         ${subject.requiredKeywords.map((keyword) => renderKeyword(keyword, subject)).join("")}
@@ -7032,6 +7056,35 @@ function renderSubjectPage(subject: SubjectNote): string {
             ${source.pages ? `<p class="source-pages">${source.pages}</p>` : ""}
           </article>
         `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderSubjectDepthNav(subject: SubjectNote, materials: PdfMaterialDraft[]): string {
+  return `
+    <section class="subject-depth-nav" aria-labelledby="subject-depth-title">
+      <div>
+        <p class="meta">과목 안에서 보기</p>
+        <h2 id="subject-depth-title">요약과 강의 자료를 나눠 보기</h2>
+        <p class="lede">과목 전체 흐름은 전체 요약에서 보고, PDF는 강의별 자료로 들어가서 필기와 함께 확인합니다.</p>
+      </div>
+      <div class="subject-depth-nav__grid">
+        <button class="subject-depth-card" type="button" data-action="scroll-subject-section" data-target-id="summary-title">
+          <span>전체 요약</span>
+          <strong>${subject.examLabel}</strong>
+          <small>시험 범위와 복습 전략</small>
+        </button>
+        <button class="subject-depth-card" type="button" data-action="scroll-subject-section" data-target-id="weekly-title">
+          <span>강의별 자료</span>
+          <strong>${materials.length}개 PDF · ${subject.weekNotes.length}개 노트</strong>
+          <small>강의 PDF와 수업일 노트</small>
+        </button>
+        <button class="subject-depth-card" type="button" data-action="scroll-subject-section" data-target-id="keywords-title">
+          <span>현재 요약</span>
+          <strong>${subject.requiredKeywords.length}개 키워드</strong>
+          <small>교수님 키워드 반영 상태</small>
+        </button>
       </div>
     </section>
   `;
@@ -7143,7 +7196,7 @@ function renderPdfSubjectLibrarySection(
       </div>
       ${
         materials.length > 0
-          ? `<div class="pdf-material-grid">
+          ? `<div class="pdf-material-slider" aria-label="${subject.title} PDF 자료 슬라이더">
               ${materials.map((material) => renderPdfMaterialCard(subject, material, {
                 isCurrent: false,
                 compact: false
@@ -7173,7 +7226,7 @@ function renderSubjectPdfMaterialBrowser(
         </div>
         <a class="secondary-link" href="#/pdf-workspaces">전체 자료실</a>
       </div>
-      <div class="pdf-material-list">
+      <div class="pdf-material-slider is-compact" aria-label="${subject.title} PDF 자료 슬라이더">
         ${materials.map((material) => renderPdfMaterialCard(subject, material, {
           isCurrent: currentMaterialKey === getPdfMaterialKey(material),
           compact: true
@@ -7205,16 +7258,18 @@ function renderPdfMaterialCard(
   const materialKey = getPdfMaterialKey(material);
   const ownerLabel = getPdfMaterialOwnerLabel(material);
   const statusLabel = getPdfMaterialStatusLabel(material);
-  const classDate = material.classDate ? ` · ${escapeHtml(material.classDate)}` : "";
+  const classDateLabel = getPdfMaterialClassDateLabel(subject, material);
+  const classDateIsUnconfirmed = isUnconfirmedPdfClassDate(subject, material.classDate);
 
   return `
     <article class="pdf-material-card${options.isCurrent ? " is-current" : ""}${options.compact ? " is-compact" : ""}">
       <div class="pdf-material-card__body">
-        <p class="meta">${escapeHtml(subject.title)}${classDate}</p>
+        <p class="meta">${escapeHtml(subject.title)} · ${escapeHtml(classDateLabel)}</p>
         <h4>${escapeHtml(material.fileName)}</h4>
         <p>${formatPdfFileSize(material.fileSize)} · ${material.pageCount}페이지 · ${statusLabel}</p>
         <div class="pdf-material-card__badges">
           <span>${ownerLabel}</span>
+          ${classDateIsUnconfirmed ? "<span>나중에 수정</span>" : ""}
           ${options.isCurrent ? "<span>현재 열림</span>" : ""}
         </div>
       </div>
@@ -7229,6 +7284,22 @@ function renderPdfMaterialCard(
       </div>
     </article>
   `;
+}
+
+function getPdfMaterialClassDateLabel(subject: SubjectNote, material: PdfMaterialDraft): string {
+  return isUnconfirmedPdfClassDate(subject, material.classDate)
+    ? "수업일 미지정"
+    : material.classDate?.trim() ?? "수업일 미지정";
+}
+
+function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | undefined): boolean {
+  const trimmed = classDate?.trim();
+
+  if (!trimmed || trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE || trimmed === "수업일 미지정") {
+    return true;
+  }
+
+  return trimmed === subject.weekNotes[0]?.label;
 }
 
 function getPdfMaterialStatusLabel(material: PdfMaterialDraft): string {

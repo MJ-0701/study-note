@@ -401,6 +401,51 @@ section + section {
   max-width: var(--ds-measure);
 }
 
+.subject-depth-nav {
+  border-bottom: 1px solid var(--ds-rule);
+  border-top: 1px solid var(--ds-rule);
+  display: grid;
+  gap: var(--ds-space-md);
+  padding: var(--ds-space-lg) 0;
+}
+
+.subject-depth-nav__grid {
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.subject-depth-card {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  color: var(--ds-fg);
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: var(--ds-space-xs);
+  min-height: 132px;
+  padding: var(--ds-space-md);
+  text-align: left;
+}
+
+.subject-depth-card:hover,
+.subject-depth-card:focus-visible {
+  border-color: var(--ds-accent);
+  outline: 0;
+}
+
+.subject-depth-card span,
+.subject-depth-card small {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+}
+
+.subject-depth-card strong {
+  font-size: var(--ds-fs-body);
+  font-weight: 600;
+}
+
 h1,
 h2,
 h3,
@@ -1175,6 +1220,16 @@ p {
   align-items: stretch;
 }
 
+.pdf-upload-hint {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  line-height: 1.5;
+  padding: var(--ds-space-sm);
+}
+
 .pdf-library-summary {
   display: grid;
   gap: var(--ds-space-sm);
@@ -1219,15 +1274,15 @@ p {
   padding: 6px 10px;
 }
 
-.pdf-material-grid {
-  display: grid;
+.pdf-material-slider {
+  display: flex;
   gap: var(--ds-space-sm);
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-}
-
-.pdf-material-list {
-  display: grid;
-  gap: var(--ds-space-sm);
+  overflow-x: auto;
+  padding-bottom: var(--ds-space-xs);
+  scroll-padding-inline: var(--ds-space-sm);
+  scroll-snap-type: x mandatory;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pdf-material-card,
@@ -1241,7 +1296,9 @@ p {
 }
 
 .pdf-material-card {
+  flex: 0 0 min(82vw, 360px);
   grid-template-columns: minmax(0, 1fr) auto;
+  scroll-snap-align: start;
 }
 
 .pdf-material-card.is-current {
@@ -1251,6 +1308,7 @@ p {
 
 .pdf-material-card.is-compact {
   align-items: center;
+  flex-basis: min(78vw, 440px);
   padding: var(--ds-space-sm);
 }
 
@@ -2613,6 +2671,7 @@ body[data-route="pdf-workspace"] .content {
   .upload-section,
   .flow-section,
   .concept-row,
+  .subject-depth-nav__grid,
   .subject-heading,
   .week-note-grid,
   .pdf-library-summary,

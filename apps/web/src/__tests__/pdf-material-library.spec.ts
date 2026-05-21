@@ -39,7 +39,7 @@ describe("PDF material library UI", () => {
     assert.match(indexBlock, /등록 자료/);
     assert.match(indexBlock, /과목별 PDF/);
     assert.match(indexBlock, /renderPdfSubjectLibrarySection/);
-    assert.match(sectionBlock, /pdf-material-grid/);
+    assert.match(sectionBlock, /pdf-material-slider/);
     assert.match(sectionBlock, /renderPdfSubjectEmptyCard/);
   });
 
@@ -55,6 +55,8 @@ describe("PDF material library UI", () => {
     assert.match(cardBlock, /현재 열림/);
     assert.match(cardBlock, /다시 열기/);
     assert.match(cardBlock, /열기/);
+    assert.match(cardBlock, /getPdfMaterialClassDateLabel\(subject, material\)/);
+    assert.match(cardBlock, /나중에 수정/);
     assert.match(ownerLabelBlock, /공유 자료/);
     assert.match(statusLabelBlock, /공유 가능/);
   });
@@ -87,6 +89,28 @@ describe("PDF material library UI", () => {
     assert.match(canManageBlock, /role === "master" \|\| role === "admin"/);
   });
 
+  it("keeps upload open for additional PDFs without auto-mapping lecture dates", () => {
+    const workspaceBlock = getFunctionBlock("renderPdfWorkspacePage");
+
+    assert.match(mainTs, /const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending";/);
+    assert.match(mainTs, /classDate:\s*PDF_MATERIAL_UNASSIGNED_CLASS_DATE/);
+    assert.doesNotMatch(mainTs, /classDate:\s*getPdfMaterialClassDate\(subjectId\)/);
+    assert.match(workspaceBlock, /강의 PDF 추가 업로드/);
+    assert.match(workspaceBlock, /PDF를 계속 추가할 수 있습니다/);
+    assert.match(workspaceBlock, /날짜와 수업일은 자동으로 정하지 않습니다/);
+    assert.match(workspaceBlock, /새 파일을 선택하면 같은 과목 자료에 추가됩니다/);
+  });
+
+  it("normalizes unconfirmed class dates instead of showing inferred first-week values", () => {
+    const labelBlock = getFunctionBlock("getPdfMaterialClassDateLabel");
+    const unconfirmedBlock = getFunctionBlock("isUnconfirmedPdfClassDate");
+
+    assert.match(labelBlock, /수업일 미지정/);
+    assert.match(unconfirmedBlock, /trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE/);
+    assert.match(unconfirmedBlock, /trimmed === "수업일 미지정"/);
+    assert.match(unconfirmedBlock, /trimmed === subject\.weekNotes\[0\]\?\.label/);
+  });
+
   it("maps uploaded PDF materials to the shared-available status label", () => {
     const statusLabelBlock = getFunctionBlock("getPdfMaterialStatusLabel");
     const uploadedBranch = statusLabelBlock.slice(
@@ -99,13 +123,40 @@ describe("PDF material library UI", () => {
 
   it("keeps the material library responsive on phone-width screens", () => {
     const cardBlock = getCssRuleBlock(".pdf-material-card");
+    const sliderBlock = getCssRuleBlock(".pdf-material-slider");
     const summaryBlock = getCssRuleBlock(".pdf-library-summary");
     const mobileBlock = css.slice(css.indexOf("@media (max-width: 820px)"));
 
     assert.match(summaryBlock, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
+    assert.match(sliderBlock, /overflow-x:\s*auto;/);
+    assert.match(sliderBlock, /scroll-snap-type:\s*x\s+mandatory;/);
+    assert.match(cardBlock, /flex:\s*0\s+0\s+min\(82vw,\s*360px\);/);
     assert.match(cardBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/);
+    assert.match(mobileBlock, /\.subject-depth-nav__grid,\s*\n\s*\.subject-heading,/);
     assert.match(mobileBlock, /\.pdf-library-summary,\s*\n\s*\.pdf-material-card,/);
     assert.match(mobileBlock, /grid-template-columns:\s*1fr;/);
     assert.match(mobileBlock, /\.pdf-material-card__actions \.action-button\s*\{\s*width:\s*100%;/m);
+  });
+
+  it("adds a subject-level depth navigation for summary, lecture materials, and current recap", () => {
+    const subjectBlock = getFunctionBlock("renderSubjectPage");
+    const depthNavBlock = getFunctionBlock("renderSubjectDepthNav");
+    const clickBlock = mainTs.slice(
+      mainTs.indexOf('quickNoteButton?.dataset.action === "scroll-subject-section"'),
+      mainTs.indexOf('quickNoteButton?.dataset.action === "open-pdf-material"')
+    );
+
+    assert.match(subjectBlock, /renderSubjectDepthNav\(subject, subjectMaterials\)/);
+    assert.match(subjectBlock, /전체 요약/);
+    assert.match(subjectBlock, /강의별 PDF와 수업 노트/);
+    assert.match(subjectBlock, /PDF 한 개를 한 강의 자료로 보고/);
+    assert.match(subjectBlock, /현재 요약/);
+    assert.match(depthNavBlock, /과목 안에서 보기/);
+    assert.match(depthNavBlock, /data-target-id="summary-title"/);
+    assert.match(depthNavBlock, /data-target-id="weekly-title"/);
+    assert.match(depthNavBlock, /data-target-id="keywords-title"/);
+    assert.match(clickBlock, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+    assert.match(css, /\.subject-depth-nav/);
+    assert.match(css, /\.subject-depth-card/);
   });
 });
