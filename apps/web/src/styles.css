@@ -435,12 +435,12 @@ section + section {
 }
 
 .class-date-add-section {
-  align-items: end;
+  align-items: start;
   border: 1px solid var(--ds-rule);
   border-radius: 8px;
   display: grid;
   gap: var(--ds-space-md);
-  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   padding: var(--ds-space-md);
 }
 
@@ -448,13 +448,19 @@ section + section {
   align-items: end;
   display: grid;
   gap: var(--ds-space-sm);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.class-date-form .action-button {
+  justify-self: start;
+  min-height: 42px;
 }
 
 .class-date-form label,
 .pdf-material-card__field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .class-date-form span,
@@ -471,7 +477,9 @@ section + section {
   color: var(--ds-fg);
   font: inherit;
   min-height: 40px;
+  min-width: 0;
   padding: 0 10px;
+  width: 100%;
 }
 
 .class-day-grid {
@@ -512,6 +520,41 @@ section + section {
   color: var(--ds-fg-soft);
   font-size: var(--ds-fs-meta);
   padding: 5px 9px;
+}
+
+.class-day-card__empty {
+  color: var(--ds-fg-muted);
+  font-size: var(--ds-fs-meta);
+}
+
+.class-day-card__pdfs {
+  border-top: 1px solid var(--ds-rule);
+  display: grid;
+  gap: var(--ds-space-xs);
+  padding-top: var(--ds-space-sm);
+}
+
+.class-day-card__pdf {
+  background: transparent;
+  border: 0;
+  color: var(--ds-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-fs-meta);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  padding: 0;
+  text-align: left;
+}
+
+.class-day-card__pdf:hover,
+.class-day-card__pdf:focus-visible {
+  text-decoration: underline;
+}
+
+.class-day-card__more {
+  color: var(--ds-fg-muted);
+  font-size: var(--ds-fs-meta);
 }
 
 .subject-mcp-callout p {
@@ -2801,7 +2844,6 @@ body[data-route="pdf-workspace"] .content {
   .subject-heading,
   .week-note-grid,
   .class-date-add-section,
-  .class-date-form,
   .class-day-grid,
   .pdf-library-summary,
   .pdf-material-card,
@@ -2862,6 +2904,10 @@ body[data-route="pdf-workspace"] .content {
   .subject-mcp-callout {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .class-date-form {
+    grid-template-columns: 1fr;
   }
 
   /* sprint-11/codex-P1: 모바일에서 inspector toggle 노출 유지.

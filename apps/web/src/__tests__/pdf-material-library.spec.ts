@@ -149,8 +149,11 @@ describe("PDF material library UI", () => {
     assert.match(cardBlock, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto;/);
     assert.match(css, /\.subject-sidebar-depth__link/);
     assert.match(css, /\.class-day-grid/);
+    assert.match(css, /\.class-date-form \.action-button/);
+    assert.match(css, /\.class-day-card__pdfs/);
     assert.match(mobileBlock, /\.subject-heading,\s*\n\s*\.week-note-grid,/);
     assert.match(mobileBlock, /\.class-day-grid,\s*\n\s*\.pdf-library-summary,/);
+    assert.match(mobileBlock, /\.class-date-form\s*\{\s*\n\s*grid-template-columns:\s*1fr;/m);
     assert.match(mobileBlock, /grid-template-columns:\s*1fr;/);
     assert.match(mobileBlock, /\.pdf-material-card__actions \.action-button\s*\{\s*width:\s*100%;/m);
   });
@@ -196,6 +199,9 @@ describe("PDF material library UI", () => {
     assert.match(classBlock, /renderClassDateAddSection\(subject\)/);
     assert.match(classBlock, /renderClassDayCard/);
     assert.match(classBlock, /renderPdfMaterialAssignmentSection\(subject, subjectMaterials\)/);
+    assert.match(mainTs, /function renderClassDayPdfLinks/);
+    assert.match(mainTs, /data-action="open-pdf-material"/);
+    assert.match(mainTs, /연결 PDF/);
     assert.match(summariesBlock, /수업일별 요약 목록/);
     assert.match(summariesBlock, /renderSummaryDayCard\(subject, week\)/);
     assert.match(summaryDetailBlock, /이 날짜 요약 만들기/);

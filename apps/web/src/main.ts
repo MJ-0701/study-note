@@ -7364,11 +7364,39 @@ function renderClassDayCard(
         <span>${materials.length}개 PDF</span>
         <span>${week.requiredKeywordIds.length}개 키워드</span>
       </div>
+      ${renderClassDayPdfLinks(subject, materials)}
       <div class="week-card-actions">
         <a class="action-button" href="${weekPath(subject, week)}">수업 상세</a>
         <a class="secondary-link" href="${weekSummaryPath(subject, week)}">요약 상세</a>
       </div>
     </article>
+  `;
+}
+
+function renderClassDayPdfLinks(
+  subject: SubjectNote,
+  materials: PdfMaterialDraft[]
+): string {
+  if (materials.length === 0) {
+    return '<p class="class-day-card__empty">아직 연결된 PDF가 없습니다.</p>';
+  }
+
+  return `
+    <div class="class-day-card__pdfs" aria-label="연결된 PDF">
+      <p class="meta">연결 PDF</p>
+      ${materials.slice(0, 2).map((material) => `
+        <button
+          class="class-day-card__pdf"
+          type="button"
+          data-action="open-pdf-material"
+          data-subject-id="${escapeHtml(subject.id)}"
+          data-material-id="${escapeHtml(getPdfMaterialKey(material))}"
+        >
+          ${escapeHtml(material.fileName)}
+        </button>
+      `).join("")}
+      ${materials.length > 2 ? `<span class="class-day-card__more">외 ${materials.length - 2}개</span>` : ""}
+    </div>
   `;
 }
 
