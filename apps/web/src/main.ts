@@ -2330,6 +2330,20 @@ const PDF_TOOL_HOTKEY_LABELS: Partial<Record<LocalPdfTool, string>> = {
   chart: "G"
 };
 
+// sprint-1/S2 fix (codex P2): map by the produced character so layouts where
+// the physical "KeyR" code does not produce "R" (Dvorak / AZERTY) still match
+// what the badge advertises. Lookup uses lowercased event.key.
+const PDF_TOOL_KEY_LABEL_LOOKUP: Record<string, LocalPdfTool> = {
+  r: "read",
+  s: "sticky",
+  p: "pen",
+  e: "eraser",
+  t: "text",
+  c: "checklist",
+  b: "table",
+  g: "chart"
+};
+
 let hotkeyHelpModalOpen = false;
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -2430,7 +2444,14 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  const tool = PDF_TOOL_HOTKEYS[event.code];
+  // sprint-1/S2 fix (codex P2): try event.code first (Korean IME safety —
+  // physical KeyR still maps even when IME consumes event.key), then fall back
+  // to event.key lookup so non-QWERTY layouts (Dvorak / AZERTY) also work as
+  // labelled. event.key is single character for letter keys; lowercase it so
+  // CapsLock and Shift do not break the lookup.
+  const tool =
+    PDF_TOOL_HOTKEYS[event.code] ??
+    PDF_TOOL_KEY_LABEL_LOOKUP[event.key.toLowerCase()];
   if (!tool) {
     return;
   }
