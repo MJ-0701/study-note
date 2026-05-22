@@ -795,6 +795,24 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
       return;
     }
     const incoming = payload.body;
+    // sprint-2/S2 fix (codex P1): protect against stale GET overwriting fresh
+    // local edits. Skip hydrate when:
+    //   (a) the user has a pending debounced PUT for this weekId (still typing),
+    //   (b) the active week has a non-empty local userNotes that differs from
+    //       the server payload — treat that as a local edit not yet flushed
+    //       and let the next PUT carry the local value to the server.
+    // Cross-device restore still works on first visit (local empty → hydrate).
+    if (userNotesPutTimers.has(weekId)) {
+      recordSyncSuccess();
+      return;
+    }
+    const localSubject = notebook.subjects.find((subject) => subject.id === subjectId);
+    const localWeek = localSubject?.weekNotes.find((week) => week.id === weekId);
+    const localValue = typeof localWeek?.userNotes === "string" ? localWeek.userNotes : "";
+    if (localValue.length > 0 && localValue !== incoming) {
+      recordSyncSuccess();
+      return;
+    }
     let applied = false;
     notebook = {
       ...notebook,
@@ -1842,6 +1860,11 @@ function handleDocumentClick(event: MouseEvent): void {
   if (quickNoteButton?.dataset.action === "dismiss-notebook-storage-error") {
     notebookStorageError = undefined;
     notebookStorageErrorReported = false;
+    // sprint-2/S2 fix (codex P2): also unpause the BE sync tracker so autosave
+    // resumes after the user dismisses the banner. Without this, the paused
+    // flag stays true and silently drops subsequent PUTs.
+    syncFailureTracker.paused = false;
+    syncFailureTracker.recentFailures = [];
     renderApp();
     return;
   }
