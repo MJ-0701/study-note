@@ -122,6 +122,7 @@ jobs:
               "DD_ENV=production" \
               "DD_VERSION=${{ steps.meta.outputs.version }}" \
               "DD_SITE=us5.datadoghq.com" \
+              "DD_TRACE_ENABLED=true" \
               "DD_AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
               "DD_AZURE_RESOURCE_GROUP=${{ env.RESOURCE_GROUP }}" \
               "DD_LOGS_ENABLED=true" \

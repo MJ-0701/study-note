@@ -66,6 +66,7 @@ DD_SERVICE=study-note-api
 DD_ENV=production
 DD_VERSION=<be tag version>
 DD_SITE=us5.datadoghq.com
+DD_TRACE_ENABLED=true
 DD_LOGS_ENABLED=true
 DD_LOGS_INJECTION=true
 DD_SOURCE=nodejs

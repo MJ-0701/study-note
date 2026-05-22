@@ -65,14 +65,13 @@ RUN pnpm --filter @study-note/api prisma:generate
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
 # Datadog Azure Container Apps in-container instrumentation.
-# serverless-init wraps the existing DB wait/migration entrypoint, then the
-# entrypoint execs Node with dd-trace preloaded via NODE_OPTIONS.
+# serverless-init wraps the existing DB wait/migration entrypoint. The
+# entrypoint preloads dd-trace only for the final NestJS process so build-time
+# and migration Node commands do not inherit the preload.
 COPY --from=datadog/serverless-init:1-alpine /datadog-init /app/datadog-init
 
 # Entrypoint: DB wait → migrate deploy → optional seed → exec app
 COPY --chmod=0755 apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
-
-ENV NODE_OPTIONS="--require dd-trace/init"
 
 EXPOSE 3010
 ENTRYPOINT ["/app/datadog-init"]

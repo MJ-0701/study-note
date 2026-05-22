@@ -108,4 +108,5 @@ fi
 # 5. start app — exec so Node is PID 1 and receives SIGTERM directly
 # ------------------------------------------------------------------
 echo "[entrypoint] starting app..."
-exec node apps/api/dist/main.js
+cd /app/apps/api
+exec node --require dd-trace/init dist/main.js
