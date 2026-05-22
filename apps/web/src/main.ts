@@ -708,6 +708,30 @@ const syncFailureTracker: SyncFailureTracker = {
 let syncBackendError: string | undefined;
 let syncBackendErrorReported = false;
 
+// sprint-2/S3 fix (codex P2): handle 401/403 during background sync. PUT/GET
+// for user-notes/annotations silently failed when the session cookie expired;
+// the UI kept accepting edits while writes were dropped and the user had no
+// signal. Treat 401/403 from those endpoints as "session expired" — clear the
+// in-memory session + transient timers via clearAuthSession() and redirect
+// to login with a feedback banner. Guarded by a one-shot flag so concurrent
+// in-flight requests do not stack multiple banners; the flag resets when a
+// new session is attached (revalidate / sign-in).
+let authExpiryHandled = false;
+function handleAuthExpiredFromSync(): void {
+  if (authExpiryHandled) {
+    return;
+  }
+  authExpiryHandled = true;
+  clearAuthSession();
+  authMode = "login";
+  loginFeedback = {
+    kind: "error",
+    title: "세션이 만료되었습니다.",
+    detail: "자동 저장이 중단되어 다시 로그인이 필요합니다."
+  };
+  try { renderApp(); } catch { /* ignore */ }
+}
+
 function recordSyncFailure(): void {
   const now = Date.now();
   syncFailureTracker.recentFailures.push(now);
@@ -772,6 +796,11 @@ async function putUserNoteToBE(
       console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
       return;
     }
+    if (response.status === 401 || response.status === 403) {
+      console.warn("[study-note] userNotes PUT auth expired", response.status, weekId);
+      handleAuthExpiredFromSync();
+      return;
+    }
     if (!response.ok) {
       console.warn("[study-note] userNotes PUT failed", response.status, weekId);
       if (response.status >= 500) {
@@ -821,6 +850,12 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
       // sprint-2/S2 fix (codex P2): release cache so a note created later from
       // another device can be re-fetched in the same session.
       releaseNoteCache();
+      return;
+    }
+    if (response.status === 401 || response.status === 403) {
+      // sprint-2/S3 fix (codex P2): GET auth expiry also surfaces re-login.
+      releaseNoteCache();
+      handleAuthExpiredFromSync();
       return;
     }
     if (!response.ok) {
@@ -908,6 +943,11 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
       console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
       return;
     }
+    if (response.status === 401 || response.status === 403) {
+      console.warn("[study-note] annotation PUT auth expired", response.status, materialId);
+      handleAuthExpiredFromSync();
+      return;
+    }
     if (!response.ok) {
       console.warn("[study-note] annotation PUT failed", response.status, materialId);
       if (response.status >= 500) {
@@ -959,6 +999,12 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       // sprint-2/S2 fix (codex P2): release cache marker on 404 so a later
       // device that creates the annotation can be re-fetched on next view.
       releaseCache();
+      return;
+    }
+    if (response.status === 401 || response.status === 403) {
+      // sprint-2/S3 fix (codex P2): GET auth expiry also surfaces re-login.
+      releaseCache();
+      handleAuthExpiredFromSync();
       return;
     }
     if (!response.ok) {
@@ -1215,6 +1261,9 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
     }
 
     authSession = meResponseToSession(payload);
+    // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot so a future
+    // session loss can re-surface the banner.
+    authExpiryHandled = false;
     await restoreUploadedPdfMaterialsForSession(authSession);
     if (requestId !== authBootRequestId) {
       return;
@@ -2540,6 +2589,8 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
 
       const session = meResponseToSession(payload as AuthMeResponse);
       authSession = session;
+      // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot on fresh sign-in.
+      authExpiryHandled = false;
       authBootState = "ready";
       authBootNotice = "checking";
       clearAuthBootTimers();
