@@ -708,14 +708,21 @@ interface SyncFailureTracker {
 
 const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
-// sprint-2/S3 fix (codex P1): per-key AbortControllers for in-flight PUT
-// supersession. Debounce alone does not prevent out-of-order delivery — once
-// the timer fires and a PUT is on the wire, a new schedule produces a second
-// in-flight request whose response can arrive before the first, leaving the
-// older body persisted on the server. When scheduling, abort the previous
-// in-flight PUT so only the latest payload reaches the server.
+// sprint-2/S3 fix (codex P1): per-key AbortControllers for hard termination
+// on logout / user transition. Cancelling client-side does NOT guarantee the
+// server hasn't already processed the request — server-order safety comes
+// from the chain map below.
 const userNotesPutAborts = new Map<string, AbortController>();
 const annotationPutAborts = new Map<string, AbortController>();
+// sprint-2/S3 fix (codex P1 #NEW-22): per-key promise chains that serialize
+// PUTs FIFO. Without this, two debounced PUTs can be on the wire concurrently
+// and the server may persist the older body on top of the newer one. Each
+// new PUT awaits the prior chain entry before issuing fetch(), so server
+// arrival order matches client-issue order on this device. Cross-device
+// races are governed by plan §5.2 last-write-wins; server-side revision
+// checks are a sprint-3 follow-up.
+const userNotesPutChains = new Map<string, Promise<void>>();
+const annotationPutChains = new Map<string, Promise<void>>();
 const userNotesFetchedKeys = new Set<string>();
 const annotationFetchedKeys = new Set<string>();
 // sprint-2/S3 fix (codex P2): track which materialId currently occupies the
@@ -813,59 +820,78 @@ async function putUserNoteToBE(
   if (syncFailureTracker.paused) {
     return;
   }
-  // sprint-2/S3 fix (codex P1): abort any prior in-flight PUT for the same
-  // (subject, week) so out-of-order delivery cannot persist the older payload
-  // after the newer one. Debounce only collapses pre-PUT churn; once the
-  // request is on the wire, only this guard prevents stale-overwrite races.
-  const abortKey = `${subjectId}:${weekId}`;
-  const previousAbort = userNotesPutAborts.get(abortKey);
-  if (previousAbort) {
-    previousAbort.abort();
+  // sprint-2/S3 fix (codex P1 #NEW-22): chain this PUT after any prior PUT
+  // for the same (subject, week) so server arrival order matches client-issue
+  // order on this device. AbortController inside is for hard termination
+  // from logout / user transition — within the chain there is never more
+  // than one in-flight at a time, so the abort path only fires on session
+  // changes, not on supersession.
+  const key = `${subjectId}:${weekId}`;
+  const sessionUserIdAtSchedule = authSession?.user.id;
+  if (!sessionUserIdAtSchedule) {
+    return;
   }
-  const abortController = new AbortController();
-  userNotesPutAborts.set(abortKey, abortController);
-  try {
-    const response = await fetch(
-      `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
-      {
-        method: "PUT",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body }),
-        signal: abortController.signal
+  const previous = userNotesPutChains.get(key) ?? Promise.resolve();
+  const work = previous
+    .catch(() => {})
+    .then(async () => {
+      // sprint-2/S3 fix (advisor): chain may have awaited seconds while the
+      // user logged out and back in. Re-validate session before issuing the
+      // PUT so user A's debounced edit cannot land with user B's cookie.
+      if (authSession?.user.id !== sessionUserIdAtSchedule) {
+        return;
       }
-    );
-    if (response.status === 413) {
-      console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
-      return;
-    }
-    if (response.status === 401 || response.status === 403) {
-      console.warn("[study-note] userNotes PUT auth expired", response.status, weekId);
-      handleAuthExpiredFromSync();
-      return;
-    }
-    if (!response.ok) {
-      console.warn("[study-note] userNotes PUT failed", response.status, weekId);
-      // sprint-2/S3 fix (codex P1): treat 429 Too Many Requests as a sync
-      // failure so the autosave pause threshold can engage. Without this,
-      // server-side rate-limiting silently drops PUTs while the UI keeps
-      // accepting edits — same user-facing symptom as 5xx.
-      if (response.status >= 500 || response.status === 429) {
+      if (syncFailureTracker.paused) {
+        return;
+      }
+      const abortController = new AbortController();
+      userNotesPutAborts.set(key, abortController);
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body }),
+            signal: abortController.signal
+          }
+        );
+        if (response.status === 413) {
+          console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
+          return;
+        }
+        if (response.status === 401 || response.status === 403) {
+          console.warn("[study-note] userNotes PUT auth expired", response.status, weekId);
+          handleAuthExpiredFromSync();
+          return;
+        }
+        if (!response.ok) {
+          console.warn("[study-note] userNotes PUT failed", response.status, weekId);
+          if (response.status >= 500 || response.status === 429) {
+            recordSyncFailure();
+          }
+          return;
+        }
+        recordSyncSuccess();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        console.warn("[study-note] userNotes PUT network error", error);
         recordSyncFailure();
+      } finally {
+        if (userNotesPutAborts.get(key) === abortController) {
+          userNotesPutAborts.delete(key);
+        }
       }
-      return;
-    }
-    recordSyncSuccess();
-  } catch (error) {
-    // Aborted by a newer PUT — silent, not a sync failure.
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return;
-    }
-    console.warn("[study-note] userNotes PUT network error", error);
-    recordSyncFailure();
+    });
+  userNotesPutChains.set(key, work);
+  try {
+    await work;
   } finally {
-    if (userNotesPutAborts.get(abortKey) === abortController) {
-      userNotesPutAborts.delete(abortKey);
+    if (userNotesPutChains.get(key) === work) {
+      userNotesPutChains.delete(key);
     }
   }
 }
@@ -991,50 +1017,68 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
   if (syncFailureTracker.paused) {
     return;
   }
-  // sprint-2/S3 fix (codex P1): same in-flight supersession as userNotes —
-  // cancel any prior PUT for this material so out-of-order delivery cannot
-  // overwrite the latest annotation bundle with an older one.
-  const previousAbort = annotationPutAborts.get(materialId);
-  if (previousAbort) {
-    previousAbort.abort();
+  // sprint-2/S3 fix (codex P1 #NEW-22): chain per material so server arrival
+  // order matches client-issue order. AbortController inside is for hard
+  // termination on logout / user transition.
+  const sessionUserIdAtSchedule = authSession?.user.id;
+  if (!sessionUserIdAtSchedule) {
+    return;
   }
-  const abortController = new AbortController();
-  annotationPutAborts.set(materialId, abortController);
-  try {
-    const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ payload }),
-      signal: abortController.signal
-    });
-    if (response.status === 413) {
-      console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
-      return;
-    }
-    if (response.status === 401 || response.status === 403) {
-      console.warn("[study-note] annotation PUT auth expired", response.status, materialId);
-      handleAuthExpiredFromSync();
-      return;
-    }
-    if (!response.ok) {
-      console.warn("[study-note] annotation PUT failed", response.status, materialId);
-      // sprint-2/S3 fix (codex P1): 429 mirrors >=500 in the pause logic.
-      if (response.status >= 500 || response.status === 429) {
-        recordSyncFailure();
+  const previous = annotationPutChains.get(materialId) ?? Promise.resolve();
+  const work = previous
+    .catch(() => {})
+    .then(async () => {
+      if (authSession?.user.id !== sessionUserIdAtSchedule) {
+        return;
       }
-      return;
-    }
-    recordSyncSuccess();
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return;
-    }
-    console.warn("[study-note] annotation PUT network error", error);
-    recordSyncFailure();
+      if (syncFailureTracker.paused) {
+        return;
+      }
+      const abortController = new AbortController();
+      annotationPutAborts.set(materialId, abortController);
+      try {
+        const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload }),
+          signal: abortController.signal
+        });
+        if (response.status === 413) {
+          console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
+          return;
+        }
+        if (response.status === 401 || response.status === 403) {
+          console.warn("[study-note] annotation PUT auth expired", response.status, materialId);
+          handleAuthExpiredFromSync();
+          return;
+        }
+        if (!response.ok) {
+          console.warn("[study-note] annotation PUT failed", response.status, materialId);
+          if (response.status >= 500 || response.status === 429) {
+            recordSyncFailure();
+          }
+          return;
+        }
+        recordSyncSuccess();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        console.warn("[study-note] annotation PUT network error", error);
+        recordSyncFailure();
+      } finally {
+        if (annotationPutAborts.get(materialId) === abortController) {
+          annotationPutAborts.delete(materialId);
+        }
+      }
+    });
+  annotationPutChains.set(materialId, work);
+  try {
+    await work;
   } finally {
-    if (annotationPutAborts.get(materialId) === abortController) {
-      annotationPutAborts.delete(materialId);
+    if (annotationPutChains.get(materialId) === work) {
+      annotationPutChains.delete(materialId);
     }
   }
 }
@@ -1323,6 +1367,12 @@ function applySessionTransitionForUser(newUserId: string): void {
     ac.abort();
   }
   annotationPutAborts.clear();
+  // sprint-2/S3 fix (codex P1 #NEW-22 / advisor): drop chained PUT promises
+  // so queued continuations after the current in-flight do not fire under
+  // the new session's cookie. The body re-validates session before fetch,
+  // but clearing the chain here avoids the post-abort .then() running at all.
+  userNotesPutChains.clear();
+  annotationPutChains.clear();
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
@@ -1373,6 +1423,9 @@ function clearAuthSession(): void {
     ac.abort();
   }
   annotationPutAborts.clear();
+  // sprint-2/S3 fix (codex P1 #NEW-22): drop chained PUT promises on logout.
+  userNotesPutChains.clear();
+  annotationPutChains.clear();
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
