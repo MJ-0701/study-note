@@ -769,7 +769,13 @@ function scheduleUserNotePut(weekId: string, body: string): void {
 }
 
 async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promise<void> {
-  const cacheKey = `${subjectId}:${weekId}`;
+  // sprint-2/S2 fix (codex P1): scope cache key to authenticated user so
+  // logout/login on a shared SPA runtime does not skip GET for the new user.
+  const sessionUserId = authSession?.user.id;
+  if (!sessionUserId) {
+    return;
+  }
+  const cacheKey = `${sessionUserId}:${subjectId}:${weekId}`;
   if (userNotesFetchedKeys.has(cacheKey)) {
     return;
   }
@@ -888,7 +894,12 @@ function scheduleAnnotationPut(materialId: string, payload: unknown): void {
 }
 
 async function fetchAnnotationIfMissing(subjectId: string, materialId: string): Promise<void> {
-  const cacheKey = `${subjectId}:${materialId}`;
+  // sprint-2/S2 fix (codex P1): scope cache key to authenticated user.
+  const sessionUserId = authSession?.user.id;
+  if (!sessionUserId) {
+    return;
+  }
+  const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
   if (annotationFetchedKeys.has(cacheKey)) {
     return;
   }
@@ -948,13 +959,22 @@ function updatePdfWorkspaceStoreFromServer(
   // between GET start and resolve), clear the cache key for the *fetched*
   // material so re-entry retries instead of permanently believing it was
   // already hydrated.
+  // cache key is `${userId}:${subjectId}:${materialId}` (sprint-2/S2 fix).
+  // Re-derive from current authSession so the delete on early return matches
+  // the key added in fetchAnnotationIfMissing.
+  const cacheUserId = authSession?.user.id;
+  const cacheKey = cacheUserId ? `${cacheUserId}:${subjectId}:${materialId}` : null;
   if (!material) {
-    annotationFetchedKeys.delete(`${subjectId}:${materialId}`);
+    if (cacheKey) {
+      annotationFetchedKeys.delete(cacheKey);
+    }
     return;
   }
   const currentMaterialId = material.backendMaterialId ?? material.id;
   if (currentMaterialId !== materialId) {
-    annotationFetchedKeys.delete(`${subjectId}:${materialId}`);
+    if (cacheKey) {
+      annotationFetchedKeys.delete(cacheKey);
+    }
     return;
   }
   const merged: SubjectPdfWorkspace = {
@@ -1013,6 +1033,22 @@ function clearAuthSession(): void {
   // a session reset. Without this the hotkey help modal could persist into the
   // post-login render and lock the shell in `inert`.
   hotkeyHelpModalOpen = false;
+  // sprint-2/S2 fix (codex P1): cancel all pending debounced sync timers so a
+  // delayed PUT from user A cannot be sent with user B's cookie after a
+  // logout/login. Also reset the fetch caches (they are user-scoped, but old
+  // entries are stale once the session is gone) and the failure tracker.
+  for (const timer of userNotesPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  userNotesPutTimers.clear();
+  for (const timer of annotationPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  annotationPutTimers.clear();
+  userNotesFetchedKeys.clear();
+  annotationFetchedKeys.clear();
+  syncFailureTracker.paused = false;
+  syncFailureTracker.recentFailures = [];
 }
 
 function clearAuthBootTimers(): void {
