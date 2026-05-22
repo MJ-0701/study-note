@@ -97,10 +97,11 @@ aggregate 별 invariant 는 각 aggregate page 에. 여기는 **여러 context �
 > failure / quota exception 발생 시 fallback = 다음 GET hydrate.
 
 - 결과: localStorage 코드 path 의 try/catch 는 silent fail 허용 (UX banner 만).
-- migration 2-phase write 는 setItem 실패 시 legacy 보존 (다음 load 재시도) +
-  in-memory return.
 - 위반 사례: localStorage 실패 시 throw → boot 깨짐.
-- **원문**: sprint-3/S1+S2 의 `migrateLegacy*ForUser` 2-phase 블록.
+- **원문**: sprint-3/S1+S2 의 `migrateLegacy*ForUser` 2-phase 블록이 원본
+  도입. sprint-4/S1 에서 owner gate marker 가 제거되면서 helper 함수 자체도
+  삭제 — silent fail 정책만 `loadStoredNotebook` / `loadPdfWorkspaceStore` /
+  save 함수에 남아 계속 작동.
 
 ## I7. R2 키는 user-scoped, BC 명칭은 그대로 두기
 

@@ -36,7 +36,7 @@ summary: boot → revalidate → sign-in/out → transition → clear 의 단계
    notebook = sampleLectureNote
    pdfWorkspaceStore = { workspaces: {} }
    authSession = undefined
-   lastSessionUserId = localStorage[lastSessionUserStorageKey]
+   lastSessionUserId = undefined      (sprint-4/S1: marker 제거, in-memory only)
 
 2. window load
    attemptSessionRevalidation()
@@ -66,18 +66,16 @@ applySessionTransitionForUser(newUserId):
     return                                 # 같은 user 재attach → 끝
 
   if lastSessionUserId === undefined:
-    lastSessionUserId = newUserId
-    localStorage[lastSessionUserStorageKey] = newUserId
-    return                                 # 첫 attach → marker 기록만
+    lastSessionUserId = newUserId           # in-memory only (sprint-4/S1)
+    return                                 # page lifetime 의 first attach
 
-  # 다른 user 로 전환 (마커 존재 + 일치 X)
+  # 다른 user 로 전환 (page lifetime 안의 A→B 전환)
   # 동기화 cache 와 in-flight PUT 만 reset.
   # (sprint-3/S3 이후 notebook/pdfWorkspaceStore wipe 는 제거)
   abort all userNotes/annotation PUT
   clear all timers / chains / fetched keys / hydrated marker
   syncFailureTracker reset
-  lastSessionUserId = newUserId
-  localStorage[lastSessionUserStorageKey] = newUserId
+  lastSessionUserId = newUserId             # in-memory only (sprint-4/S1)
 ```
 
 ## clearAuthSession 분기
@@ -106,7 +104,8 @@ clearAuthSession():
   localStorage:
     study-note.notebook.v2:user-a = { ... A 의 데이터 ... }
     study-note.pdf-workspaces.v1:user-a = { ... }
-    study-note.session.lastUserId = "user-a"
+  in-memory:
+    lastSessionUserId = "user-a"           (sprint-4/S1: marker 미사용)
 
 A 로그아웃
   authSession = undefined
@@ -114,18 +113,24 @@ A 로그아웃
   pdfWorkspaceStore = (유지)
   localStorage = 유지
 
-B 로그인
-  POST /v1/auth/sign-in → success
+B 로그인 (같은 page lifetime, 새로고침 없음)
+  POST /api/v1/auth/sign-in → success
   applySessionTransitionForUser("user-b"):
     notebook = loadStoredNotebook("user-b") → 빈 namespace → sampleLectureNote (or B 의 이전 데이터)
     pdfWorkspaceStore = loadPdfWorkspaceStore("user-b") → 빈 namespace → { workspaces: {} }
     lastSessionUserId = "user-a", newUserId = "user-b" → 다른 user 분기
     sync state reset (A 의 in-flight PUT abort 보장)
-    lastSessionUserId = "user-b"
-    localStorage[lastSessionUserStorageKey] = "user-b"
+    lastSessionUserId = "user-b"            (in-memory)
 
   결과: B 가 A 의 데이터 볼 수 X.
         localStorage 의 A 의 namespaced key 는 그대로 (A 가 재로그인 시 복원).
+
+페이지 reload 후 B 가 다시 로그인 (또는 다른 탭 사용)
+  → page lifetime 새로 시작 → lastSessionUserId = undefined
+  → "first attach" 분기 (sync cache 가 empty 라 reset 불필요)
+  → B 의 namespaced key 에서 데이터 로드.
+  ※ 이전 marker 가 cross-reload 보존하던 의미는 페이지가 닫히면 in-flight PUT
+    도 함께 사라지므로 보존 가치가 없다 — sprint-4/S1 정책.
 ```
 
 ## Cold start 보호
@@ -147,8 +152,8 @@ B 로그인
 - sprint-3/S1 — notebook namespacing + module-init notebook empty
 - sprint-3/S2 — pdfWorkspace namespacing + module-init empty
 - sprint-3/S3 — destructive wipe 제거, namespacing 이 격리 책임
+- sprint-4/S1 — marker write/read + legacy migration helper 2개 완전 제거. `lastSessionUserId` = in-memory only.
 
 ## Open / TODO
 
-- marker 의 deprecation 시점 (legacy 키가 운영상 사라진 뒤).
 - sign-in 시점 vs revalidate 시점의 transition 차이 (동일 routine 호출 — 추가 분기 필요할 가능성).

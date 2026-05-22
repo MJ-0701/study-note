@@ -173,13 +173,6 @@ type LoginFeedback =
 
 const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
-// sprint-2/S3 fix (codex P1): persisted marker for the last successfully
-// attached session's userId. Used to detect A→B account switches on the same
-// browser so we can wipe local notebook + pdfWorkspaceStore before autosave
-// PUTs leak user A's content into user B's server record. Stored in
-// localStorage so the marker survives page reloads (otherwise B opening a
-// fresh tab over A's stored notebook would not be detected as a switch).
-const lastSessionUserStorageKey = "study-note.session.lastUserId";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
 const DRILL_HIGHLIGHT_DURATION_MS = 1500;
@@ -208,13 +201,14 @@ let notebook: StudyNotebook = sampleLectureNote;
 // to populate the user's data once the session attaches. Mirrors the notebook
 // loading semantics introduced in sprint-3/S1.
 let pdfWorkspaceStore: PdfWorkspaceStore = { workspaces: {} };
-// sprint-2/S3 fix (codex P1): see lastSessionUserStorageKey comment for the
-// invariant this enforces. Initialized from localStorage so a page reload
-// after user A's session retains A's identity until the next sign-in/auth-me
-// success either confirms A (no wipe) or detects B (wipe).
-let lastSessionUserId: string | undefined = isBrowserRuntime
-  ? window.localStorage.getItem(lastSessionUserStorageKey) ?? undefined
-  : undefined;
+// sprint-4/S1: in-memory tracker for the last session userId attached during
+// this page lifetime. Used by applySessionTransitionForUser to distinguish
+// "first attach" (no sync state to reset) from "different user transition"
+// (reset in-flight PUT + sync caches). Page reload starts undefined: any
+// pending PUT from a previous tab is already gone with the closed page, so
+// no localStorage marker is needed. Marker (`study-note.session.lastUserId`)
+// removed in sprint-4/S1 — legacy unscoped keys are no longer migrated.
+let lastSessionUserId: string | undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
@@ -671,102 +665,14 @@ function buildNotebookKey(userId: string): string {
   return `${notebookStorageKey}:${userId}`;
 }
 
-// sprint-3/S1: one-shot migration from the legacy unscoped key into the new
-// userId-scoped key. Runs the first time `loadStoredNotebook(userId)` is
-// called for a user whose namespaced key is empty AND the legacy unscoped key
-// has parseable notebook data AND the sprint-2 `lastSessionUserStorageKey`
-// marker confirms this user owns the legacy payload. After the migrated copy
-// is persisted, the legacy key is removed so subsequent loads on this browser
-// do not re-migrate stale data into a different user's namespace.
-//
-// sprint-3/S1 fix (codex P1): without the owner gate, a shared-browser
-// upgrade would copy user A's legacy notebook into whoever logs in first
-// after the upgrade — defeating the namespacing this sprint introduces.
-// When the marker is missing or names a different user, drop the legacy
-// payload instead of migrating (data loss policy from plan §6 — server
-// autosave is SoT, GET hydrate restores cross-device).
-//
-// Failure policy: data loss allowed.
-function migrateLegacyNotebookForUser(userId: string): StudyNotebook | undefined {
-  let legacyRaw: string | null = null;
-  try {
-    legacyRaw = window.localStorage.getItem(notebookStorageKey);
-  } catch {
-    return undefined;
-  }
-  if (!legacyRaw) {
-    return undefined;
-  }
-  // sprint-3/S1 fix (codex P1): gate migration to the marker-identified
-  // owner. The sprint-2 marker is the only signal we have about which user
-  // wrote the legacy payload on this browser. Marker absent (fresh browser)
-  // or mismatched (different user wrote it) → drop legacy without migration.
-  let legacyOwnerId: string | null = null;
-  try {
-    legacyOwnerId = window.localStorage.getItem(lastSessionUserStorageKey);
-  } catch {
-    legacyOwnerId = null;
-  }
-  if (!legacyOwnerId || legacyOwnerId !== userId) {
-    try {
-      window.localStorage.removeItem(notebookStorageKey);
-    } catch {
-      /* ignore */
-    }
-    return undefined;
-  }
-  let parsed: Partial<StudyNotebook>;
-  try {
-    parsed = JSON.parse(legacyRaw) as Partial<StudyNotebook>;
-  } catch {
-    try {
-      window.localStorage.removeItem(notebookStorageKey);
-    } catch {
-      /* ignore */
-    }
-    return undefined;
-  }
-  if (
-    typeof parsed.id !== "string" ||
-    !Array.isArray(parsed.subjects) ||
-    !hasCurrentSubjectSet(parsed)
-  ) {
-    try {
-      window.localStorage.removeItem(notebookStorageKey);
-    } catch {
-      /* ignore */
-    }
-    return undefined;
-  }
-  const notebook = parsed as StudyNotebook;
-  const scopedKey = buildNotebookKey(userId);
-  // sprint-3/S1 fix-2 (codex P1): split the 2-phase write so a scoped setItem
-  // failure (quota / private-mode) does not throw away the readable legacy
-  // payload in memory. Previously any exception inside the combined try
-  // returned undefined, which made loadStoredNotebook fall back to
-  // sampleLectureNote and silently drop the user's data for the session.
-  // New behavior:
-  //   - setItem fails  → return the in-memory parsed notebook; legacy key
-  //                       is left intact so the next load retries migration.
-  //   - removeItem fails → scoped copy already landed; return notebook. Next
-  //                       load reads the scoped key directly and never enters
-  //                       the migration branch (idempotent).
-  let scopedWritten = false;
-  try {
-    window.localStorage.setItem(scopedKey, JSON.stringify(notebook));
-    scopedWritten = true;
-  } catch {
-    /* keep legacy intact, return in-memory copy below */
-  }
-  if (scopedWritten) {
-    try {
-      window.localStorage.removeItem(notebookStorageKey);
-    } catch {
-      /* scoped copy is the source of truth from this point */
-    }
-  }
-  return notebook;
-}
+// sprint-4/S1: legacy unscoped-key migration removed. Marker
+// (`study-note.session.lastUserId`) no longer written, so migration owner
+// gate cannot be enforced. Without the gate, migrating legacy data would
+// allow a shared-browser scenario where user B inherits user A's pre-sprint-3
+// notebook on first login after the upgrade. Server autosave is the SoT and
+// GET hydrate restores cross-device data, so dropping the legacy key path is
+// safe (legacy data orphans in localStorage but is never read; can be cleaned
+// up via the "로컬 import 초기화" button if visible to a user).
 
 function loadStoredNotebook(userId: string): StudyNotebook {
   const scopedKey = buildNotebookKey(userId);
@@ -778,11 +684,9 @@ function loadStoredNotebook(userId: string): StudyNotebook {
   }
 
   if (!stored) {
-    // sprint-3/S1: no scoped data yet — attempt one-shot migration from the
-    // legacy unscoped key. If that fails (no legacy data or invalid),
-    // fall back to the fixture default.
-    const migrated = migrateLegacyNotebookForUser(userId);
-    return migrated ?? sampleLectureNote;
+    // sprint-4/S1: no scoped data yet — start from the fixture default.
+    // Server autosave (sprint-2) restores notebook data via GET hydrate.
+    return sampleLectureNote;
   }
 
   try {
@@ -1455,9 +1359,11 @@ function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = 
 // cookie (cross-namespace authorship leak is structurally impossible, but a
 // PUT already on the wire carries the previous body and must be aborted).
 //
-// First-load semantics: lastSessionUserId is initialized from localStorage,
-// so a page reload by the same user matches the marker and skips the sync
-// reset. Only a genuinely different userId triggers the cache reset.
+// First-load semantics: lastSessionUserId starts undefined on every page load
+// (in-memory only, marker removed in sprint-4/S1). The very first session
+// attach is treated as "first attach" — no sync caches exist yet to reset.
+// Subsequent A→B attaches within the same page lifetime trigger the cache
+// reset below.
 //
 // Called from the two session-attach success paths (revalidate, sign-in)
 // only — never from clearAuthSession, because that fires on transient
@@ -1473,33 +1379,22 @@ function applySessionTransitionForUser(newUserId: string): void {
   pdfWorkspaceStore = loadPdfWorkspaceStore(newUserId);
 
   if (lastSessionUserId === newUserId) {
-    // Same user as last session — namespaced loads above already restored
-    // data. No further transition work needed.
+    // Same user as last attach within this page lifetime — namespaced loads
+    // above already restored data. No further transition work needed.
     return;
   }
-  // sprint-2/S3 fix-2 (codex P1): on first rollout (or fresh browser) the
-  // marker is absent. Record the marker so a subsequent sign-in by a
-  // different user can run the sync-cache reset below.
-  //
-  // sprint-3/S2 deprecation note: the marker still gates the legacy-key
-  // migration owner check in `migrateLegacyNotebookForUser` /
-  // `migrateLegacyPdfWorkspaceForUser`. Once enough rollout time has passed
-  // that no legacy unscoped keys remain in user browsers, both the marker
-  // and `lastSessionUserId` can be removed entirely.
+  // sprint-4/S1: first attach in this page lifetime (lastSessionUserId still
+  // undefined). No sync caches exist yet — nothing to abort, nothing to
+  // clear. Just record the new userId in memory and return.
   if (lastSessionUserId === undefined) {
     lastSessionUserId = newUserId;
-    try {
-      window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
-    } catch {
-      /* ignore */
-    }
     return;
   }
-  // sprint-3/S2+S3: destructive `pdfWorkspaceStore = { workspaces: {} }` wipe
-  // removed — `loadPdfWorkspaceStore(newUserId)` above already returns the
-  // new user's namespaced data (or an empty store), so there is nothing left
-  // to leak through this code path. The remaining sync-cache resets below
-  // still need to run on any A→B transition.
+  // sprint-3/S2+S3 + sprint-4/S1: actual A→B transition within the same page
+  // lifetime. `pdfWorkspaceStore` and `notebook` are already loaded from the
+  // new user's namespace above; only the sync caches and in-flight PUTs need
+  // to be reset so user A's pending traffic does not land under user B's
+  // cookie.
   for (const timer of userNotesPutTimers.values()) {
     clearTimeout(timer);
   }
@@ -1537,11 +1432,6 @@ function applySessionTransitionForUser(newUserId: string): void {
   syncBackendError = undefined;
   syncBackendErrorReported = false;
   lastSessionUserId = newUserId;
-  try {
-    window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
-  } catch {
-    /* ignore */
-  }
 }
 
 function clearAuthSession(): void {
@@ -1846,71 +1736,10 @@ function parsePdfWorkspaceStorePayload(raw: string): PdfWorkspaceStore | undefin
   return undefined;
 }
 
-// sprint-3/S2: one-shot migration from the legacy unscoped pdfWorkspaceStore
-// key into the new userId-scoped key. Mirrors the notebook migration owner
-// gate from S1 — the sprint-2 `lastSessionUserStorageKey` marker is the only
-// signal we have for which user wrote the legacy payload on this browser, so
-// migrate only when the marker matches; otherwise drop the legacy payload to
-// prevent a shared-browser upgrade from leaking user A's workspace to user B.
-//
-// 2-phase write: scoped setItem must succeed before legacy removeItem fires.
-// setItem failure (quota / private mode) returns the in-memory parsed store
-// and leaves the legacy key intact so the next load can retry migration.
-// removeItem failure is silent (scoped copy is SoT from that point —
-// idempotent on subsequent loads).
-//
-// Failure policy: data loss allowed (plan §6 — server autosave is SoT, GET
-// hydrate restores cross-device).
-function migrateLegacyPdfWorkspaceForUser(userId: string): PdfWorkspaceStore | undefined {
-  let legacyRaw: string | null = null;
-  try {
-    legacyRaw = window.localStorage.getItem(pdfWorkspaceStorageKey);
-  } catch {
-    return undefined;
-  }
-  if (!legacyRaw) {
-    return undefined;
-  }
-  let legacyOwnerId: string | null = null;
-  try {
-    legacyOwnerId = window.localStorage.getItem(lastSessionUserStorageKey);
-  } catch {
-    legacyOwnerId = null;
-  }
-  if (!legacyOwnerId || legacyOwnerId !== userId) {
-    try {
-      window.localStorage.removeItem(pdfWorkspaceStorageKey);
-    } catch {
-      /* ignore */
-    }
-    return undefined;
-  }
-  const parsed = parsePdfWorkspaceStorePayload(legacyRaw);
-  if (!parsed) {
-    try {
-      window.localStorage.removeItem(pdfWorkspaceStorageKey);
-    } catch {
-      /* ignore */
-    }
-    return undefined;
-  }
-  const scopedKey = buildPdfWorkspaceKey(userId);
-  let scopedWritten = false;
-  try {
-    window.localStorage.setItem(scopedKey, JSON.stringify(parsed));
-    scopedWritten = true;
-  } catch {
-    /* keep legacy intact, return in-memory copy below */
-  }
-  if (scopedWritten) {
-    try {
-      window.localStorage.removeItem(pdfWorkspaceStorageKey);
-    } catch {
-      /* scoped copy is the source of truth from this point */
-    }
-  }
-  return parsed;
-}
+// sprint-4/S1: legacy unscoped-key migration removed (same reasoning as
+// loadStoredNotebook above). Server-side annotation snapshots are SoT;
+// orphaned legacy `study-note.pdf-workspaces.v1` keys in localStorage are
+// not read by anything and can be cleaned up via the reset button.
 
 function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
   const scopedKey = buildPdfWorkspaceKey(userId);
@@ -1922,11 +1751,9 @@ function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
   }
 
   if (!stored) {
-    // sprint-3/S2: no scoped data yet — attempt one-shot migration from the
-    // legacy unscoped key. If that fails (no legacy data, owner mismatch, or
-    // invalid payload), fall back to an empty store.
-    const migrated = migrateLegacyPdfWorkspaceForUser(userId);
-    return migrated ?? { workspaces: {} };
+    // sprint-4/S1: no scoped data yet — start from an empty store. Server
+    // annotation GET hydrate (sprint-2) restores PDF workspace data.
+    return { workspaces: {} };
   }
 
   const parsed = parsePdfWorkspaceStorePayload(stored);

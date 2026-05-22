@@ -32,10 +32,10 @@ Vite + TypeScript. 빌드 = `pnpm --filter @study-note/web build`.
 | 영역 | 대략 라인 | 키워드 |
 |---|---|---|
 | Import | 1~120 | `import` |
-| 상수 + storage key | 170~220 | `notebookStorageKey`, `pdfWorkspaceStorageKey`, `lastSessionUserStorageKey` |
-| Module-level state | 200~260 | `notebook`, `pdfWorkspaceStore`, `authSession`, `lastSessionUserId` |
+| 상수 + storage key | 170~220 | `notebookStorageKey`, `pdfWorkspaceStorageKey` (sprint-4/S1 이후 `lastSessionUserStorageKey` 삭제) |
+| Module-level state | 200~260 | `notebook`, `pdfWorkspaceStore`, `authSession`, `lastSessionUserId` (in-memory only, sprint-4/S1) |
 | Inspector / drill state | 215~260 | `inspectorDrillStorageKey`, `inspectorOpen` |
-| Notebook load/save + migration | 660~810 | `buildNotebookKey`, `loadStoredNotebook`, `migrateLegacyNotebookForUser`, `saveNotebook` |
+| Notebook load/save | 660~700 | `buildNotebookKey`, `loadStoredNotebook`, `saveNotebook` (sprint-4/S1 이후 legacy migration helper 제거) |
 | Sync helper (debounce / abort / chain / failure tracker) | 820~1000 | `userNotesPutTimers`, `userNotesPutAborts`, `userNotesPutChains`, `syncFailureTracker` |
 | PDF preview / fetch | 1100~1400 | `loadPdfPreviewFromBackend`, `fetchAnnotationIfMissing` |
 | `updatePdfWorkspaceStoreFromServer` (hydrate) | 1354~1410 | hydrate 분기 + PUT 발사 차단 |
