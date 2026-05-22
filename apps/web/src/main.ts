@@ -766,6 +766,16 @@ const annotationFetchedKeys = new Set<string>();
 // when the active material differs from the last hydrated material for the
 // same subject (the real revisit signal).
 const lastHydratedAnnotationByMaterial = new Map<string, string>();
+// sprint-W21-sprint-2/S2 + S3 (plan §R4): per-material server-issued revision
+// cache. key = `${userId}:${materialId}`, value = wire `updatedAt` (ISO 8601
+// = server `AnnotationSnapshot.savedAt`). updated on every GET/PUT success +
+// 409 hydrate. used as `clientRevision` in subsequent PUT bodies for atomic
+// CAS on the server. local mutator `SubjectPdfWorkspace.updatedAt` 와 분리.
+const lastHydratedAnnotationRevision = new Map<string, string>();
+// sprint-W21-sprint-2/S2 (plan §R3): once-per-subject batch hydrate marker.
+// key = `${userId}:${subjectId}`. ensures the batch GET fires exactly once
+// per subject view (R3 AC3). cleared on session transition / clearAuthSession.
+const annotationSubjectBatchFetched = new Set<string>();
 const syncFailureTracker: SyncFailureTracker = {
   recentFailures: [],
   paused: false
@@ -1069,20 +1079,51 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
       const abortController = new AbortController();
       annotationPutAborts.set(materialId, abortController);
       try {
+        // sprint-W21-sprint-2/S2+S3 (plan §R4): include `clientRevision` from
+        // per-material server-issued revision cache. cache miss = neue create
+        // path (BE 가 record 없음 + clientRevision undefined 면 201 create).
+        const revisionKey = `${sessionUserIdAtSchedule}:${materialId}`;
+        const cachedRevision = lastHydratedAnnotationRevision.get(revisionKey);
+        const requestBody: Record<string, unknown> = { payload };
+        if (cachedRevision !== undefined) {
+          requestBody.clientRevision = cachedRevision;
+        }
         const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
           method: "PUT",
           credentials: "include",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ payload }),
+          body: JSON.stringify(requestBody),
           signal: abortController.signal
         });
         if (response.status === 413) {
           console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
           return;
         }
+        if (response.status === 400) {
+          // plan §R5: invalid request (e.g. malformed clientRevision).
+          // backoff X — request shape 문제, retry 안 함.
+          console.warn("[study-note] annotation PUT 400 INVALID_BODY", materialId);
+          return;
+        }
         if (response.status === 401 || response.status === 403) {
           console.warn("[study-note] annotation PUT auth expired", response.status, materialId);
           handleAuthExpiredFromSync();
+          return;
+        }
+        if (response.status === 404) {
+          // plan §R6: material ownership pre-check 실패 (material 삭제/소유 변경).
+          // 추가 retry X — material 자체가 사라진 상태.
+          console.warn("[study-note] annotation PUT 404 MATERIAL_NOT_FOUND", materialId);
+          return;
+        }
+        if (response.status === 409) {
+          // plan §R5: silent stale-write recovery. body = canonical schema.
+          await handleAnnotationStaleResponse(
+            sessionUserIdAtSchedule,
+            materialId,
+            response
+          );
+          recordSyncSuccess();
           return;
         }
         if (!response.ok) {
@@ -1091,6 +1132,19 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
             recordSyncFailure();
           }
           return;
+        }
+        // plan §R4 + canonical schema: 200 body = `{ annotations: { [materialId]: { payload, updatedAt } } }`.
+        // updatedAt 를 revision cache 에 저장해 다음 PUT 의 clientRevision 으로.
+        try {
+          const json = (await response.json()) as {
+            annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
+          };
+          const entry = json.annotations?.[materialId];
+          if (entry && typeof entry.updatedAt === "string") {
+            lastHydratedAnnotationRevision.set(revisionKey, entry.updatedAt);
+          }
+        } catch {
+          /* response body parse 실패 = revision cache 업데이트만 못 함, PUT 자체는 성공 */
         }
         recordSyncSuccess();
       } catch (error) {
@@ -1125,6 +1179,148 @@ function scheduleAnnotationPut(materialId: string, payload: unknown): void {
     void putAnnotationToBE(materialId, payload);
   }, ANNOTATION_PUT_DEBOUNCE_MS);
   annotationPutTimers.set(materialId, timer);
+}
+
+// sprint-W21-sprint-2/S2+S3 (plan §R5): silent stale-write 복원.
+// 409 응답 body = canonical schema. server 최신 payload 로 workspace 갱신 +
+// revision cache 업데이트. chain entry drop 은 putAnnotationToBE 의 finally
+// 가 처리. 다음 user mutation 의 PUT 이 새 revision 으로 issue.
+async function handleAnnotationStaleResponse(
+  userId: string,
+  materialId: string,
+  response: Response
+): Promise<void> {
+  let json: {
+    annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
+  };
+  try {
+    json = (await response.json()) as typeof json;
+  } catch {
+    return;
+  }
+  const entry = json.annotations?.[materialId];
+  if (!entry) {
+    // server 에 entry 없음 (R9 stale_revision_no_record). revision cache
+    // drop 후 다음 mutation 이 clientRevision undefined 로 신규 create.
+    lastHydratedAnnotationRevision.delete(`${userId}:${materialId}`);
+    return;
+  }
+  if (typeof entry.updatedAt !== "string") {
+    return;
+  }
+  if (entry.payload && typeof entry.payload === "object") {
+    const incoming = entry.payload as Partial<SubjectPdfWorkspace>;
+    // find subjectId via current workspace lookup.
+    for (const [subjectId, workspace] of Object.entries(pdfWorkspaceStore.workspaces)) {
+      const activeMat = workspace.material?.backendMaterialId ?? workspace.material?.id;
+      if (activeMat === materialId) {
+        updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
+        break;
+      }
+    }
+  }
+  lastHydratedAnnotationRevision.set(`${userId}:${materialId}`, entry.updatedAt);
+}
+
+// sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
+// once per subject view (annotationSubjectBatchFetched 마커). hot path
+// network 호출 1회 → 모든 material 의 annotation + revision 일괄 hydrate.
+// truncated: true (R7 cap) 시 누락 material 의 single-material GET fallback
+// (R3 fallback path; AC9).
+async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
+  const sessionUserId = authSession?.user.id;
+  if (!sessionUserId) {
+    return;
+  }
+  const subjectBatchKey = `${sessionUserId}:${subjectId}`;
+  if (annotationSubjectBatchFetched.has(subjectBatchKey)) {
+    return;
+  }
+  annotationSubjectBatchFetched.add(subjectBatchKey);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiBaseUrl}/v1/pdf-annotations/by-subject/${encodeURIComponent(subjectId)}`,
+      { credentials: "include" }
+    );
+  } catch (error) {
+    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    console.warn("[study-note] annotation batch GET network error", error);
+    recordFetchFailure();
+    return;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    handleAuthExpiredFromSync();
+    return;
+  }
+  if (!response.ok) {
+    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    if (response.status >= 500) {
+      recordFetchFailure();
+    }
+    return;
+  }
+
+  let json: {
+    annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
+    truncated?: boolean;
+    total?: number;
+    returned?: number;
+  };
+  try {
+    json = (await response.json()) as typeof json;
+  } catch {
+    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    return;
+  }
+
+  // session re-validate (sprint-2/S2 fix pattern).
+  if (authSession?.user.id !== sessionUserId) {
+    return;
+  }
+  recordFetchSuccess();
+
+  const annotations = json.annotations ?? {};
+  for (const [materialId, entry] of Object.entries(annotations)) {
+    if (typeof entry.updatedAt === "string") {
+      lastHydratedAnnotationRevision.set(`${sessionUserId}:${materialId}`, entry.updatedAt);
+    }
+    // per-material hydrate marker so subsequent fetchAnnotationIfMissing
+    // short-circuits.
+    const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
+    annotationFetchedKeys.add(cacheKey);
+    // hydrate the active material's workspace if it matches.
+    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+    const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
+    if (active === materialId && entry.payload && typeof entry.payload === "object") {
+      updatePdfWorkspaceStoreFromServer(
+        subjectId,
+        materialId,
+        entry.payload as Partial<SubjectPdfWorkspace>
+      );
+      lastHydratedAnnotationByMaterial.set(`${sessionUserId}:${subjectId}`, materialId);
+    }
+  }
+
+  // R7 partial fallback: truncated materials 은 single-material GET 으로.
+  if (json.truncated === true) {
+    const total = typeof json.total === "number" ? json.total : 0;
+    const returned = typeof json.returned === "number" ? json.returned : 0;
+    if (total > returned) {
+      // active material 이 truncated 셋에 있을 가능성 — fetchAnnotationIfMissing
+      // 가 per-material GET fallback 으로 hydrate.
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+      const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
+      if (active && !annotations[active]) {
+        void fetchAnnotationIfMissing(subjectId, active);
+      }
+    }
+  }
+
+  try { renderApp(); } catch { /* ignore */ }
 }
 
 async function fetchAnnotationIfMissing(subjectId: string, materialId: string): Promise<void> {
@@ -1169,12 +1365,12 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       credentials: "include"
     });
     if (response.status === 404) {
-      // sprint-2/S3 fix (codex P2): 404 = server has no annotation for this
-      // material. Keep the cache marker AND record lastHydrated so subsequent
-      // re-renders of the same material short-circuit (no storm). Cross-device
-      // creation that lands later is rehydrated on material switch revisit.
-      // Guard against material-switch race: only mark this material as
-      // hydrated if the user is still on it.
+      // sprint-W21-sprint-2/S2 (plan §R6): 404 = material ownership pre-check
+      // 실패 (material 삭제 / 다른 user 소유 / 비존재). 신규 의미 — 이전
+      // sprint-2 의 "no annotation" 의미와 다름 (그건 이제 200 empty canonical
+      // body 로 옴). cache marker 만 보존 (storm 방지) + revision cache drop +
+      // hydrate 안 함.
+      lastHydratedAnnotationRevision.delete(`${sessionUserId}:${materialId}`);
       if (isStillActiveMaterial()) {
         lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
       } else {
@@ -1195,10 +1391,11 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       }
       return;
     }
+    // sprint-W21-sprint-2/S2: canonical schema 응답 parse.
+    // shape = `{ annotations: { [materialId]: { payload, updatedAt } }, truncated, total, returned }`.
+    // empty `{ annotations: {} }` = own material w/o snapshot (R6).
     const json = (await response.json()) as {
-      materialId?: unknown;
-      payload?: unknown;
-      updatedAt?: unknown;
+      annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
     };
     // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
     // logout/login between fetch start and resolve must NOT apply user A's
@@ -1210,15 +1407,7 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     // pending for this material — annotation writes are debounced (750ms),
     // so a stale GET could overwrite fresh local edits before the user's
     // changes are flushed to the server.
-    // sprint-2/S3 fix (codex P2): keep the cache marker AND record lastHydrated
-    // so the next renderApp() pass short-circuits. Releasing the cache here
-    // caused fetchAnnotationIfMissing → cache empty → re-fetch → still pending
-    // PUT → release = a per-render storm. Client edits are about to PUT to
-    // the server anyway, so deferring the GET until the next material switch
-    // is the correct trade.
     if (annotationPutTimers.has(materialId)) {
-      // Material-switch race guard: do not record hydrate marker for a
-      // material the user is no longer viewing.
       if (isStillActiveMaterial()) {
         lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
       } else {
@@ -1228,15 +1417,20 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     }
     recordFetchSuccess();
 
-    // sprint-2/S2 fix (codex P1): hydrate the workspace store with the server
-    // payload. The server-side snapshot is the per-material annotation bundle
-    // (stickyNotes / inkStrokes / textBoxes / checklists / tables / charts);
-    // missing keys keep their current value to avoid wiping unsaved local edits.
-    // last-write-wins per plan §5.2 (server preferred), so equal/empty server
-    // arrays still overwrite local stale ones for cross-device parity.
-    if (json.payload && typeof json.payload === "object") {
-      const incoming = json.payload as Partial<SubjectPdfWorkspace>;
-      updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
+    const entry = json.annotations?.[materialId];
+    if (entry) {
+      if (typeof entry.updatedAt === "string") {
+        // sprint-W21-sprint-2/S2 (plan §R4): server-issued revision cache
+        // 갱신. 다음 PUT 의 clientRevision 으로 사용.
+        lastHydratedAnnotationRevision.set(
+          `${sessionUserId}:${materialId}`,
+          entry.updatedAt
+        );
+      }
+      if (entry.payload && typeof entry.payload === "object") {
+        const incoming = entry.payload as Partial<SubjectPdfWorkspace>;
+        updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
+      }
     }
     // sprint-2/S3 fix (codex P2): keep the cache marker AND record which
     // material currently occupies the subject's in-memory bundle. The
@@ -1422,6 +1616,11 @@ function applySessionTransitionForUser(newUserId: string): void {
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
+  // sprint-W21-sprint-2/S2 (plan §R4 + §R3): cross-user revision/batch cache
+  // 도 함께 reset. 다른 user 의 server revision 또는 batch hydrate marker 가
+  // 새 user 의 PUT 에 잘못된 clientRevision 으로 흘러가지 않도록.
+  lastHydratedAnnotationRevision.clear();
+  annotationSubjectBatchFetched.clear();
   // sprint-2/S3 fix (self-review): also reset sync-failure tracker + banner
   // state. Without this, user A's accumulated PUT failures (and the resulting
   // `paused = true` autosave halt) silently persist into user B's session,
@@ -1470,6 +1669,8 @@ function clearAuthSession(): void {
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
+  lastHydratedAnnotationRevision.clear();
+  annotationSubjectBatchFetched.clear();
   syncFailureTracker.paused = false;
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
@@ -5716,7 +5917,12 @@ function renderApp(): void {
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
     ));
-    // sprint-2/S2: lazy fetch annotation snapshot for active material on first view.
+    // sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
+    // once per subject view (annotationSubjectBatchFetched 마커). 모든 material
+    // 의 annotation + revision 일괄 hydrate. active material 의 single-GET
+    // fetchAnnotationIfMissing 는 batch 가 cover 못하는 경우 (truncated, batch
+    // 실패, post-batch material 추가 등) 의 fallback.
+    void fetchAnnotationsForSubject(subject.id);
     const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
     const material = workspace.material;
     if (material) {

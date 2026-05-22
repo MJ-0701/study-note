@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Get,
+  GoneException,
   HttpCode,
   Param,
   Patch,
@@ -15,7 +16,7 @@ import {
 } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
 import { RoleGuard, Roles, SessionAuthGuard } from "@study-note/auth";
-import { MaterialsService, parseAnnotationBody, parseMaterialMetadataBody, parseUploadIntentBody } from "./materials.service";
+import { MaterialsService, parseMaterialMetadataBody, parseUploadIntentBody } from "./materials.service";
 
 interface AuthenticatedRequest {
   user: UserProfile;
@@ -127,29 +128,28 @@ export class MaterialsController {
     return this.materials.getDownload(request.user.id, materialId);
   }
 
+  // sprint-W21-sprint-2/S2 R6: legacy annotation endpoints deprecated.
+  // S3 stale-write 보호가 적용된 표준 path = `/api/v1/pdf-annotations/:materialId`.
+  // 본 두 endpoint 는 revision check 없이 호출되면 cross-device race 보호 우회
+  // 가능했음 → 410 Gone + Deprecation header 로 차단. controller layer 만
+  // 닫고 service 의 saveAnnotation/getAnnotation 메서드는 보존 (data migration
+  // 용도로 backfill 등에 재사용 가능).
   @Put(":materialId/annotation")
-  async saveAnnotation(
-    @Req() request: AuthenticatedRequest,
-    @Param("materialId") materialId: string,
-    @Body() body: unknown
-  ) {
-    return {
-      annotation: await this.materials.saveAnnotation(
-        request.user.id,
-        materialId,
-        parseAnnotationBody(body)
-      )
-    };
+  @HttpCode(410)
+  saveAnnotationDeprecated() {
+    throw new GoneException({
+      errorCode: "ANNOTATION_LEGACY_DEPRECATED",
+      errorMessage: "Use PUT /api/v1/pdf-annotations/:materialId"
+    });
   }
 
   @Get(":materialId/annotation")
-  async getAnnotation(
-    @Req() request: AuthenticatedRequest,
-    @Param("materialId") materialId: string
-  ) {
-    return {
-      annotation: await this.materials.getAnnotation(request.user.id, materialId)
-    };
+  @HttpCode(410)
+  getAnnotationDeprecated() {
+    throw new GoneException({
+      errorCode: "ANNOTATION_LEGACY_DEPRECATED",
+      errorMessage: "Use GET /api/v1/pdf-annotations/:materialId"
+    });
   }
 
   @Get(":materialId/export-bundle")

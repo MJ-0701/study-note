@@ -20,17 +20,37 @@ summary: userNotes / pdf-annotations 의 debounce → chain → fetch → succes
 ## Resource
 
 - **userNotes**: `WeekNote.userNotes` (사용자 자유 메모) — BE URL
-  `/api/v1/notes/subject/:subjectId/week/:weekId` (FE 호출: `apps/web/src/main.ts:979, 1055`).
-  userId 는 cookie session 에서 BE 가 추출.
+  `/api/v1/notes/subject/:subjectId/week/:weekId`. userId 는 cookie session
+  에서 BE 가 추출.
 - **pdf-annotations**: SubjectPdfWorkspace 의 annotation 묶음 (sticky / ink /
-  textBox / checklist / table / chart 모두 동일 payload 안) — BE URL
-  `/api/v1/pdf-annotations/:materialId` (FE 호출: `apps/web/src/main.ts:1168, 1264`).
-  userId / subjectId 는 URL 에 없고 cookie session 으로 BE 가 식별.
+  textBox / checklist / table / chart 모두 동일 payload 안). 두 BE endpoint:
+  - **batch GET** (sprint-W21-sprint-2/S2 신규):
+    `/api/v1/pdf-annotations/by-subject/:subjectId` — subject 진입 시 1회
+    호출, 모든 material 의 annotation 을 canonical schema 단일 응답으로 hydrate.
+    cap = material 50개 + 1MB → 초과 시 partial 응답 + FE fallback.
+  - **single GET/PUT**:
+    `/api/v1/pdf-annotations/:materialId` — 응답/요청 모두 canonical schema
+    `{ annotations: { [materialId]: { payload, updatedAt } }, truncated:false, total:1, returned:1 }`.
+    PUT body 는 `{ payload, clientRevision? }` (sprint-W21-sprint-2/S3 신규
+    revision check). 409 = stale write (canonical body 동봉 + silent hydrate).
+  - **legacy `/api/materials/:materialId/annotation`** (PUT/GET) = `410 Gone`
+    (sprint-W21-sprint-2/S2 R6 deprecation).
+  - userId / subjectId 는 URL 에 없고 cookie session 으로 BE 가 식별.
 
 > client-side cache / mutex key (`userNotesPutTimers` / `annotationPutAborts` 의
 > Map key) 는 `<userId>:<subjectId>:<weekId>` / `<userId>:<subjectId>:<materialId>`
 > 형태로 사용하지만 이는 **FE 메모리 안의 mutex key** 이고 URL path key 가
 > 아니다. 둘을 분리해서 읽는다.
+
+### sprint-W21-sprint-2/S2+S3 신규 FE state
+
+- `lastHydratedAnnotationRevision: Map<key, string>` (key = `${userId}:${materialId}`,
+  value = server-issued `updatedAt`). PUT 의 `clientRevision` 값. GET/PUT 응답
+  + 409 hydrate 가 갱신.
+- `annotationSubjectBatchFetched: Set<key>` (key = `${userId}:${subjectId}`).
+  subject 당 batch GET 1회 dedup.
+
+세션 전환 / clearAuthSession 시 두 cache 모두 reset.
 
 ## 상수
 
