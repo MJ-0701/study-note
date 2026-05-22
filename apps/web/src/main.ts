@@ -874,9 +874,13 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
       { credentials: "include" }
     );
     if (response.status === 404) {
-      // sprint-2/S2 fix (codex P2): release cache so a note created later from
-      // another device can be re-fetched in the same session.
-      releaseNoteCache();
+      // sprint-2/S3 fix (codex P2): keep the cache marker on 404. The previous
+      // fix released it so cross-device note creation could appear without
+      // reload, but `renderApp()` re-invokes fetchUserNoteIfMissing on every
+      // week-page render → released cache → re-fetch → 404 → release =
+      // per-render request storm for any week without a server note. Trade
+      // accepted: cross-device new notes appear after the next page reload
+      // instead of mid-session (server data wins on reload).
       return;
     }
     if (response.status === 401 || response.status === 403) {
@@ -1069,8 +1073,14 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     // pending for this material — annotation writes are debounced (750ms),
     // so a stale GET could overwrite fresh local edits before the user's
     // changes are flushed to the server.
+    // sprint-2/S3 fix (codex P2): keep the cache marker AND record lastHydrated
+    // so the next renderApp() pass short-circuits. Releasing the cache here
+    // caused fetchAnnotationIfMissing → cache empty → re-fetch → still pending
+    // PUT → release = a per-render storm. Client edits are about to PUT to
+    // the server anyway, so deferring the GET until the next material switch
+    // is the correct trade.
     if (annotationPutTimers.has(materialId)) {
-      releaseCache();
+      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
       return;
     }
     recordFetchSuccess();
