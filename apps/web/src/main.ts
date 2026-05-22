@@ -201,7 +201,13 @@ const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 // the session attaches. See applySessionTransitionForUser refactor for the
 // load wiring.
 let notebook: StudyNotebook = sampleLectureNote;
-let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
+// sprint-3/S2: pdfWorkspaceStore is no longer loaded at module init — without
+// an authenticated userId we cannot pick the correct namespaced key. Boot
+// starts empty; revalidate / sign-in success paths call
+// `loadPdfWorkspaceStore(session.user.id)` from `applySessionTransitionForUser`
+// to populate the user's data once the session attaches. Mirrors the notebook
+// loading semantics introduced in sprint-3/S1.
+let pdfWorkspaceStore: PdfWorkspaceStore = { workspaces: {} };
 // sprint-2/S3 fix (codex P1): see lastSessionUserStorageKey comment for the
 // invariant this enforces. Initialized from localStorage so a page reload
 // after user A's session retains A's identity until the next sign-in/auth-me
@@ -1438,35 +1444,48 @@ function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = 
 // slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
 // Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
 
-// sprint-2/S3 fix (codex P1): when a session attach succeeds for a different
-// user than the previously-seen one on this browser, wipe the local notebook
-// + pdfWorkspaceStore + sync caches BEFORE autosave PUT can leak the previous
-// user's content into the new user's server record. Called from the two
-// session-attach success paths (revalidate, sign-in) only — never from
-// clearAuthSession, because that fires on transient /v1/auth/me failures and
-// must not destroy data on a network blip.
+// sprint-2/S3 fix (codex P1) → sprint-3/S2+S3: on session attach (revalidate /
+// sign-in), load each user's localStorage data from their userId-namespaced
+// key. The destructive wipe-on-transition path is gone — the namespace itself
+// keeps user A and user B's data isolated, and re-attaching as the same user
+// picks up their data without touching anyone else's namespace.
+//
+// Sync caches + in-flight PUT aborts are still cleared on a *different*-user
+// transition so user A's pending autosave traffic cannot land under user B's
+// cookie (cross-namespace authorship leak is structurally impossible, but a
+// PUT already on the wire carries the previous body and must be aborted).
 //
 // First-load semantics: lastSessionUserId is initialized from localStorage,
-// so a page reload by the same user matches the marker and skips the wipe.
-// Only a genuinely different userId triggers the destructive reset.
+// so a page reload by the same user matches the marker and skips the sync
+// reset. Only a genuinely different userId triggers the cache reset.
+//
+// Called from the two session-attach success paths (revalidate, sign-in)
+// only — never from clearAuthSession, because that fires on transient
+// /v1/auth/me failures and must not run a transition under flaky network.
 function applySessionTransitionForUser(newUserId: string): void {
-  // sprint-3/S1: load the notebook from the user's namespaced localStorage key.
-  // This runs on every session attach (revalidate / sign-in) so the same user
-  // re-attaching after page reload picks up their own data, and a different
-  // user attaching gets their own — neither sees the other's notebook.
-  // module-init left `notebook` as sampleLectureNote; this is the first read.
+  // sprint-3/S1 + S2: load notebook and pdfWorkspaceStore from each user's
+  // namespaced localStorage key. Runs on every session attach so the same
+  // user re-attaching after page reload picks up their own data, and a
+  // different user attaching gets their own — neither sees the other's
+  // notebook or workspace. Module init left both as their empty defaults;
+  // this is the first read.
   notebook = loadStoredNotebook(newUserId);
+  pdfWorkspaceStore = loadPdfWorkspaceStore(newUserId);
 
   if (lastSessionUserId === newUserId) {
-    // Same user as last session — namespaced load above already restored data.
-    // No further transition work needed.
+    // Same user as last session — namespaced loads above already restored
+    // data. No further transition work needed.
     return;
   }
   // sprint-2/S3 fix-2 (codex P1): on first rollout (or fresh browser) the
-  // marker is absent. Do NOT wipe workspace in that case — record the marker
-  // so a subsequent sign-in by a *different* user triggers the wipe. (S2
-  // backlog item will namespace pdfWorkspaceStore the same way notebook is
-  // namespaced now, removing the wipe entirely.)
+  // marker is absent. Record the marker so a subsequent sign-in by a
+  // different user can run the sync-cache reset below.
+  //
+  // sprint-3/S2 deprecation note: the marker still gates the legacy-key
+  // migration owner check in `migrateLegacyNotebookForUser` /
+  // `migrateLegacyPdfWorkspaceForUser`. Once enough rollout time has passed
+  // that no legacy unscoped keys remain in user browsers, both the marker
+  // and `lastSessionUserId` can be removed entirely.
   if (lastSessionUserId === undefined) {
     lastSessionUserId = newUserId;
     try {
@@ -1476,15 +1495,11 @@ function applySessionTransitionForUser(newUserId: string): void {
     }
     return;
   }
-  // sprint-3/S1: notebook is now user-scoped via loadStoredNotebook(newUserId)
-  // above; no need to wipe it here. pdfWorkspaceStore is still global (S2
-  // pending) so keep wiping it for now to prevent leak through that channel.
-  pdfWorkspaceStore = { workspaces: {} };
-  try {
-    savePdfWorkspaceStore();
-  } catch {
-    /* ignore */
-  }
+  // sprint-3/S2+S3: destructive `pdfWorkspaceStore = { workspaces: {} }` wipe
+  // removed — `loadPdfWorkspaceStore(newUserId)` above already returns the
+  // new user's namespaced data (or an empty store), so there is nothing left
+  // to leak through this code path. The remaining sync-cache resets below
+  // still need to run on any A→B transition.
   for (const timer of userNotesPutTimers.values()) {
     clearTimeout(timer);
   }
@@ -1796,41 +1811,154 @@ function isAuthSignInResponse(value: unknown): value is AuthSignInResponse {
   );
 }
 
-function loadPdfWorkspaceStore(): PdfWorkspaceStore {
-  const stored = window.localStorage.getItem(pdfWorkspaceStorageKey);
+// sprint-3/S2: userId-scoped pdfWorkspaceStore localStorage key. Mirrors the
+// S1 notebook namespacing pattern (`{base}:{userId}`) so A→B account
+// transitions cannot see each other's PDF workspace through localStorage. See
+// plan G1 (2026-W21 userId-namespacing sprint) for the leak class this closes.
+function buildPdfWorkspaceKey(userId: string): string {
+  return `${pdfWorkspaceStorageKey}:${userId}`;
+}
 
-  if (!stored) {
-    return { workspaces: {} };
-  }
-
+// sprint-3/S2: parse + hydrate a raw localStorage payload into a
+// PdfWorkspaceStore. Shared by the scoped-key load path and the legacy
+// migration path; returns undefined when the payload is missing or
+// structurally invalid so callers can fall back to an empty store.
+function parsePdfWorkspaceStorePayload(raw: string): PdfWorkspaceStore | undefined {
   try {
-    const parsed = JSON.parse(stored) as Partial<PdfWorkspaceStore>;
+    const parsed = JSON.parse(raw) as Partial<PdfWorkspaceStore>;
 
     if (parsed.workspaces && typeof parsed.workspaces === "object") {
       // sprint-12/slice-2: hydrate each workspace through fail-closed helper.
       // corrupt entries (invalid textBoxes/checklists) are dropped per-item.
       // sticky/ink BC: pass-through (array保証のみ).
-      const raw = parsed.workspaces as Record<string, unknown>;
+      const rawEntries = parsed.workspaces as Record<string, unknown>;
       const workspaces: PdfWorkspaceStore["workspaces"] = {};
 
-      for (const [id, entry] of Object.entries(raw)) {
+      for (const [id, entry] of Object.entries(rawEntries)) {
         workspaces[id] = hydrateSubjectPdfWorkspace(entry);
       }
 
       return { workspaces };
     }
   } catch {
-    window.localStorage.removeItem(pdfWorkspaceStorageKey);
+    /* fall through to undefined */
+  }
+  return undefined;
+}
+
+// sprint-3/S2: one-shot migration from the legacy unscoped pdfWorkspaceStore
+// key into the new userId-scoped key. Mirrors the notebook migration owner
+// gate from S1 — the sprint-2 `lastSessionUserStorageKey` marker is the only
+// signal we have for which user wrote the legacy payload on this browser, so
+// migrate only when the marker matches; otherwise drop the legacy payload to
+// prevent a shared-browser upgrade from leaking user A's workspace to user B.
+//
+// 2-phase write: scoped setItem must succeed before legacy removeItem fires.
+// setItem failure (quota / private mode) returns the in-memory parsed store
+// and leaves the legacy key intact so the next load can retry migration.
+// removeItem failure is silent (scoped copy is SoT from that point —
+// idempotent on subsequent loads).
+//
+// Failure policy: data loss allowed (plan §6 — server autosave is SoT, GET
+// hydrate restores cross-device).
+function migrateLegacyPdfWorkspaceForUser(userId: string): PdfWorkspaceStore | undefined {
+  let legacyRaw: string | null = null;
+  try {
+    legacyRaw = window.localStorage.getItem(pdfWorkspaceStorageKey);
+  } catch {
+    return undefined;
+  }
+  if (!legacyRaw) {
+    return undefined;
+  }
+  let legacyOwnerId: string | null = null;
+  try {
+    legacyOwnerId = window.localStorage.getItem(lastSessionUserStorageKey);
+  } catch {
+    legacyOwnerId = null;
+  }
+  if (!legacyOwnerId || legacyOwnerId !== userId) {
+    try {
+      window.localStorage.removeItem(pdfWorkspaceStorageKey);
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+  const parsed = parsePdfWorkspaceStorePayload(legacyRaw);
+  if (!parsed) {
+    try {
+      window.localStorage.removeItem(pdfWorkspaceStorageKey);
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+  const scopedKey = buildPdfWorkspaceKey(userId);
+  let scopedWritten = false;
+  try {
+    window.localStorage.setItem(scopedKey, JSON.stringify(parsed));
+    scopedWritten = true;
+  } catch {
+    /* keep legacy intact, return in-memory copy below */
+  }
+  if (scopedWritten) {
+    try {
+      window.localStorage.removeItem(pdfWorkspaceStorageKey);
+    } catch {
+      /* scoped copy is the source of truth from this point */
+    }
+  }
+  return parsed;
+}
+
+function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
+  const scopedKey = buildPdfWorkspaceKey(userId);
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(scopedKey);
+  } catch {
+    return { workspaces: {} };
   }
 
+  if (!stored) {
+    // sprint-3/S2: no scoped data yet — attempt one-shot migration from the
+    // legacy unscoped key. If that fails (no legacy data, owner mismatch, or
+    // invalid payload), fall back to an empty store.
+    const migrated = migrateLegacyPdfWorkspaceForUser(userId);
+    return migrated ?? { workspaces: {} };
+  }
+
+  const parsed = parsePdfWorkspaceStorePayload(stored);
+  if (parsed) {
+    return parsed;
+  }
+  try {
+    window.localStorage.removeItem(scopedKey);
+  } catch {
+    /* ignore */
+  }
   return { workspaces: {} };
 }
 
-function savePdfWorkspaceStore(): void {
-  window.localStorage.setItem(
-    pdfWorkspaceStorageKey,
-    JSON.stringify(pdfWorkspaceStore)
-  );
+// sprint-3/S2: require an authenticated userId to write. Saving without one
+// would either land on the legacy unscoped key (leak vector) or an empty
+// namespace (data loss). When there is no session yet (boot before
+// /v1/auth/me resolves), drop the write — the next save after session attach
+// will persist the same in-memory state.
+function savePdfWorkspaceStore(userId: string | undefined = authSession?.user.id): void {
+  if (!userId) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      buildPdfWorkspaceKey(userId),
+      JSON.stringify(pdfWorkspaceStore)
+    );
+  } catch {
+    /* localStorage exception (quota / private mode) — silent: server autosave
+       is SoT for pdfWorkspaceStore, and the next mutation retries the write. */
+  }
 }
 
 function updatePdfWorkspace(
@@ -2915,13 +3043,19 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
-  // sprint-3/S1 (codex P1 backlog): remove the per-user scoped key in addition
-  // to the legacy unscoped key so the reset action does what it advertises for
-  // userId-namespaced storage. Falls through cleanly when no session is active.
+  // sprint-3/S1 + S2 (codex P1 backlog): remove the per-user scoped keys in
+  // addition to the legacy unscoped keys so the reset action does what it
+  // advertises for userId-namespaced storage. Falls through cleanly when no
+  // session is active.
   const resetUserId = authSession?.user.id;
   if (resetUserId) {
     try {
       window.localStorage.removeItem(buildNotebookKey(resetUserId));
+    } catch {
+      /* ignore */
+    }
+    try {
+      window.localStorage.removeItem(buildPdfWorkspaceKey(resetUserId));
     } catch {
       /* ignore */
     }
@@ -2931,7 +3065,13 @@ function handleDocumentClick(event: MouseEvent): void {
   } catch {
     /* ignore */
   }
+  try {
+    window.localStorage.removeItem(pdfWorkspaceStorageKey);
+  } catch {
+    /* ignore */
+  }
   notebook = sampleLectureNote;
+  pdfWorkspaceStore = { workspaces: {} };
   intakeFeedback = {
     kind: "success",
     title: "로컬 import 데이터를 초기화했습니다.",
