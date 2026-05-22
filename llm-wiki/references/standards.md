@@ -15,8 +15,9 @@ summary: 컨벤션 / 표준 문서 색인. **repo-local** 만. user-home (~/.cla
 # Standards / Conventions Index
 
 본 wiki 는 by-reference 정책 (`llm-wiki/README.md` §원칙) 에 따라 **repo 안에
-존재하는 파일만** SoT 로 인용한다. user-home 의 `~/.claude/CLAUDE.md`, `~/.claude/.../MEMORY.md`,
-`~/.gstack/` 류는 사용자 개인 environment 라 wiki context 로 끌어오지 않는다.
+존재하는 파일만** SoT 로 인용한다. host-local 사용자 environment (`~/.claude/CLAUDE.md`,
+`~/.claude/projects/<encoded>/memory/`, 그 외 사용자 개인 도구 설정 등) 는 wiki
+context 로 끌어오지 않는다.
 
 ## Repo-local 표준 문서
 
@@ -87,5 +88,6 @@ repo 안에 안착된 운영 규칙만 정리. 개인 environment 의 working me
 
 - repo-local `CLAUDE.md` / `SFS.md` 가 바뀌면 본 wiki 갱신.
 - 새 `docs/standards/*.md` 또는 ADR 추가 시 위 표 갱신.
-- user-home 파일 (`~/.claude/`, `~/.gstack/`) 은 wiki 가 인용하지 않는다. 필요한
-  규칙은 repo-local 문서로 옮긴 뒤 인용한다.
+- host-local 사용자 environment (`~/.claude/` 등) 는 wiki 가 인용하지 않는다.
+  필요한 규칙은 repo-local 문서 (`CLAUDE.md`, `SFS.md`, `docs/standards/` 등) 로
+  옮긴 뒤 인용한다.

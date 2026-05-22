@@ -41,9 +41,9 @@ handoff 시 broad repo scan 대신 wiki map 을 먼저 읽고, 필요한 원문�
 
 - **By reference, not by copy.** 큰 원문을 wiki 에 붙여 넣지 않는다. summary +
   파일 경로 / 줄 번호 / sprint id / decision id 링크만.
-- **Source truth = repo-local code + docs/solon + .sfs-local.** user-home
-  파일 (`~/.claude/`, `~/.gstack/`) 은 wiki 의 SoT 가 아니다. wiki 가 원문과
-  충돌하면 원문이 이긴다.
+- **Source truth = repo-local code + docs/solon + .sfs-local.** repo 밖
+  host-local 설정 (`~/.claude/` 등 개인 environment) 은 wiki 의 SoT 가 아니다.
+  wiki 가 원문과 충돌하면 원문이 이긴다.
 - **DDD lens.** 모든 페이지는 bounded context / aggregate / invariant /
   ubiquitous language 중 하나로 정렬되어야 한다. "그냥 잡문" 은 만들지 않는다.
 - **Sprint 갱신 의무.** sprint 가 domain language, aggregate boundary,
