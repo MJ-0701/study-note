@@ -54,6 +54,21 @@ export interface HeadObjectResult {
   contentType?: string;
 }
 
+// sprint-2/S1: lightweight JSON object I/O — used by notes/annotation persistence
+// where the body is a small JSON document (<256KB) and the consumer wants typed
+// `T | null` semantics on missing keys.
+export interface ListJsonObjectsOptions {
+  /** Pagination cursor returned by a previous call. Implementation-specific opaque token. */
+  cursor?: string;
+  /** Max keys returned in a single call. Default 50, hard cap 100. */
+  maxKeys?: number;
+}
+
+export interface ListJsonObjectsResult {
+  keys: string[];
+  nextCursor: string | null;
+}
+
 export abstract class StoragePort {
   abstract createUploadIntent(material: PdfMaterialRecord): Promise<UploadIntent>;
   abstract createDownloadIntent(material: PdfMaterialRecord): DownloadIntent;
@@ -73,4 +88,17 @@ export abstract class StoragePort {
   // completion PDF magic check — reads first `length` bytes of a stored object.
   // Used by completeUpload to verify %PDF- magic without downloading the full file.
   abstract readObjectPrefix(storageKey: string, length: number): Promise<Buffer>;
+
+  // sprint-2/S1: small JSON object I/O (notes, annotations).
+  // Implementations PUT `application/json; charset=utf-8` and parse on GET.
+  // `getJsonObject` returns null when the key is missing (ObjectNotFoundError
+  // is converted to null inside the adapter so callers do not need to catch).
+  abstract putJsonObject<T>(key: string, body: T): Promise<void>;
+  abstract getJsonObject<T>(key: string): Promise<T | null>;
+  // sprint-2/S1: prefix listing for opt-in bulk restore. Pagination cursor +
+  // bounded maxKeys to prevent unbounded fan-out.
+  abstract listJsonObjects(
+    prefix: string,
+    options?: ListJsonObjectsOptions
+  ): Promise<ListJsonObjectsResult>;
 }

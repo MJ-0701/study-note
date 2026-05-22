@@ -51,7 +51,10 @@ export interface WeekNote {
   conceptIds: string[];
   exampleQuestionIds: string[];
   reviewStatus: "ready" | "needs-fill";
+  /** sprint-1: 사용자 자유 메모 (localStorage + sprint-2 BE sync). */
   userNotes?: string;
+  /** sprint-2: subject.examPhase override. 특정 주차가 다른 구간일 때만 명시. */
+  examPhase?: ExamPhase;
 }
 
 export interface SubjectSummary {
@@ -63,11 +66,15 @@ export interface SubjectSummary {
   strategy: string;
 }
 
+export type ExamPhase = "midterm" | "final";
+
 export interface SubjectNote {
   id: string;
   title: string;
   professor: string;
   examLabel: string;
+  /** sprint-2: 현재 학기 기준 subject 의 시험 구간. WeekNote.examPhase 가 override. */
+  examPhase?: ExamPhase;
   summary: SubjectSummary;
   sources: SourceMaterial[];
   requiredKeywords: RequiredKeyword[];

@@ -2,6 +2,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -13,6 +14,8 @@ import type {
   DownloadIntent,
   ExportBundle,
   HeadObjectResult,
+  ListJsonObjectsOptions,
+  ListJsonObjectsResult,
   StorageObjectInput,
   StorageObjectOutput,
   UploadIntent
@@ -33,7 +36,12 @@ export interface S3StorageConfig {
 
 export interface S3ClientLike {
   send(
-    command: PutObjectCommand | GetObjectCommand | HeadObjectCommand | DeleteObjectCommand
+    command:
+      | PutObjectCommand
+      | GetObjectCommand
+      | HeadObjectCommand
+      | DeleteObjectCommand
+      | ListObjectsV2Command
   ): Promise<unknown>;
 }
 
@@ -323,6 +331,83 @@ export class S3StorageService extends StoragePort {
       originalPdf: this.createDownloadIntent(material),
       annotation
     };
+  }
+
+  // sprint-2/S1: small JSON object I/O for notes/annotations persistence.
+  // Implementation uses the existing S3-compatible client (R2 endpoint in prod).
+  async putJsonObject<T>(key: string, body: T): Promise<void> {
+    const json = JSON.stringify(body);
+    const bytes = Buffer.from(json, "utf-8");
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+        Body: bytes,
+        ContentType: "application/json; charset=utf-8",
+        ContentLength: bytes.length
+      })
+    );
+  }
+
+  async getJsonObject<T>(key: string): Promise<T | null> {
+    try {
+      const result = (await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.config.bucket,
+          Key: key
+        })
+      )) as { Body?: unknown };
+      const body = result.Body;
+      let bytes: Uint8Array;
+      if (body && typeof (body as { transformToByteArray?: unknown }).transformToByteArray === "function") {
+        bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+      } else if (body instanceof Uint8Array) {
+        bytes = body;
+      } else if (body && typeof (body as AsyncIterable<Uint8Array>)[Symbol.asyncIterator] === "function") {
+        const chunks: Buffer[] = [];
+        for await (const chunk of body as AsyncIterable<Uint8Array>) {
+          chunks.push(Buffer.from(chunk));
+        }
+        bytes = Buffer.concat(chunks);
+      } else {
+        throw new Error("S3 getJsonObject: unsupported body type");
+      }
+      const text = Buffer.from(bytes).toString("utf-8");
+      return JSON.parse(text) as T;
+    } catch (err) {
+      const e = err as Record<string, unknown>;
+      const isMissingKey =
+        e["name"] === "NoSuchKey" ||
+        e["Code"] === "NoSuchKey";
+      if (isMissingKey) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async listJsonObjects(
+    prefix: string,
+    options: ListJsonObjectsOptions = {}
+  ): Promise<ListJsonObjectsResult> {
+    const maxKeys = Math.min(options.maxKeys ?? 50, 100);
+    const result = (await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: this.config.bucket,
+        Prefix: prefix,
+        MaxKeys: maxKeys,
+        ContinuationToken: options.cursor
+      })
+    )) as {
+      Contents?: Array<{ Key?: string }>;
+      NextContinuationToken?: string;
+      IsTruncated?: boolean;
+    };
+    const keys = (result.Contents ?? [])
+      .map((entry) => entry.Key ?? "")
+      .filter((key) => key.length > 0);
+    const nextCursor = result.IsTruncated ? result.NextContinuationToken ?? null : null;
+    return { keys, nextCursor };
   }
 }
 

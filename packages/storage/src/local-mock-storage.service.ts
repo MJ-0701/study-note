@@ -5,6 +5,8 @@ import type {
   DownloadIntent,
   ExportBundle,
   HeadObjectResult,
+  ListJsonObjectsOptions,
+  ListJsonObjectsResult,
   StorageObjectInput,
   StorageObjectOutput,
   UploadIntent
@@ -103,6 +105,41 @@ export class LocalMockStorageService extends StoragePort {
       throw new ObjectNotFoundError(storageKey);
     }
     return object.body.subarray(0, length);
+  }
+
+  async putJsonObject<T>(key: string, body: T): Promise<void> {
+    const json = JSON.stringify(body);
+    this.objects.set(key, {
+      body: Buffer.from(json, "utf-8"),
+      contentType: "application/json; charset=utf-8"
+    });
+  }
+
+  async getJsonObject<T>(key: string): Promise<T | null> {
+    const object = this.objects.get(key);
+    if (!object) {
+      return null;
+    }
+    return JSON.parse(object.body.toString("utf-8")) as T;
+  }
+
+  async listJsonObjects(
+    prefix: string,
+    options: ListJsonObjectsOptions = {}
+  ): Promise<ListJsonObjectsResult> {
+    const maxKeys = Math.min(options.maxKeys ?? 50, 100);
+    const allKeys = Array.from(this.objects.keys())
+      .filter((key) => key.startsWith(prefix))
+      .sort();
+    const startIdx = options.cursor
+      ? Math.max(0, allKeys.indexOf(options.cursor) + 1)
+      : 0;
+    const slice = allKeys.slice(startIdx, startIdx + maxKeys);
+    const nextCursor =
+      startIdx + maxKeys < allKeys.length && slice.length > 0
+        ? slice[slice.length - 1] ?? null
+        : null;
+    return { keys: slice, nextCursor };
   }
 }
 

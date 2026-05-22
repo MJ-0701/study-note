@@ -5,6 +5,7 @@ const digitalEngineering: SubjectNote = {
   title: "디지털공학개론",
   professor: "교수님 강의 PDF 기반",
   examLabel: "기말고사",
+  examPhase: "final",
   summary: {
     goal: "논리게이트, 부울대수, 조합논리 회로를 시험 직전 계산 문제 중심으로 정리한다.",
     examScope: "number system, boolean algebra, logic gate, combinational circuit",
@@ -164,6 +165,7 @@ const informationCommunication: SubjectNote = {
   title: "정보통신개론",
   professor: "교수님 강의 PDF 기반",
   examLabel: "기말고사",
+  examPhase: "final",
   summary: {
     goal: "통신 기본 모델, 전송매체, 네트워크 계층 구조를 용어 비교 중심으로 정리한다.",
     examScope: "communication model, signal, transmission media, OSI/TCP-IP",
@@ -312,6 +314,7 @@ const cLanguage: SubjectNote = {
   title: "C언어",
   professor: "교수님 강의 PDF 기반",
   examLabel: "기말고사",
+  examPhase: "final",
   summary: {
     goal: "포인터, 배열, 함수, 구조체를 코드 읽기와 출력 예측 문제 중심으로 정리한다.",
     examScope: "pointer, array, function, struct, file I/O",
@@ -460,6 +463,7 @@ const computerIntroduction: SubjectNote = {
   title: "컴퓨터개론",
   professor: "교수님 강의 PDF 기반",
   examLabel: "기말고사",
+  examPhase: "final",
   summary: {
     goal: "컴퓨터 구조, 운영체제, 데이터 표현, 네트워크 기초를 큰 그림 중심으로 훑는다.",
     examScope: "computer system, data representation, OS basics, network basics",

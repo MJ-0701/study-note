@@ -173,6 +173,13 @@ type LoginFeedback =
 
 const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
+// sprint-2/S3 fix (codex P1): persisted marker for the last successfully
+// attached session's userId. Used to detect A→B account switches on the same
+// browser so we can wipe local notebook + pdfWorkspaceStore before autosave
+// PUTs leak user A's content into user B's server record. Stored in
+// localStorage so the marker survives page reloads (otherwise B opening a
+// fresh tab over A's stored notebook would not be detected as a switch).
+const lastSessionUserStorageKey = "study-note.session.lastUserId";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
 const DRILL_HIGHLIGHT_DURATION_MS = 1500;
@@ -189,6 +196,13 @@ const AUTH_SESSION_RETRY_DELAY_MS = 3000;
 const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
 let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
+// sprint-2/S3 fix (codex P1): see lastSessionUserStorageKey comment for the
+// invariant this enforces. Initialized from localStorage so a page reload
+// after user A's session retains A's identity until the next sign-in/auth-me
+// success either confirms A (no wipe) or detects B (wipe).
+let lastSessionUserId: string | undefined = isBrowserRuntime
+  ? window.localStorage.getItem(lastSessionUserStorageKey) ?? undefined
+  : undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
@@ -678,6 +692,594 @@ function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
 let notebookStorageErrorReported = false;
 let notebookStorageError: string | undefined;
 
+// sprint-2/S2: BE sync layer state — debounce timers + in-flight tracking for
+// userNotes / pdf-annotations. Plan §8b: per-resource hot path GET on view,
+// debounced PUT (userNotes 500ms, annotations 750ms), max in-flight 3,
+// backoff on consecutive 5xx (3회 / 5분 → autosave pause + banner).
+const USER_NOTES_PUT_DEBOUNCE_MS = 500;
+const ANNOTATION_PUT_DEBOUNCE_MS = 750;
+const SYNC_FAILURE_PAUSE_THRESHOLD = 3;
+const SYNC_FAILURE_PAUSE_WINDOW_MS = 5 * 60 * 1000;
+
+interface SyncFailureTracker {
+  recentFailures: number[];
+  paused: boolean;
+}
+
+const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// sprint-2/S3 fix (codex P1): per-key AbortControllers for hard termination
+// on logout / user transition. Cancelling client-side does NOT guarantee the
+// server hasn't already processed the request — server-order safety comes
+// from the chain map below.
+const userNotesPutAborts = new Map<string, AbortController>();
+const annotationPutAborts = new Map<string, AbortController>();
+// sprint-2/S3 fix (codex P1 #NEW-22): per-key promise chains that serialize
+// PUTs FIFO. Without this, two debounced PUTs can be on the wire concurrently
+// and the server may persist the older body on top of the newer one. Each
+// new PUT awaits the prior chain entry before issuing fetch(), so server
+// arrival order matches client-issue order on this device. Cross-device
+// races are governed by plan §5.2 last-write-wins; server-side revision
+// checks are a sprint-3 follow-up.
+const userNotesPutChains = new Map<string, Promise<void>>();
+const annotationPutChains = new Map<string, Promise<void>>();
+const userNotesFetchedKeys = new Set<string>();
+const annotationFetchedKeys = new Set<string>();
+// sprint-2/S3 fix (codex P2): track which materialId currently occupies the
+// in-memory bundle for `${userId}:${subjectId}`. The previous fix released
+// the cache key after every successful GET so material A→B→A revisit would
+// re-fetch, but renderApp() re-invokes fetchAnnotationIfMissing on every
+// render and the released cache made that a per-render network storm.
+// Keep the cache marker set after success and instead force a refetch only
+// when the active material differs from the last hydrated material for the
+// same subject (the real revisit signal).
+const lastHydratedAnnotationByMaterial = new Map<string, string>();
+const syncFailureTracker: SyncFailureTracker = {
+  recentFailures: [],
+  paused: false
+};
+
+// sprint-2/S2 fix (codex P1): BE sync 실패 banner 를 localStorage save 실패
+// banner 와 분리. saveNotebook 성공 path 가 notebookStorageError 만 clear 하므로,
+// BE sync 실패 메시지가 같은 변수에 들어 있으면 사용자가 typing 시 banner 가
+// 사라지면서 paused flag 만 남아 silent disabled 상태가 된다. 별도 변수로 분리.
+let syncBackendError: string | undefined;
+let syncBackendErrorReported = false;
+
+// sprint-2/S3 fix (codex P2): handle 401/403 during background sync. PUT/GET
+// for user-notes/annotations silently failed when the session cookie expired;
+// the UI kept accepting edits while writes were dropped and the user had no
+// signal. Treat 401/403 from those endpoints as "session expired" — clear the
+// in-memory session + transient timers via clearAuthSession() and redirect
+// to login with a feedback banner. Guarded by a one-shot flag so concurrent
+// in-flight requests do not stack multiple banners; the flag resets when a
+// new session is attached (revalidate / sign-in).
+let authExpiryHandled = false;
+function handleAuthExpiredFromSync(): void {
+  if (authExpiryHandled) {
+    return;
+  }
+  authExpiryHandled = true;
+  clearAuthSession();
+  authMode = "login";
+  loginFeedback = {
+    kind: "error",
+    title: "세션이 만료되었습니다.",
+    detail: "자동 저장이 중단되어 다시 로그인이 필요합니다."
+  };
+  try { renderApp(); } catch { /* ignore */ }
+}
+
+function recordSyncFailure(): void {
+  const now = Date.now();
+  syncFailureTracker.recentFailures.push(now);
+  syncFailureTracker.recentFailures = syncFailureTracker.recentFailures.filter(
+    (ts) => now - ts < SYNC_FAILURE_PAUSE_WINDOW_MS
+  );
+  if (syncFailureTracker.recentFailures.length >= SYNC_FAILURE_PAUSE_THRESHOLD && !syncFailureTracker.paused) {
+    syncFailureTracker.paused = true;
+    syncBackendError =
+      "메모/필기 BE 저장에 연속 실패했습니다. 자동 동기화를 잠시 멈춥니다. 네트워크/세션 상태를 확인한 뒤 닫기를 눌러 재시작하세요.";
+    if (!syncBackendErrorReported) {
+      syncBackendErrorReported = true;
+      try { renderApp(); } catch { /* ignore */ }
+    }
+  }
+}
+
+// sprint-2/S2 fix (codex P1): PUT success only — unpause autosave (PUT 신호).
+// GET success 는 read-only 라 PUT 의 paused 상태를 풀면 안 됨 (사용자가 typing
+// 중인데 PUT 은 여전히 500 일 수 있음).
+function recordSyncSuccess(): void {
+  syncFailureTracker.recentFailures = [];
+  if (syncFailureTracker.paused) {
+    syncFailureTracker.paused = false;
+    syncBackendError = undefined;
+    syncBackendErrorReported = false;
+    try { renderApp(); } catch { /* ignore */ }
+  }
+}
+
+// sprint-2/S2 fix (codex P1): GET success — silent. 별도 함수로 분리해 unpause
+// 신호 X. 5xx 누적 카운트도 그대로 (PUT 만 카운트).
+function recordFetchSuccess(): void {
+  /* no-op intentionally — GET 성공이 PUT paused 상태 변경에 영향 없음. */
+}
+
+// sprint-2/S2 fix (codex P2): GET failure — silent. PUT paused 카운트에 영향 X.
+// read-side 실패가 write-side 차단을 유발하면 안 됨.
+function recordFetchFailure(): void {
+  /* no-op intentionally — GET 실패가 PUT paused 카운트를 키우지 않는다. */
+}
+
+async function putUserNoteToBE(
+  subjectId: string,
+  weekId: string,
+  body: string
+): Promise<void> {
+  if (syncFailureTracker.paused) {
+    return;
+  }
+  // sprint-2/S3 fix (codex P1 #NEW-22): chain this PUT after any prior PUT
+  // for the same (subject, week) so server arrival order matches client-issue
+  // order on this device. AbortController inside is for hard termination
+  // from logout / user transition — within the chain there is never more
+  // than one in-flight at a time, so the abort path only fires on session
+  // changes, not on supersession.
+  const key = `${subjectId}:${weekId}`;
+  const sessionUserIdAtSchedule = authSession?.user.id;
+  if (!sessionUserIdAtSchedule) {
+    return;
+  }
+  const previous = userNotesPutChains.get(key) ?? Promise.resolve();
+  const work = previous
+    .catch(() => {})
+    .then(async () => {
+      // sprint-2/S3 fix (advisor): chain may have awaited seconds while the
+      // user logged out and back in. Re-validate session before issuing the
+      // PUT so user A's debounced edit cannot land with user B's cookie.
+      if (authSession?.user.id !== sessionUserIdAtSchedule) {
+        return;
+      }
+      if (syncFailureTracker.paused) {
+        return;
+      }
+      const abortController = new AbortController();
+      userNotesPutAborts.set(key, abortController);
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body }),
+            signal: abortController.signal
+          }
+        );
+        if (response.status === 413) {
+          console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
+          return;
+        }
+        if (response.status === 401 || response.status === 403) {
+          console.warn("[study-note] userNotes PUT auth expired", response.status, weekId);
+          handleAuthExpiredFromSync();
+          return;
+        }
+        if (!response.ok) {
+          console.warn("[study-note] userNotes PUT failed", response.status, weekId);
+          if (response.status >= 500 || response.status === 429) {
+            recordSyncFailure();
+          }
+          return;
+        }
+        recordSyncSuccess();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        console.warn("[study-note] userNotes PUT network error", error);
+        recordSyncFailure();
+      } finally {
+        if (userNotesPutAborts.get(key) === abortController) {
+          userNotesPutAborts.delete(key);
+        }
+      }
+    });
+  userNotesPutChains.set(key, work);
+  try {
+    await work;
+  } finally {
+    if (userNotesPutChains.get(key) === work) {
+      userNotesPutChains.delete(key);
+    }
+  }
+}
+
+function scheduleUserNotePut(subjectId: string, weekId: string, body: string): void {
+  const timerKey = `${subjectId}:${weekId}`;
+  const existing = userNotesPutTimers.get(timerKey);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const timer = setTimeout(() => {
+    userNotesPutTimers.delete(timerKey);
+    void putUserNoteToBE(subjectId, weekId, body);
+  }, USER_NOTES_PUT_DEBOUNCE_MS);
+  userNotesPutTimers.set(timerKey, timer);
+}
+
+async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promise<void> {
+  // sprint-2/S2 fix (codex P1): scope cache key to authenticated user so
+  // logout/login on a shared SPA runtime does not skip GET for the new user.
+  const sessionUserId = authSession?.user.id;
+  if (!sessionUserId) {
+    return;
+  }
+  const cacheKey = `${sessionUserId}:${subjectId}:${weekId}`;
+  if (userNotesFetchedKeys.has(cacheKey)) {
+    return;
+  }
+  userNotesFetchedKeys.add(cacheKey);
+  const releaseNoteCache = () => userNotesFetchedKeys.delete(cacheKey);
+  try {
+    const response = await fetch(
+      `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
+      { credentials: "include" }
+    );
+    if (response.status === 404) {
+      // sprint-2/S3 fix (codex P2): keep the cache marker on 404. The previous
+      // fix released it so cross-device note creation could appear without
+      // reload, but `renderApp()` re-invokes fetchUserNoteIfMissing on every
+      // week-page render → released cache → re-fetch → 404 → release =
+      // per-render request storm for any week without a server note. Trade
+      // accepted: cross-device new notes appear after the next page reload
+      // instead of mid-session (server data wins on reload).
+      return;
+    }
+    if (response.status === 401 || response.status === 403) {
+      // sprint-2/S3 fix (codex P2): GET auth expiry also surfaces re-login.
+      releaseNoteCache();
+      handleAuthExpiredFromSync();
+      return;
+    }
+    if (!response.ok) {
+      // Allow retry on later view by clearing cache marker.
+      userNotesFetchedKeys.delete(cacheKey);
+      if (response.status >= 500) {
+        recordFetchFailure();
+      }
+      return;
+    }
+    const payload = (await response.json()) as { body?: unknown; updatedAt?: unknown };
+    if (typeof payload.body !== "string") {
+      return;
+    }
+    // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
+    // a logout/login between fetch start and resolve must NOT apply user A's
+    // server data into user B's notebook.
+    if (authSession?.user.id !== sessionUserId) {
+      return;
+    }
+    const incoming = payload.body;
+    // sprint-2/S2 fix (codex P1): protect against stale GET overwriting fresh
+    // local edits. Skip hydrate when:
+    //   (a) the user has a pending debounced PUT for this weekId (still typing),
+    //   (b) the active week has a non-empty local userNotes that differs from
+    //       the server payload — treat that as a local edit not yet flushed
+    //       and let the next PUT carry the local value to the server.
+    // Cross-device restore still works on first visit (local empty → hydrate).
+    if (userNotesPutTimers.has(`${subjectId}:${weekId}`)) {
+      recordFetchSuccess();
+      return;
+    }
+    const localSubject = notebook.subjects.find((subject) => subject.id === subjectId);
+    const localWeek = localSubject?.weekNotes.find((week) => week.id === weekId);
+    const localValue = typeof localWeek?.userNotes === "string" ? localWeek.userNotes : "";
+    if (localValue.length > 0 && localValue !== incoming) {
+      recordFetchSuccess();
+      return;
+    }
+    let applied = false;
+    notebook = {
+      ...notebook,
+      subjects: notebook.subjects.map((subject) =>
+        subject.id !== subjectId
+          ? subject
+          : {
+              ...subject,
+              weekNotes: subject.weekNotes.map((week) => {
+                if (week.id !== weekId) {
+                  return week;
+                }
+                if ((week.userNotes ?? "") === incoming) {
+                  return week;
+                }
+                applied = true;
+                return { ...week, userNotes: incoming };
+              })
+            }
+      )
+    };
+    if (applied) {
+      saveNotebook(notebook);
+      try { renderApp(); } catch { /* ignore */ }
+    }
+    recordFetchSuccess();
+  } catch (error) {
+    userNotesFetchedKeys.delete(cacheKey);
+    console.warn("[study-note] userNotes GET network error", error);
+    recordFetchFailure();
+  }
+}
+
+async function putAnnotationToBE(materialId: string, payload: unknown): Promise<void> {
+  if (syncFailureTracker.paused) {
+    return;
+  }
+  // sprint-2/S3 fix (codex P1 #NEW-22): chain per material so server arrival
+  // order matches client-issue order. AbortController inside is for hard
+  // termination on logout / user transition.
+  const sessionUserIdAtSchedule = authSession?.user.id;
+  if (!sessionUserIdAtSchedule) {
+    return;
+  }
+  const previous = annotationPutChains.get(materialId) ?? Promise.resolve();
+  const work = previous
+    .catch(() => {})
+    .then(async () => {
+      if (authSession?.user.id !== sessionUserIdAtSchedule) {
+        return;
+      }
+      if (syncFailureTracker.paused) {
+        return;
+      }
+      const abortController = new AbortController();
+      annotationPutAborts.set(materialId, abortController);
+      try {
+        const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload }),
+          signal: abortController.signal
+        });
+        if (response.status === 413) {
+          console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
+          return;
+        }
+        if (response.status === 401 || response.status === 403) {
+          console.warn("[study-note] annotation PUT auth expired", response.status, materialId);
+          handleAuthExpiredFromSync();
+          return;
+        }
+        if (!response.ok) {
+          console.warn("[study-note] annotation PUT failed", response.status, materialId);
+          if (response.status >= 500 || response.status === 429) {
+            recordSyncFailure();
+          }
+          return;
+        }
+        recordSyncSuccess();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+        console.warn("[study-note] annotation PUT network error", error);
+        recordSyncFailure();
+      } finally {
+        if (annotationPutAborts.get(materialId) === abortController) {
+          annotationPutAborts.delete(materialId);
+        }
+      }
+    });
+  annotationPutChains.set(materialId, work);
+  try {
+    await work;
+  } finally {
+    if (annotationPutChains.get(materialId) === work) {
+      annotationPutChains.delete(materialId);
+    }
+  }
+}
+
+function scheduleAnnotationPut(materialId: string, payload: unknown): void {
+  const existing = annotationPutTimers.get(materialId);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const timer = setTimeout(() => {
+    annotationPutTimers.delete(materialId);
+    void putAnnotationToBE(materialId, payload);
+  }, ANNOTATION_PUT_DEBOUNCE_MS);
+  annotationPutTimers.set(materialId, timer);
+}
+
+async function fetchAnnotationIfMissing(subjectId: string, materialId: string): Promise<void> {
+  // sprint-2/S2 fix (codex P1): scope cache key to authenticated user.
+  const sessionUserId = authSession?.user.id;
+  if (!sessionUserId) {
+    return;
+  }
+  const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
+  const subjectKey = `${sessionUserId}:${subjectId}`;
+  // sprint-2/S3 fix (codex P2): force a refetch when the active material
+  // differs from the last hydrated material for this subject (real A→B→A
+  // revisit signal). For same-material re-renders the cache short-circuit
+  // still applies, preventing the per-render network storm caused by the
+  // previous "release on success" approach.
+  if (
+    annotationFetchedKeys.has(cacheKey)
+    && lastHydratedAnnotationByMaterial.get(subjectKey) === materialId
+  ) {
+    return;
+  }
+  if (lastHydratedAnnotationByMaterial.get(subjectKey) !== materialId) {
+    annotationFetchedKeys.delete(cacheKey);
+  }
+  if (annotationFetchedKeys.has(cacheKey)) {
+    return;
+  }
+  annotationFetchedKeys.add(cacheKey);
+  const releaseCache = () => annotationFetchedKeys.delete(cacheKey);
+  // sprint-2/S3 fix (codex P2): before recording lastHydrated, re-check that
+  // the active material is still the one this fetch was started for. A fast
+  // A→B switch can let an older A response resolve after the newer B response;
+  // without this guard, A's resolution would overwrite the freshly-correct B
+  // marker and trigger a redundant B refetch on the next render.
+  const isStillActiveMaterial = (): boolean => {
+    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+    const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
+    return active === materialId;
+  };
+  try {
+    const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
+      credentials: "include"
+    });
+    if (response.status === 404) {
+      // sprint-2/S3 fix (codex P2): 404 = server has no annotation for this
+      // material. Keep the cache marker AND record lastHydrated so subsequent
+      // re-renders of the same material short-circuit (no storm). Cross-device
+      // creation that lands later is rehydrated on material switch revisit.
+      // Guard against material-switch race: only mark this material as
+      // hydrated if the user is still on it.
+      if (isStillActiveMaterial()) {
+        lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+      } else {
+        releaseCache();
+      }
+      return;
+    }
+    if (response.status === 401 || response.status === 403) {
+      // sprint-2/S3 fix (codex P2): GET auth expiry also surfaces re-login.
+      releaseCache();
+      handleAuthExpiredFromSync();
+      return;
+    }
+    if (!response.ok) {
+      annotationFetchedKeys.delete(cacheKey);
+      if (response.status >= 500) {
+        recordFetchFailure();
+      }
+      return;
+    }
+    const json = (await response.json()) as {
+      materialId?: unknown;
+      payload?: unknown;
+      updatedAt?: unknown;
+    };
+    // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
+    // logout/login between fetch start and resolve must NOT apply user A's
+    // server data into user B's workspace.
+    if (authSession?.user.id !== sessionUserId) {
+      return;
+    }
+    // sprint-2/S2 fix (codex P1): skip hydrate when a local PUT is still
+    // pending for this material — annotation writes are debounced (750ms),
+    // so a stale GET could overwrite fresh local edits before the user's
+    // changes are flushed to the server.
+    // sprint-2/S3 fix (codex P2): keep the cache marker AND record lastHydrated
+    // so the next renderApp() pass short-circuits. Releasing the cache here
+    // caused fetchAnnotationIfMissing → cache empty → re-fetch → still pending
+    // PUT → release = a per-render storm. Client edits are about to PUT to
+    // the server anyway, so deferring the GET until the next material switch
+    // is the correct trade.
+    if (annotationPutTimers.has(materialId)) {
+      // Material-switch race guard: do not record hydrate marker for a
+      // material the user is no longer viewing.
+      if (isStillActiveMaterial()) {
+        lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+      } else {
+        releaseCache();
+      }
+      return;
+    }
+    recordFetchSuccess();
+
+    // sprint-2/S2 fix (codex P1): hydrate the workspace store with the server
+    // payload. The server-side snapshot is the per-material annotation bundle
+    // (stickyNotes / inkStrokes / textBoxes / checklists / tables / charts);
+    // missing keys keep their current value to avoid wiping unsaved local edits.
+    // last-write-wins per plan §5.2 (server preferred), so equal/empty server
+    // arrays still overwrite local stale ones for cross-device parity.
+    if (json.payload && typeof json.payload === "object") {
+      const incoming = json.payload as Partial<SubjectPdfWorkspace>;
+      updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
+    }
+    // sprint-2/S3 fix (codex P2): keep the cache marker AND record which
+    // material currently occupies the subject's in-memory bundle. The
+    // material-switch guard at the top of this function clears the cache key
+    // when the active material differs, so revisits still re-fetch.
+    // Race guard: only mark if user is still on this material; otherwise
+    // updatePdfWorkspaceStoreFromServer already declined the hydrate, so
+    // setting lastHydrated would lie about in-memory state.
+    if (isStillActiveMaterial()) {
+      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+    } else {
+      releaseCache();
+    }
+  } catch (error) {
+    releaseCache();
+    console.warn("[study-note] annotation GET network error", error);
+    recordFetchFailure();
+  }
+}
+
+// sprint-2/S2 fix (codex P1): apply server snapshot to local workspace store.
+// We bypass `updatePdfWorkspace` here so the hydrate write does not trigger
+// another PUT (it would loop). `savePdfWorkspaceStore` persists to
+// localStorage and `renderApp` reflects in the UI.
+function updatePdfWorkspaceStoreFromServer(
+  subjectId: string,
+  materialId: string,
+  incoming: Partial<SubjectPdfWorkspace>
+): void {
+  const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const material = current.material;
+  // Only hydrate when the active material matches; otherwise defer until the
+  // user selects that material (lazy default — plan §8b.3).
+  // sprint-2/S2 fix (codex P1): when active material mismatches (user switched
+  // between GET start and resolve), clear the cache key for the *fetched*
+  // material so re-entry retries instead of permanently believing it was
+  // already hydrated.
+  // cache key is `${userId}:${subjectId}:${materialId}` (sprint-2/S2 fix).
+  // Re-derive from current authSession so the delete on early return matches
+  // the key added in fetchAnnotationIfMissing.
+  const cacheUserId = authSession?.user.id;
+  const cacheKey = cacheUserId ? `${cacheUserId}:${subjectId}:${materialId}` : null;
+  if (!material) {
+    if (cacheKey) {
+      annotationFetchedKeys.delete(cacheKey);
+    }
+    return;
+  }
+  const currentMaterialId = material.backendMaterialId ?? material.id;
+  if (currentMaterialId !== materialId) {
+    if (cacheKey) {
+      annotationFetchedKeys.delete(cacheKey);
+    }
+    return;
+  }
+  const merged: SubjectPdfWorkspace = {
+    ...current,
+    stickyNotes: Array.isArray(incoming.stickyNotes) ? incoming.stickyNotes : current.stickyNotes,
+    inkStrokes: Array.isArray(incoming.inkStrokes) ? incoming.inkStrokes : current.inkStrokes,
+    textBoxes: Array.isArray(incoming.textBoxes) ? incoming.textBoxes : current.textBoxes,
+    checklists: Array.isArray(incoming.checklists) ? incoming.checklists : current.checklists,
+    tables: Array.isArray(incoming.tables) ? incoming.tables : current.tables,
+    charts: Array.isArray(incoming.charts) ? incoming.charts : current.charts,
+    updatedAt: new Date().toISOString()
+  };
+  pdfWorkspaceStore = {
+    workspaces: {
+      ...pdfWorkspaceStore.workspaces,
+      [subjectId]: merged
+    }
+  };
+  savePdfWorkspaceStore();
+  try { renderApp(); } catch { /* ignore */ }
+}
+
 function saveNotebook(nextNotebook: StudyNotebook): boolean {
   try {
     window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
@@ -705,6 +1307,92 @@ function saveNotebook(nextNotebook: StudyNotebook): boolean {
 // slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
 // Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
 
+// sprint-2/S3 fix (codex P1): when a session attach succeeds for a different
+// user than the previously-seen one on this browser, wipe the local notebook
+// + pdfWorkspaceStore + sync caches BEFORE autosave PUT can leak the previous
+// user's content into the new user's server record. Called from the two
+// session-attach success paths (revalidate, sign-in) only — never from
+// clearAuthSession, because that fires on transient /v1/auth/me failures and
+// must not destroy data on a network blip.
+//
+// First-load semantics: lastSessionUserId is initialized from localStorage,
+// so a page reload by the same user matches the marker and skips the wipe.
+// Only a genuinely different userId triggers the destructive reset.
+function applySessionTransitionForUser(newUserId: string): void {
+  if (lastSessionUserId === newUserId) {
+    return;
+  }
+  // sprint-2/S3 fix-2 (codex P1): on first rollout (or fresh browser) the
+  // marker is absent. Do NOT wipe in that case — record the marker so a
+  // subsequent sign-in by a *different* user triggers the wipe. Wiping on
+  // first revalidate would destroy every existing user's local notebook on
+  // the day this fix deploys, which is worse than the residual one-time
+  // pre-marker leak risk it tries to close.
+  if (lastSessionUserId === undefined) {
+    lastSessionUserId = newUserId;
+    try {
+      window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+  notebook = structuredClone(sampleLectureNote);
+  try {
+    window.localStorage.removeItem(notebookStorageKey);
+  } catch {
+    /* localStorage unavailable — in-memory reset still applies */
+  }
+  pdfWorkspaceStore = { workspaces: {} };
+  try {
+    savePdfWorkspaceStore();
+  } catch {
+    /* ignore */
+  }
+  for (const timer of userNotesPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  userNotesPutTimers.clear();
+  for (const timer of annotationPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  annotationPutTimers.clear();
+  // sprint-2/S3 fix (codex P1): abort in-flight PUTs so a delayed completion
+  // cannot land on the new session with the previous user's body.
+  for (const ac of userNotesPutAborts.values()) {
+    ac.abort();
+  }
+  userNotesPutAborts.clear();
+  for (const ac of annotationPutAborts.values()) {
+    ac.abort();
+  }
+  annotationPutAborts.clear();
+  // sprint-2/S3 fix (codex P1 #NEW-22 / advisor): drop chained PUT promises
+  // so queued continuations after the current in-flight do not fire under
+  // the new session's cookie. The body re-validates session before fetch,
+  // but clearing the chain here avoids the post-abort .then() running at all.
+  userNotesPutChains.clear();
+  annotationPutChains.clear();
+  userNotesFetchedKeys.clear();
+  annotationFetchedKeys.clear();
+  lastHydratedAnnotationByMaterial.clear();
+  // sprint-2/S3 fix (self-review): also reset sync-failure tracker + banner
+  // state. Without this, user A's accumulated PUT failures (and the resulting
+  // `paused = true` autosave halt) silently persist into user B's session,
+  // disabling B's autosave on first edit despite B having no failures.
+  // Mirrors the equivalent reset block in clearAuthSession.
+  syncFailureTracker.paused = false;
+  syncFailureTracker.recentFailures = [];
+  syncBackendError = undefined;
+  syncBackendErrorReported = false;
+  lastSessionUserId = newUserId;
+  try {
+    window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
+  } catch {
+    /* ignore */
+  }
+}
+
 function clearAuthSession(): void {
   authBootRequestId += 1;
   authSession = undefined;
@@ -714,6 +1402,37 @@ function clearAuthSession(): void {
   // a session reset. Without this the hotkey help modal could persist into the
   // post-login render and lock the shell in `inert`.
   hotkeyHelpModalOpen = false;
+  // sprint-2/S2 fix (codex P1): cancel all pending debounced sync timers so a
+  // delayed PUT from user A cannot be sent with user B's cookie after a
+  // logout/login. Also reset the fetch caches (they are user-scoped, but old
+  // entries are stale once the session is gone) and the failure tracker.
+  for (const timer of userNotesPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  userNotesPutTimers.clear();
+  for (const timer of annotationPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  annotationPutTimers.clear();
+  // sprint-2/S3 fix (codex P1): also abort in-flight PUTs.
+  for (const ac of userNotesPutAborts.values()) {
+    ac.abort();
+  }
+  userNotesPutAborts.clear();
+  for (const ac of annotationPutAborts.values()) {
+    ac.abort();
+  }
+  annotationPutAborts.clear();
+  // sprint-2/S3 fix (codex P1 #NEW-22): drop chained PUT promises on logout.
+  userNotesPutChains.clear();
+  annotationPutChains.clear();
+  userNotesFetchedKeys.clear();
+  annotationFetchedKeys.clear();
+  lastHydratedAnnotationByMaterial.clear();
+  syncFailureTracker.paused = false;
+  syncFailureTracker.recentFailures = [];
+  syncBackendError = undefined;
+  syncBackendErrorReported = false;
 }
 
 function clearAuthBootTimers(): void {
@@ -811,6 +1530,14 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
     }
 
     authSession = meResponseToSession(payload);
+    // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot so a future
+    // session loss can re-surface the banner.
+    authExpiryHandled = false;
+    // sprint-2/S3 fix (codex P1): wipe local data if this revalidate landed
+    // on a different user than the previous session on this browser. Must run
+    // before restoreUploadedPdfMaterialsForSession so the workspace rebuild
+    // starts from an empty pdfWorkspaceStore.
+    applySessionTransitionForUser(authSession.user.id);
     await restoreUploadedPdfMaterialsForSession(authSession);
     if (requestId !== authBootRequestId) {
       return;
@@ -987,6 +1714,26 @@ function updatePdfWorkspace(
     }
   };
   savePdfWorkspaceStore();
+  // sprint-2/S2 fix (codex P1): only PUT annotations when the active material
+  // did not change. If the mutator only switched material (current.material →
+  // updated.material is a different id), the workspace's annotation arrays
+  // belong to the *previous* material and a PUT would mis-attribute them to
+  // the new material's BE record.
+  const previousMaterial = current.material;
+  const nextMaterial = updated.material;
+  const previousId = previousMaterial?.backendMaterialId ?? previousMaterial?.id;
+  const nextId = nextMaterial?.backendMaterialId ?? nextMaterial?.id;
+  if (nextMaterial && previousId === nextId) {
+    const payload = {
+      stickyNotes: updated.stickyNotes,
+      inkStrokes: updated.inkStrokes,
+      textBoxes: updated.textBoxes,
+      checklists: updated.checklists,
+      tables: updated.tables,
+      charts: updated.charts
+    };
+    scheduleAnnotationPut(nextId!, payload);
+  }
 }
 
 function syncCurrentPdfMaterial(workspace: SubjectPdfWorkspace): SubjectPdfWorkspace {
@@ -1550,8 +2297,16 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "dismiss-notebook-storage-error") {
+    // sprint-2/S2 fix (codex P1): clear BOTH banner sources + reset sync pause.
+    // - notebookStorageError: localStorage save failure path.
+    // - syncBackendError: BE sync paused after 3×5xx.
+    // - syncFailureTracker.paused: unpause so autosave resumes.
     notebookStorageError = undefined;
     notebookStorageErrorReported = false;
+    syncBackendError = undefined;
+    syncBackendErrorReported = false;
+    syncFailureTracker.paused = false;
+    syncFailureTracker.recentFailures = [];
     renderApp();
     return;
   }
@@ -2108,9 +2863,15 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
 
       const session = meResponseToSession(payload as AuthMeResponse);
       authSession = session;
+      // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot on fresh sign-in.
+      authExpiryHandled = false;
       authBootState = "ready";
       authBootNotice = "checking";
       clearAuthBootTimers();
+      // sprint-2/S3 fix (codex P1): wipe local notebook + pdfWorkspaceStore if
+      // sign-in landed on a different user than the previous session, before
+      // any autosave PUT can leak the prior user's content.
+      applySessionTransitionForUser(session.user.id);
       // F2: no localStorage — session lives in httpOnly cookie + in-memory only
       await restoreUploadedPdfMaterialsForSession(session);
       if (authSession !== session) {
@@ -2236,6 +2997,8 @@ function handleDocumentInput(event: Event): void {
       )
     };
     saveNotebook(notebook);
+    // sprint-2/S2: BE sync (debounced PUT). localStorage 가 primary, BE 가 cross-device 백업.
+    scheduleUserNotePut(subjectId, weekId, value);
     return;
   }
 
@@ -4835,6 +5598,13 @@ function renderApp(): void {
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
     ));
+    // sprint-2/S2: lazy fetch annotation snapshot for active material on first view.
+    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
+    const material = workspace.material;
+    if (material) {
+      const materialId = material.backendMaterialId ?? material.id;
+      void fetchAnnotationIfMissing(subject.id, materialId);
+    }
     return;
   }
 
@@ -4889,6 +5659,8 @@ function renderApp(): void {
       renderWeekPage(subject, week),
       `${subject.title} / ${week.label}`
     ));
+    // sprint-2/S2: lazy fetch userNotes from BE on first week view (per-session cache).
+    void fetchUserNoteIfMissing(subject.id, week.id);
   }
 
   // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
@@ -5779,13 +6551,16 @@ function renderShell(sidebar: string, mainContent: string, crumb: string): strin
 }
 
 function renderNotebookStorageBanner(): string {
-  if (!notebookStorageError) {
+  // sprint-2/S2 fix (codex P1): show either banner (localStorage save fail OR
+  // BE sync pause). Two independent sources; dismiss button clears both for UX
+  // simplicity. localStorage 우선 (더 치명적).
+  const message = notebookStorageError ?? syncBackendError;
+  if (!message) {
     return "";
   }
-
   return `
     <div class="storage-error-banner" role="alert">
-      <p>${escapeHtml(notebookStorageError)}</p>
+      <p>${escapeHtml(message)}</p>
       <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
     </div>
   `;
@@ -7794,13 +8569,32 @@ function renderSubjectClassPage(subject: SubjectNote): string {
   return `
     <section class="subject-page-hero">
       <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h1>${subject.title} 수업</h1>
-      <p class="lede">수업일을 먼저 고르고, 연결된 PDF와 노트 상세로 들어갑니다. 과목 첫 화면은 날짜와 자료 현황만 빠르게 보여줍니다.</p>
-      <div class="hero-actions">
-        <a class="action-button" href="${subjectPdfWorkspacePath(subject)}">PDF 작업공간 열기</a>
-        <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약본으로 이동</a>
-        <a class="secondary-link" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
-      </div>
+      <h1>${subject.title}</h1>
+      <p class="lede">이 진입 화면에서 유닛 카드를 골라 상세로 진입합니다. 카드 click 또는 사이드바의 명시적 메뉴 click 만 상세 라우트를 엽니다.</p>
+    </section>
+
+    <!-- sprint-2/S4: 진입화면 우선 IA — 4 개 유닛 카드 (요약본 / 암기노트 / PDF 작업공간 / 자료 매핑) 가 디폴트 진입 패턴. -->
+    <section class="subject-unit-grid" aria-label="${subject.title} 유닛">
+      <a class="subject-unit-card" href="${subjectClassPath(subject)}">
+        <span class="subject-unit-card__meta">수업</span>
+        <strong>수업일 카드</strong>
+        <span class="subject-unit-card__hint">날짜별 자료 + 메모. ${subject.weekNotes.length}회.</span>
+      </a>
+      <a class="subject-unit-card" href="${subjectSummaryPath(subject)}">
+        <span class="subject-unit-card__meta">요약</span>
+        <strong>요약본</strong>
+        <span class="subject-unit-card__hint">수업일별 요약 + 키워드 정리.</span>
+      </a>
+      <a class="subject-unit-card" href="${subjectMemorizePath(subject)}">
+        <span class="subject-unit-card__meta">암기</span>
+        <strong>필수 암기노트</strong>
+        <span class="subject-unit-card__hint">중간/기말 구간별 + 필수 개념.</span>
+      </a>
+      <a class="subject-unit-card" href="${subjectPdfWorkspacePath(subject)}">
+        <span class="subject-unit-card__meta">PDF</span>
+        <strong>PDF 작업공간</strong>
+        <span class="subject-unit-card__hint">필기 + 단축키. ${subjectMaterials.length}개 자료.</span>
+      </a>
     </section>
 
     ${renderClassDateAddSection(subject)}
@@ -8110,6 +8904,70 @@ function renderWeekSummaryPage(subject: SubjectNote, week: WeekNote): string {
   `;
 }
 
+// sprint-2/S3: render an exam-phase group on the memorize page.
+function renderMemorizeExamGroup(
+  title: string,
+  weeks: WeekNote[],
+  subject: SubjectNote
+): string {
+  if (weeks.length === 0) {
+    return `
+      <div class="memorize-exam-group memorize-exam-group--empty">
+        <h3>${escapeHtml(title)}</h3>
+        <p class="empty-note">${escapeHtml(title)} 구간의 수업일이 없습니다.</p>
+      </div>
+    `;
+  }
+  return `
+    <div class="memorize-exam-group">
+      <h3>${escapeHtml(title)} <span class="memorize-exam-group__count">${weeks.length}회</span></h3>
+      <ul class="memorize-exam-group__list">
+        ${weeks
+          .map(
+            (week) => `
+              <li>
+                <a href="${weekPath(subject, week)}">
+                  <span class="memorize-exam-group__label">${escapeHtml(week.label)}</span>
+                  <span class="memorize-exam-group__title">${escapeHtml(week.title)}</span>
+                </a>
+              </li>
+            `
+          )
+          .join("")}
+      </ul>
+    </div>
+  `;
+}
+
+// sprint-2/S3: parse "5월 14일(목)" / "5월14일" / "5/14" → millisecond timestamp.
+// Failed parses → +Infinity 로 정렬 끝으로 보냄 (stable order 유지).
+// sprint-2/S3 fix (codex P3): JS Date 가 invalid combo (e.g., 2/31) 를 silently
+// normalize (→ March 3). day-bound 검사를 month 별 max 로 정확화 + Date 재검증.
+function parseClassDateLabel(label: string): number {
+  const text = label.trim();
+  const kr = /(\d{1,2})\s*월\s*(\d{1,2})/.exec(text);
+  if (kr) {
+    const ts = safeDateMs(Number(kr[1]), Number(kr[2]));
+    if (ts !== null) return ts;
+  }
+  const slash = /(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})/.exec(text);
+  if (slash) {
+    const ts = safeDateMs(Number(slash[1]), Number(slash[2]));
+    if (ts !== null) return ts;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function safeDateMs(month: number, day: number): number | null {
+  if (!Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  // sprint-2/S3 fix (codex P3): use a leap year (2024) so "2월 29일" stays
+  // valid. 학기 비교 정렬 키 용도라 연도 자체는 임의 고정 가능.
+  const d = new Date(2024, month - 1, day);
+  if (d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d.getTime();
+}
+
 function renderSubjectMemorizePage(subject: SubjectNote): string {
   const mustKnowConcepts = subject.summary.mustKnowConceptIds
     .map((conceptId) => getConceptById(subject, conceptId))
@@ -8119,6 +8977,15 @@ function renderSubjectMemorizePage(subject: SubjectNote): string {
     .flatMap((week) => week.exampleQuestionIds)
     .map((questionId) => getQuestionById(subject, questionId))
     .filter((question): question is ExampleQuestion => Boolean(question));
+
+  // sprint-2/S3: 시험 구간별 수업일 그룹 + 수업일자 ascending 정렬.
+  // WeekNote.examPhase override > SubjectNote.examPhase > "final" default.
+  const subjectPhase = subject.examPhase ?? "final";
+  const sortedWeeks = [...subject.weekNotes].sort((a, b) =>
+    parseClassDateLabel(a.label) - parseClassDateLabel(b.label)
+  );
+  const midtermWeeks = sortedWeeks.filter((week) => (week.examPhase ?? subjectPhase) === "midterm");
+  const finalWeeks = sortedWeeks.filter((week) => (week.examPhase ?? subjectPhase) === "final");
 
   return `
     <section class="subject-page-hero">
@@ -8135,6 +9002,14 @@ function renderSubjectMemorizePage(subject: SubjectNote): string {
       ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
       ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
       ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
+    </section>
+
+    <section aria-labelledby="memorize-by-exam-title">
+      <p class="meta">시험 구간별 수업일</p>
+      <h2 id="memorize-by-exam-title">중간고사 / 기말고사 묶음</h2>
+      <p class="lede">현재 학기의 수업일을 시험 구간으로 나눕니다. 수업일자 오름차순.</p>
+      ${renderMemorizeExamGroup("중간고사", midtermWeeks, subject)}
+      ${renderMemorizeExamGroup("기말고사", finalWeeks, subject)}
     </section>
 
     <section aria-labelledby="memorize-concepts-title">
