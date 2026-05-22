@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>study-note 모니터링 셋업 가이드</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --surface: #fff;
+        --ink: #17212b;
+        --muted: #5c6875;
+        --line: #d9e1ea;
+        --accent: #137d6f;
+        --danger: #9c2f2f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.58;
+      }
+      header, main, footer { max-width: 1120px; margin: 0 auto; padding: 1.25rem; }
+      .hero { padding-top: 3rem; padding-bottom: 2rem; }
+      h1 { margin: 0; font-size: clamp(2.1rem, 5vw, 4rem); line-height: 1.05; letter-spacing: 0; }
+      h2 { margin: 2.4rem 0 0.8rem; font-size: 1.6rem; letter-spacing: 0; }
+      h3 { margin: 0 0 0.35rem; font-size: 1.05rem; letter-spacing: 0; }
+      p { margin: 0.35rem 0; }
+      a { color: var(--accent); }
+      code {
+        border-radius: 5px;
+        background: #edf2f7;
+        padding: 0.08rem 0.32rem;
+        font-family: "SFMono-Regular", Consolas, monospace;
+      }
+      pre {
+        overflow-x: auto;
+        border-radius: 8px;
+        background: #10202c;
+        color: #e8f2f7;
+        padding: 1rem;
+      }
+      pre code { background: transparent; color: inherit; padding: 0; }
+      .lead { max-width: 780px; color: var(--muted); font-size: 1.1rem; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 1rem;
+      }
+      .danger { border-color: #e1aaaa; background: #fff1f1; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      th, td { border-bottom: 1px solid var(--line); padding: 0.75rem; text-align: left; vertical-align: top; }
+      th { background: #edf3f8; }
+      @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <p><strong>Datadog Student Pack 기준</strong></p>
+      <h1>study-note 모니터링 셋업 가이드</h1>
+      <p class="lead">
+        실제 사용자가 Datadog, Vercel, Azure 콘솔에서 무엇을 설정해야 하는지
+        따라가기 위한 문서입니다.
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>현재 구조</h2>
+        <div class="grid">
+          <div class="card"><h3>Frontend</h3><p>Vercel production SPA, <code>study-note.910701.xyz</code></p></div>
+          <div class="card"><h3>Backend</h3><p>Azure Container Apps, <code>study-note-api</code></p></div>
+          <div class="card"><h3>Datadog</h3><p>US5 student org, RUM + Azure integration 우선</p></div>
+          <div class="card"><h3>분석 목표</h3><p>퍼널, 리텐션, 장애/성능 감지</p></div>
+        </div>
+        <div class="card danger">
+          <h3>중요</h3>
+          <p>Datadog API Key를 Vercel의 <code>VITE_</code> 변수나 브라우저 코드에 넣지 않습니다.</p>
+          <p>RUM의 <code>applicationId</code>, <code>clientToken</code>은 브라우저용 공개 값입니다.</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>Vercel Production 환경변수</h2>
+        <pre><code>VITE_DD_APPLICATION_ID=&lt;Datadog RUM application id&gt;
+VITE_DD_CLIENT_TOKEN=&lt;Datadog RUM client token&gt;
+VITE_DD_SITE=us5.datadoghq.com
+VITE_DD_SERVICE=study-note-web
+VITE_DD_ENV=production
+VITE_DD_SESSION_REPLAY_SAMPLE_RATE=0
+VITE_DD_TRACK_USER_INTERACTIONS=false</code></pre>
+      </section>
+
+      <section>
+        <h2>처음 볼 지표</h2>
+        <table>
+          <thead>
+            <tr><th>영역</th><th>지표</th><th>이유</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Frontend</td><td>RUM sessions, browser errors, resource latency</td><td>Vercel 배포 후 사용자 브라우저에서 깨지는지 확인</td></tr>
+            <tr><td>Product</td><td>signup, login, PDF upload, annotation actions</td><td>학습 퍼널과 activation 확인</td></tr>
+            <tr><td>Backend</td><td><code>azure.app_containerapps.*</code>, API 5xx, p95 latency</td><td>Azure Container Apps 상태와 백엔드 회귀 확인</td></tr>
+            <tr><td>Cost</td><td>Datadog usage, Azure credit</td><td>학생팩/학생 크레딧 한도 관리</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>퍼널 이벤트</h2>
+        <pre><code>view_home
+sign_up_started
+sign_up_completed
+login_completed
+subject_opened
+pdf_upload_started
+pdf_upload_completed
+pdf_workspace_opened
+annotation_created
+persona_turn_sent
+persona_turn_completed
+sync_put_success
+sync_put_failure
+sync_paused</code></pre>
+      </section>
+
+      <section>
+        <h2>개인정보 원칙</h2>
+        <p>보내도 되는 값: role, env, service, version, status_code, file_size_bucket, page_count_bucket.</p>
+        <p>보내면 안 되는 값: 이름, 학번, 이메일, PDF 파일명, 노트 본문, annotation payload, persona prompt/response, session cookie, API key.</p>
+      </section>
+
+      <section>
+        <h2>Hackle 판단</h2>
+        <p>
+          공개 가격 기준으로 GitHub Student Pack 같은 학생 무료 플랜은 확인되지 않았습니다.
+          현재는 이미 활성화된 Datadog 학생팩으로 먼저 RUM/Product Analytics를 사용합니다.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>관리 레지스트리: <a href="./metrics-registry.md">metrics-registry.md</a> / 체크리스트: <a href="./setup-checklist.md">setup-checklist.md</a></p>
+    </footer>
+  </body>
+</html>

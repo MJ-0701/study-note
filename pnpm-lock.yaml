@@ -236,6 +236,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@datadog/browser-rum':
+        specifier: ^7.1.0
+        version: 7.1.0
       dompurify:
         specifier: ^3.4.2
         version: 3.4.2
@@ -685,6 +688,20 @@ packages:
 
   '@borewit/text-codec@0.2.2':
     resolution: {integrity: sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ==}
+
+  '@datadog/browser-core@7.1.0':
+    resolution: {integrity: sha512-loR/1/ZpqczABeGHFW6Az4hgGYmWwUaA2ame8gwOa3W16BtXnk+67suzo+pbaiG5gNjMpwDIFpUAYQjGYcoxUg==}
+
+  '@datadog/browser-rum-core@7.1.0':
+    resolution: {integrity: sha512-VHg8tpHAiWmuwUW7icBjeLcek/uM7EbTCoBc017Vp2RNzkLfqIiXfpmdm+vilWO1mYbW2adVR2AF2CTHQhVcgQ==}
+
+  '@datadog/browser-rum@7.1.0':
+    resolution: {integrity: sha512-JCtA7NWgH1XUvwBSKdsgU7qIeKFR68QtQVqPBoaNhyTx8Q5Ftec5Mz7cAKIYI/wvF0fSpwcqjp0JI1g1morWkw==}
+    peerDependencies:
+      '@datadog/browser-logs': 7.1.0
+    peerDependenciesMeta:
+      '@datadog/browser-logs':
+        optional: true
 
   '@esbuild/aix-ppc64@0.27.7':
     resolution: {integrity: sha512-EKX3Qwmhz1eMdEJokhALr0YiD0lhQNwDqkPYyPhiSwKrh7/4KRjQc04sZ8db+5DVVnZ1LmbNDI1uAMPEUBnQPg==}
@@ -3057,6 +3074,17 @@ snapshots:
       '@babel/helper-validator-identifier': 7.28.5
 
   '@borewit/text-codec@0.2.2': {}
+
+  '@datadog/browser-core@7.1.0': {}
+
+  '@datadog/browser-rum-core@7.1.0':
+    dependencies:
+      '@datadog/browser-core': 7.1.0
+
+  '@datadog/browser-rum@7.1.0':
+    dependencies:
+      '@datadog/browser-core': 7.1.0
+      '@datadog/browser-rum-core': 7.1.0
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true
