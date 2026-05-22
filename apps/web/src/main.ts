@@ -938,10 +938,16 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     return;
   }
   const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
+  // sprint-2/S2 fix-2 (codex P1): in-flight 중복만 차단하고, completion 후에는
+  // cache 를 풀어 다음 view (material 전환 후 재방문) 시 re-fetch 한다.
+  // workspace 의 annotation array 가 subject-level (material 별 분리 X) 이라
+  // material 전환 시 다른 material 의 데이터로 in-memory state 가 덮어쓰여
+  // session 동안 한 번만 fetch 시 stale 노출 위험.
   if (annotationFetchedKeys.has(cacheKey)) {
     return;
   }
   annotationFetchedKeys.add(cacheKey);
+  const releaseCache = () => annotationFetchedKeys.delete(cacheKey);
   try {
     const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
       credentials: "include"
@@ -979,8 +985,11 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       const incoming = json.payload as Partial<SubjectPdfWorkspace>;
       updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
     }
+    // sprint-2/S2 fix-2 (codex P1): release cache marker on completion so a
+    // future view (after material switch) re-fetches a fresh snapshot.
+    releaseCache();
   } catch (error) {
-    annotationFetchedKeys.delete(cacheKey);
+    releaseCache();
     console.warn("[study-note] annotation GET network error", error);
     recordFetchFailure();
   }
@@ -1368,11 +1377,16 @@ function updatePdfWorkspace(
     }
   };
   savePdfWorkspaceStore();
-  // sprint-2/S2: BE sync — debounced PUT for the active material's annotations.
-  // We send the per-material snapshot (sticky/pen/text/checklist/table/chart).
-  const material = updated.material;
-  if (material) {
-    const materialId = material.backendMaterialId ?? material.id;
+  // sprint-2/S2 fix (codex P1): only PUT annotations when the active material
+  // did not change. If the mutator only switched material (current.material →
+  // updated.material is a different id), the workspace's annotation arrays
+  // belong to the *previous* material and a PUT would mis-attribute them to
+  // the new material's BE record.
+  const previousMaterial = current.material;
+  const nextMaterial = updated.material;
+  const previousId = previousMaterial?.backendMaterialId ?? previousMaterial?.id;
+  const nextId = nextMaterial?.backendMaterialId ?? nextMaterial?.id;
+  if (nextMaterial && previousId === nextId) {
     const payload = {
       stickyNotes: updated.stickyNotes,
       inkStrokes: updated.inkStrokes,
@@ -1381,7 +1395,7 @@ function updatePdfWorkspace(
       tables: updated.tables,
       charts: updated.charts
     };
-    scheduleAnnotationPut(materialId, payload);
+    scheduleAnnotationPut(nextId!, payload);
   }
 }
 
