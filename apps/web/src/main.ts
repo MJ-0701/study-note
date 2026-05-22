@@ -1033,6 +1033,16 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
   }
   annotationFetchedKeys.add(cacheKey);
   const releaseCache = () => annotationFetchedKeys.delete(cacheKey);
+  // sprint-2/S3 fix (codex P2): before recording lastHydrated, re-check that
+  // the active material is still the one this fetch was started for. A fast
+  // A→B switch can let an older A response resolve after the newer B response;
+  // without this guard, A's resolution would overwrite the freshly-correct B
+  // marker and trigger a redundant B refetch on the next render.
+  const isStillActiveMaterial = (): boolean => {
+    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+    const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
+    return active === materialId;
+  };
   try {
     const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
       credentials: "include"
@@ -1042,7 +1052,13 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       // material. Keep the cache marker AND record lastHydrated so subsequent
       // re-renders of the same material short-circuit (no storm). Cross-device
       // creation that lands later is rehydrated on material switch revisit.
-      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+      // Guard against material-switch race: only mark this material as
+      // hydrated if the user is still on it.
+      if (isStillActiveMaterial()) {
+        lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+      } else {
+        releaseCache();
+      }
       return;
     }
     if (response.status === 401 || response.status === 403) {
@@ -1080,7 +1096,13 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     // the server anyway, so deferring the GET until the next material switch
     // is the correct trade.
     if (annotationPutTimers.has(materialId)) {
-      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+      // Material-switch race guard: do not record hydrate marker for a
+      // material the user is no longer viewing.
+      if (isStillActiveMaterial()) {
+        lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+      } else {
+        releaseCache();
+      }
       return;
     }
     recordFetchSuccess();
@@ -1099,7 +1121,14 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     // material currently occupies the subject's in-memory bundle. The
     // material-switch guard at the top of this function clears the cache key
     // when the active material differs, so revisits still re-fetch.
-    lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+    // Race guard: only mark if user is still on this material; otherwise
+    // updatePdfWorkspaceStoreFromServer already declined the hydrate, so
+    // setting lastHydrated would lie about in-memory state.
+    if (isStillActiveMaterial()) {
+      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
+    } else {
+      releaseCache();
+    }
   } catch (error) {
     releaseCache();
     console.warn("[study-note] annotation GET network error", error);
