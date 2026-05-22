@@ -13,6 +13,12 @@ let rumClient: DatadogRumClient | undefined;
 let initStarted = false;
 let pendingUser: RumUser | undefined;
 
+// RUM application id/client token are public browser SDK values, not Datadog API
+// keys. Vercel env remains the override path, but the fallback keeps production
+// instrumentation alive if the environment-specific Vite build env is missing.
+const FALLBACK_APPLICATION_ID = "ff4758ab-cf93-4aee-99ab-bbe6ac957f6f";
+const FALLBACK_CLIENT_TOKEN = "pube4196f9d76def0459684c80bdc4ac9ee";
+
 function envValue(name: string): string | undefined {
   const value = import.meta.env?.[name];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -38,8 +44,8 @@ export function initializeDatadogRum(): void {
     return;
   }
 
-  const applicationId = envValue("VITE_DD_APPLICATION_ID");
-  const clientToken = envValue("VITE_DD_CLIENT_TOKEN");
+  const applicationId = envValue("VITE_DD_APPLICATION_ID") ?? FALLBACK_APPLICATION_ID;
+  const clientToken = envValue("VITE_DD_CLIENT_TOKEN") ?? FALLBACK_CLIENT_TOKEN;
 
   if (!applicationId || !clientToken) {
     return;
