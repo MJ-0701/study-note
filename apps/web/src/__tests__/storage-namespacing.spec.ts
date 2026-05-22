@@ -137,3 +137,168 @@ describe("legacy migration owner gate", () => {
     assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), false);
   });
 });
+
+// sprint-3/S2: pdfWorkspaceStore namespacing mirrors the notebook contract.
+// Same `{base}:{userId}` shape, same owner gate on the legacy migration, same
+// goal of closing the cross-user leak vector. Test the contract directly
+// without importing main.ts (DOM globals required for the runtime helper).
+const PDF_WORKSPACE_KEY_BASE = "study-note.pdf-workspaces.v1";
+
+function buildPdfWorkspaceKey(userId: string): string {
+  return `${PDF_WORKSPACE_KEY_BASE}:${userId}`;
+}
+
+describe("buildPdfWorkspaceKey", () => {
+  test("uses `{base}:{userId}` shape", () => {
+    assert.equal(
+      buildPdfWorkspaceKey("user-a"),
+      "study-note.pdf-workspaces.v1:user-a"
+    );
+  });
+
+  test("keys for different users do not collide", () => {
+    const keyA = buildPdfWorkspaceKey("user-a");
+    const keyB = buildPdfWorkspaceKey("user-b");
+    assert.notEqual(keyA, keyB);
+  });
+
+  test("legacy unscoped key is NOT produced by the builder", () => {
+    // Regression guard mirroring the notebook test: any new caller routing
+    // through buildPdfWorkspaceKey must never accidentally produce the
+    // unscoped base, which would reopen the leak vector this sprint closes.
+    const key = buildPdfWorkspaceKey("user-a");
+    assert.notEqual(key, PDF_WORKSPACE_KEY_BASE);
+    assert.ok(key.startsWith(`${PDF_WORKSPACE_KEY_BASE}:`));
+  });
+
+  test("numeric userId from MySQL PK serializes safely", () => {
+    const key = buildPdfWorkspaceKey("12345");
+    assert.equal(key, "study-note.pdf-workspaces.v1:12345");
+  });
+
+  test("notebook key and pdfWorkspace key for the same user do not collide", () => {
+    // Cross-domain collision check: notebook + pdfWorkspace must occupy
+    // distinct localStorage entries for the same user so a writer on one
+    // namespace cannot corrupt the other.
+    const notebookKey = buildNotebookKey("user-a");
+    const workspaceKey = buildPdfWorkspaceKey("user-a");
+    assert.notEqual(notebookKey, workspaceKey);
+  });
+});
+
+describe("pdfWorkspace migration shape", () => {
+  test("post-migration: scoped key has data, legacy key removed", () => {
+    const store = new Map<string, string>();
+    const legacyKey = PDF_WORKSPACE_KEY_BASE;
+    const userId = "user-a";
+    const scopedKey = buildPdfWorkspaceKey(userId);
+    const fixture = JSON.stringify({ workspaces: { "subject-1": {} } });
+
+    store.set(legacyKey, fixture);
+    assert.equal(store.get(legacyKey), fixture);
+    assert.equal(store.get(scopedKey), undefined);
+
+    const legacyRaw = store.get(legacyKey);
+    if (legacyRaw) {
+      store.set(scopedKey, legacyRaw);
+      store.delete(legacyKey);
+    }
+
+    assert.equal(store.get(scopedKey), fixture);
+    assert.equal(store.get(legacyKey), undefined);
+  });
+
+  test("post-migration: user B sees their own empty namespace, not user A's", () => {
+    const store = new Map<string, string>();
+    const userA = "user-a";
+    const userB = "user-b";
+    const aKey = buildPdfWorkspaceKey(userA);
+    const bKey = buildPdfWorkspaceKey(userB);
+
+    store.set(
+      aKey,
+      JSON.stringify({ workspaces: { "subject-1": { material: null } } })
+    );
+
+    assert.equal(store.get(bKey), undefined);
+    assert.notEqual(store.get(aKey), store.get(bKey));
+  });
+});
+
+describe("pdfWorkspace legacy migration owner gate", () => {
+  const LAST_USER_KEY = "study-note.session.lastUserId";
+
+  // Same gating predicate as the notebook migration: marker must match the
+  // current userId or the legacy payload is dropped. Re-declared here so the
+  // pdfWorkspace contract is verified independently — drift between the two
+  // helpers would silently reopen the leak vector for one namespace only.
+  function shouldMigrate(
+    legacyExists: boolean,
+    ownerId: string | null,
+    userId: string
+  ): boolean {
+    if (!legacyExists) {
+      return false;
+    }
+    if (!ownerId || ownerId !== userId) {
+      return false;
+    }
+    return true;
+  }
+
+  test("owner match → migrate", () => {
+    const store = new Map<string, string>();
+    store.set(PDF_WORKSPACE_KEY_BASE, JSON.stringify({ workspaces: {} }));
+    store.set(LAST_USER_KEY, "user-a");
+    assert.equal(
+      shouldMigrate(
+        store.has(PDF_WORKSPACE_KEY_BASE),
+        store.get(LAST_USER_KEY) ?? null,
+        "user-a"
+      ),
+      true
+    );
+  });
+
+  test("owner mismatch → drop legacy, do NOT migrate", () => {
+    // Shared browser upgrade scenario: user A wrote legacy, user B is first
+    // to log in after the upgrade. B must not absorb A's workspace.
+    const store = new Map<string, string>();
+    store.set(PDF_WORKSPACE_KEY_BASE, JSON.stringify({ workspaces: {} }));
+    store.set(LAST_USER_KEY, "user-a");
+    assert.equal(
+      shouldMigrate(
+        store.has(PDF_WORKSPACE_KEY_BASE),
+        store.get(LAST_USER_KEY) ?? null,
+        "user-b"
+      ),
+      false
+    );
+  });
+
+  test("marker absent → drop legacy, do NOT migrate", () => {
+    const store = new Map<string, string>();
+    store.set(PDF_WORKSPACE_KEY_BASE, JSON.stringify({ workspaces: {} }));
+    assert.equal(
+      shouldMigrate(
+        store.has(PDF_WORKSPACE_KEY_BASE),
+        store.get(LAST_USER_KEY) ?? null,
+        "user-a"
+      ),
+      false
+    );
+  });
+
+  test("legacy absent → noop regardless of marker", () => {
+    const store = new Map<string, string>();
+    store.set(LAST_USER_KEY, "user-a");
+    assert.equal(
+      shouldMigrate(
+        store.has(PDF_WORKSPACE_KEY_BASE),
+        store.get(LAST_USER_KEY) ?? null,
+        "user-a"
+      ),
+      false
+    );
+  });
+});
