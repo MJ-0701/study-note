@@ -91,52 +91,15 @@ describe("notebook migration shape", () => {
   });
 });
 
-// sprint-3/S1 fix (codex P1): legacy migration must be gated to the owner
-// identified by the sprint-2 marker. Otherwise a shared-browser upgrade lets
-// the next user logging in absorb the previous user's legacy notebook.
-describe("legacy migration owner gate", () => {
-  const LAST_USER_KEY = "study-note.session.lastUserId";
-
-  function shouldMigrate(legacyExists: boolean, ownerId: string | null, userId: string): boolean {
-    if (!legacyExists) {
-      return false;
-    }
-    if (!ownerId || ownerId !== userId) {
-      return false;
-    }
-    return true;
-  }
-
-  test("owner match → migrate", () => {
-    const store = new Map<string, string>();
-    store.set(NOTEBOOK_KEY_BASE, "{}");
-    store.set(LAST_USER_KEY, "user-a");
-    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), true);
-  });
-
-  test("owner mismatch → drop legacy, do NOT migrate", () => {
-    // Shared browser upgrade scenario: user A wrote legacy, user B is first to
-    // log in after the upgrade. B must not absorb A's notebook.
-    const store = new Map<string, string>();
-    store.set(NOTEBOOK_KEY_BASE, "{}");
-    store.set(LAST_USER_KEY, "user-a");
-    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-b"), false);
-  });
-
-  test("marker absent → drop legacy, do NOT migrate", () => {
-    // Fresh browser or pre-marker rollout. Without the owner signal we cannot
-    // safely attribute the legacy payload to anyone.
-    const store = new Map<string, string>();
-    store.set(NOTEBOOK_KEY_BASE, "{}");
-    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), false);
-  });
-
-  test("legacy absent → noop regardless of marker", () => {
-    const store = new Map<string, string>();
-    store.set(LAST_USER_KEY, "user-a");
-    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), false);
-  });
-});
+// sprint-4/S1: legacy migration + owner gate removed. The marker
+// (`study-note.session.lastUserId`) is no longer written, so the runtime
+// helper `migrateLegacyNotebookForUser` has been deleted entirely. Legacy
+// unscoped keys that remain in any pre-sprint-3/S1 browser stay orphaned
+// (never read, never migrated) — server autosave is the SoT and GET hydrate
+// restores notebook data on session attach. The previous "legacy migration
+// owner gate" describe block has been intentionally removed; loading from a
+// fresh scoped key returning the fixture default is sufficient and verified
+// by the runtime path in `loadStoredNotebook`.
 
 // sprint-3/S2: pdfWorkspaceStore namespacing mirrors the notebook contract.
 // Same `{base}:{userId}` shape, same owner gate on the legacy migration, same
@@ -225,80 +188,8 @@ describe("pdfWorkspace migration shape", () => {
   });
 });
 
-describe("pdfWorkspace legacy migration owner gate", () => {
-  const LAST_USER_KEY = "study-note.session.lastUserId";
-
-  // Same gating predicate as the notebook migration: marker must match the
-  // current userId or the legacy payload is dropped. Re-declared here so the
-  // pdfWorkspace contract is verified independently — drift between the two
-  // helpers would silently reopen the leak vector for one namespace only.
-  function shouldMigrate(
-    legacyExists: boolean,
-    ownerId: string | null,
-    userId: string
-  ): boolean {
-    if (!legacyExists) {
-      return false;
-    }
-    if (!ownerId || ownerId !== userId) {
-      return false;
-    }
-    return true;
-  }
-
-  test("owner match → migrate", () => {
-    const store = new Map<string, string>();
-    store.set(PDF_WORKSPACE_KEY_BASE, JSON.stringify({ workspaces: {} }));
-    store.set(LAST_USER_KEY, "user-a");
-    assert.equal(
-      shouldMigrate(
-        store.has(PDF_WORKSPACE_KEY_BASE),
-        store.get(LAST_USER_KEY) ?? null,
-        "user-a"
-      ),
-      true
-    );
-  });
-
-  test("owner mismatch → drop legacy, do NOT migrate", () => {
-    // Shared browser upgrade scenario: user A wrote legacy, user B is first
-    // to log in after the upgrade. B must not absorb A's workspace.
-    const store = new Map<string, string>();
-    store.set(PDF_WORKSPACE_KEY_BASE, JSON.stringify({ workspaces: {} }));
-    store.set(LAST_USER_KEY, "user-a");
-    assert.equal(
-      shouldMigrate(
-        store.has(PDF_WORKSPACE_KEY_BASE),
-        store.get(LAST_USER_KEY) ?? null,
-        "user-b"
-      ),
-      false
-    );
-  });
-
-  test("marker absent → drop legacy, do NOT migrate", () => {
-    const store = new Map<string, string>();
-    store.set(PDF_WORKSPACE_KEY_BASE, JSON.stringify({ workspaces: {} }));
-    assert.equal(
-      shouldMigrate(
-        store.has(PDF_WORKSPACE_KEY_BASE),
-        store.get(LAST_USER_KEY) ?? null,
-        "user-a"
-      ),
-      false
-    );
-  });
-
-  test("legacy absent → noop regardless of marker", () => {
-    const store = new Map<string, string>();
-    store.set(LAST_USER_KEY, "user-a");
-    assert.equal(
-      shouldMigrate(
-        store.has(PDF_WORKSPACE_KEY_BASE),
-        store.get(LAST_USER_KEY) ?? null,
-        "user-a"
-      ),
-      false
-    );
-  });
-});
+// sprint-4/S1: pdfWorkspace 의 legacy migration + owner gate 도 동일하게
+// 제거됨. `migrateLegacyPdfWorkspaceForUser` 함수와 `LAST_USER_KEY` marker
+// 의존이 main.ts 에서 사라졌으므로 본 spec 의 owner gate describe block 도
+// 제거. 신규 사용자는 `loadPdfWorkspaceStore(userId)` 가 빈 store 를
+// 반환하고 BE 의 hot path GET 이 annotation 을 hydrate 한다.

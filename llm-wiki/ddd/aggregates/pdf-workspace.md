@@ -97,10 +97,8 @@ boot
 session attach
   pdfWorkspaceStore := loadPdfWorkspaceStore(userId)
     - scoped key 있으면 parse + hydrate (fail-closed per item)
-    - 없으면 migrateLegacyPdfWorkspaceForUser(userId)
-        - owner marker 일치 → 2-phase write → 성공 시 legacy 삭제
-        - 불일치 → legacy drop, empty store
-    - migration 실패 / 미존재 → { workspaces: {} }
+    - 없으면 { workspaces: {} } (sprint-4/S1 이후 legacy migration helper 제거
+      — server annotation GET hydrate 가 SoT 로 복원)
 
 user annotation
   updatePdfWorkspace(subjectId, (ws) => ({ ...ws, [mutation] }))

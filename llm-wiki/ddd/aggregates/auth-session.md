@@ -32,16 +32,18 @@ summary: FE in-memory AuthSession + BE cookie session 의 라이프사이클, A�
 | Variable | 정의 | 의미 |
 |---|---|---|
 | `authSession` | `main.ts` 변수 | FE 현재 session (cookie 기반, in-memory) |
-| `lastSessionUserId` | `main.ts:209` | 직전 attach 된 userId. A→B 전환 detection. |
-| `lastSessionUserStorageKey` | `main.ts:182` = `study-note.session.lastUserId` | localStorage marker. 페이지 reload 후에도 lastSessionUserId 보존. |
+| `lastSessionUserId` | `main.ts:211` | 직전 attach 된 userId (in-memory only, sprint-4/S1 이후). 같은 page lifetime 안의 A→B 전환 detection 용도. |
+| ~~`lastSessionUserStorageKey`~~ | **DEPRECATED** (sprint-4/S1 제거) | 이전엔 marker 가 cross-reload 보존 + legacy migration owner gate 두 용도. 두 기능 모두 폐기 → marker write/read 제거. |
 | `authBootRequestId` | retry / abort 무력화용 token | 새 boot cycle 시 증가, 이전 cycle 의 timer 무력화 |
 
 ## Invariants
 
 ### A1. authSession.user.id = userId 의 live SoT
-- localStorage marker (`lastSessionUserStorageKey`) 는 **legacy migration owner
-  gate + A→B detection** 에만 쓰는 보조 식별자. 절대 인증 정체성으로 사용 X.
-- 위반 = marker 조작으로 인증 우회.
+- `lastSessionUserId` (in-memory) 는 **A→B 전환 detection** 용도. cookie session
+  검증 결과를 보조적으로 재확인하는 게 아니라, 단순히 "직전 attach 된 userId
+  가 누구였는지" 를 기록한다. 인증 정체성은 항상 `authSession.user.id` /
+  cookie 가 SoT.
+- 위반 = `lastSessionUserId` 를 인증 정체성으로 신뢰 → 우회 risk.
 
 ### A2. clearAuthSession 은 transient /v1/auth/me 실패에도 호출됨
 - network blip / cold start 로 `/v1/auth/me` 가 잠시 fail → `clearAuthSession`
@@ -79,23 +81,23 @@ summary: FE in-memory AuthSession + BE cookie session 의 라이프사이클, A�
 ```
 boot
   authSession := undefined
-  lastSessionUserId := localStorage[lastSessionUserStorageKey] ?? undefined
+  lastSessionUserId := undefined        (sprint-4/S1: marker 제거, in-memory only)
 
   attemptSessionRevalidation()
-    → GET /v1/auth/me with 45s timeout
+    → GET /api/v1/auth/me with 45s timeout
     → success: authSession = response
                 applySessionTransitionForUser(userId)
     → 4xx unauthorized: authSession 그대로 undefined
     → 5xx / timeout: retry up to 3, then clearAuthSession (data 보존)
 
 sign-in
-  POST /v1/auth/sign-in
+  POST /api/v1/auth/sign-in
     → success: authSession = response
                 applySessionTransitionForUser(userId)
     → fail: 에러 banner
 
 logout
-  POST /v1/auth/sign-out
+  POST /api/v1/auth/sign-out
   clearAuthSession()
     - authBootRequestId++
     - in-flight PUT abort
@@ -108,11 +110,12 @@ session attach (transition)
   applySessionTransitionForUser(newUserId)
     1. notebook := loadStoredNotebook(newUserId)
     2. pdfWorkspaceStore := loadPdfWorkspaceStore(newUserId)   (sprint-3/S2)
-    3. if lastSessionUserId === newUserId → return  (같은 user)
-    4. if lastSessionUserId === undefined → marker 만 기록, return  (first attach)
-    5. (다른 user) sync caches clear + in-flight abort + failure tracker reset
-       (sprint-3/S3 이후 pdfWorkspace wipe 제거)
-    6. lastSessionUserId := newUserId, marker localStorage 갱신
+    3. if lastSessionUserId === newUserId → return  (같은 user 재attach)
+    4. if lastSessionUserId === undefined → in-memory marker 만 기록, return
+       (page lifetime 의 first attach — sync cache 가 empty 라 reset 불필요)
+    5. (다른 user — page lifetime 안의 A→B 전환) sync caches clear + in-flight
+       abort + failure tracker reset (sprint-3/S3 이후 pdfWorkspace wipe 제거)
+    6. lastSessionUserId := newUserId (in-memory only)
 ```
 
 ## 외부 의존
@@ -128,9 +131,9 @@ session attach (transition)
 - sprint-3/S1 — notebook namespacing, wipe 제거
 - sprint-3/S2 — pdfWorkspace namespacing, sprint-2 wipe 의 마지막 가지 제거
 - sprint-3/S3 — `applySessionTransitionForUser` 의 pdfWorkspace wipe 제거. marker 는 migration owner gate 이유로 유지, deprecation 의도 주석.
+- sprint-4/S1 — `lastSessionUserStorageKey` marker write/read + `migrateLegacy*ForUser` helper 2개 완전 제거. `lastSessionUserId` 는 in-memory only.
 
 ## Open questions / TODO
 
-- marker 의 완전한 deprecation 시점 (legacy 키가 사실상 사라진 뒤).
 - account merge / id rotation 정책 미정 — 별도 sprint.
 - session timeout 정책 (BE cookie expiry vs FE re-attach) 명시 필요.

@@ -78,10 +78,8 @@ boot
 session attach (revalidate / sign-in)
   notebook := loadStoredNotebook(userId)
     - scoped key 있으면 parse + hydrate
-    - 없으면 migrateLegacyNotebookForUser(userId)
-        - owner marker 일치 → 2-phase write (scoped) → 성공 시 legacy 삭제
-        - 불일치 → legacy drop, return undefined
-    - migration 실패 시 sampleLectureNote
+    - 없으면 sampleLectureNote (sprint-4/S1 이후 legacy migration helper 제거
+      — server GET hydrate 가 sprint-2 autosave 의 SoT 로 복원)
 
 user edit
   notebook = { ...notebook, ...patch }

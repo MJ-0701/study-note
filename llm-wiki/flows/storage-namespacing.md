@@ -38,54 +38,30 @@ summary: sprint-3 의 localStorage `{base}:{userId}` namespacing 정책. noteboo
 |---|---|
 | `studyNote.pdfWorkspace.inspectorDrill` | inspector drill UI state |
 | `studyNote.pdfWorkspace.inspectorOpen` | inspector 펼침/접힘 |
-| `study-note.session.lastUserId` | A→B detection + migration owner gate |
 
-→ 위 3개는 UI preference / session marker 라 cross-user 무해.
+→ 위 2개는 UI preference 라 cross-user 무해.
 
-## Migration 알고리즘
+> **sprint-4/S1 변경**: 이전엔 `study-note.session.lastUserId` marker 가
+> A→B detection + legacy migration owner gate 두 용도로 쓰였지만 marker 자체가
+> 제거됐다. A→B detection 은 in-memory `lastSessionUserId` 만으로 충분 (page
+> reload 시 pending PUT 도 사라지므로 marker 가 cross-page 보존할 필요 없음).
+> legacy migration 도 helper 자체가 삭제됨.
 
-`migrateLegacyNotebookForUser(userId)` / `migrateLegacyPdfWorkspaceForUser(userId)`:
+## Legacy migration (sprint-4/S1 이전) — DEPRECATED
 
-```
-1. localStorage[<base>] 읽기 (legacy)
-   - 없으면 return undefined (migration 불필요)
+`migrateLegacyNotebookForUser` / `migrateLegacyPdfWorkspaceForUser` 는 sprint-4/S1
+에서 함수 자체가 삭제됐다. 정책 변경 이유:
 
-2. localStorage[<lastSessionUserStorageKey>] 읽기 (owner marker)
-   - marker 부재 OR marker ≠ userId
-     → legacy drop (removeItem)
-     → return undefined
-   - marker === userId → 진행
+- marker (`study-note.session.lastUserId`) 가 제거되면서 owner gate 신호가
+  사라짐.
+- gate 없이 legacy 데이터를 자동으로 migrate 하면 shared browser scenario 에서
+  user B 가 user A 의 pre-sprint-3 데이터를 자동 흡수.
+- gate 없이 항상 drop 한다면 helper 가 사실상 cleanup 만 수행 — 그것조차도
+  사용자가 "로컬 import 초기화" 버튼으로 명시 수행하면 충분.
 
-3. legacy 페이로드 JSON parse + shape 검증
-   - invalid → legacy drop, return undefined
-   - valid → 진행
-
-4. 2-phase write
-   a. localStorage[<scopedKey>] = legacy 페이로드 (setItem)
-      - 실패 (quota / private mode):
-          - legacy 그대로 남김 (다음 load 재시도)
-          - return parsed (in-memory copy, current session 보존)
-   b. setItem 성공 시 localStorage.removeItem(legacy)
-      - removeItem 실패: silent (scoped 이미 적힘 → idempotent)
-      - return parsed
-```
-
-→ 2-phase 의 의미: setItem 실패가 데이터 손실로 이어지지 않게.
-
-## Owner gate 의 이유
-
-shared browser 시나리오:
-
-```
-이전 버전 (sprint-2 이전): user A 가 localStorage 에 unscoped notebook 적음
-upgrade 후: user B 가 같은 브라우저에서 처음 로그인
-  if no owner gate: B 의 첫 load 가 A 의 notebook 을 B 의 namespace 로 migrate
-                    → B 가 A 의 데이터 보임 + 자기 BE 에 A 의 body PUT
-  with owner gate: marker = "user-a", B = "user-b" → 불일치
-                    legacy drop, B 는 빈 namespace 에서 시작
-                    A 의 데이터는 영구 손실 (의도된 trade-off — A 가 다른
-                    브라우저에서 재로그인하면 BE GET hydrate 로 복원)
-```
+→ 현재 정책: legacy unscoped key 가 어떤 브라우저에 잔존해도 절대 read 하지
+않는다. 사용자가 명시적으로 reset 버튼을 누를 때만 removeItem 으로 정리.
+server autosave 가 SoT 이므로 데이터 손실 X (GET hydrate 가 복원).
 
 ## Module-init / load 분기
 
@@ -94,7 +70,7 @@ module-init (boot, isBrowserRuntime = window 존재):
   notebook = sampleLectureNote
   pdfWorkspaceStore = { workspaces: {} }
   authSession = undefined
-  lastSessionUserId = localStorage[lastSessionUserStorageKey] ?? undefined
+  lastSessionUserId = undefined        (sprint-4/S1: marker 제거, in-memory only)
 
   (sprint-3 이전엔 module-init 에서 localStorage read 했지만, userId 없이는
   scoped key 선택 불가. boot 는 fixture/empty 로 시작 + session attach 시 load.)
@@ -132,16 +108,17 @@ pdfWorkspaceStore = { workspaces: {} }
 
 ## 검증
 
-`apps/web/src/__tests__/storage-namespacing.spec.ts` — 21 case:
+`apps/web/src/__tests__/storage-namespacing.spec.ts` — 13 case (sprint-4/S1
+에서 owner gate × 8 case 제거):
 - buildNotebookKey / buildPdfWorkspaceKey shape (4 + 5)
-- 마이그레이션 후 store 모양 (2 + 2)
-- 오너 게이트 (4 + 4)
+- 네임스페이스 격리 모양 (2 + 2)
 
 ## 변경 이력
 
 - sprint-3/S1 — notebook namespacing + migration + owner gate
 - sprint-3/S2 — pdfWorkspace namespacing + migration + owner gate (S1 패턴 미러)
 - sprint-3/S3 — `applySessionTransitionForUser` 의 destructive wipe 제거 (namespacing 이 격리)
+- sprint-4/S1 — marker (`study-note.session.lastUserId`) write 제거 + `migrateLegacy*ForUser` helper 2개 삭제 + owner gate spec 8 case 제거. `lastSessionUserId` = in-memory only.
 
 ## Open / TODO
 

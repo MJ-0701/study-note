@@ -54,7 +54,7 @@ summary: study-note 의 도메인 용어집. canonical meaning + 금기 의미. 
 | AuthSession | FE in-memory 사용자 인증 상태. `authSession.user.id` 가 userId SoT. | localStorage session |
 | userId | `authSession.user.id`. MySQL BIGINT → string. localStorage namespacing 의 키. | studentNumber, login id |
 | applySessionTransitionForUser | session attach 시 호출되는 transition routine. namespaced load + (다른 user 일 때) sync cache reset. | 단순 login handler |
-| lastSessionUserStorageKey | localStorage marker `study-note.session.lastUserId`. legacy migration owner gate + 다른 user 감지에 사용. (sprint-3 이후 deprecation 의도) | 영구 사용자 식별자 |
+| ~~lastSessionUserStorageKey~~ | **DEPRECATED** — sprint-4/S1 에서 marker write/read 완전 제거. 이전엔 `study-note.session.lastUserId` 가 legacy migration owner gate + cross-reload A→B detection 에 쓰였지만 두 기능 모두 폐기. `lastSessionUserId` 는 sprint-4/S1 이후 in-memory only. | 영구 사용자 식별자 |
 | clearAuthSession | session 해제 routine. transient /v1/auth/me 실패에도 호출되므로 destructive reset 금지. | logout 만의 의미 |
 
 ## Sync / Storage
