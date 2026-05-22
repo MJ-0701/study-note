@@ -23,7 +23,6 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production \
-    NODE_OPTIONS="--require dd-trace/init" \
     DD_SERVICE=study-note-api \
     DD_ENV=production \
     DD_SITE=us5.datadoghq.com \
@@ -72,6 +71,8 @@ COPY --from=datadog/serverless-init:1-alpine /datadog-init /app/datadog-init
 
 # Entrypoint: DB wait → migrate deploy → optional seed → exec app
 COPY --chmod=0755 apps/api/docker-entrypoint.sh ./apps/api/docker-entrypoint.sh
+
+ENV NODE_OPTIONS="--require dd-trace/init"
 
 EXPOSE 3010
 ENTRYPOINT ["/app/datadog-init"]
