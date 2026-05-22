@@ -101,6 +101,41 @@ VITE_DD_TRACK_USER_INTERACTIONS=false</code></pre>
       </section>
 
       <section>
+        <h2>Azure Backend APM 환경변수</h2>
+        <p>
+          백엔드는 Datadog에서 <code>study-note-api</code> 서비스로 생성되게 합니다.
+          API key는 코드와 GitHub에 넣지 않고 Azure Container App secret으로만 보관합니다.
+        </p>
+        <pre><code>DD_API_KEY=secretref:dd-api-key
+DD_SERVICE=study-note-api
+DD_ENV=production
+DD_VERSION=&lt;be tag version&gt;
+DD_SITE=us5.datadoghq.com
+DD_LOGS_ENABLED=true
+DD_LOGS_INJECTION=true
+DD_SOURCE=nodejs</code></pre>
+        <div class="grid">
+          <div class="card">
+            <h3>사용자 콘솔 작업</h3>
+            <p>Datadog API key 생성 후 Azure Container Apps의 <code>study-note-api</code>에 secret <code>dd-api-key</code>로 저장합니다.</p>
+          </div>
+          <div class="card">
+            <h3>배포 후 확인</h3>
+            <p>Datadog <code>APM</code> -> <code>Services</code>에서 <code>study-note-api</code>를 열고 API latency, 5xx, logs를 확인합니다.</p>
+          </div>
+        </div>
+        <pre><code>az containerapp secret set \
+  --name study-note-api \
+  --resource-group study-note-be-rg \
+  --secrets dd-api-key=&lt;DATADOG_API_KEY&gt;
+
+az containerapp update \
+  --name study-note-api \
+  --resource-group study-note-be-rg \
+  --set-env-vars DD_API_KEY=secretref:dd-api-key</code></pre>
+      </section>
+
+      <section>
         <h2>처음 볼 지표</h2>
         <table>
           <thead>
@@ -109,7 +144,7 @@ VITE_DD_TRACK_USER_INTERACTIONS=false</code></pre>
           <tbody>
             <tr><td>Frontend</td><td>RUM sessions, browser errors, resource latency</td><td>Vercel 배포 후 사용자 브라우저에서 깨지는지 확인</td></tr>
             <tr><td>Product</td><td>signup, login, PDF upload, annotation actions</td><td>학습 퍼널과 activation 확인</td></tr>
-            <tr><td>Backend</td><td><code>azure.app_containerapps.*</code>, API 5xx, p95 latency</td><td>Azure Container Apps 상태와 백엔드 회귀 확인</td></tr>
+            <tr><td>Backend</td><td><code>study-note-api</code> traces/logs, API 5xx, p95 latency</td><td>Spring Boot APM처럼 요청 단위 병목과 에러 원인 확인</td></tr>
             <tr><td>Cost</td><td>Datadog usage, Azure credit</td><td>학생팩/학생 크레딧 한도 관리</td></tr>
           </tbody>
         </table>

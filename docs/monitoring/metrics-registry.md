@@ -35,7 +35,7 @@ Allowed examples: `role`, `env`, `service`, `version`, `status_code`,
 |---|---|---|---|---|
 | OBS-001 | candidate | RUM | browser errors, resource latency | Detect broken FE deploys. |
 | OBS-002 | candidate | Azure integration | `azure.app_containerapps.*` | Observe ACA requests, replicas, restarts, CPU, memory, cold starts. |
-| OBS-003 | candidate | APM/logs | API 5xx rate, p95 latency | Detect BE regressions. |
+| OBS-003 | implementing | APM/logs | service `study-note-api`, API 5xx rate, p95 latency, trace-linked logs | Detect BE regressions and debug request paths like Spring Boot APM. |
 | PROD-001 | candidate | RUM action | `sign_up_started`, `sign_up_completed` | Signup funnel. |
 | PROD-002 | candidate | RUM action | `login_completed` | Returning user access. |
 | PROD-003 | candidate | RUM action | `pdf_upload_started`, `pdf_upload_completed`, `pdf_upload_failed` | PDF ingestion funnel. |
@@ -56,3 +56,4 @@ Allowed examples: `role`, `env`, `service`, `version`, `status_code`,
 | Date | Change | Reason |
 |---|---|---|
 | 2026-05-22 | Created initial Datadog-first registry. | Student-pack Datadog is active; FE is Vercel; BE is Azure Container Apps. |
+| 2026-05-23 | Added backend APM target service `study-note-api`. | RUM is active; backend traces/logs are needed for API latency, 5xx, and request debugging. |

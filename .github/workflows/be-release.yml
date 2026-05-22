@@ -11,8 +11,9 @@
 #   5. Container App 이미지 업데이트 → 새 revision 자동 생성
 #
 # Container App: study-note-api (study-note-be-rg, Korea Central)
-# Container App 의 기존 secrets (database-url, session-token-pepper) 와
-# env vars 는 이미지 업데이트 시 유지된다.
+# Container App 의 기존 secrets (database-url, session-token-pepper, dd-api-key) 와
+# env vars 는 이미지 업데이트 시 유지된다. Datadog APM 전송에는 Container App
+# env 에 DD_API_KEY=secretref:dd-api-key 가 먼저 등록되어 있어야 한다.
 #
 # 프론트엔드는 별도 워크플로우 (fe-release.yml, `fe-v*` 태그) 로 분리 배포.
 
@@ -107,6 +108,7 @@ jobs:
       - name: Update Container App with new image
         # --image 만 갱신: 기존 secrets (database-url, session-token-pepper) 와
         # env vars 는 그대로 유지되고 새 revision 이 자동 생성된다.
+        # DD_API_KEY 는 secretref 로 수동 등록된 값을 유지한다.
         # DEPLOY_TAG/SHA 는 운영 디버깅용 — 어떤 태그/커밋이 배포됐는지 확인 가능.
         run: |
           az containerapp update \
@@ -115,7 +117,16 @@ jobs:
             --image "${{ steps.meta.outputs.image_tag }}" \
             --set-env-vars \
               "DEPLOY_TAG=${{ github.ref_name }}" \
-              "DEPLOY_SHA=${{ github.sha }}"
+              "DEPLOY_SHA=${{ github.sha }}" \
+              "DD_SERVICE=study-note-api" \
+              "DD_ENV=production" \
+              "DD_VERSION=${{ steps.meta.outputs.version }}" \
+              "DD_SITE=us5.datadoghq.com" \
+              "DD_AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+              "DD_AZURE_RESOURCE_GROUP=${{ env.RESOURCE_GROUP }}" \
+              "DD_LOGS_ENABLED=true" \
+              "DD_LOGS_INJECTION=true" \
+              "DD_SOURCE=nodejs"
 
       - name: Show new revision info
         run: |
