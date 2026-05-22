@@ -28,9 +28,14 @@ SoT.
 
 ## 의존 / 사용처
 
-- apps/web: 모든 도메인 타입 import + factory 사용.
-- apps/api: BE controller / service 가 DTO 변환 시 동일 타입 참조 (예:
-  `BackendPdfMaterialInput` → BE 직렬화 schema).
+- apps/web: 모든 도메인 타입 import + factory 사용. `PdfMaterialDraft`,
+  `SubjectPdfWorkspace`, `StudyNotebook`, factory/mutator 전부 FE 측 사용.
+- apps/api: BE 측이 import 하는 도메인 타입은 주로 **`UserProfile`,
+  `PdfMaterialRecord`, `AnnotationSnapshotRecord`** 이다 (`apps/api/src/materials/`,
+  `apps/api/src/pdf-annotations/` 에서 grep). `BackendPdfMaterialInput` 은 FE 가
+  BE 응답을 받아 `createPdfMaterialFromBackend` 으로 변환할 때 쓰는 **FE-facing
+  schema mirror** 이지 BE 가 직접 응답에 쓰는 타입은 아니다 — anti-corruption
+  layer 의 입력 형식으로 보는 게 정확.
 
 ## 명명 규칙
 

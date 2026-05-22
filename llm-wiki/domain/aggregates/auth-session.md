@@ -62,11 +62,17 @@ summary: FE in-memory AuthSession + BE cookie session 의 라이프사이클, A�
 - `AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500` — 사용자에게 "깨우는 중" banner.
 - 위반 = cold start 도중 false negative (clearAuthSession 발화).
 
-### A5. userId-aware load/save 강제
-- `loadStoredNotebook(userId)`, `saveNotebook(notebook, userId?)`,
-  `loadPdfWorkspaceStore(userId)`, `savePdfWorkspaceStore(userId?)` 모두 userId
-  필수. session 부재 시 save = noop, load = fixture/empty.
-- TypeScript signature 가 컴파일 단계에서 enforced.
+### A5. userId-aware load/save (type-required load, runtime-guarded save)
+- `loadStoredNotebook(userId)` / `loadPdfWorkspaceStore(userId)` 는 userId 가
+  **required parameter** 라 컴파일 단계에서 enforced — 호출 site 가 userId 를
+  반드시 넣어야 한다.
+- `saveNotebook(notebook, userId = authSession?.user.id)` / `savePdfWorkspaceStore(userId = authSession?.user.id)`
+  는 optional default + **runtime noop**: userId 가 undefined 면 그대로 return.
+  즉 TS 가 모든 save 호출자에게 userId 를 강제하지는 않고, 런타임에서 session
+  부재일 때 silent skip 한다.
+- 위반 사례: save 시점에 session 이 없는 줄 모르고 호출 → 데이터가 어디에도
+  저장되지 않은 채 흘러감 (silent). 호출자는 session attach 이후에만 의미 있는
+  save 가 일어난다는 점을 기대해야 한다.
 
 ## 라이프사이클
 

@@ -46,7 +46,7 @@ summary: 무엇을 찾을 때 어떤 wiki page 와 어떤 원문 경로를 먼�
 |---|---|---|
 | "이 결정 왜 이렇게 됐지" | [references/decisions](references/decisions.md) | `.sfs-local/decisions/`, `docs/solon/decisions/` |
 | "지난 sprint 무엇을 했나" | [references/sprints](references/sprints.md) | `.sfs-local/sprints/`, git log |
-| "표준 / 컨벤션" | [references/standards](references/standards.md) | `CLAUDE.md`, `SFS.md`, `docs/standards/` (없으면 user CLAUDE.md) |
+| "표준 / 컨벤션" | [references/standards](references/standards.md) | repo-local `CLAUDE.md`, `SFS.md`. `docs/standards/` 는 현재 부재 (standards.md "Repo-local 부재 표준" 섹션 참조). user-home 파일은 wiki SoT 아님. |
 
 ## sprint 진입 시 권장 retrieval 순서
 

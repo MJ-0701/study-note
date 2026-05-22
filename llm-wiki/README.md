@@ -41,13 +41,31 @@ handoff 시 broad repo scan 대신 wiki map 을 먼저 읽고, 필요한 원문�
 
 - **By reference, not by copy.** 큰 원문을 wiki 에 붙여 넣지 않는다. summary +
   파일 경로 / 줄 번호 / sprint id / decision id 링크만.
-- **Source truth = code + docs/solon + .sfs-local.** wiki 가 원문과 충돌하면
-  원문이 이긴다. wiki 는 그 충돌을 빠르게 찾는 색인이지 자기 SSoT 가 아니다.
+- **Source truth = repo-local code + docs/solon + .sfs-local.** user-home
+  파일 (`~/.claude/`, `~/.gstack/`) 은 wiki 의 SoT 가 아니다. wiki 가 원문과
+  충돌하면 원문이 이긴다.
 - **DDD lens.** 모든 페이지는 bounded context / aggregate / invariant /
-  ubiquitous language 중 하나로 정렬되어야 한다. "그냥 잡문" 는 만들지 않는다.
+  ubiquitous language 중 하나로 정렬되어야 한다. "그냥 잡문" 은 만들지 않는다.
 - **Sprint 갱신 의무.** sprint 가 domain language, aggregate boundary,
   invariant, release flow 를 바꾸면 retro 또는 다음 sprint 진입 전에 관련 wiki
-  page 를 갱신하거나 follow-up gap 으로 기록한다.
+  page 를 갱신하거나 follow-up gap 으로 기록한다 (아래 routing table 참조).
+
+## 갱신 routing table
+
+변경 종류 → 갱신 의무 page. 미수 = wiki drift.
+
+| 변경한 것 | 함께 갱신할 wiki page |
+|---|---|
+| domain 타입 추가/변경 (`packages/domain/src/*.ts`) | 해당 `domain/aggregates/<name>.md` + `domain/ubiquitous-language.md` + `modules/packages-domain.md` |
+| controller path / endpoint 추가/변경 (`apps/api/src/*/controller.ts`) | `modules/apps-api.md` (endpoint 표) + 영향 받는 `flows/<flow>.md` |
+| storage key 추가/변경 (localStorage, R2 prefix, MySQL 컬럼) | `flows/storage-namespacing.md` + `domain/invariants.md` (I1, I7) + 해당 aggregate page |
+| sync flow (debounce/abort/chain/backoff) 변경 | `flows/autosave-sync.md` + `domain/invariants.md` (I2~I5) |
+| auth/session 흐름 변경 | `flows/session-transition.md` + `domain/aggregates/auth-session.md` |
+| 새 invariant / 기존 invariant 변경 | `domain/invariants.md` + 관련 aggregate page |
+| 새 ADR 추가 | `references/decisions.md` (anchor + 표 추가) + 인용하는 aggregate page |
+| sprint close | `references/sprints.md` + 닿은 aggregate / flow page (각 page 의 "변경 이력") |
+| 새 표준 문서 (`docs/standards/*.md`) 추가 | `references/standards.md` (gap 섹션 → 표 섹션 이동) |
+| user-facing 용어 / 카피 변경 | `domain/ubiquitous-language.md` + `docs/solon/domain-map.md` 양쪽 일관성 확인 |
 
 ## 워크스페이스 boundary
 

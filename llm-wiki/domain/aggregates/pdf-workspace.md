@@ -135,12 +135,30 @@ session clear / different user transition
 - sprint-12: textbox / checklist / eraser widget + sticky drag + textbox inline redesign
 - sprint-13: table / chart 도구
 - sprint-14: tan 함수 / 검사기 drill-down / PDF 70vh UX
-- sprint-2: annotation BE persistence (`/v1/pdf-annotations/<key>`)
-- sprint-3/S2: pdfWorkspaceStore localStorage userId namespacing
-- sprint-3/S3: session transition wipe 제거
+- sprint-2: annotation BE persistence — 표준 endpoint `/api/v1/pdf-annotations/:materialId` (PUT/GET). FE 의 `apps/web/src/main.ts:1168,1264` 가 호출.
+- sprint-3/S2: pdfWorkspaceStore localStorage userId namespacing.
+- sprint-3/S3: session transition wipe 제거.
+
+## Annotation PUT body
+
+FE 는 단일 PUT body 에 모든 annotation 묶음을 보낸다:
+```
+{ stickyNotes, inkStrokes, textBoxes, checklists, tables, charts }
+```
+sticky / ink 는 `AnnotationSnapshotRecord` 스키마 v1 으로 명시되어 있고, sprint-12/13 에서
+도입된 textBoxes / checklists / tables / charts 는 같은 payload 안에 포함된다.
+BE 는 이 payload 를 R2 object 로 저장 (현재 schema 가 sticky/ink 만 1급으로 명시
+하므로 신규 필드는 "unknown payload" 로 함께 보존된다).
+
+## 별도 채널 (legacy)
+
+`apps/api/src/materials/materials.controller.ts` 의 `:materialId/annotation` PUT/GET
+은 sprint-2 이전의 legacy 경로다. FE 는 더 이상 호출하지 않으며, 운영 정리 시점에
+deprecation 여부 결정 필요.
 
 ## Open questions / TODO
 
 - annotation PUT body 의 revision check 미구현 (sprint-3 backlog 후보).
 - material 삭제 시 annotation 후처리 정책 미정.
-- table / chart 의 BE persistence 형식 (sprint-2 PUT body 가 `tables`/`charts` 포함은 확인 필요).
+- table / chart 의 BE schema 1급화 (현재 `AnnotationSnapshotRecord` 는 sticky/ink 만 명시).
+- materials legacy annotation 채널의 deprecation 시점.

@@ -49,12 +49,17 @@ fixture default 로 reset.
 WeekNote 에 `examPhase` 가 있으면 그 값이 우선, 없으면 SubjectNote.examPhase.
 `midterm` / `final` 외 값 = invalid.
 
-### N3. Concept ↔ Keyword ↔ Question 그래프 정합성
+### N3. Concept ↔ Keyword ↔ Question 그래프 정합성 (diagnostic, not enforced)
 - `Concept.relatedKeywordIds` 의 모든 id 가 `requiredKeywords[*].id` 에 존재.
 - `Concept.exampleQuestionIds` 의 모든 id 가 `exampleQuestions[*].id` 에 존재.
 - `RequiredKeyword.conceptIds` 의 모든 id 가 `concepts[*].id` 에 존재.
 
-→ `getIntegrityWarnings` (`lecture-note.ts:171`) 가 warning 출력. UI banner.
+→ `getIntegrityWarnings` (`lecture-note.ts:171`) 는 **diagnostic warning** 만
+배출하고 UI banner 로 surface 한다. load/save/mutation 어디서도 dangling
+reference 자체를 강제 차단하지 않는다 — 위반 데이터도 그대로 저장된다. 따라서
+이 항목은 strict invariant 가 아니라 "consistency check + 사용자 알림" 수준이다.
+실제 enforce 가 필요해지면 import/load 시점에 강제 hook 을 추가하는 후속 작업
+대상.
 
 ### N4. Coverage = covered / total
 `getSubjectCoverage` (line 111) + `getNotebookCoverage` (line 126). 0 division
