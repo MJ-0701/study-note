@@ -808,6 +808,12 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
     if (typeof payload.body !== "string") {
       return;
     }
+    // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
+    // a logout/login between fetch start and resolve must NOT apply user A's
+    // server data into user B's notebook.
+    if (authSession?.user.id !== sessionUserId) {
+      return;
+    }
     const incoming = payload.body;
     // sprint-2/S2 fix (codex P1): protect against stale GET overwriting fresh
     // local edits. Skip hydrate when:
@@ -931,6 +937,12 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       payload?: unknown;
       updatedAt?: unknown;
     };
+    // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
+    // logout/login between fetch start and resolve must NOT apply user A's
+    // server data into user B's workspace.
+    if (authSession?.user.id !== sessionUserId) {
+      return;
+    }
     recordSyncSuccess();
 
     // sprint-2/S2 fix (codex P1): hydrate the workspace store with the server
