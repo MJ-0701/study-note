@@ -23,13 +23,13 @@ context 로 끌어오지 않는다.
 
 | 파일 | 내용 |
 |---|---|
-| `CLAUDE.md` (project root) | Solon SFS bash adapter dispatch table, SFS 0.6.100 추가 정책, 인프라 현황 (R2 + Azure + Porkbun), `/sfs loop` multi-adaptor convention, 운영 규율 |
+| `CLAUDE.md` (project root) | Solon SFS bash adapter dispatch table, SFS 0.6.102 추가 정책, 인프라 현황 (R2 + Azure + Porkbun), `/sfs loop` multi-adaptor convention, 운영 규율 |
 | `SFS.md` | 프로젝트의 SFS 진입점 — sprint 흐름의 SoT |
 | `.sfs-local/VERSION` | 현재 SFS 버전 + upgrade history |
 | `.sfs-local/divisions.yaml` | division (engineering / design 등) 활성 상태 |
 | `.sfs-local/decisions/`, `docs/solon/decisions/` | ADR — [references/decisions](decisions.md) 참조 |
 | `.sfs-local/sprints/`, `docs/solon/handoff/`, `docs/solon/work-slice/` | sprint history — [references/sprints](sprints.md) 참조 |
-| `docs/solon/domain-map.md` | 도메인 용어 일부 — 현 study-note 용어는 [domain/ubiquitous-language](../domain/ubiquitous-language.md) 가 갱신본 |
+| `docs/solon/domain-map.md` | 도메인 용어 일부 — 현 study-note 용어는 [ddd/ubiquitous-language](../ddd/ubiquitous-language.md) 가 갱신본 |
 
 ## SFS 슬래시 명령 (dispatch table — `CLAUDE.md` SSoT)
 
@@ -78,7 +78,7 @@ sprint 에서 작성한다:
 
 repo 안에 안착된 운영 규칙만 정리. 개인 environment 의 working memory 는 인용 X.
 
-- commit message 는 사용자/저장소의 native 언어 (`CLAUDE.md` SFS 0.6.100 §Commit policy).
+- commit message 는 사용자/저장소의 native 언어 (`CLAUDE.md` SFS 0.6.102 §Commit policy).
 - self-review (diff + 7 영역) → codex `@codex review` 순. push 직후 codex 자동 트리거 금지.
 - `@codex review` 트리거 후 30~60초 후 inline + reaction 재확인.
 - SFS push 정책: `sfs commit apply` 는 current branch push 가 default; `--no-push` 는 local sandbox 한정.

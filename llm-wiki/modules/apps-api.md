@@ -103,4 +103,4 @@ key 가 아니다 — 둘을 혼동하지 않게 주의.
 ## 갱신 의무
 
 - 새 controller / endpoint 추가 시 위 표 갱신.
-- 인증 / 권한 규칙 변경 시 `auth.controller.ts` 와 함께 [domain/invariants](../domain/invariants.md) 의 I1, I2 영향 확인.
+- 인증 / 권한 규칙 변경 시 `auth.controller.ts` 와 함께 [ddd/invariants](../ddd/invariants.md) 의 I1, I2 영향 확인.

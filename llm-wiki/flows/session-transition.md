@@ -137,9 +137,9 @@ B 로그인
 
 ## 관련 invariant
 
-- [I1 — User data isolation](../domain/invariants.md#i1-user-data-isolation-cross-user-leak-금지)
-- [I2 — AbortController on session transition](../domain/invariants.md#i2-abortcontroller-on-session-transition)
-- AuthSession aggregate 의 A2~A5 ([domain/aggregates/auth-session](../domain/aggregates/auth-session.md))
+- [I1 — User data isolation](../ddd/invariants.md#i1-user-data-isolation-cross-user-leak-금지)
+- [I2 — AbortController on session transition](../ddd/invariants.md#i2-abortcontroller-on-session-transition)
+- AuthSession aggregate 의 A2~A5 ([ddd/aggregates/auth-session](../ddd/aggregates/auth-session.md))
 
 ## 변경 이력
 

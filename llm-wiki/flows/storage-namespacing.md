@@ -127,8 +127,8 @@ pdfWorkspaceStore = { workspaces: {} }
 
 ## 관련 invariant
 
-- [I1 — User data isolation](../domain/invariants.md#i1-user-data-isolation-cross-user-leak-금지)
-- [I6 — Server autosave = SoT, localStorage = cache](../domain/invariants.md#i6-server-autosave--sot-localstorage--cache)
+- [I1 — User data isolation](../ddd/invariants.md#i1-user-data-isolation-cross-user-leak-금지)
+- [I6 — Server autosave = SoT, localStorage = cache](../ddd/invariants.md#i6-server-autosave--sot-localstorage--cache)
 
 ## 검증
 

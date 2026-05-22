@@ -151,11 +151,11 @@ hotkeyHelpModalOpen = false
 
 ## 관련 invariant
 
-- [I2 — AbortController on session transition](../domain/invariants.md#i2-abortcontroller-on-session-transition)
-- [I3 — PUT ordering per key](../domain/invariants.md#i3-put-ordering-per-key)
-- [I4 — Hot path GET dedup](../domain/invariants.md#i4-hot-path-get-dedup)
-- [I5 — Backoff pause + banner](../domain/invariants.md#i5-backoff-pause--banner)
-- [I6 — Server autosave = SoT, localStorage = cache](../domain/invariants.md#i6-server-autosave--sot-localstorage--cache)
+- [I2 — AbortController on session transition](../ddd/invariants.md#i2-abortcontroller-on-session-transition)
+- [I3 — PUT ordering per key](../ddd/invariants.md#i3-put-ordering-per-key)
+- [I4 — Hot path GET dedup](../ddd/invariants.md#i4-hot-path-get-dedup)
+- [I5 — Backoff pause + banner](../ddd/invariants.md#i5-backoff-pause--banner)
+- [I6 — Server autosave = SoT, localStorage = cache](../ddd/invariants.md#i6-server-autosave--sot-localstorage--cache)
 
 ## 변경 이력
 
