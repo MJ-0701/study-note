@@ -16,37 +16,89 @@ Before planning or editing, read:
 - recent files under `.sfs-local/sprints/`
 - recent files under `.sfs-local/decisions/`
 
-## SFS commands — bash adapter SSoT
+## SFS commands — bash adapter SSoT (sfs 0.6.100)
 
-Solon Product SFS 의 10 슬래시 명령은 모두 `sfs <command>` global runtime 이
-deterministic bash adapter 로 내려보낸다. `.sfs-local/scripts/` 는 vendored layout 의
-fallback 이고, 기본 방향은 project-local state + packaged runtime 이다.
-Claude Code 의 native slash 진입점은 `.claude/commands/sfs.md` 가 자동 install 되며,
-동일한 dispatch table 을 따른다 (paraphrase 금지, 결정성 유지):
+Solon Product SFS 슬래시 명령은 모두 `sfs <command>` global runtime 이
+deterministic bash adapter 로 내려보낸다. `.sfs-local/scripts/` 는 vendored
+layout 의 fallback 이고, 기본 방향은 project-local state + packaged runtime
+이다. Claude Code 의 native slash 진입점은 `.claude/commands/sfs.md` 가 자동
+install 되며, 동일한 dispatch table 을 따른다 (paraphrase 금지, 결정성 유지):
 
 | 슬래시 | 실행 |
 |:--|:--|
-| `/sfs status [--color=auto/always/never]` | `sfs status [--color=auto/always/never]` |
-| `/sfs start <goal> [--id <sprint-id>] [--force]` | `sfs start <goal> [--id <sprint-id>] [--force]` |
-| `/sfs guide [--path|--print]` | `sfs guide [--path|--print]` |
-| `/sfs auth status|check|login|probe [--executor <tool>]` | `sfs auth status|check|login|probe [--executor <tool>]` |
-| `/sfs brainstorm [text|--stdin]` | `sfs brainstorm [text|--stdin]` raw capture 후 Claude 가 Solon CEO 로 §1~§7 정리 |
-| `/sfs plan` | `sfs plan` 후 Claude 가 `brainstorm.md` 기반 G1 plan + CTO/CPO contract 작성 |
-| `/sfs review --gate <id> [--executor <tool>] [--prompt-only]` / `/sfs review --show-last` | `sfs review --gate <id> [--executor <tool>] [--prompt-only]` 또는 `sfs review --show-last`; 기본은 선택된 CPO executor bridge 실행 + verdict/output path 메타데이터 출력, `--prompt-only` 는 수동 handoff, `--show-last` 는 executor 재실행 없이 기존 결과를 사용자 언어의 요약/action report 로 확인 |
-| `/sfs decision <title> [--id <id>]` | `sfs decision "<title>" [--id <id>]` 후 Claude 가 ADR 본문 작성 |
-| `/sfs retro [--close]` | `sfs retro [--close]`; `--close` 는 Claude 가 `retro.md` 를 먼저 채운 뒤 close adapter 1회 실행 |
-| `/sfs loop [OPTIONS]` | `sfs loop [OPTIONS]` (Ralph Loop + Solon mutex) |
-| `/sfs`, `/sfs help` | usage 출력 (`.claude/commands/sfs.md` 의 self-help) |
+| `/sfs status [--color=auto/always/never]` | `sfs status ...` |
+| `/sfs start <goal> [--id <sprint-id>] [--force]` | `sfs start ...` |
+| `/sfs guide [--path|--print]` | `sfs guide ...` |
+| `/sfs auth status\|check\|login\|probe [--executor <tool>]` | `sfs auth ...` |
+| `/sfs profile` | `sfs profile`; Claude 는 `SFS.md` project overview section 만 편집 |
+| `/sfs division [...]` | `sfs division ...`; division 활성/비활성 |
+| `/sfs adopt [...]` | `sfs adopt ...`; legacy/surface adopt 워크플로우 |
+| `/sfs brainstorm [text\|--stdin]` | hybrid — raw capture 후 Claude 가 Solon CEO 로 §1~§7 정리 |
+| `/sfs plan` | hybrid — `brainstorm.md` 기반 G1 plan + CTO/CPO contract |
+| `/sfs implement` | hybrid — Gate 3 review PASS 후에만 진입. worker/generator 가 fixed slice 구현. Gate 3 미통과면 `sfs review --gate 3` 먼저 |
+| `/sfs review --gate <id> [--stage self\|cross] [--executor <tool>] [--prompt-only]` / `/sfs review --show-last` | adapter-run — Gate 6 는 `--stage self` → `--stage cross` 순. Gate 3 self-review 가 PASS 될 때까지 cross 진입 X. round count = PASS 아님 |
+| `/sfs decision <title> [--id <id>]` | hybrid — ADR 본문 작성 |
+| `/sfs capture --kind <kind> --gate <id> "..."` | bash-only — evidence 기록 (user-approval 등) |
+| `/sfs note`, `/sfs report`, `/sfs tidy` | bash-only — 보조 기록/정리 명령 |
+| `/sfs commit plan` / `/sfs commit apply --group <name> [--no-push]` | bash-only — Solon commit grouping. `apply` 는 current branch push 기본; `--no-push` 는 local sandbox/release 테스트 한정 |
+| `/sfs retro [--close]` | hybrid — `--close` 는 `retro.md` 채운 뒤 close adapter 1회 |
+| `/sfs loop [OPTIONS]` | bash-only — Ralph Loop + Solon mutex |
+| `/sfs bootstrap [<idea>]` | bash-only — agent-facing initial setup handoff |
+| `/sfs measure --alive -- <command>` | bash-only — long-running command heartbeat |
+| `/sfs`, `/sfs help` | usage 출력 (`.claude/commands/sfs.md` self-help) |
 
-`sfs` runtime 이 PATH 에 없으면 그 사실을 1줄로 사용자에게 알리고 install/upgrade 를 안내한다.
-stdout / stderr / exit code 는 verbatim 보고한다 (paraphrase 금지).
+`sfs` runtime 이 PATH 에 없으면 1줄로 알리고 install/upgrade 안내. stdout /
+stderr / exit code 는 verbatim 보고 (paraphrase 금지). Empty output 은 visible
+SFS command 의 success 가 아니다 — `start`, `brainstorm`, `plan`, `implement`,
+`review`, `retro`, `adopt`, `profile`, `upgrade`, `agent install` 은 stdout 출력
+또는 산출물 변경 필수.
 
-명령 모드는 고정이다:
-- **Bash-only**: `status`, `start`, `guide`, `auth`, `loop`.
-- **Always hybrid**: `brainstorm`, `plan`, `decision`, `retro`.
-- **Adapter-run**: `review` — 기본적으로 bash adapter 가 선택된 CPO executor bridge 를 실행하고 stdout 에는 verdict/output path 메타데이터만 보여준다. Claude 는 result 원문을 그대로 덤프하지 않고 사용자 언어로 요약/action report 를 렌더링한다. `--prompt-only` 일 때도 현재 Claude runtime 이 대신 verdict 를 작성하지 않고 prompt handoff 로 멈춘다.
+부족한 정보가 있으면 1~3개 질문만 남기고, 다음 gate 자동 실행 X.
+1개 인자 누락 시 multi-choice prompt 대신 plain-language 질문 1개로 받는다.
 
-부족한 정보가 있으면 1~3개 질문만 남기고, 다음 gate 를 자동 실행하지 않는다.
+## SFS 0.6.100 추가 정책
+
+- **Gate 3 self-review PASS 필수**: cross-review / `sfs implement` 진입 전 self
+  review 가 PASS 될 때까지 같은 gate self review 반복. round count 는 PASS
+  아님. 결정적/저위험 finding (grep scope, 정정 가능한 wording) 은 직접 patch
+  후 same-gate review 재실행.
+- **Gate 6 review 순서**: `sfs review --gate 6 --stage self` → `--stage cross`
+  → GitHub `@codex` (외부 evidence, post-implementation only). brainstorm /
+  Gate 3 단계에서는 `@codex` 호출 X.
+- **Model routing** (default, 사용자 설정 불필요):
+  - Codex worker: `gpt-5.4`. Helper I/O: `gpt-5.4-mini`. Bounded repo-aware
+    coding helper: `gpt-5.3-codex`. Locked judgment-free mechanical: `gpt-5.3-codex-spark`.
+  - Claude worker/helper coding: Sonnet 4.6. Haiku = non-coding helper only.
+  - Gemini: `gemini-3-pro-auto` 모든 역할.
+  - Advisor (top-model) review 필요: 사용자 답변 해석 / 제품 정체성 / 아키텍처 /
+    gate / AC / files_scope 영향 시 → Claude Opus 4.7, Codex `gpt-5.5` xhigh,
+    Gemini `gemini-3-pro-auto`.
+- **Self-CPO mini-check**: external cross review 전, requirements → AC →
+  implementation slices → ADR id 매핑 + 모든 AC 가 file/artifact/evidence 매핑 +
+  SEED/placeholder/mock/fallback 은 non-acceptance.
+- **Commit policy**: commit message default = user 의 native/workspace 언어.
+  English 는 user/repo 언어가 영어일 때만. `sfs commit apply` 는 current branch
+  push 가 default; `--no-push` 는 local sandbox/release 테스트 한정. host-local
+  `/commit` skill 은 SFS workflow 가 아니므로 SFS 작업 안내에 쓰지 않는다.
+- **Session Continuation Guard**: `sfs upgrade` 가 runtime/project context 는
+  갱신해도 이미 열린 LLM 대화의 토큰은 줄이지 못한다. host token meter 가
+  새 WU/sprint action 전 30%+, 새 gate/loop/review handoff 전 50%+, 또는 같은
+  대화가 여러 WU/sprint/loop wake 를 거쳤다면 fresh session 으로 handoff.
+- **Multi-agent implement**: 옵션이며 default 아님. 사용자가 명시적으로 parallel
+  agents 선택 시에만 + 각 lane 의 files_scope 분리 + native-language commit
+  message + post-implement cross review 기록 → Gate 6.
+- **Gate 표기**: Solon report 에서 `Gate N (Name)` 형식. Gate 1 (Intake) ~
+  Gate 7 (Retro). naked id 사용 X.
+- **Decision question 형식**: Q1/D1/option id 전에 plain language 로 무엇을
+  결정하는지, 왜 중요한지, 권장 default, 각 옵션 영향을 설명. label 은
+  cross-reference 일 뿐 explanation 아님. recommendation-only 표 / compact 옵션
+  bundle (예: `A/A/A/C/C`) 금지.
+- **`.sfs-local/`** = private workbench. 공유 handoff 는 `docs/solon/<domain>/
+  <subdomain>/<feature>/<yyyyMMdd>/` 우선, domainless 는 `docs/solon/<english-workspace>/<yyyyMMdd>/`
+  fallback. 팀이 opt-in 하지 않는 한 `.sfs-local` commit 요구 X.
+- **Taxonomy**: 제품 함수. org division / copy polish 아님. user 의 native
+  /workspace 언어 + project 용어 일치. SFS 명령/도메인 용어를 기계 번역 금지.
+  `Other` / `Type something` 같은 placeholder 라벨 노출 X.
 
 ## `/sfs loop` — multi-adaptor LLM executor convention
 
