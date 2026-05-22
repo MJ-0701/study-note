@@ -8632,8 +8632,9 @@ function parseClassDateLabel(label: string): number {
 function safeDateMs(month: number, day: number): number | null {
   if (!Number.isInteger(month) || !Number.isInteger(day)) return null;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  // 학기 비교용 연도 임의 고정 + Date round-trip 으로 invalid combo 차단.
-  const d = new Date(2026, month - 1, day);
+  // sprint-2/S3 fix (codex P3): use a leap year (2024) so "2월 29일" stays
+  // valid. 학기 비교 정렬 키 용도라 연도 자체는 임의 고정 가능.
+  const d = new Date(2024, month - 1, day);
   if (d.getMonth() !== month - 1 || d.getDate() !== day) return null;
   return d.getTime();
 }
