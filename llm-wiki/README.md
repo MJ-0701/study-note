@@ -19,20 +19,24 @@ study-note 프로젝트의 LLM retrieval / DDD 지식 지도. **원문 SSoT 는 
 `docs/solon/`, `.sfs-local/decisions/` 에 그대로 있고, 이 wiki 는 by-reference
 인덱스 + DDD 맥락 + 흐름 요약만 제공한다.**
 
-SFS 0.6.100 `policies/obsidian-llm-wiki.md` 권고에 따라 sprint 진입 전 / agent
+SFS 0.6.102 `policies/obsidian-llm-wiki.md` 권고에 따라 sprint 진입 전 / agent
 handoff 시 broad repo scan 대신 wiki map 을 먼저 읽고, 필요한 원문으로만 jump.
+`.obsidian/` 또는 `llm-wiki/` 가 있으면 SFS 가 본 프로젝트를 Obsidian active
+project 로 감지하므로 broad scan 전 `llm-wiki/README.md` + `llm-wiki/ddd/README.md`
+두 진입점을 우선 확인 (0.6.101 추가).
 
 ## 진입 순서
 
 1. 이 README — vault 개요 + 사용 약속
-2. [retrieval-guide](retrieval-guide.md) — 무엇을 찾을 때 어디를 보는지
-3. [domain/context-map](domain/context-map.md) — bounded contexts 와 관계
-4. [domain/ubiquitous-language](domain/ubiquitous-language.md) — 도메인 용어집
-5. 필요한 aggregate / flow / module 페이지로 점프
+2. [ddd/README](ddd/README.md) — SFS 0.6.101 명시 DDD 진입점 (context map +
+   aggregates + invariants + ubiquitous language hub)
+3. [retrieval-guide](retrieval-guide.md) — 무엇을 찾을 때 어디를 보는지
+4. 필요한 aggregate / flow / module 페이지로 점프
 
 ## 디렉터리
 
-- `domain/` — DDD core: context map, glossary, aggregate 명세, invariants
+- `ddd/` — DDD 운영 모델 root (SFS 0.6.101 명시 경로): context map, glossary,
+  aggregate 명세, invariants. 진입은 [ddd/README.md](ddd/README.md).
 - `modules/` — 코드 모듈 별 지도 (apps/web, apps/api, packages/domain)
 - `flows/` — cross-aggregate 흐름 (autosave, session transition, storage namespacing)
 - `references/` — sprint / decision / standards 색인
@@ -41,13 +45,31 @@ handoff 시 broad repo scan 대신 wiki map 을 먼저 읽고, 필요한 원문�
 
 - **By reference, not by copy.** 큰 원문을 wiki 에 붙여 넣지 않는다. summary +
   파일 경로 / 줄 번호 / sprint id / decision id 링크만.
-- **Source truth = code + docs/solon + .sfs-local.** wiki 가 원문과 충돌하면
-  원문이 이긴다. wiki 는 그 충돌을 빠르게 찾는 색인이지 자기 SSoT 가 아니다.
+- **Source truth = repo-local code + docs/solon + .sfs-local.** repo 밖
+  host-local 설정 (`~/.claude/` 등 개인 environment) 은 wiki 의 SoT 가 아니다.
+  wiki 가 원문과 충돌하면 원문이 이긴다.
 - **DDD lens.** 모든 페이지는 bounded context / aggregate / invariant /
-  ubiquitous language 중 하나로 정렬되어야 한다. "그냥 잡문" 는 만들지 않는다.
+  ubiquitous language 중 하나로 정렬되어야 한다. "그냥 잡문" 은 만들지 않는다.
 - **Sprint 갱신 의무.** sprint 가 domain language, aggregate boundary,
   invariant, release flow 를 바꾸면 retro 또는 다음 sprint 진입 전에 관련 wiki
-  page 를 갱신하거나 follow-up gap 으로 기록한다.
+  page 를 갱신하거나 follow-up gap 으로 기록한다 (아래 routing table 참조).
+
+## 갱신 routing table
+
+변경 종류 → 갱신 의무 page. 미수 = wiki drift.
+
+| 변경한 것 | 함께 갱신할 wiki page |
+|---|---|
+| domain 타입 추가/변경 (`packages/domain/src/*.ts`) | 해당 `ddd/aggregates/<name>.md` + `ddd/ubiquitous-language.md` + `modules/packages-domain.md` |
+| controller path / endpoint 추가/변경 (`apps/api/src/*/controller.ts`) | `modules/apps-api.md` (endpoint 표) + 영향 받는 `flows/<flow>.md` |
+| storage key 추가/변경 (localStorage, R2 prefix, MySQL 컬럼) | `flows/storage-namespacing.md` + `ddd/invariants.md` (I1, I7) + 해당 aggregate page |
+| sync flow (debounce/abort/chain/backoff) 변경 | `flows/autosave-sync.md` + `ddd/invariants.md` (I2~I5) |
+| auth/session 흐름 변경 | `flows/session-transition.md` + `ddd/aggregates/auth-session.md` |
+| 새 invariant / 기존 invariant 변경 | `ddd/invariants.md` + 관련 aggregate page |
+| 새 ADR 추가 | `references/decisions.md` (anchor + 표 추가) + 인용하는 aggregate page |
+| sprint close | `references/sprints.md` + 닿은 aggregate / flow page (각 page 의 "변경 이력") |
+| 새 표준 문서 (`docs/standards/*.md`) 추가 | `references/standards.md` (gap 섹션 → 표 섹션 이동) |
+| user-facing 용어 / 카피 변경 | `ddd/ubiquitous-language.md` + `docs/solon/domain-map.md` 양쪽 일관성 확인 |
 
 ## 워크스페이스 boundary
 

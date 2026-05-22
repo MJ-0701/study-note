@@ -16,7 +16,7 @@ Before planning or editing, read:
 - recent files under `.sfs-local/sprints/`
 - recent files under `.sfs-local/decisions/`
 
-## SFS commands — bash adapter SSoT (sfs 0.6.100)
+## SFS commands — bash adapter SSoT (sfs 0.6.102)
 
 Solon Product SFS 슬래시 명령은 모두 `sfs <command>` global runtime 이
 deterministic bash adapter 로 내려보낸다. `.sfs-local/scripts/` 는 vendored
@@ -56,7 +56,9 @@ SFS command 의 success 가 아니다 — `start`, `brainstorm`, `plan`, `implem
 부족한 정보가 있으면 1~3개 질문만 남기고, 다음 gate 자동 실행 X.
 1개 인자 누락 시 multi-choice prompt 대신 plain-language 질문 1개로 받는다.
 
-## SFS 0.6.100 추가 정책
+## SFS 0.6.100~0.6.102 추가 정책
+
+> 0.6.101 / 0.6.102 추가분은 §**Obsidian wiki 경계** 섹션 (아래 마지막) 에 모은다.
 
 - **Gate 3 self-review PASS 필수**: cross-review / `sfs implement` 진입 전 self
   review 가 PASS 될 때까지 같은 gate self review 반복. round count 는 PASS
@@ -99,6 +101,25 @@ SFS command 의 success 가 아니다 — `start`, `brainstorm`, `plan`, `implem
 - **Taxonomy**: 제품 함수. org division / copy polish 아님. user 의 native
   /workspace 언어 + project 용어 일치. SFS 명령/도메인 용어를 기계 번역 금지.
   `Other` / `Type something` 같은 placeholder 라벨 노출 X.
+
+### Obsidian wiki 경계 (0.6.101 + 0.6.102)
+
+- **Active 감지** (0.6.101): repo 에 `.obsidian/` 또는 `llm-wiki/` 가 있으면 SFS
+  가 본 프로젝트를 Obsidian-active 로 본다. 본 repo 는 `llm-wiki/` 보유 →
+  active. broad scan 전 `llm-wiki/README.md` + `llm-wiki/ddd/README.md` 를
+  진입점으로 먼저 읽는다.
+- **DDD root 경로 컨벤션** (0.6.101): wiki DDD 운영 모델 root = `llm-wiki/ddd/`.
+  본 repo 는 sprint-3 wiki round-3 fix 에서 `llm-wiki/domain/` → `llm-wiki/ddd/`
+  rename 적용. 누락된 page 가 있으면 gap/waiver 기록.
+- **Taxonomy = lens** (0.6.101): taxonomy 는 독립 wiki / 조직 본부가 아니라
+  domain language / classification lens. `llm-wiki/ddd/` 와 관련 TopicHub 에
+  연결.
+- **Host-local 경계** (0.6.102): host-local tool/skill bundle 과 user-home
+  folder 는 외부 실행 environment 이지 project SSoT / wiki root / install target /
+  migration source 가 아니다. 사용자가 명시 요청하지 않는 한 wiki 구축 중 설치/
+  scaffold/승격 X. 참조가 필요하면 external environment evidence 로만 기록.
+  이미 SFS 에 흡수된 개념은 host-local tool 대신 SFS command/policy surface 를
+  쓴다.
 
 ## `/sfs loop` — multi-adaptor LLM executor convention
 

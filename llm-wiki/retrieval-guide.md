@@ -19,10 +19,10 @@ summary: 무엇을 찾을 때 어떤 wiki page 와 어떤 원문 경로를 먼�
 
 | 질문 | 1차 wiki | 2차 원문 |
 |---|---|---|
-| "이 용어 정확한 뜻이 뭐였지" | [domain/ubiquitous-language](domain/ubiquitous-language.md) | `docs/solon/domain-map.md`, `packages/domain/src/*.ts` |
-| "이 도메인은 어느 bounded context 인가" | [domain/context-map](domain/context-map.md) | `packages/domain/src/index.ts` |
-| "이 aggregate 의 invariant 는" | `domain/aggregates/<name>.md` | aggregate 정의 파일 (`packages/domain/src/<file>.ts`) |
-| "여러 aggregate 가 같이 지켜야 하는 규칙" | [domain/invariants](domain/invariants.md) | 관련 sprint plan/retro |
+| "이 용어 정확한 뜻이 뭐였지" | [ddd/ubiquitous-language](ddd/ubiquitous-language.md) | `docs/solon/domain-map.md`, `packages/domain/src/*.ts` |
+| "이 도메인은 어느 bounded context 인가" | [ddd/context-map](ddd/context-map.md) | `packages/domain/src/index.ts` |
+| "이 aggregate 의 invariant 는" | `ddd/aggregates/<name>.md` | aggregate 정의 파일 (`packages/domain/src/<file>.ts`) |
+| "여러 aggregate 가 같이 지켜야 하는 규칙" | [ddd/invariants](ddd/invariants.md) | 관련 sprint plan/retro |
 
 ## 코드 위치 질문
 
@@ -46,12 +46,12 @@ summary: 무엇을 찾을 때 어떤 wiki page 와 어떤 원문 경로를 먼�
 |---|---|---|
 | "이 결정 왜 이렇게 됐지" | [references/decisions](references/decisions.md) | `.sfs-local/decisions/`, `docs/solon/decisions/` |
 | "지난 sprint 무엇을 했나" | [references/sprints](references/sprints.md) | `.sfs-local/sprints/`, git log |
-| "표준 / 컨벤션" | [references/standards](references/standards.md) | `CLAUDE.md`, `SFS.md`, `docs/standards/` (없으면 user CLAUDE.md) |
+| "표준 / 컨벤션" | [references/standards](references/standards.md) | repo-local `CLAUDE.md`, `SFS.md`. `docs/standards/` 는 현재 부재 (standards.md "Repo-local 부재 표준" 섹션 참조). user-home 파일은 wiki SoT 아님. |
 
 ## sprint 진입 시 권장 retrieval 순서
 
 1. [references/sprints](references/sprints.md) 에서 직전 sprint retro / handoff
-2. [domain/context-map](domain/context-map.md) — 건드릴 context 확인
-3. 관련 aggregate page (`domain/aggregates/<name>.md`) — invariant 확인
+2. [ddd/context-map](ddd/context-map.md) — 건드릴 context 확인
+3. 관련 aggregate page (`ddd/aggregates/<name>.md`) — invariant 확인
 4. 관련 flow page (`flows/<name>.md`) — 흐름 안에서 작업할 곳 파악
 5. 필요한 원문으로 jump (file path / line range)

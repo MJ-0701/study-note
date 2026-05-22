@@ -33,14 +33,22 @@ summary: 최근 sprint 색인. 본문은 `.sfs-local/sprints/`, PR, retro 원문
 | **W20-sprint-6** | smoke sweep | log | 전역 검증 |
 | **W20-sprint-10 (sprint-10 in memory)** | persona + PDF inspector 등 multi-feature | #10 squash | 다영역 |
 
-## 2026 W19 이전
+## 2026 W19 이전 (repo evidence 기반)
 
-handoff 문서: `docs/2026-W19-sprint-5/`, sprint-11~15 등 memory MEMORY.md 참조:
+repo 안 evidence: `docs/2026-W19-sprint-5/`, `docs/solon/work-slice/`, `docs/solon/handoff/`,
+`.sfs-local/sprints/2026-W20-*` 디렉터리, git log + PR merge 커밋. 아래는 git
+history 와 sprint dir 에서 직접 확인 가능한 sprint 목록 (대략 sprint-11 부터
+sprint-15 까지):
+
 - sprint-11: layout L2 + 지우개
 - sprint-12: textbox/checklist/eraser widget + sticky drag + morphdom fix
 - sprint-13: 표/그래프 도구
 - sprint-14: tan 함수 + 검사기 drill-down + PDF 70vh UX
 - sprint-15: 운영 배포 (Azure SWA + ACA + MySQL Flex + Porkbun)
+
+각 sprint 의 정확한 PR 번호 / 커밋 / 산출물은 `git log --oneline -200` 와
+`.sfs-local/sprints/` 에서 직접 확인. user-home 의 working memory 는 wiki 의
+SoT 가 아니라 retrieval helper 일 뿐.
 
 ## sprint dir convention
 

@@ -20,17 +20,27 @@ aggregate 별 invariant 는 각 aggregate page 에. 여기는 **여러 context �
 > 한 user 의 메모/필기/annotation 은 다른 user 의 namespace 에서 read/write 될
 > 수 없다.
 
-- localStorage: 모든 user-scoped key 는 `{base}:{userId}` 형태.
+- **Client (FE) localStorage**: 모든 user-scoped key 는 `{base}:{userId}` 형태.
   - `study-note.notebook.v2:<userId>` (sprint-3/S1)
   - `study-note.pdf-workspaces.v1:<userId>` (sprint-3/S2)
-- legacy unscoped key (`study-note.notebook.v2`, `study-note.pdf-workspaces.v1`)
-  는 한 번 owner-gated migration 후 drop. owner 가 안 맞으면 migrate 없이 drop
-  (data loss 허용 — server autosave 가 SoT).
-- BE: PUT path 가 `authSession.user.id` 와 ownerId 일치 검증.
-- 위반 사례: shared browser 에서 A 로그인 → B 로그인 시 A 의 데이터가 B 의
-  서버 record 로 PUT. sprint-2 가 wipe 로 1차 완화, sprint-3 가 namespacing
+  legacy unscoped key 는 한 번 owner-gated migration 후 drop. owner mismatch =
+  migrate 없이 drop (data loss 허용 — server autosave 가 SoT).
+- **Server (BE) authorization**: URL path 에 userId 가 **없다** (userNotes,
+  pdf-annotations 모두). NestJS guard (cookie session) → `request.user.id` 로
+  ownership 을 식별 후 그 userId 기반 storage key / DB row 를 작성한다. 즉
+  "URL ownerId 검증" 이 아니라 **URL 에 userId 가 들어가지 않게 설계** 함으로써
+  client 가 다른 user 의 자원에 접근할 표면 자체가 없다.
+- **PdfMaterial 예외**: shared-read 정책 ([private 0005](../references/decisions.md#private-0005)).
+  uploader (ownerId) 만 write/delete 가능하지만 같은 cohort 의 read 는 허용.
+  shared-read 가 적용되는 read endpoint 는 ownership check 가 "uploader OR cohort
+  member" 로 완화되며 write 는 여전히 ownerId strict (`apps/api/src/materials/materials.service.ts`
+  의 `where: { id, ownerId, deletedAt: null }` 패턴).
+- 위반 사례: shared browser 에서 A 로그인 → B 로그인 시 A 의 localStorage 가
+  B 의 BE record 로 PUT. sprint-2 가 wipe 로 1차 완화, sprint-3 가 namespacing
   으로 구조적 차단.
 - **원문**: `apps/web/src/main.ts:660-800` (notebook), `1815-1985` (pdfWorkspace),
+  `apps/api/src/user-notes/user-notes.controller.ts`, `apps/api/src/pdf-annotations/pdf-annotations.controller.ts`,
+  `apps/api/src/materials/materials.service.ts` (ownerId guard),
   [flows/storage-namespacing](../flows/storage-namespacing.md)
 
 ## I2. AbortController on session transition

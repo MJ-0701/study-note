@@ -19,8 +19,18 @@ summary: userNotes / pdf-annotations 의 debounce → chain → fetch → succes
 
 ## Resource
 
-- **userNotes**: `WeekNote.userNotes` (사용자 자유 메모) — `/v1/user-notes/<userId>:<subjectId>:<weekId>`.
-- **pdf-annotations**: SubjectPdfWorkspace 의 annotation 묶음 (sticky / ink / textBox / checklist / table / chart) — `/v1/pdf-annotations/<userId>:<subjectId>:<materialId>`.
+- **userNotes**: `WeekNote.userNotes` (사용자 자유 메모) — BE URL
+  `/api/v1/notes/subject/:subjectId/week/:weekId` (FE 호출: `apps/web/src/main.ts:979, 1055`).
+  userId 는 cookie session 에서 BE 가 추출.
+- **pdf-annotations**: SubjectPdfWorkspace 의 annotation 묶음 (sticky / ink /
+  textBox / checklist / table / chart 모두 동일 payload 안) — BE URL
+  `/api/v1/pdf-annotations/:materialId` (FE 호출: `apps/web/src/main.ts:1168, 1264`).
+  userId / subjectId 는 URL 에 없고 cookie session 으로 BE 가 식별.
+
+> client-side cache / mutex key (`userNotesPutTimers` / `annotationPutAborts` 의
+> Map key) 는 `<userId>:<subjectId>:<weekId>` / `<userId>:<subjectId>:<materialId>`
+> 형태로 사용하지만 이는 **FE 메모리 안의 mutex key** 이고 URL path key 가
+> 아니다. 둘을 분리해서 읽는다.
 
 ## 상수
 
@@ -90,7 +100,8 @@ fetchUserNoteIfMissing(key) / fetchAnnotationIfMissing(key)
   │  (material 재방문은 lastHydratedAnnotationByMaterial 비교로 force refetch)
   │
   ▼
-GET /v1/user-notes/<key> 또는 /v1/pdf-annotations/<key>
+GET /api/v1/notes/subject/<subjectId>/week/<weekId>
+  또는 GET /api/v1/pdf-annotations/<materialId>
   │
   ▼
 응답 처리
@@ -140,11 +151,11 @@ hotkeyHelpModalOpen = false
 
 ## 관련 invariant
 
-- [I2 — AbortController on session transition](../domain/invariants.md#i2-abortcontroller-on-session-transition)
-- [I3 — PUT ordering per key](../domain/invariants.md#i3-put-ordering-per-key)
-- [I4 — Hot path GET dedup](../domain/invariants.md#i4-hot-path-get-dedup)
-- [I5 — Backoff pause + banner](../domain/invariants.md#i5-backoff-pause--banner)
-- [I6 — Server autosave = SoT, localStorage = cache](../domain/invariants.md#i6-server-autosave--sot-localstorage--cache)
+- [I2 — AbortController on session transition](../ddd/invariants.md#i2-abortcontroller-on-session-transition)
+- [I3 — PUT ordering per key](../ddd/invariants.md#i3-put-ordering-per-key)
+- [I4 — Hot path GET dedup](../ddd/invariants.md#i4-hot-path-get-dedup)
+- [I5 — Backoff pause + banner](../ddd/invariants.md#i5-backoff-pause--banner)
+- [I6 — Server autosave = SoT, localStorage = cache](../ddd/invariants.md#i6-server-autosave--sot-localstorage--cache)
 
 ## 변경 이력
 

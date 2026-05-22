@@ -9,39 +9,27 @@ load_when:
   - CLAUDE.md
   - SFS.md
   - DTO 규칙
-summary: 컨벤션 / 표준 문서 색인. 본문은 CLAUDE.md / SFS.md / user-global CLAUDE.md 에.
+summary: 컨벤션 / 표준 문서 색인. **repo-local** 만. user-home (~/.claude/...) 파일은 by-reference 정책 위반이라 wiki SoT 로 인용하지 않는다.
 ---
 
 # Standards / Conventions Index
 
-## 프로젝트 표준 (project root)
+본 wiki 는 by-reference 정책 (`llm-wiki/README.md` §원칙) 에 따라 **repo 안에
+존재하는 파일만** SoT 로 인용한다. host-local 사용자 environment (`~/.claude/CLAUDE.md`,
+`~/.claude/projects/<encoded>/memory/`, 그 외 사용자 개인 도구 설정 등) 는 wiki
+context 로 끌어오지 않는다.
+
+## Repo-local 표준 문서
 
 | 파일 | 내용 |
 |---|---|
-| `CLAUDE.md` (project) | Solon SFS bash adapter dispatch table, SFS 0.6.100 추가 정책, 인프라 현황 (R2 + Azure + Porkbun), `/sfs loop` multi-adaptor convention, 운영 규율 |
+| `CLAUDE.md` (project root) | Solon SFS bash adapter dispatch table, SFS 0.6.102 추가 정책, 인프라 현황 (R2 + Azure + Porkbun), `/sfs loop` multi-adaptor convention, 운영 규율 |
 | `SFS.md` | 프로젝트의 SFS 진입점 — sprint 흐름의 SoT |
-| `.sfs-local/VERSION` | 현재 SFS 버전 (0.6.100) + upgrade history |
+| `.sfs-local/VERSION` | 현재 SFS 버전 + upgrade history |
 | `.sfs-local/divisions.yaml` | division (engineering / design 등) 활성 상태 |
-
-## 사용자 글로벌 (user-level CLAUDE.md, 모든 프로젝트 공통)
-
-`/Users/<user>/.claude/CLAUDE.md` — API conventions, DTO rules, migration naming, git conventions, code style, infrastructure (secret), standards 표.
-
-핵심:
-- API URL: `/v{n}/{dash-case-복수형}`
-- 성공 응답: HTTP 200, 래핑 없이 데이터 직접 반환 (ApiResponse 래퍼 금지)
-- ErrorResponse: `{ "errorCode": "...", "errorMessage": "..." }`
-- DTO: `{Entity}{Client}Request/Response` (Web), `{Entity}Request/Response` (Service)
-- Mapper 라이브러리 사용 금지, 빌더 패턴 사용 금지
-- Migration: `V{yyyyMMddHHmmss}__{description}.sql`, Flyway 외부 관리
-- Git: 브랜치 `{type}/{JIRA-KEY}` 또는 `{JIRA-KEY}`
-- Solon/SFS: `sfs commit plan` → `sfs commit apply --group <name>` (host-local `/commit` 사용 X)
-- Code style: Google Java Style + Lombok
-- Secret: AWS Secrets Manager (dev/prod) / git-crypt (local)
-
-## docs/standards/ (사용자 글로벌이 가리키는 표 — 본 프로젝트에는 부재)
-
-사용자 CLAUDE.md 의 표는 `docs/standards/backend-rules.md` 등 5개 문서를 가리키지만, **본 프로젝트 (study-note) 에는 해당 디렉터리가 없다.** 본 프로젝트는 Spring 백엔드가 아닌 NestJS 백엔드 + Vite frontend 라 일부 표준은 부분 적용. 표준 문서가 필요해지면 별도 sprint 에서 작성.
+| `.sfs-local/decisions/`, `docs/solon/decisions/` | ADR — [references/decisions](decisions.md) 참조 |
+| `.sfs-local/sprints/`, `docs/solon/handoff/`, `docs/solon/work-slice/` | sprint history — [references/sprints](sprints.md) 참조 |
+| `docs/solon/domain-map.md` | 도메인 용어 일부 — 현 study-note 용어는 [ddd/ubiquitous-language](../ddd/ubiquitous-language.md) 가 갱신본 |
 
 ## SFS 슬래시 명령 (dispatch table — `CLAUDE.md` SSoT)
 
@@ -69,16 +57,37 @@ summary: 컨벤션 / 표준 문서 색인. 본문은 CLAUDE.md / SFS.md / user-g
 /sfs measure --alive   bash — long-running heartbeat
 ```
 
-자세한 분기 / 옵션은 `CLAUDE.md` SFS 섹션 원문.
+자세한 분기 / 옵션은 repo-local `CLAUDE.md` 의 SFS 섹션 원문.
 
-## 코드 / 컨벤션 메모
+## Repo-local 부재 표준 (gap)
 
-- 한국어 commit message (memory `feedback_commit_language`).
-- self-review (diff 읽기 + 7 영역) → codex `@codex review` (memory `feedback_review_flow`).
-- codex bot review 30~60s 후 재확인 (memory `feedback_codex_bot_review_timing`).
-- 메모리 (`~/.claude/projects/<encoded>/memory/`) 의 `MEMORY.md` 가 회화 간 SoT.
+다음 표준 문서가 repo 안에 **없다** — wiki 는 이 fact 만 기록하고, 필요 시 별도
+sprint 에서 작성한다:
+
+- `docs/standards/backend-rules.md` (아키텍처, 트랜잭션, 예외 처리, 테스트 기준)
+- `docs/standards/api-rules.md` (URL / 응답 / 에러 / DTO 규약)
+- `docs/standards/db-rules.md` (스키마 / 마이그레이션 / 인덱스)
+- `docs/standards/security-rules.md` (인증/인가, PII, 보안 로깅)
+- `docs/standards/observability-rules.md` (metric+log+trace, 알림)
+- `docs/standards/git-rules.md` (브랜치 / commit 컨벤션)
+
+이 gap 을 메우는 작업이 들어오면 본 wiki 의 위 표에 한 줄씩 추가하고 각 page 의
+"갱신 의무" 도 wire 한다.
+
+## Repo-local 회의 / 운영 메모
+
+repo 안에 안착된 운영 규칙만 정리. 개인 environment 의 working memory 는 인용 X.
+
+- commit message 는 사용자/저장소의 native 언어 (`CLAUDE.md` SFS 0.6.102 §Commit policy).
+- self-review (diff + 7 영역) → codex `@codex review` 순. push 직후 codex 자동 트리거 금지.
+- `@codex review` 트리거 후 30~60초 후 inline + reaction 재확인.
+- SFS push 정책: `sfs commit apply` 는 current branch push 가 default; `--no-push` 는 local sandbox 한정.
+- host-local `/commit` skill 은 SFS workflow 가 아니므로 SFS 작업에 쓰지 않는다.
 
 ## 갱신 의무
 
-- CLAUDE.md / SFS.md / 사용자 글로벌 CLAUDE.md 가 바뀌면 본 wiki 갱신 (요약 한 줄 + 핵심 변경 표시).
-- 새 표준 문서 (예: `docs/standards/api-rules.md`) 추가 시 위 표 갱신.
+- repo-local `CLAUDE.md` / `SFS.md` 가 바뀌면 본 wiki 갱신.
+- 새 `docs/standards/*.md` 또는 ADR 추가 시 위 표 갱신.
+- host-local 사용자 environment (`~/.claude/` 등) 는 wiki 가 인용하지 않는다.
+  필요한 규칙은 repo-local 문서 (`CLAUDE.md`, `SFS.md`, `docs/standards/` 등) 로
+  옮긴 뒤 인용한다.
