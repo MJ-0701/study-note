@@ -141,14 +141,25 @@ session clear / different user transition
 
 ## Annotation PUT body
 
-FE 는 단일 PUT body 에 모든 annotation 묶음을 보낸다:
+FE 는 단일 PUT body 에 모든 annotation 묶음을 `payload` envelope 로 감싸 보낸다
+(`apps/web/src/main.ts:1172`):
 ```
-{ stickyNotes, inkStrokes, textBoxes, checklists, tables, charts }
+{
+  "payload": {
+    "stickyNotes": [...],
+    "inkStrokes": [...],
+    "textBoxes": [...],
+    "checklists": [...],
+    "tables": [...],
+    "charts": [...]
+  }
+}
 ```
-sticky / ink 는 `AnnotationSnapshotRecord` 스키마 v1 으로 명시되어 있고, sprint-12/13 에서
-도입된 textBoxes / checklists / tables / charts 는 같은 payload 안에 포함된다.
-BE 는 이 payload 를 R2 object 로 저장 (현재 schema 가 sticky/ink 만 1급으로 명시
-하므로 신규 필드는 "unknown payload" 로 함께 보존된다).
+BE `PdfAnnotationsController` 가 `payload` 키를 필수로 검증한다 — envelope 없이
+보내면 400 INVALID_BODY. sticky / ink 는 `AnnotationSnapshotRecord` 스키마 v1 으로
+1급 명시되어 있고, sprint-12/13 에서 도입된 textBoxes / checklists / tables /
+charts 는 같은 `payload` 안에 포함되어 R2 object 로 저장된다 (현재 schema 가
+sticky/ink 만 1급이라 신규 필드는 "unknown payload" 로 함께 보존).
 
 ## 별도 채널 (legacy)
 

@@ -46,10 +46,10 @@ NestJS global prefix = `app.setGlobalPrefix("api")` (`apps/api/src/main.ts:38`).
 | POST | `/api/v1/auth/sign-in` | auth | — | cookie 발급 |
 | POST | `/api/v1/auth/sign-up` | auth | — | 신규 가입 |
 | POST | `/api/v1/auth/sign-out` | auth | cookie | cookie 해제 |
-| POST | `/api/materials/upload-intent` | materials | cookie + ownerId | R2 PUT pre-signed URL 발급 |
-| PUT | `/api/materials/:materialId/file` | materials | cookie + ownerId | proxy upload 경로 |
-| POST | `/api/materials/:materialId/complete` | materials | cookie + ownerId | upload 완료 마킹 |
-| GET | `/api/materials?subjectId=...` | materials | cookie | uploader-self 또는 cohort shared-read ([private 0005](../references/decisions.md#private-0005)) |
+| POST | `/api/materials/upload-intent` | materials | cookie + `RoleGuard` + `@Roles("master", "admin")` | R2 PUT pre-signed URL 발급 (admin/master 전용) |
+| PUT | `/api/materials/:materialId/file` | materials | cookie + `RoleGuard` + `@Roles("master", "admin")` | proxy upload 경로 (admin/master 전용) |
+| POST | `/api/materials/:materialId/complete` | materials | cookie + `RoleGuard` + `@Roles("master", "admin")` | upload 완료 마킹 (admin/master 전용) |
+| GET | `/api/materials?subjectId=...` | materials | cookie (`SessionAuthGuard`) | uploader-self 또는 cohort shared-read ([private 0005](../references/decisions.md#private-0005)) |
 | GET | `/api/materials/:materialId` | materials | cookie | shared-read |
 | GET | `/api/materials/:materialId/file` | materials | cookie | R2 object proxy |
 | GET | `/api/materials/:materialId/download` | materials | cookie | download disposition |
@@ -60,7 +60,7 @@ NestJS global prefix = `app.setGlobalPrefix("api")` (`apps/api/src/main.ts:38`).
 | PUT | `/api/v1/notes/subject/:subjectId/week/:weekId` | user-notes | 동일 | autosave PUT (userId 는 URL 에 없음 — cookie session 에서 추출) |
 | GET | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | cookie → `request.user.id` 로 storage key 구성 | annotation hot path GET |
 | PUT | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | 동일 | annotation autosave (subjectId/userId 는 URL 에 없음) |
-| GET | `/api/v1/health` | health | — | LB / keep-alive |
+| GET | `/api/health` | health | — | LB / keep-alive (`HealthController` 는 prefix 없이 `@Controller("health")`) |
 
 핵심: **userId / subjectId 는 path key 에 들어가지 않는다.** userNotes 와
 pdf-annotations 모두 BE 가 `request.user.id` (cookie session) 와 path 의
