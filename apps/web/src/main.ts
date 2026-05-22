@@ -811,13 +811,16 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
     return;
   }
   userNotesFetchedKeys.add(cacheKey);
+  const releaseNoteCache = () => userNotesFetchedKeys.delete(cacheKey);
   try {
     const response = await fetch(
       `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
       { credentials: "include" }
     );
     if (response.status === 404) {
-      // No remote note — keep local notebook value (likely empty).
+      // sprint-2/S2 fix (codex P2): release cache so a note created later from
+      // another device can be re-fetched in the same session.
+      releaseNoteCache();
       return;
     }
     if (!response.ok) {
@@ -8609,26 +8612,30 @@ function renderMemorizeExamGroup(
 
 // sprint-2/S3: parse "5월 14일(목)" / "5월14일" / "5/14" → millisecond timestamp.
 // Failed parses → +Infinity 로 정렬 끝으로 보냄 (stable order 유지).
+// sprint-2/S3 fix (codex P3): JS Date 가 invalid combo (e.g., 2/31) 를 silently
+// normalize (→ March 3). day-bound 검사를 month 별 max 로 정확화 + Date 재검증.
 function parseClassDateLabel(label: string): number {
   const text = label.trim();
   const kr = /(\d{1,2})\s*월\s*(\d{1,2})/.exec(text);
   if (kr) {
-    const month = Number(kr[1]);
-    const day = Number(kr[2]);
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      // 학기 비교용이므로 연도는 임의 고정 (정렬 키만 필요).
-      return new Date(2026, month - 1, day).getTime();
-    }
+    const ts = safeDateMs(Number(kr[1]), Number(kr[2]));
+    if (ts !== null) return ts;
   }
   const slash = /(\d{1,2})\s*[\/\-\.]\s*(\d{1,2})/.exec(text);
   if (slash) {
-    const month = Number(slash[1]);
-    const day = Number(slash[2]);
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return new Date(2026, month - 1, day).getTime();
-    }
+    const ts = safeDateMs(Number(slash[1]), Number(slash[2]));
+    if (ts !== null) return ts;
   }
   return Number.POSITIVE_INFINITY;
+}
+
+function safeDateMs(month: number, day: number): number | null {
+  if (!Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  // 학기 비교용 연도 임의 고정 + Date round-trip 으로 invalid combo 차단.
+  const d = new Date(2026, month - 1, day);
+  if (d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return d.getTime();
 }
 
 function renderSubjectMemorizePage(subject: SubjectNote): string {
