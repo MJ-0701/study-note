@@ -668,10 +668,19 @@ function buildNotebookKey(userId: string): string {
 // sprint-3/S1: one-shot migration from the legacy unscoped key into the new
 // userId-scoped key. Runs the first time `loadStoredNotebook(userId)` is
 // called for a user whose namespaced key is empty AND the legacy unscoped key
-// has parseable notebook data. After the migrated copy is persisted, the
-// legacy key is removed so subsequent loads on this browser do not re-migrate
-// stale data into a different user's namespace. Failure policy: data loss
-// allowed — server autosave is SoT, GET hydrate restores cross-device.
+// has parseable notebook data AND the sprint-2 `lastSessionUserStorageKey`
+// marker confirms this user owns the legacy payload. After the migrated copy
+// is persisted, the legacy key is removed so subsequent loads on this browser
+// do not re-migrate stale data into a different user's namespace.
+//
+// sprint-3/S1 fix (codex P1): without the owner gate, a shared-browser
+// upgrade would copy user A's legacy notebook into whoever logs in first
+// after the upgrade — defeating the namespacing this sprint introduces.
+// When the marker is missing or names a different user, drop the legacy
+// payload instead of migrating (data loss policy from plan §6 — server
+// autosave is SoT, GET hydrate restores cross-device).
+//
+// Failure policy: data loss allowed.
 function migrateLegacyNotebookForUser(userId: string): StudyNotebook | undefined {
   let legacyRaw: string | null = null;
   try {
@@ -680,6 +689,24 @@ function migrateLegacyNotebookForUser(userId: string): StudyNotebook | undefined
     return undefined;
   }
   if (!legacyRaw) {
+    return undefined;
+  }
+  // sprint-3/S1 fix (codex P1): gate migration to the marker-identified
+  // owner. The sprint-2 marker is the only signal we have about which user
+  // wrote the legacy payload on this browser. Marker absent (fresh browser)
+  // or mismatched (different user wrote it) → drop legacy without migration.
+  let legacyOwnerId: string | null = null;
+  try {
+    legacyOwnerId = window.localStorage.getItem(lastSessionUserStorageKey);
+  } catch {
+    legacyOwnerId = null;
+  }
+  if (!legacyOwnerId || legacyOwnerId !== userId) {
+    try {
+      window.localStorage.removeItem(notebookStorageKey);
+    } catch {
+      /* ignore */
+    }
     return undefined;
   }
   let parsed: Partial<StudyNotebook>;

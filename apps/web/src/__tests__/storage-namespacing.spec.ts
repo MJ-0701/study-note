@@ -90,3 +90,50 @@ describe("notebook migration shape", () => {
     assert.notEqual(store.get(aKey), store.get(bKey));
   });
 });
+
+// sprint-3/S1 fix (codex P1): legacy migration must be gated to the owner
+// identified by the sprint-2 marker. Otherwise a shared-browser upgrade lets
+// the next user logging in absorb the previous user's legacy notebook.
+describe("legacy migration owner gate", () => {
+  const LAST_USER_KEY = "study-note.session.lastUserId";
+
+  function shouldMigrate(legacyExists: boolean, ownerId: string | null, userId: string): boolean {
+    if (!legacyExists) {
+      return false;
+    }
+    if (!ownerId || ownerId !== userId) {
+      return false;
+    }
+    return true;
+  }
+
+  test("owner match → migrate", () => {
+    const store = new Map<string, string>();
+    store.set(NOTEBOOK_KEY_BASE, "{}");
+    store.set(LAST_USER_KEY, "user-a");
+    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), true);
+  });
+
+  test("owner mismatch → drop legacy, do NOT migrate", () => {
+    // Shared browser upgrade scenario: user A wrote legacy, user B is first to
+    // log in after the upgrade. B must not absorb A's notebook.
+    const store = new Map<string, string>();
+    store.set(NOTEBOOK_KEY_BASE, "{}");
+    store.set(LAST_USER_KEY, "user-a");
+    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-b"), false);
+  });
+
+  test("marker absent → drop legacy, do NOT migrate", () => {
+    // Fresh browser or pre-marker rollout. Without the owner signal we cannot
+    // safely attribute the legacy payload to anyone.
+    const store = new Map<string, string>();
+    store.set(NOTEBOOK_KEY_BASE, "{}");
+    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), false);
+  });
+
+  test("legacy absent → noop regardless of marker", () => {
+    const store = new Map<string, string>();
+    store.set(LAST_USER_KEY, "user-a");
+    assert.equal(shouldMigrate(store.has(NOTEBOOK_KEY_BASE), store.get(LAST_USER_KEY) ?? null, "user-a"), false);
+  });
+});
