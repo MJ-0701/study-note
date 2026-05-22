@@ -1,4 +1,10 @@
 import morphdom from "morphdom";
+import {
+  clearDatadogRumUser,
+  initializeDatadogRum,
+  setDatadogRumUser,
+  trackRumAction
+} from "./observability/datadogRum";
 import { sampleLectureNote } from "./data/sampleLectureNote";
 import { localIntakeGuide } from "./data/intakeGuide";
 import { classSchedule, scheduleRangeLabel } from "./data/classSchedule";
@@ -84,6 +90,7 @@ import "./styles.css";
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
 const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
+initializeDatadogRum();
 const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending";
 
 type Route =
@@ -1437,6 +1444,7 @@ function applySessionTransitionForUser(newUserId: string): void {
 function clearAuthSession(): void {
   authBootRequestId += 1;
   authSession = undefined;
+  clearDatadogRumUser();
   clearAuthBootTimers();
   revokeAllPdfObjectUrls();
   // sprint-1/S2 fix (codex P2): drop transient overlays that should not survive
@@ -1571,6 +1579,10 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
     }
 
     authSession = meResponseToSession(payload);
+    setDatadogRumUser({
+      id: authSession.user.id,
+      role: authSession.user.role
+    });
     // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot so a future
     // session loss can re-surface the banner.
     authExpiryHandled = false;
@@ -2365,6 +2377,7 @@ function handleDocumentClick(event: MouseEvent): void {
   if (quickNoteButton?.dataset.action === "auth-tab-signup") {
     authMode = "signup";
     loginFeedback = undefined;
+    trackRumAction("sign_up_started");
     renderApp();
     return;
   }
@@ -2981,6 +2994,13 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
 
       const session = meResponseToSession(payload as AuthMeResponse);
       authSession = session;
+      setDatadogRumUser({
+        id: session.user.id,
+        role: session.user.role
+      });
+      trackRumAction("login_completed", {
+        role: session.user.role
+      });
       // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot on fresh sign-in.
       authExpiryHandled = false;
       authBootState = "ready";
@@ -3032,6 +3052,7 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     // Server sets cookie on 200. Re-validate via /me to populate session + PDF restore.
     loginFeedback = undefined;
     authMode = "login";
+    trackRumAction("sign_up_completed");
     await revalidateStoredSession();
   } catch (error) {
     loginFeedback = {
@@ -4109,6 +4130,9 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     title: "PDF 업로드를 시작했습니다.",
     detail: `${file.name}을 backend material storage로 보내는 중입니다.`
   };
+  trackRumAction("pdf_upload_started", {
+    file_size_bucket: bucketFileSize(file.size)
+  });
   renderApp();
 
   try {
@@ -4161,6 +4185,10 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       title: "PDF를 backend에 저장했습니다.",
       detail: `${uploadedMaterial.fileName} · ${formatPdfFileSize(uploadedMaterial.fileSize)} · ${uploadedMaterial.pageCount}페이지 추정 · 새로고침 후에도 복원됩니다.`
     };
+    trackRumAction("pdf_upload_completed", {
+      file_size_bucket: bucketFileSize(uploadedMaterial.fileSize),
+      page_count_bucket: bucketPageCount(uploadedMaterial.pageCount)
+    });
   } catch (error) {
     if (handleMaterialAuthError(error)) {
       return;
@@ -4172,6 +4200,9 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       detail: formatMaterialError(error),
       retrySubjectId: subjectId
     };
+    trackRumAction("pdf_upload_failed", {
+      reason: error instanceof MaterialApiError ? `http_${error.status}` : "unknown"
+    });
   }
 
   renderApp();
@@ -4302,6 +4333,20 @@ function formatMaterialError(error: unknown): string {
   }
 
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.";
+}
+
+function bucketFileSize(size: number): string {
+  if (size < 1_000_000) return "lt_1mb";
+  if (size < 5_000_000) return "1_5mb";
+  if (size < 20_000_000) return "5_20mb";
+  return "gte_20mb";
+}
+
+function bucketPageCount(pageCount: number): string {
+  if (pageCount <= 10) return "1_10";
+  if (pageCount <= 30) return "11_30";
+  if (pageCount <= 100) return "31_100";
+  return "gt_100";
 }
 
 function getSurfacePoint(event: PointerEvent, surface: HTMLElement): PdfInkPoint {
