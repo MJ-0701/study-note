@@ -696,6 +696,15 @@ const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const userNotesFetchedKeys = new Set<string>();
 const annotationFetchedKeys = new Set<string>();
+// sprint-2/S3 fix (codex P2): track which materialId currently occupies the
+// in-memory bundle for `${userId}:${subjectId}`. The previous fix released
+// the cache key after every successful GET so material A→B→A revisit would
+// re-fetch, but renderApp() re-invokes fetchAnnotationIfMissing on every
+// render and the released cache made that a per-render network storm.
+// Keep the cache marker set after success and instead force a refetch only
+// when the active material differs from the last hydrated material for the
+// same subject (the real revisit signal).
+const lastHydratedAnnotationByMaterial = new Map<string, string>();
 const syncFailureTracker: SyncFailureTracker = {
   recentFailures: [],
   paused: false
@@ -981,11 +990,21 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     return;
   }
   const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
-  // sprint-2/S2 fix-2 (codex P1): in-flight 중복만 차단하고, completion 후에는
-  // cache 를 풀어 다음 view (material 전환 후 재방문) 시 re-fetch 한다.
-  // workspace 의 annotation array 가 subject-level (material 별 분리 X) 이라
-  // material 전환 시 다른 material 의 데이터로 in-memory state 가 덮어쓰여
-  // session 동안 한 번만 fetch 시 stale 노출 위험.
+  const subjectKey = `${sessionUserId}:${subjectId}`;
+  // sprint-2/S3 fix (codex P2): force a refetch when the active material
+  // differs from the last hydrated material for this subject (real A→B→A
+  // revisit signal). For same-material re-renders the cache short-circuit
+  // still applies, preventing the per-render network storm caused by the
+  // previous "release on success" approach.
+  if (
+    annotationFetchedKeys.has(cacheKey)
+    && lastHydratedAnnotationByMaterial.get(subjectKey) === materialId
+  ) {
+    return;
+  }
+  if (lastHydratedAnnotationByMaterial.get(subjectKey) !== materialId) {
+    annotationFetchedKeys.delete(cacheKey);
+  }
   if (annotationFetchedKeys.has(cacheKey)) {
     return;
   }
@@ -996,9 +1015,11 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       credentials: "include"
     });
     if (response.status === 404) {
-      // sprint-2/S2 fix (codex P2): release cache marker on 404 so a later
-      // device that creates the annotation can be re-fetched on next view.
-      releaseCache();
+      // sprint-2/S3 fix (codex P2): 404 = server has no annotation for this
+      // material. Keep the cache marker AND record lastHydrated so subsequent
+      // re-renders of the same material short-circuit (no storm). Cross-device
+      // creation that lands later is rehydrated on material switch revisit.
+      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
       return;
     }
     if (response.status === 401 || response.status === 403) {
@@ -1045,9 +1066,11 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       const incoming = json.payload as Partial<SubjectPdfWorkspace>;
       updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
     }
-    // sprint-2/S2 fix-2 (codex P1): release cache marker on completion so a
-    // future view (after material switch) re-fetches a fresh snapshot.
-    releaseCache();
+    // sprint-2/S3 fix (codex P2): keep the cache marker AND record which
+    // material currently occupies the subject's in-memory bundle. The
+    // material-switch guard at the top of this function clears the cache key
+    // when the active material differs, so revisits still re-fetch.
+    lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
   } catch (error) {
     releaseCache();
     console.warn("[study-note] annotation GET network error", error);
@@ -1160,6 +1183,7 @@ function clearAuthSession(): void {
   annotationPutTimers.clear();
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
+  lastHydratedAnnotationByMaterial.clear();
   syncFailureTracker.paused = false;
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
