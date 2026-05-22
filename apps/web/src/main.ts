@@ -1118,10 +1118,14 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
         }
         if (response.status === 409) {
           // plan §R5: silent stale-write recovery. body = canonical schema.
+          // codex P1 (PR #35 round-2): NO_RECORD 분기 retry 위해 payload +
+          // abortController.signal 전달.
           await handleAnnotationStaleResponse(
             sessionUserIdAtSchedule,
             materialId,
-            response
+            response,
+            payload,
+            abortController.signal
           );
           recordSyncSuccess();
           return;
@@ -1188,7 +1192,9 @@ function scheduleAnnotationPut(materialId: string, payload: unknown): void {
 async function handleAnnotationStaleResponse(
   userId: string,
   materialId: string,
-  response: Response
+  response: Response,
+  retryPayload: unknown,
+  abortSignal: AbortSignal
 ): Promise<void> {
   let json: {
     annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
@@ -1200,9 +1206,59 @@ async function handleAnnotationStaleResponse(
   }
   const entry = json.annotations?.[materialId];
   if (!entry) {
-    // server 에 entry 없음 (R9 stale_revision_no_record). revision cache
-    // drop 후 다음 mutation 이 clientRevision undefined 로 신규 create.
+    // codex P1 (PR #35 round-2): STALE_REVISION_NO_RECORD = client 가 cache
+    // revision 보냈지만 server 에 snapshot 없음 (예: 다른 device 에서 삭제
+    // / migration). 이전 구현은 cache drop 후 sync success 로 마무리해서
+    // user 의 현재 mutation 이 영원히 사라졌음 (다음 mutation 까지 wait).
+    // 대신 즉시 retry with clientRevision undefined → BE 의 create 분기가
+    // 사용자 payload 로 신규 snapshot 생성. 이 retry 는 같은 chain entry
+    // 안에서 sequential 하게 실행되므로 추가 race 없음.
     lastHydratedAnnotationRevision.delete(`${userId}:${materialId}`);
+    try {
+      const retryResp = await fetch(
+        `${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ payload: retryPayload }),
+          signal: abortSignal
+        }
+      );
+      if (retryResp.ok) {
+        try {
+          const retryJson = (await retryResp.json()) as {
+            annotations?: Record<string, { updatedAt?: unknown }>;
+          };
+          const created = retryJson.annotations?.[materialId];
+          if (created && typeof created.updatedAt === "string") {
+            lastHydratedAnnotationRevision.set(
+              `${userId}:${materialId}`,
+              created.updatedAt
+            );
+          }
+        } catch {
+          /* response body parse 실패 = revision cache 못 갱신, 다음 mutation
+             이 다시 STALE_REVISION_NO_RECORD path 거치며 또 retry 됨 */
+        }
+      } else if (retryResp.status === 401 || retryResp.status === 403) {
+        handleAuthExpiredFromSync();
+      } else {
+        console.warn(
+          "[study-note] annotation NO_RECORD retry failed",
+          retryResp.status,
+          materialId
+        );
+        if (retryResp.status >= 500 || retryResp.status === 429) {
+          recordSyncFailure();
+        }
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        console.warn("[study-note] annotation NO_RECORD retry network error", err);
+        recordSyncFailure();
+      }
+    }
     return;
   }
   if (typeof entry.updatedAt !== "string") {
