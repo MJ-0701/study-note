@@ -194,7 +194,13 @@ const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
 const AUTH_SESSION_REQUEST_TIMEOUT_MS = 45000;
 const AUTH_SESSION_RETRY_DELAY_MS = 3000;
 const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
-let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
+// sprint-3/S1 (codex P1 backlog): notebook is no longer loaded at module init —
+// without an authenticated userId we cannot pick the correct namespaced key.
+// Boot starts with the fixture default; revalidate / sign-in success paths
+// call `loadStoredNotebook(session.user.id)` and render the user's data once
+// the session attaches. See applySessionTransitionForUser refactor for the
+// load wiring.
+let notebook: StudyNotebook = sampleLectureNote;
 let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
 // sprint-2/S3 fix (codex P1): see lastSessionUserStorageKey comment for the
 // invariant this enforces. Initialized from localStorage so a page reload
@@ -650,11 +656,84 @@ export function toggleInspectorDrillState(
   };
 }
 
-function loadStoredNotebook(): StudyNotebook {
-  const stored = window.localStorage.getItem(notebookStorageKey);
+// sprint-3/S1 (codex P1 backlog): userId-scoped notebook storage key. The
+// previous global key allowed cross-user data leak vectors on shared browsers;
+// each user now writes to `{base}:{userId}` so A→B account transitions cannot
+// see each other's notebook through localStorage. See plan G1 (2026-W21
+// userId-namespacing sprint) for the leak class this closes.
+function buildNotebookKey(userId: string): string {
+  return `${notebookStorageKey}:${userId}`;
+}
+
+// sprint-3/S1: one-shot migration from the legacy unscoped key into the new
+// userId-scoped key. Runs the first time `loadStoredNotebook(userId)` is
+// called for a user whose namespaced key is empty AND the legacy unscoped key
+// has parseable notebook data. After the migrated copy is persisted, the
+// legacy key is removed so subsequent loads on this browser do not re-migrate
+// stale data into a different user's namespace. Failure policy: data loss
+// allowed — server autosave is SoT, GET hydrate restores cross-device.
+function migrateLegacyNotebookForUser(userId: string): StudyNotebook | undefined {
+  let legacyRaw: string | null = null;
+  try {
+    legacyRaw = window.localStorage.getItem(notebookStorageKey);
+  } catch {
+    return undefined;
+  }
+  if (!legacyRaw) {
+    return undefined;
+  }
+  let parsed: Partial<StudyNotebook>;
+  try {
+    parsed = JSON.parse(legacyRaw) as Partial<StudyNotebook>;
+  } catch {
+    try {
+      window.localStorage.removeItem(notebookStorageKey);
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+  if (
+    typeof parsed.id !== "string" ||
+    !Array.isArray(parsed.subjects) ||
+    !hasCurrentSubjectSet(parsed)
+  ) {
+    try {
+      window.localStorage.removeItem(notebookStorageKey);
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  }
+  const notebook = parsed as StudyNotebook;
+  const scopedKey = buildNotebookKey(userId);
+  try {
+    // 2-phase: write the scoped copy first; remove the legacy key only after
+    // a successful write. Partial failure leaves the legacy key intact for
+    // the next load attempt (idempotent retry).
+    window.localStorage.setItem(scopedKey, JSON.stringify(notebook));
+    window.localStorage.removeItem(notebookStorageKey);
+  } catch {
+    return undefined;
+  }
+  return notebook;
+}
+
+function loadStoredNotebook(userId: string): StudyNotebook {
+  const scopedKey = buildNotebookKey(userId);
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(scopedKey);
+  } catch {
+    return sampleLectureNote;
+  }
 
   if (!stored) {
-    return sampleLectureNote;
+    // sprint-3/S1: no scoped data yet — attempt one-shot migration from the
+    // legacy unscoped key. If that fails (no legacy data or invalid),
+    // fall back to the fixture default.
+    const migrated = migrateLegacyNotebookForUser(userId);
+    return migrated ?? sampleLectureNote;
   }
 
   try {
@@ -668,9 +747,9 @@ function loadStoredNotebook(): StudyNotebook {
       return parsed as StudyNotebook;
     }
 
-    window.localStorage.removeItem(notebookStorageKey);
+    window.localStorage.removeItem(scopedKey);
   } catch {
-    window.localStorage.removeItem(notebookStorageKey);
+    window.localStorage.removeItem(scopedKey);
   }
 
   return sampleLectureNote;
@@ -1280,9 +1359,18 @@ function updatePdfWorkspaceStoreFromServer(
   try { renderApp(); } catch { /* ignore */ }
 }
 
-function saveNotebook(nextNotebook: StudyNotebook): boolean {
+function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = authSession?.user.id): boolean {
+  // sprint-3/S1 (codex P1 backlog): require an authenticated userId to write.
+  // Saving without one would either land on the legacy unscoped key (leak
+  // vector) or an empty namespace (data loss). When there is no session yet
+  // (boot before /v1/auth/me resolves), drop the write — the next save after
+  // session attach will persist the same in-memory state.
+  if (!userId) {
+    return true;
+  }
+  const scopedKey = buildNotebookKey(userId);
   try {
-    window.localStorage.setItem(notebookStorageKey, JSON.stringify(nextNotebook));
+    window.localStorage.setItem(scopedKey, JSON.stringify(nextNotebook));
     // Recovery: surface banner removal if we had been failing.
     if (notebookStorageError !== undefined) {
       notebookStorageError = undefined;
@@ -1319,15 +1407,23 @@ function saveNotebook(nextNotebook: StudyNotebook): boolean {
 // so a page reload by the same user matches the marker and skips the wipe.
 // Only a genuinely different userId triggers the destructive reset.
 function applySessionTransitionForUser(newUserId: string): void {
+  // sprint-3/S1: load the notebook from the user's namespaced localStorage key.
+  // This runs on every session attach (revalidate / sign-in) so the same user
+  // re-attaching after page reload picks up their own data, and a different
+  // user attaching gets their own — neither sees the other's notebook.
+  // module-init left `notebook` as sampleLectureNote; this is the first read.
+  notebook = loadStoredNotebook(newUserId);
+
   if (lastSessionUserId === newUserId) {
+    // Same user as last session — namespaced load above already restored data.
+    // No further transition work needed.
     return;
   }
   // sprint-2/S3 fix-2 (codex P1): on first rollout (or fresh browser) the
-  // marker is absent. Do NOT wipe in that case — record the marker so a
-  // subsequent sign-in by a *different* user triggers the wipe. Wiping on
-  // first revalidate would destroy every existing user's local notebook on
-  // the day this fix deploys, which is worse than the residual one-time
-  // pre-marker leak risk it tries to close.
+  // marker is absent. Do NOT wipe workspace in that case — record the marker
+  // so a subsequent sign-in by a *different* user triggers the wipe. (S2
+  // backlog item will namespace pdfWorkspaceStore the same way notebook is
+  // namespaced now, removing the wipe entirely.)
   if (lastSessionUserId === undefined) {
     lastSessionUserId = newUserId;
     try {
@@ -1337,12 +1433,9 @@ function applySessionTransitionForUser(newUserId: string): void {
     }
     return;
   }
-  notebook = structuredClone(sampleLectureNote);
-  try {
-    window.localStorage.removeItem(notebookStorageKey);
-  } catch {
-    /* localStorage unavailable — in-memory reset still applies */
-  }
+  // sprint-3/S1: notebook is now user-scoped via loadStoredNotebook(newUserId)
+  // above; no need to wipe it here. pdfWorkspaceStore is still global (S2
+  // pending) so keep wiping it for now to prevent leak through that channel.
   pdfWorkspaceStore = { workspaces: {} };
   try {
     savePdfWorkspaceStore();
@@ -2779,7 +2872,22 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
-  window.localStorage.removeItem(notebookStorageKey);
+  // sprint-3/S1 (codex P1 backlog): remove the per-user scoped key in addition
+  // to the legacy unscoped key so the reset action does what it advertises for
+  // userId-namespaced storage. Falls through cleanly when no session is active.
+  const resetUserId = authSession?.user.id;
+  if (resetUserId) {
+    try {
+      window.localStorage.removeItem(buildNotebookKey(resetUserId));
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    window.localStorage.removeItem(notebookStorageKey);
+  } catch {
+    /* ignore */
+  }
   notebook = sampleLectureNote;
   intakeFeedback = {
     kind: "success",
