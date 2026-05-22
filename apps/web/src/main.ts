@@ -734,14 +734,30 @@ function migrateLegacyNotebookForUser(userId: string): StudyNotebook | undefined
   }
   const notebook = parsed as StudyNotebook;
   const scopedKey = buildNotebookKey(userId);
+  // sprint-3/S1 fix-2 (codex P1): split the 2-phase write so a scoped setItem
+  // failure (quota / private-mode) does not throw away the readable legacy
+  // payload in memory. Previously any exception inside the combined try
+  // returned undefined, which made loadStoredNotebook fall back to
+  // sampleLectureNote and silently drop the user's data for the session.
+  // New behavior:
+  //   - setItem fails  → return the in-memory parsed notebook; legacy key
+  //                       is left intact so the next load retries migration.
+  //   - removeItem fails → scoped copy already landed; return notebook. Next
+  //                       load reads the scoped key directly and never enters
+  //                       the migration branch (idempotent).
+  let scopedWritten = false;
   try {
-    // 2-phase: write the scoped copy first; remove the legacy key only after
-    // a successful write. Partial failure leaves the legacy key intact for
-    // the next load attempt (idempotent retry).
     window.localStorage.setItem(scopedKey, JSON.stringify(notebook));
-    window.localStorage.removeItem(notebookStorageKey);
+    scopedWritten = true;
   } catch {
-    return undefined;
+    /* keep legacy intact, return in-memory copy below */
+  }
+  if (scopedWritten) {
+    try {
+      window.localStorage.removeItem(notebookStorageKey);
+    } catch {
+      /* scoped copy is the source of truth from this point */
+    }
   }
   return notebook;
 }
