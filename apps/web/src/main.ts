@@ -826,7 +826,11 @@ async function putUserNoteToBE(
     }
     if (!response.ok) {
       console.warn("[study-note] userNotes PUT failed", response.status, weekId);
-      if (response.status >= 500) {
+      // sprint-2/S3 fix (codex P1): treat 429 Too Many Requests as a sync
+      // failure so the autosave pause threshold can engage. Without this,
+      // server-side rate-limiting silently drops PUTs while the UI keeps
+      // accepting edits — same user-facing symptom as 5xx.
+      if (response.status >= 500 || response.status === 429) {
         recordSyncFailure();
       }
       return;
@@ -973,7 +977,8 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
     }
     if (!response.ok) {
       console.warn("[study-note] annotation PUT failed", response.status, materialId);
-      if (response.status >= 500) {
+      // sprint-2/S3 fix (codex P1): 429 mirrors >=500 in the pause logic.
+      if (response.status >= 500 || response.status === 429) {
         recordSyncFailure();
       }
       return;
