@@ -708,6 +708,14 @@ interface SyncFailureTracker {
 
 const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// sprint-2/S3 fix (codex P1): per-key AbortControllers for in-flight PUT
+// supersession. Debounce alone does not prevent out-of-order delivery — once
+// the timer fires and a PUT is on the wire, a new schedule produces a second
+// in-flight request whose response can arrive before the first, leaving the
+// older body persisted on the server. When scheduling, abort the previous
+// in-flight PUT so only the latest payload reaches the server.
+const userNotesPutAborts = new Map<string, AbortController>();
+const annotationPutAborts = new Map<string, AbortController>();
 const userNotesFetchedKeys = new Set<string>();
 const annotationFetchedKeys = new Set<string>();
 // sprint-2/S3 fix (codex P2): track which materialId currently occupies the
@@ -805,6 +813,17 @@ async function putUserNoteToBE(
   if (syncFailureTracker.paused) {
     return;
   }
+  // sprint-2/S3 fix (codex P1): abort any prior in-flight PUT for the same
+  // (subject, week) so out-of-order delivery cannot persist the older payload
+  // after the newer one. Debounce only collapses pre-PUT churn; once the
+  // request is on the wire, only this guard prevents stale-overwrite races.
+  const abortKey = `${subjectId}:${weekId}`;
+  const previousAbort = userNotesPutAborts.get(abortKey);
+  if (previousAbort) {
+    previousAbort.abort();
+  }
+  const abortController = new AbortController();
+  userNotesPutAborts.set(abortKey, abortController);
   try {
     const response = await fetch(
       `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
@@ -812,7 +831,8 @@ async function putUserNoteToBE(
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body })
+        body: JSON.stringify({ body }),
+        signal: abortController.signal
       }
     );
     if (response.status === 413) {
@@ -837,8 +857,16 @@ async function putUserNoteToBE(
     }
     recordSyncSuccess();
   } catch (error) {
+    // Aborted by a newer PUT — silent, not a sync failure.
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return;
+    }
     console.warn("[study-note] userNotes PUT network error", error);
     recordSyncFailure();
+  } finally {
+    if (userNotesPutAborts.get(abortKey) === abortController) {
+      userNotesPutAborts.delete(abortKey);
+    }
   }
 }
 
@@ -963,12 +991,22 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
   if (syncFailureTracker.paused) {
     return;
   }
+  // sprint-2/S3 fix (codex P1): same in-flight supersession as userNotes —
+  // cancel any prior PUT for this material so out-of-order delivery cannot
+  // overwrite the latest annotation bundle with an older one.
+  const previousAbort = annotationPutAborts.get(materialId);
+  if (previousAbort) {
+    previousAbort.abort();
+  }
+  const abortController = new AbortController();
+  annotationPutAborts.set(materialId, abortController);
   try {
     const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ payload })
+      body: JSON.stringify({ payload }),
+      signal: abortController.signal
     });
     if (response.status === 413) {
       console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
@@ -989,8 +1027,15 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
     }
     recordSyncSuccess();
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return;
+    }
     console.warn("[study-note] annotation PUT network error", error);
     recordSyncFailure();
+  } finally {
+    if (annotationPutAborts.get(materialId) === abortController) {
+      annotationPutAborts.delete(materialId);
+    }
   }
 }
 
@@ -1268,6 +1313,16 @@ function applySessionTransitionForUser(newUserId: string): void {
     clearTimeout(timer);
   }
   annotationPutTimers.clear();
+  // sprint-2/S3 fix (codex P1): abort in-flight PUTs so a delayed completion
+  // cannot land on the new session with the previous user's body.
+  for (const ac of userNotesPutAborts.values()) {
+    ac.abort();
+  }
+  userNotesPutAborts.clear();
+  for (const ac of annotationPutAborts.values()) {
+    ac.abort();
+  }
+  annotationPutAborts.clear();
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
@@ -1309,6 +1364,15 @@ function clearAuthSession(): void {
     clearTimeout(timer);
   }
   annotationPutTimers.clear();
+  // sprint-2/S3 fix (codex P1): also abort in-flight PUTs.
+  for (const ac of userNotesPutAborts.values()) {
+    ac.abort();
+  }
+  userNotesPutAborts.clear();
+  for (const ac of annotationPutAborts.values()) {
+    ac.abort();
+  }
+  annotationPutAborts.clear();
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
