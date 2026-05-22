@@ -953,6 +953,9 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       credentials: "include"
     });
     if (response.status === 404) {
+      // sprint-2/S2 fix (codex P2): release cache marker on 404 so a later
+      // device that creates the annotation can be re-fetched on next view.
+      releaseCache();
       return;
     }
     if (!response.ok) {
@@ -971,6 +974,14 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     // logout/login between fetch start and resolve must NOT apply user A's
     // server data into user B's workspace.
     if (authSession?.user.id !== sessionUserId) {
+      return;
+    }
+    // sprint-2/S2 fix (codex P1): skip hydrate when a local PUT is still
+    // pending for this material — annotation writes are debounced (750ms),
+    // so a stale GET could overwrite fresh local edits before the user's
+    // changes are flushed to the server.
+    if (annotationPutTimers.has(materialId)) {
+      releaseCache();
       return;
     }
     recordFetchSuccess();
