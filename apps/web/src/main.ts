@@ -1189,6 +1189,21 @@ function applySessionTransitionForUser(newUserId: string): void {
   if (lastSessionUserId === newUserId) {
     return;
   }
+  // sprint-2/S3 fix-2 (codex P1): on first rollout (or fresh browser) the
+  // marker is absent. Do NOT wipe in that case — record the marker so a
+  // subsequent sign-in by a *different* user triggers the wipe. Wiping on
+  // first revalidate would destroy every existing user's local notebook on
+  // the day this fix deploys, which is worse than the residual one-time
+  // pre-marker leak risk it tries to close.
+  if (lastSessionUserId === undefined) {
+    lastSessionUserId = newUserId;
+    try {
+      window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   notebook = structuredClone(sampleLectureNote);
   try {
     window.localStorage.removeItem(notebookStorageKey);
