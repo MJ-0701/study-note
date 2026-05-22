@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { BadRequestException, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { json } from "express";
 import { AppModule } from "./app.module";
 import { ApiExceptionFilter } from "./common/filters/api-exception.filter";
 
@@ -21,6 +22,11 @@ async function bootstrap() {
   }
 
   const app = await NestFactory.create(AppModule, { logger: ["error", "warn", "log"] });
+  // sprint-2/S1 fix (codex P1): raise JSON body parser limit so the documented
+  // 256KB API contract for /v1/notes / /v1/pdf-annotations is reachable.
+  // Express default is 100KB → bodies between 100KB and 256KB would fail at
+  // the parser layer before reaching the per-endpoint controller guard.
+  app.use(json({ limit: "256kb" }));
   // slice-2: global exception filter — maps all HttpExceptions to {errorCode, errorMessage}
   // per CLAUDE.md API convention.
   app.useGlobalFilters(new ApiExceptionFilter());
