@@ -25,12 +25,13 @@ async function bootstrap() {
     logger: ["error", "warn", "log"]
   });
   // sprint-2/S1 fix (codex P1+P2): raise JSON body parser limit so the
-  // documented 256KB payload contract is reachable. We allow 320KB at the
-  // parser layer (256KB content + JSON wrapper/header overhead like
-  // `{"body":"..."}` plus quoting/escaping). The per-endpoint controller still
-  // enforces the strict 256KB content cap, so legitimate near-limit payloads
-  // pass the parser and reach the controller for accurate 413 emission.
-  app.useBodyParser("json", { limit: "320kb" });
+  // documented 256KB payload contract is reachable in all escape forms.
+  // Parser limits raw request bytes; a 256KB content with heavy JSON escaping
+  // (`\"`, `\\`, `\n`, UTF-8 multi-byte) can exceed 256KB raw. We allow
+  // **640KB** at the parser layer = 256KB content × ~2.5 worst-case escape
+  // overhead × wrapper. The per-endpoint controller still enforces the strict
+  // 256KB *decoded* content cap so the 413 emission stays accurate.
+  app.useBodyParser("json", { limit: "640kb" });
   // slice-2: global exception filter — maps all HttpExceptions to {errorCode, errorMessage}
   // per CLAUDE.md API convention.
   app.useGlobalFilters(new ApiExceptionFilter());

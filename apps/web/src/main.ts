@@ -725,6 +725,9 @@ function recordSyncFailure(): void {
   }
 }
 
+// sprint-2/S2 fix (codex P1): PUT success only — unpause autosave (PUT 신호).
+// GET success 는 read-only 라 PUT 의 paused 상태를 풀면 안 됨 (사용자가 typing
+// 중인데 PUT 은 여전히 500 일 수 있음).
 function recordSyncSuccess(): void {
   syncFailureTracker.recentFailures = [];
   if (syncFailureTracker.paused) {
@@ -733,6 +736,12 @@ function recordSyncSuccess(): void {
     syncBackendErrorReported = false;
     try { renderApp(); } catch { /* ignore */ }
   }
+}
+
+// sprint-2/S2 fix (codex P1): GET success — silent. 별도 함수로 분리해 unpause
+// 신호 X. 5xx 누적 카운트도 그대로 (PUT 만 카운트).
+function recordFetchSuccess(): void {
+  /* no-op intentionally — GET 성공이 PUT paused 상태 변경에 영향 없음. */
 }
 
 async function putUserNoteToBE(weekId: string, body: string): Promise<void> {
@@ -823,14 +832,14 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
     //       and let the next PUT carry the local value to the server.
     // Cross-device restore still works on first visit (local empty → hydrate).
     if (userNotesPutTimers.has(weekId)) {
-      recordSyncSuccess();
+      recordFetchSuccess();
       return;
     }
     const localSubject = notebook.subjects.find((subject) => subject.id === subjectId);
     const localWeek = localSubject?.weekNotes.find((week) => week.id === weekId);
     const localValue = typeof localWeek?.userNotes === "string" ? localWeek.userNotes : "";
     if (localValue.length > 0 && localValue !== incoming) {
-      recordSyncSuccess();
+      recordFetchSuccess();
       return;
     }
     let applied = false;
@@ -858,7 +867,7 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
       saveNotebook(notebook);
       try { renderApp(); } catch { /* ignore */ }
     }
-    recordSyncSuccess();
+    recordFetchSuccess();
   } catch (error) {
     userNotesFetchedKeys.delete(cacheKey);
     console.warn("[study-note] userNotes GET network error", error);
@@ -943,7 +952,7 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     if (authSession?.user.id !== sessionUserId) {
       return;
     }
-    recordSyncSuccess();
+    recordFetchSuccess();
 
     // sprint-2/S2 fix (codex P1): hydrate the workspace store with the server
     // payload. The server-side snapshot is the per-material annotation bundle
