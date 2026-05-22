@@ -354,34 +354,40 @@ export class PdfAnnotationsService {
         select: { savedAt: true }
       });
     } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2002"
-      ) {
-        // R9: unique violation = another concurrent create won.
-        const existing = await this.prisma.annotationSnapshot.findUnique({
-          where: { materialId_ownerId: { materialId, ownerId } },
-          select: { savedAt: true }
-        });
-        const obj = existing
-          ? await this.storage.getJsonObject<{ payload: unknown }>(
-              this.key(ownerId, materialId)
-            )
-          : null;
-        throw new ConflictException({
-          errorCode: "STALE_REVISION",
-          annotations: existing
-            ? {
-                [materialId]: {
-                  payload: obj?.payload ?? null,
-                  updatedAt: existing.savedAt.toISOString()
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === "P2002") {
+          // R9: unique violation = another concurrent create won.
+          const existing = await this.prisma.annotationSnapshot.findUnique({
+            where: { materialId_ownerId: { materialId, ownerId } },
+            select: { savedAt: true }
+          });
+          const obj = existing
+            ? await this.storage.getJsonObject<{ payload: unknown }>(
+                this.key(ownerId, materialId)
+              )
+            : null;
+          throw new ConflictException({
+            errorCode: "STALE_REVISION",
+            annotations: existing
+              ? {
+                  [materialId]: {
+                    payload: obj?.payload ?? null,
+                    updatedAt: existing.savedAt.toISOString()
+                  }
                 }
-              }
-            : {},
-          truncated: false,
-          total: existing ? 1 : 0,
-          returned: existing ? 1 : 0
-        });
+              : {},
+            truncated: false,
+            total: existing ? 1 : 0,
+            returned: existing ? 1 : 0
+          });
+        }
+        if (err.code === "P2003" || err.code === "P2025") {
+          // codex P2 (PR #35 round-3): pre-check 후 material delete race —
+          // FK violation (P2003) 또는 RecordNotFound (P2025) 발생. ownership
+          // pre-check 가 보장하던 invariant 가 사이에 무너졌으므로 R6 의
+          // foreign/nonexistent 와 동일 응답 (404). 5xx 로 leak 차단.
+          this.throwMaterialNotFound();
+        }
       }
       throw err;
     }

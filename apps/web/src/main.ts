@@ -1118,16 +1118,20 @@ async function putAnnotationToBE(materialId: string, payload: unknown): Promise<
         }
         if (response.status === 409) {
           // plan §R5: silent stale-write recovery. body = canonical schema.
-          // codex P1 (PR #35 round-2): NO_RECORD 분기 retry 위해 payload +
-          // abortController.signal 전달.
-          await handleAnnotationStaleResponse(
+          // codex P1 (PR #35 round-3): handleAnnotationStaleResponse 가 boolean
+          // 반환 — recovered (true) 일 때만 recordSyncSuccess. NO_RECORD retry
+          // 가 5xx/network 로 실패하면 false → recordSyncSuccess 안 부름 →
+          // failure tracker 가 backoff/banner 정상 발사. silent edit drop 차단.
+          const recovered = await handleAnnotationStaleResponse(
             sessionUserIdAtSchedule,
             materialId,
             response,
             payload,
             abortController.signal
           );
-          recordSyncSuccess();
+          if (recovered) {
+            recordSyncSuccess();
+          }
           return;
         }
         if (!response.ok) {
@@ -1195,24 +1199,24 @@ async function handleAnnotationStaleResponse(
   response: Response,
   retryPayload: unknown,
   abortSignal: AbortSignal
-): Promise<void> {
+): Promise<boolean> {
+  // codex P1 (PR #35 round-3): return true = recovered (caller 가 recordSyncSuccess),
+  // false = unrecovered (caller 가 recordSyncSuccess 호출 X — backoff 정책
+  // 안 우회 + 사용자 편집 silent drop 안 함).
   let json: {
     annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
   };
   try {
     json = (await response.json()) as typeof json;
   } catch {
-    return;
+    return false;
   }
   const entry = json.annotations?.[materialId];
   if (!entry) {
     // codex P1 (PR #35 round-2): STALE_REVISION_NO_RECORD = client 가 cache
     // revision 보냈지만 server 에 snapshot 없음 (예: 다른 device 에서 삭제
-    // / migration). 이전 구현은 cache drop 후 sync success 로 마무리해서
-    // user 의 현재 mutation 이 영원히 사라졌음 (다음 mutation 까지 wait).
-    // 대신 즉시 retry with clientRevision undefined → BE 의 create 분기가
-    // 사용자 payload 로 신규 snapshot 생성. 이 retry 는 같은 chain entry
-    // 안에서 sequential 하게 실행되므로 추가 race 없음.
+    // / migration). cache drop 후 즉시 retry with clientRevision undefined
+    // → BE 의 create 분기가 사용자 payload 로 신규 snapshot 생성.
     lastHydratedAnnotationRevision.delete(`${userId}:${materialId}`);
     try {
       const retryResp = await fetch(
@@ -1241,28 +1245,31 @@ async function handleAnnotationStaleResponse(
           /* response body parse 실패 = revision cache 못 갱신, 다음 mutation
              이 다시 STALE_REVISION_NO_RECORD path 거치며 또 retry 됨 */
         }
-      } else if (retryResp.status === 401 || retryResp.status === 403) {
-        handleAuthExpiredFromSync();
-      } else {
-        console.warn(
-          "[study-note] annotation NO_RECORD retry failed",
-          retryResp.status,
-          materialId
-        );
-        if (retryResp.status >= 500 || retryResp.status === 429) {
-          recordSyncFailure();
-        }
+        return true;
       }
+      if (retryResp.status === 401 || retryResp.status === 403) {
+        handleAuthExpiredFromSync();
+        return false;
+      }
+      console.warn(
+        "[study-note] annotation NO_RECORD retry failed",
+        retryResp.status,
+        materialId
+      );
+      if (retryResp.status >= 500 || retryResp.status === 429) {
+        recordSyncFailure();
+      }
+      return false;
     } catch (err) {
       if (!(err instanceof DOMException && err.name === "AbortError")) {
         console.warn("[study-note] annotation NO_RECORD retry network error", err);
         recordSyncFailure();
       }
+      return false;
     }
-    return;
   }
   if (typeof entry.updatedAt !== "string") {
-    return;
+    return false;
   }
   if (entry.payload && typeof entry.payload === "object") {
     const incoming = entry.payload as Partial<SubjectPdfWorkspace>;
@@ -1276,6 +1283,9 @@ async function handleAnnotationStaleResponse(
     }
   }
   lastHydratedAnnotationRevision.set(`${userId}:${materialId}`, entry.updatedAt);
+  // stale hydrate 성공 — caller 가 recordSyncSuccess 호출 OK. user 의 다음
+  // mutation 이 새 revision 으로 issue.
+  return true;
 }
 
 // sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
