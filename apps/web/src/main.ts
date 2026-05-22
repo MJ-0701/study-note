@@ -701,6 +701,13 @@ const syncFailureTracker: SyncFailureTracker = {
   paused: false
 };
 
+// sprint-2/S2 fix (codex P1): BE sync 실패 banner 를 localStorage save 실패
+// banner 와 분리. saveNotebook 성공 path 가 notebookStorageError 만 clear 하므로,
+// BE sync 실패 메시지가 같은 변수에 들어 있으면 사용자가 typing 시 banner 가
+// 사라지면서 paused flag 만 남아 silent disabled 상태가 된다. 별도 변수로 분리.
+let syncBackendError: string | undefined;
+let syncBackendErrorReported = false;
+
 function recordSyncFailure(): void {
   const now = Date.now();
   syncFailureTracker.recentFailures.push(now);
@@ -709,10 +716,10 @@ function recordSyncFailure(): void {
   );
   if (syncFailureTracker.recentFailures.length >= SYNC_FAILURE_PAUSE_THRESHOLD && !syncFailureTracker.paused) {
     syncFailureTracker.paused = true;
-    notebookStorageError =
+    syncBackendError =
       "메모/필기 BE 저장에 연속 실패했습니다. 자동 동기화를 잠시 멈춥니다. 네트워크/세션 상태를 확인한 뒤 닫기를 눌러 재시작하세요.";
-    if (!notebookStorageErrorReported) {
-      notebookStorageErrorReported = true;
+    if (!syncBackendErrorReported) {
+      syncBackendErrorReported = true;
       try { renderApp(); } catch { /* ignore */ }
     }
   }
@@ -722,9 +729,10 @@ function recordSyncSuccess(): void {
   syncFailureTracker.recentFailures = [];
   if (syncFailureTracker.paused) {
     syncFailureTracker.paused = false;
+    syncBackendError = undefined;
+    syncBackendErrorReported = false;
+    try { renderApp(); } catch { /* ignore */ }
   }
-  // Note: notebookStorageError 가 BE sync 실패로 set 된 경우 banner 자동 해제는
-  // dismiss 버튼 또는 다음 saveNotebook 성공 (localStorage path) 에서 정리.
 }
 
 async function putUserNoteToBE(weekId: string, body: string): Promise<void> {
@@ -1049,6 +1057,8 @@ function clearAuthSession(): void {
   annotationFetchedKeys.clear();
   syncFailureTracker.paused = false;
   syncFailureTracker.recentFailures = [];
+  syncBackendError = undefined;
+  syncBackendErrorReported = false;
 }
 
 function clearAuthBootTimers(): void {
@@ -1900,11 +1910,14 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "dismiss-notebook-storage-error") {
+    // sprint-2/S2 fix (codex P1): clear BOTH banner sources + reset sync pause.
+    // - notebookStorageError: localStorage save failure path.
+    // - syncBackendError: BE sync paused after 3×5xx.
+    // - syncFailureTracker.paused: unpause so autosave resumes.
     notebookStorageError = undefined;
     notebookStorageErrorReported = false;
-    // sprint-2/S2 fix (codex P2): also unpause the BE sync tracker so autosave
-    // resumes after the user dismisses the banner. Without this, the paused
-    // flag stays true and silently drops subsequent PUTs.
+    syncBackendError = undefined;
+    syncBackendErrorReported = false;
     syncFailureTracker.paused = false;
     syncFailureTracker.recentFailures = [];
     renderApp();
@@ -6145,13 +6158,16 @@ function renderShell(sidebar: string, mainContent: string, crumb: string): strin
 }
 
 function renderNotebookStorageBanner(): string {
-  if (!notebookStorageError) {
+  // sprint-2/S2 fix (codex P1): show either banner (localStorage save fail OR
+  // BE sync pause). Two independent sources; dismiss button clears both for UX
+  // simplicity. localStorage 우선 (더 치명적).
+  const message = notebookStorageError ?? syncBackendError;
+  if (!message) {
     return "";
   }
-
   return `
     <div class="storage-error-banner" role="alert">
-      <p>${escapeHtml(notebookStorageError)}</p>
+      <p>${escapeHtml(message)}</p>
       <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
     </div>
   `;

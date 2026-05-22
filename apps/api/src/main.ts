@@ -24,11 +24,13 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ["error", "warn", "log"]
   });
-  // sprint-2/S1 fix (codex P1): raise JSON body parser limit so the documented
-  // 256KB API contract for /v1/notes / /v1/pdf-annotations is reachable.
-  // Express default is 100KB → bodies between 100KB and 256KB would fail at
-  // the parser layer before reaching the per-endpoint controller guard.
-  app.useBodyParser("json", { limit: "256kb" });
+  // sprint-2/S1 fix (codex P1+P2): raise JSON body parser limit so the
+  // documented 256KB payload contract is reachable. We allow 320KB at the
+  // parser layer (256KB content + JSON wrapper/header overhead like
+  // `{"body":"..."}` plus quoting/escaping). The per-endpoint controller still
+  // enforces the strict 256KB content cap, so legitimate near-limit payloads
+  // pass the parser and reach the controller for accurate 413 emission.
+  app.useBodyParser("json", { limit: "320kb" });
   // slice-2: global exception filter — maps all HttpExceptions to {errorCode, errorMessage}
   // per CLAUDE.md API convention.
   app.useGlobalFilters(new ApiExceptionFilter());
