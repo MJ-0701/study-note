@@ -173,6 +173,13 @@ type LoginFeedback =
 
 const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
+// sprint-2/S3 fix (codex P1): persisted marker for the last successfully
+// attached session's userId. Used to detect A→B account switches on the same
+// browser so we can wipe local notebook + pdfWorkspaceStore before autosave
+// PUTs leak user A's content into user B's server record. Stored in
+// localStorage so the marker survives page reloads (otherwise B opening a
+// fresh tab over A's stored notebook would not be detected as a switch).
+const lastSessionUserStorageKey = "study-note.session.lastUserId";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const PDF_FRAME_READY_DELAY_MS = 180;
 const DRILL_HIGHLIGHT_DURATION_MS = 1500;
@@ -189,6 +196,13 @@ const AUTH_SESSION_RETRY_DELAY_MS = 3000;
 const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 let notebook: StudyNotebook = isBrowserRuntime ? loadStoredNotebook() : sampleLectureNote;
 let pdfWorkspaceStore: PdfWorkspaceStore = isBrowserRuntime ? loadPdfWorkspaceStore() : { workspaces: {} };
+// sprint-2/S3 fix (codex P1): see lastSessionUserStorageKey comment for the
+// invariant this enforces. Initialized from localStorage so a page reload
+// after user A's session retains A's identity until the next sign-in/auth-me
+// success either confirms A (no wipe) or detects B (wipe).
+let lastSessionUserId: string | undefined = isBrowserRuntime
+  ? window.localStorage.getItem(lastSessionUserStorageKey) ?? undefined
+  : undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
@@ -1160,6 +1174,52 @@ function saveNotebook(nextNotebook: StudyNotebook): boolean {
 // slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
 // Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
 
+// sprint-2/S3 fix (codex P1): when a session attach succeeds for a different
+// user than the previously-seen one on this browser, wipe the local notebook
+// + pdfWorkspaceStore + sync caches BEFORE autosave PUT can leak the previous
+// user's content into the new user's server record. Called from the two
+// session-attach success paths (revalidate, sign-in) only — never from
+// clearAuthSession, because that fires on transient /v1/auth/me failures and
+// must not destroy data on a network blip.
+//
+// First-load semantics: lastSessionUserId is initialized from localStorage,
+// so a page reload by the same user matches the marker and skips the wipe.
+// Only a genuinely different userId triggers the destructive reset.
+function applySessionTransitionForUser(newUserId: string): void {
+  if (lastSessionUserId === newUserId) {
+    return;
+  }
+  notebook = structuredClone(sampleLectureNote);
+  try {
+    window.localStorage.removeItem(notebookStorageKey);
+  } catch {
+    /* localStorage unavailable — in-memory reset still applies */
+  }
+  pdfWorkspaceStore = { workspaces: {} };
+  try {
+    savePdfWorkspaceStore();
+  } catch {
+    /* ignore */
+  }
+  for (const timer of userNotesPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  userNotesPutTimers.clear();
+  for (const timer of annotationPutTimers.values()) {
+    clearTimeout(timer);
+  }
+  annotationPutTimers.clear();
+  userNotesFetchedKeys.clear();
+  annotationFetchedKeys.clear();
+  lastHydratedAnnotationByMaterial.clear();
+  lastSessionUserId = newUserId;
+  try {
+    window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
+  } catch {
+    /* ignore */
+  }
+}
+
 function clearAuthSession(): void {
   authBootRequestId += 1;
   authSession = undefined;
@@ -1288,6 +1348,11 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
     // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot so a future
     // session loss can re-surface the banner.
     authExpiryHandled = false;
+    // sprint-2/S3 fix (codex P1): wipe local data if this revalidate landed
+    // on a different user than the previous session on this browser. Must run
+    // before restoreUploadedPdfMaterialsForSession so the workspace rebuild
+    // starts from an empty pdfWorkspaceStore.
+    applySessionTransitionForUser(authSession.user.id);
     await restoreUploadedPdfMaterialsForSession(authSession);
     if (requestId !== authBootRequestId) {
       return;
@@ -2618,6 +2683,10 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
       authBootState = "ready";
       authBootNotice = "checking";
       clearAuthBootTimers();
+      // sprint-2/S3 fix (codex P1): wipe local notebook + pdfWorkspaceStore if
+      // sign-in landed on a different user than the previous session, before
+      // any autosave PUT can leak the prior user's content.
+      applySessionTransitionForUser(session.user.id);
       // F2: no localStorage — session lives in httpOnly cookie + in-memory only
       await restoreUploadedPdfMaterialsForSession(session);
       if (authSession !== session) {
