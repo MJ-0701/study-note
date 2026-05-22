@@ -1238,6 +1238,17 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
   }
   annotationSubjectBatchFetched.add(subjectBatchKey);
 
+  // codex P1 (PR #35): batch HTTP 실패 시 active material 의 single-GET
+  // fallback 발사 — renderApp 의 redundant single-GET 제거 이후 유일한
+  // fallback 경로. degraded mode 동안 사용자 작업 가능.
+  const fallbackToSingleGet = () => {
+    const ws = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+    const active = ws.material?.backendMaterialId ?? ws.material?.id;
+    if (active) {
+      void fetchAnnotationIfMissing(subjectId, active);
+    }
+  };
+
   let response: Response;
   try {
     response = await fetch(
@@ -1248,6 +1259,7 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
     annotationSubjectBatchFetched.delete(subjectBatchKey);
     console.warn("[study-note] annotation batch GET network error", error);
     recordFetchFailure();
+    fallbackToSingleGet();
     return;
   }
 
@@ -1261,6 +1273,7 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
     if (response.status >= 500) {
       recordFetchFailure();
     }
+    fallbackToSingleGet();
     return;
   }
 
@@ -1305,19 +1318,15 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
     }
   }
 
-  // R7 partial fallback: truncated materials 은 single-material GET 으로.
-  if (json.truncated === true) {
-    const total = typeof json.total === "number" ? json.total : 0;
-    const returned = typeof json.returned === "number" ? json.returned : 0;
-    if (total > returned) {
-      // active material 이 truncated 셋에 있을 가능성 — fetchAnnotationIfMissing
-      // 가 per-material GET fallback 으로 hydrate.
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-      const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
-      if (active && !annotations[active]) {
-        void fetchAnnotationIfMissing(subjectId, active);
-      }
-    }
+  // R7 partial fallback + post-batch active material 누락 fallback.
+  // codex P1 (PR #35): renderApp 의 redundant single-GET 호출을 batch-gated 로
+  // 옮겼으니, batch 가 active material 을 cover 못한 경우 single-GET fallback
+  // 책임이 batch 함수로 통합. truncated 와 무관하게 active material 이
+  // 응답에 없으면 single-GET 발사.
+  const workspaceAfter = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const activeAfter = workspaceAfter.material?.backendMaterialId ?? workspaceAfter.material?.id;
+  if (activeAfter && !annotations[activeAfter]) {
+    void fetchAnnotationIfMissing(subjectId, activeAfter);
   }
 
   try { renderApp(); } catch { /* ignore */ }
@@ -5918,16 +5927,28 @@ function renderApp(): void {
       `${subject.title} / PDF 작업공간`
     ));
     // sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
-    // once per subject view (annotationSubjectBatchFetched 마커). 모든 material
-    // 의 annotation + revision 일괄 hydrate. active material 의 single-GET
-    // fetchAnnotationIfMissing 는 batch 가 cover 못하는 경우 (truncated, batch
-    // 실패, post-batch material 추가 등) 의 fallback.
-    void fetchAnnotationsForSubject(subject.id);
+    // codex P1 (PR #35): first entry 에서 batch + single 두 GET 동시 발사 race
+    // 방지. 분기 = batch 가 끝났는지 (annotationSubjectBatchFetched 마커) 로
+    // 결정. 첫 entry = batch 만. batch 끝난 후 (또는 material 전환) = single-GET.
+    // fetchAnnotationsForSubject 자체가 truncated / batch 실패 시 active
+    // material 의 single-GET fallback 을 내부에서 발사한다 (아래 함수 참조).
     const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
     const material = workspace.material;
-    if (material) {
-      const materialId = material.backendMaterialId ?? material.id;
-      void fetchAnnotationIfMissing(subject.id, materialId);
+    const sessionUserIdForGate = authSession?.user.id;
+    const subjectBatchKey = sessionUserIdForGate
+      ? `${sessionUserIdForGate}:${subject.id}`
+      : null;
+    if (subjectBatchKey && annotationSubjectBatchFetched.has(subjectBatchKey)) {
+      // batch 이미 끝남 → material 전환 단일-fetch (dedup 은
+      // annotationFetchedKeys 가 처리).
+      if (material) {
+        const materialId = material.backendMaterialId ?? material.id;
+        void fetchAnnotationIfMissing(subject.id, materialId);
+      }
+    } else {
+      // 첫 entry → batch 1회. 내부에서 active material 의 single-GET fallback
+      // 도 발사 (truncated / 응답에 없음 / batch HTTP 실패).
+      void fetchAnnotationsForSubject(subject.id);
     }
     return;
   }
