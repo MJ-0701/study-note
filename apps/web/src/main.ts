@@ -889,14 +889,68 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
       }
       return;
     }
+    const json = (await response.json()) as {
+      materialId?: unknown;
+      payload?: unknown;
+      updatedAt?: unknown;
+    };
     recordSyncSuccess();
-    // Payload application은 후속 (annotation store 의 import 함수 활용) — 본
-    // sprint 는 endpoint round-trip 우선 검증. UI 측 hydrate 는 follow-up.
+
+    // sprint-2/S2 fix (codex P1): hydrate the workspace store with the server
+    // payload. The server-side snapshot is the per-material annotation bundle
+    // (stickyNotes / inkStrokes / textBoxes / checklists / tables / charts);
+    // missing keys keep their current value to avoid wiping unsaved local edits.
+    // last-write-wins per plan §5.2 (server preferred), so equal/empty server
+    // arrays still overwrite local stale ones for cross-device parity.
+    if (json.payload && typeof json.payload === "object") {
+      const incoming = json.payload as Partial<SubjectPdfWorkspace>;
+      updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
+    }
   } catch (error) {
     annotationFetchedKeys.delete(cacheKey);
     console.warn("[study-note] annotation GET network error", error);
     recordSyncFailure();
   }
+}
+
+// sprint-2/S2 fix (codex P1): apply server snapshot to local workspace store.
+// We bypass `updatePdfWorkspace` here so the hydrate write does not trigger
+// another PUT (it would loop). `savePdfWorkspaceStore` persists to
+// localStorage and `renderApp` reflects in the UI.
+function updatePdfWorkspaceStoreFromServer(
+  subjectId: string,
+  materialId: string,
+  incoming: Partial<SubjectPdfWorkspace>
+): void {
+  const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const material = current.material;
+  // Only hydrate when the active material matches; otherwise defer until the
+  // user selects that material (lazy default — plan §8b.3).
+  if (!material) {
+    return;
+  }
+  const currentMaterialId = material.backendMaterialId ?? material.id;
+  if (currentMaterialId !== materialId) {
+    return;
+  }
+  const merged: SubjectPdfWorkspace = {
+    ...current,
+    stickyNotes: Array.isArray(incoming.stickyNotes) ? incoming.stickyNotes : current.stickyNotes,
+    inkStrokes: Array.isArray(incoming.inkStrokes) ? incoming.inkStrokes : current.inkStrokes,
+    textBoxes: Array.isArray(incoming.textBoxes) ? incoming.textBoxes : current.textBoxes,
+    checklists: Array.isArray(incoming.checklists) ? incoming.checklists : current.checklists,
+    tables: Array.isArray(incoming.tables) ? incoming.tables : current.tables,
+    charts: Array.isArray(incoming.charts) ? incoming.charts : current.charts,
+    updatedAt: new Date().toISOString()
+  };
+  pdfWorkspaceStore = {
+    workspaces: {
+      ...pdfWorkspaceStore.workspaces,
+      [subjectId]: merged
+    }
+  };
+  savePdfWorkspaceStore();
+  try { renderApp(); } catch { /* ignore */ }
 }
 
 function saveNotebook(nextNotebook: StudyNotebook): boolean {
