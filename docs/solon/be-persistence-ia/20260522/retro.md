@@ -18,19 +18,25 @@ closed_at: 2026-05-22T19:37:17+09:00
 
 ## 1. 계속할 것
 
--
+- self-review (diff + 7영역) 먼저, self-fix 후 codex 호출 — 11라운드 누적에서 reviewer subagent 가 codex 누락 1건 추가 발견.
+- codex PR-level +1 reaction = PASS 신호. inline 0 만으로는 판정 X.
+- AbortController + Promise chain layered (FIFO + termination) PUT race 패턴.
 
 ## 2. 문제
 
--
+- codex 가 동일 stale finding 을 11라운드 반복 re-flag. triage 비용 누적.
+- localStorage 가 global 이라 cross-user leak vector 가 marker+wipe 패턴 fallback 으로만 막힘 — 구조적 fragile.
+- client-side PUT chain 으로 단일 디바이스 FIFO 만 보장. cross-device race 는 plan §5.2 LWW 수용 상태.
 
 ## 3. 시도할 것
 
--
+- localStorage userId-namespacing (`study-note.notebook.v2:{userId}`) — leak vector 클래스 제거.
+- server-side updatedAt/etag revision check — cross-device PUT race 진정한 해결.
 
 ## 4. 이어갈 것
 
--
+- PDF 전체화면 + 필기도구 단축키 backlog 가 next sprint 후보.
+- sprint-3 backlog 2건 (userId namespace + revision check) 우선순위 결정.
 
 ## 5. 종료 체크
 
