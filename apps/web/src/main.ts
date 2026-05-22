@@ -944,11 +944,17 @@ function updatePdfWorkspaceStoreFromServer(
   const material = current.material;
   // Only hydrate when the active material matches; otherwise defer until the
   // user selects that material (lazy default — plan §8b.3).
+  // sprint-2/S2 fix (codex P1): when active material mismatches (user switched
+  // between GET start and resolve), clear the cache key for the *fetched*
+  // material so re-entry retries instead of permanently believing it was
+  // already hydrated.
   if (!material) {
+    annotationFetchedKeys.delete(`${subjectId}:${materialId}`);
     return;
   }
   const currentMaterialId = material.backendMaterialId ?? material.id;
   if (currentMaterialId !== materialId) {
+    annotationFetchedKeys.delete(`${subjectId}:${materialId}`);
     return;
   }
   const merged: SubjectPdfWorkspace = {

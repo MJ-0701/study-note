@@ -70,10 +70,18 @@ export class PdfAnnotationsController {
         errorMessage: "materialId is required"
       });
     }
-    if (body?.payload === undefined || body.payload === null) {
+    // sprint-2/S1 fix (codex P2): enforce object (or array) payload — primitives
+    // (string/number/boolean) round-trip but the web hydrate path only applies
+    // typeof === "object" payloads, so primitives would become silently
+    // unreadable. Reject early at the controller.
+    if (
+      body?.payload === undefined ||
+      body.payload === null ||
+      typeof body.payload !== "object"
+    ) {
       throw new BadRequestException({
         errorCode: "INVALID_BODY",
-        errorMessage: "payload field is required"
+        errorMessage: "payload field must be an object"
       });
     }
     const record = await this.annotations.putAnnotation(
