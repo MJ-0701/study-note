@@ -744,17 +744,30 @@ function recordFetchSuccess(): void {
   /* no-op intentionally — GET 성공이 PUT paused 상태 변경에 영향 없음. */
 }
 
-async function putUserNoteToBE(weekId: string, body: string): Promise<void> {
+// sprint-2/S2 fix (codex P2): GET failure — silent. PUT paused 카운트에 영향 X.
+// read-side 실패가 write-side 차단을 유발하면 안 됨.
+function recordFetchFailure(): void {
+  /* no-op intentionally — GET 실패가 PUT paused 카운트를 키우지 않는다. */
+}
+
+async function putUserNoteToBE(
+  subjectId: string,
+  weekId: string,
+  body: string
+): Promise<void> {
   if (syncFailureTracker.paused) {
     return;
   }
   try {
-    const response = await fetch(`${apiBaseUrl}/v1/notes/week/${encodeURIComponent(weekId)}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ body })
-    });
+    const response = await fetch(
+      `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
+      {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body })
+      }
+    );
     if (response.status === 413) {
       console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
       return;
@@ -773,16 +786,17 @@ async function putUserNoteToBE(weekId: string, body: string): Promise<void> {
   }
 }
 
-function scheduleUserNotePut(weekId: string, body: string): void {
-  const existing = userNotesPutTimers.get(weekId);
+function scheduleUserNotePut(subjectId: string, weekId: string, body: string): void {
+  const timerKey = `${subjectId}:${weekId}`;
+  const existing = userNotesPutTimers.get(timerKey);
   if (existing) {
     clearTimeout(existing);
   }
   const timer = setTimeout(() => {
-    userNotesPutTimers.delete(weekId);
-    void putUserNoteToBE(weekId, body);
+    userNotesPutTimers.delete(timerKey);
+    void putUserNoteToBE(subjectId, weekId, body);
   }, USER_NOTES_PUT_DEBOUNCE_MS);
-  userNotesPutTimers.set(weekId, timer);
+  userNotesPutTimers.set(timerKey, timer);
 }
 
 async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promise<void> {
@@ -798,9 +812,10 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
   }
   userNotesFetchedKeys.add(cacheKey);
   try {
-    const response = await fetch(`${apiBaseUrl}/v1/notes/week/${encodeURIComponent(weekId)}`, {
-      credentials: "include"
-    });
+    const response = await fetch(
+      `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
+      { credentials: "include" }
+    );
     if (response.status === 404) {
       // No remote note — keep local notebook value (likely empty).
       return;
@@ -809,7 +824,7 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
       // Allow retry on later view by clearing cache marker.
       userNotesFetchedKeys.delete(cacheKey);
       if (response.status >= 500) {
-        recordSyncFailure();
+        recordFetchFailure();
       }
       return;
     }
@@ -831,7 +846,7 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
     //       the server payload — treat that as a local edit not yet flushed
     //       and let the next PUT carry the local value to the server.
     // Cross-device restore still works on first visit (local empty → hydrate).
-    if (userNotesPutTimers.has(weekId)) {
+    if (userNotesPutTimers.has(`${subjectId}:${weekId}`)) {
       recordFetchSuccess();
       return;
     }
@@ -871,7 +886,7 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
   } catch (error) {
     userNotesFetchedKeys.delete(cacheKey);
     console.warn("[study-note] userNotes GET network error", error);
-    recordSyncFailure();
+    recordFetchFailure();
   }
 }
 
@@ -937,7 +952,7 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
     if (!response.ok) {
       annotationFetchedKeys.delete(cacheKey);
       if (response.status >= 500) {
-        recordSyncFailure();
+        recordFetchFailure();
       }
       return;
     }
@@ -967,7 +982,7 @@ async function fetchAnnotationIfMissing(subjectId: string, materialId: string): 
   } catch (error) {
     annotationFetchedKeys.delete(cacheKey);
     console.warn("[study-note] annotation GET network error", error);
-    recordSyncFailure();
+    recordFetchFailure();
   }
 }
 
@@ -2626,7 +2641,7 @@ function handleDocumentInput(event: Event): void {
     };
     saveNotebook(notebook);
     // sprint-2/S2: BE sync (debounced PUT). localStorage 가 primary, BE 가 cross-device 백업.
-    scheduleUserNotePut(weekId, value);
+    scheduleUserNotePut(subjectId, weekId, value);
     return;
   }
 

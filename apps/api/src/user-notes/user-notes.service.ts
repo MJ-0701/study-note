@@ -9,6 +9,7 @@ export interface UserNoteRecord {
 }
 
 export interface UserNoteListItem {
+  subjectId: string;
   weekId: string;
   body: string;
   updatedAt: string;
@@ -25,21 +26,27 @@ export class UserNotesService {
 
   constructor(@Inject(StoragePort) private readonly storage: StoragePort) {}
 
-  /** R2 key — `notes/{userId}/week-{weekId}.json`. */
-  private key(userId: string, weekId: string): string {
-    return `notes/${encodeURIComponent(userId)}/week-${encodeURIComponent(weekId)}.json`;
+  /** R2 key — subject-scoped to avoid weekId collisions across subjects.
+   *  Format: `notes/{userId}/subject-{subjectId}/week-{weekId}.json`. */
+  private key(userId: string, subjectId: string, weekId: string): string {
+    return `notes/${encodeURIComponent(userId)}/subject-${encodeURIComponent(subjectId)}/week-${encodeURIComponent(weekId)}.json`;
   }
 
   private prefix(userId: string): string {
     return `notes/${encodeURIComponent(userId)}/`;
   }
 
-  async getNote(userId: string, weekId: string): Promise<UserNoteRecord | null> {
-    return this.storage.getJsonObject<UserNoteRecord>(this.key(userId, weekId));
+  async getNote(
+    userId: string,
+    subjectId: string,
+    weekId: string
+  ): Promise<UserNoteRecord | null> {
+    return this.storage.getJsonObject<UserNoteRecord>(this.key(userId, subjectId, weekId));
   }
 
   async putNote(
     userId: string,
+    subjectId: string,
     weekId: string,
     body: string
   ): Promise<UserNoteRecord> {
@@ -55,8 +62,10 @@ export class UserNotesService {
       body,
       updatedAt: new Date().toISOString()
     };
-    await this.storage.putJsonObject(this.key(userId, weekId), record);
-    this.logger.log(`user-notes.put userId=${userId} weekId=${weekId} bytes=${byteLength}`);
+    await this.storage.putJsonObject(this.key(userId, subjectId, weekId), record);
+    this.logger.log(
+      `user-notes.put userId=${userId} subjectId=${subjectId} weekId=${weekId} bytes=${byteLength}`
+    );
     return record;
   }
 
@@ -76,9 +85,9 @@ export class UserNotesService {
     for (const key of listing.keys) {
       const record = await this.storage.getJsonObject<UserNoteRecord>(key);
       if (record) {
-        const weekId = extractWeekIdFromKey(key);
-        if (weekId) {
-          items.push({ weekId, ...record });
+        const parsed = extractSubjectWeekFromKey(key);
+        if (parsed) {
+          items.push({ ...parsed, ...record });
         }
       }
     }
@@ -86,13 +95,22 @@ export class UserNotesService {
   }
 }
 
-function extractWeekIdFromKey(key: string): string | null {
-  // key format: notes/{userIdEncoded}/week-{weekIdEncoded}.json
-  const match = /\/week-([^/]+)\.json$/.exec(key);
-  const raw = match?.[1];
-  if (!raw) {
+function extractSubjectWeekFromKey(
+  key: string
+): { subjectId: string; weekId: string } | null {
+  // key format: notes/{userIdEncoded}/subject-{subjectIdEncoded}/week-{weekIdEncoded}.json
+  const match = /\/subject-([^/]+)\/week-([^/]+)\.json$/.exec(key);
+  const subjectRaw = match?.[1];
+  const weekRaw = match?.[2];
+  if (!subjectRaw || !weekRaw) {
     return null;
   }
+  const subjectId = decodeSafe(subjectRaw);
+  const weekId = decodeSafe(weekRaw);
+  return { subjectId, weekId };
+}
+
+function decodeSafe(raw: string): string {
   try {
     return decodeURIComponent(raw);
   } catch {

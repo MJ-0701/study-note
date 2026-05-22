@@ -37,39 +37,41 @@ export class UserNotesController {
     return this.notes.listNotes(request.user.id, cursor ?? undefined);
   }
 
-  // Per-resource hot path (default).
-  @Get("week/:weekId")
+  // Per-resource hot path (default). Subject-scoped to avoid weekId collisions.
+  @Get("subject/:subjectId/week/:weekId")
   async getWeekNote(
     @Req() request: AuthenticatedRequest,
+    @Param("subjectId") subjectId: string,
     @Param("weekId") weekId: string
   ) {
-    if (!weekId.trim()) {
+    if (!subjectId.trim() || !weekId.trim()) {
       throw new BadRequestException({
-        errorCode: "INVALID_WEEK_ID",
-        errorMessage: "weekId is required"
+        errorCode: "INVALID_PARAMS",
+        errorMessage: "subjectId and weekId are required"
       });
     }
-    const record = await this.notes.getNote(request.user.id, weekId);
+    const record = await this.notes.getNote(request.user.id, subjectId, weekId);
     if (!record) {
       throw new NotFoundException({
         errorCode: "NOTE_NOT_FOUND",
-        errorMessage: `note not found for weekId=${weekId}`
+        errorMessage: `note not found for subjectId=${subjectId} weekId=${weekId}`
       });
     }
-    return { weekId, ...record };
+    return { subjectId, weekId, ...record };
   }
 
-  @Put("week/:weekId")
+  @Put("subject/:subjectId/week/:weekId")
   @HttpCode(200)
   async putWeekNote(
     @Req() request: AuthenticatedRequest,
+    @Param("subjectId") subjectId: string,
     @Param("weekId") weekId: string,
     @Body() body: PutBody
   ) {
-    if (!weekId.trim()) {
+    if (!subjectId.trim() || !weekId.trim()) {
       throw new BadRequestException({
-        errorCode: "INVALID_WEEK_ID",
-        errorMessage: "weekId is required"
+        errorCode: "INVALID_PARAMS",
+        errorMessage: "subjectId and weekId are required"
       });
     }
     if (typeof body?.body !== "string") {
@@ -80,9 +82,10 @@ export class UserNotesController {
     }
     const record = await this.notes.putNote(
       request.user.id,
+      subjectId,
       weekId,
       body.body
     );
-    return { weekId, ...record };
+    return { subjectId, weekId, ...record };
   }
 }
