@@ -1271,6 +1271,15 @@ function applySessionTransitionForUser(newUserId: string): void {
   userNotesFetchedKeys.clear();
   annotationFetchedKeys.clear();
   lastHydratedAnnotationByMaterial.clear();
+  // sprint-2/S3 fix (self-review): also reset sync-failure tracker + banner
+  // state. Without this, user A's accumulated PUT failures (and the resulting
+  // `paused = true` autosave halt) silently persist into user B's session,
+  // disabling B's autosave on first edit despite B having no failures.
+  // Mirrors the equivalent reset block in clearAuthSession.
+  syncFailureTracker.paused = false;
+  syncFailureTracker.recentFailures = [];
+  syncBackendError = undefined;
+  syncBackendErrorReported = false;
   lastSessionUserId = newUserId;
   try {
     window.localStorage.setItem(lastSessionUserStorageKey, newUserId);
