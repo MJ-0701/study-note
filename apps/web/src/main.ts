@@ -624,7 +624,12 @@ if (isBrowserRuntime) {
   // button 의 click 이 일부 mobile context 에서 누락되거나 지연될 때 touchend
   // 가 즉시 trigger. preventDefault 로 click 중복 발사 차단 (desktop 은
   // touchend 미발사 → click handler 가 정상 처리).
+  // sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture — read tool
+  // 인 빈 영역 single-touch 만 candidate. touchstart/move/end/cancel 사이클.
+  document.addEventListener("touchstart", handleDocumentTouchStart, { passive: true });
+  document.addEventListener("touchmove", handleDocumentTouchMove, { passive: true });
   document.addEventListener("touchend", handleDocumentTouchEnd, { passive: false });
+  document.addEventListener("touchcancel", handleDocumentTouchCancel, { passive: true });
   document.addEventListener("fullscreenchange", () => {
     // sprint-1/S3: re-render so the toolbar button label reflects current
     // fullscreen state ("전체화면" → "전체화면 종료").
@@ -2443,29 +2448,156 @@ export function handleDrillItemClick(
   return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
 }
 
+// sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture state.
+// single-touch only. multi-touch (pinch zoom 후보 — 다음 sprint v2) 시 무시.
+// threshold = max(surface 폭 × SWIPE_THRESHOLD_RATIO, SWIPE_THRESHOLD_MIN_PX).
+// 좌→우 dx>0 = 이전 page, 우→좌 dx<0 = 다음 page.
+const SWIPE_THRESHOLD_RATIO = 0.2;
+const SWIPE_THRESHOLD_MIN_PX = 60;
+let activeSwipeGesture: {
+  subjectId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+} | null = null;
+
 // sprint-W21-sprint-4/S1: iOS Safari fast-tap dual handler for page nav
 // buttons. touchend 가 click 보다 먼저 발사되거나 click 이 누락되는 mobile
 // edge case 보완. preventDefault 로 ghost click 중복 차단.
 function handleDocumentTouchEnd(event: TouchEvent): void {
   const target = event.target;
   if (!(target instanceof Element)) {
+    activeSwipeGesture = null;
     return;
   }
   const navButton = target.closest<HTMLButtonElement>(
     'button[data-action="pdf-prev-page"], button[data-action="pdf-next-page"]'
   );
-  if (!navButton || navButton.disabled) {
+  if (navButton && !navButton.disabled) {
+    const action = navButton.dataset.action;
+    const subjectId = navButton.dataset.subjectId;
+    if (subjectId && (action === "pdf-prev-page" || action === "pdf-next-page")) {
+      // click 중복 발사 차단. desktop 은 touchend 발사 X → 영향 없음.
+      event.preventDefault();
+      movePdfPage(subjectId, action === "pdf-prev-page" ? -1 : 1);
+      renderApp();
+      activeSwipeGesture = null;
+      return;
+    }
+  }
+
+  // sprint-W21-sprint-4/S4: PDF 영역 swipe gesture commit.
+  commitPdfSwipeGesture(event);
+}
+
+// sprint-W21-sprint-4/S4: PDF 빈 영역 touchstart — read tool + single-touch +
+// annotation element 미터치 시에만 swipe 후보 기록.
+function handleDocumentTouchStart(event: TouchEvent): void {
+  if (event.touches.length !== 1) {
+    // multi-touch 시작 = pinch zoom 등 — 진행 중 swipe 도 취소.
+    activeSwipeGesture = null;
     return;
   }
-  const action = navButton.dataset.action;
-  const subjectId = navButton.dataset.subjectId;
-  if (!subjectId || (action !== "pdf-prev-page" && action !== "pdf-next-page")) {
+  const touch = event.touches[0]!;
+  const target = touch.target instanceof Element ? touch.target : null;
+  if (!target) {
+    activeSwipeGesture = null;
     return;
   }
-  // click 중복 발사 차단. desktop 은 touchend 발사 X → 영향 없음.
-  event.preventDefault();
-  movePdfPage(subjectId, action === "pdf-prev-page" ? -1 : 1);
+
+  const surface = target.closest<HTMLElement>("[data-pdf-annotation-surface]");
+  if (!surface) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  // read tool 외 (pen / eraser / sticky / textbox / checklist / table / chart)
+  // 에서는 swipe 무시 — tool 우선.
+  if (!surface.classList.contains("is-read-mode")) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  // annotation element (sticky / textBox / checklist / table / chart / ink stroke)
+  // 위 touch 시 swipe 무시 — drag/click 우선.
+  if (
+    target.closest(
+      "[data-note-id], [data-textbox-id], [data-checklist-id], [data-table-mount-id], [data-chart-mount-id], [data-stroke-id], button, a, input, textarea"
+    )
+  ) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  const subjectId = surface.dataset.subjectId;
+  if (!subjectId) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  activeSwipeGesture = {
+    subjectId,
+    pointerId: touch.identifier,
+    startX: touch.clientX,
+    startY: touch.clientY
+  };
+}
+
+// sprint-W21-sprint-4/S4: touchmove — multi-touch 진입 시 swipe 후보 취소.
+function handleDocumentTouchMove(event: TouchEvent): void {
+  if (!activeSwipeGesture) {
+    return;
+  }
+  if (event.touches.length !== 1) {
+    activeSwipeGesture = null;
+  }
+}
+
+// sprint-W21-sprint-4/S4: touchend / touchcancel 에서 swipe threshold 평가 후
+// page nav 또는 무시.
+function commitPdfSwipeGesture(event: TouchEvent): void {
+  const gesture = activeSwipeGesture;
+  activeSwipeGesture = null;
+  if (!gesture) {
+    return;
+  }
+  const touch = Array.from(event.changedTouches).find(
+    (t) => t.identifier === gesture.pointerId
+  );
+  if (!touch) {
+    return;
+  }
+  const dx = touch.clientX - gesture.startX;
+  const dy = touch.clientY - gesture.startY;
+  // vertical 우선: |dy| > |dx| = vertical scroll. swipe 아님.
+  if (Math.abs(dy) > Math.abs(dx)) {
+    return;
+  }
+  const surface = document.querySelector<HTMLElement>(
+    `[data-pdf-annotation-surface][data-subject-id="${gesture.subjectId}"]`
+  );
+  if (!surface) {
+    return;
+  }
+  const surfaceWidth = surface.getBoundingClientRect().width;
+  const threshold = Math.max(
+    SWIPE_THRESHOLD_MIN_PX,
+    surfaceWidth * SWIPE_THRESHOLD_RATIO
+  );
+  if (Math.abs(dx) < threshold) {
+    return;
+  }
+  // 좌→우 dx>0 = 이전 page, 우→좌 dx<0 = 다음 page.
+  movePdfPage(gesture.subjectId, dx > 0 ? -1 : 1);
   renderApp();
+}
+
+function handleDocumentTouchCancel(event: TouchEvent): void {
+  if (activeSwipeGesture) {
+    // touchcancel = OS / scroll engine 이 gesture 가로챔. commit 없이 cleanup.
+    activeSwipeGesture = null;
+  }
+  void event;
 }
 
 function handleDocumentClick(event: MouseEvent): void {
