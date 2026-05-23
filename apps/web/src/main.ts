@@ -411,35 +411,9 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     // `.catch` as a defensive net for unexpected rejections (e.g., if the viewer
     // ever throws outside its own try/catch).
     //
-    // hotfix(ipad-debug): iPad 에서 PDF canvas 가 빈 화면으로 나오는 증상이
-    // 보고됐는데 (iPhone/Mac 정상), 콘솔 접근이 막혀 있어 진단이 막혔다.
-    // 한 sprint 동안만 화면에 mount phase / device 정보 / error 를 표시하는
-    // debug badge 를 켜둔다. 원인이 잡히면 곧장 제거.
-    //
-    // codex P2 (PR #42 post-merge): failed/timeout 직후의 stale badge 를 cleanup
-    // 안 하면 onError 가 dataset.pdfMounted 를 풀어주는 순간 다음 render 가
-    // mount 를 재시도하고 같은 container 에 badge 가 누적된다. 새 attempt 전에
-    // 같은 div 안의 기존 badge 를 전부 제거.
-    div
-      .querySelectorAll<HTMLElement>('[data-pdf-debug-badge="true"]')
-      .forEach((stale) => stale.remove());
-    const debugBadge = document.createElement("div");
-    debugBadge.dataset.pdfDebugBadge = "true";
-    Object.assign(debugBadge.style, {
-      position: "absolute",
-      top: "8px",
-      left: "8px",
-      zIndex: "9999",
-      background: "rgba(0,0,0,0.85)",
-      color: "#fff",
-      font: "11px/1.4 ui-monospace, monospace",
-      padding: "6px 8px",
-      borderRadius: "4px",
-      maxWidth: "calc(100% - 16px)",
-      whiteSpace: "pre-wrap",
-      wordBreak: "break-word",
-      pointerEvents: "none"
-    });
+    // RUM observability: Datadog dashboard 에서 mount phase + device 분포
+    // 추적. iPad blank-canvas (PR #44/#45 fix 회귀 감지) 또는 향후 미지원
+    // 브라우저 발견용. user 가 콘솔/Network 직접 접근 못해도 backend-visible.
     const info = {
       page: pageNumber,
       cw: div.clientWidth,
@@ -447,11 +421,6 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
       dpr: window.devicePixelRatio || 1,
       ua: navigator.userAgent.slice(0, 90)
     };
-    debugBadge.textContent = `[mount start] p${info.page} cw=${info.cw} ch=${info.ch} dpr=${info.dpr}`;
-    div.appendChild(debugBadge);
-    // RUM observability: backend-visible event for iPad blank-canvas diagnosis.
-    // user 가 iPad Safari 콘솔/Network 접근 불가 → Datadog dashboard 에서
-    // mount phase/dpr/cw/ch/ua 분포 확인. iPad-only failure 추적.
     trackRumAction("pdf-canvas.mount.start", {
       page: info.page,
       cw: info.cw,
@@ -462,10 +431,6 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     const mountStartedAt = performance.now();
     const watchdog = window.setTimeout(() => {
       if (div.dataset.pdfMounted === mountedKey) {
-        debugBadge.style.background = "rgba(202,138,4,0.92)";
-        debugBadge.textContent =
-          `[TIMEOUT 10s] p${info.page}\nstill mounting after 10s\n` +
-          `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}\nua=${info.ua}`;
         trackRumAction("pdf-canvas.mount.timeout", {
           page: info.page,
           cw: info.cw,
@@ -479,9 +444,6 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     void mountPdfCanvas(div, blobUrl, pageNumber, {
       onReady: (vp) => {
         window.clearTimeout(watchdog);
-        debugBadge.textContent =
-          `[OK] p${vp.pageNumber} vp=${Math.round(vp.width)}x${Math.round(vp.height)} dpr=${info.dpr}`;
-        window.setTimeout(() => debugBadge.remove(), 2500);
         trackRumAction("pdf-canvas.mount.ok", {
           page: info.page,
           vp_w: Math.round(vp.width),
@@ -496,14 +458,7 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
         window.clearTimeout(watchdog);
         console.warn("[study-note] pdf canvas mount failed", err);
         delete div.dataset.pdfMounted;
-        debugBadge.style.background = "rgba(220,38,38,0.92)";
-        const e = err as { message?: unknown; stack?: unknown; name?: unknown } | null;
-        debugBadge.textContent =
-          `[FAIL] p${info.page} ${String(e?.name ?? "")}\n` +
-          `${String(e?.message ?? err)}\n` +
-          `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}\n` +
-          `ua=${info.ua}\n` +
-          `stack=${String(e?.stack ?? "").slice(0, 220)}`;
+        const e = err as { name?: unknown } | null;
         trackRumError(err, {
           phase: "pdf-canvas.mount.error",
           page: info.page,
@@ -519,12 +474,7 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
       window.clearTimeout(watchdog);
       console.warn("[study-note] pdf canvas mount rejected", err);
       delete div.dataset.pdfMounted;
-      debugBadge.style.background = "rgba(220,38,38,0.92)";
-      const e = err as { message?: unknown; stack?: unknown; name?: unknown } | null;
-      debugBadge.textContent =
-        `[REJECT] p${info.page} ${String(e?.name ?? "")}\n` +
-        `${String(e?.message ?? err)}\n` +
-        `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}`;
+      const e = err as { name?: unknown } | null;
       trackRumError(err, {
         phase: "pdf-canvas.mount.reject",
         page: info.page,
