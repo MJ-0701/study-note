@@ -16,6 +16,7 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException
@@ -387,8 +388,8 @@ describe("AC3 — response DTO role split", () => {
 
 // ─── AC3 child-count contract ────────────────────────────────────────────────
 
-describe("AC3 — child-count endpoint", () => {
-  it("returns subjectCount > 0", async () => {
+describe("AC3 + AC5b — child-count endpoint", () => {
+  it("master → returns subjectCount > 0", async () => {
     const target = termRow();
     const prisma: MockPrisma = {
       term: {
@@ -401,7 +402,7 @@ describe("AC3 — child-count endpoint", () => {
       subject: { count: async () => 5 }
     };
     const service = makeService(prisma);
-    const result = await service.getChildCount("term-001");
+    const result = await service.getChildCount("term-001", "user-master", "master");
     assert.deepEqual(result, { subjectCount: 5 });
   });
 
@@ -418,11 +419,140 @@ describe("AC3 — child-count endpoint", () => {
     };
     const service = makeService(prisma);
     await assert.rejects(
-      () => service.getChildCount("missing"),
+      () => service.getChildCount("missing", "user-master", "master"),
       (err: NotFoundException) => {
         const body = err.getResponse() as { errorCode: string };
         return body.errorCode === "TERM_NOT_FOUND";
       }
     );
+  });
+
+  it("(Codex Round-2 blocking) admin → master-owned term child-count → 403 ROLE_HIERARCHY_VIOLATION", async () => {
+    const masterTerm = termRow({ createdById: "user-master" });
+    const prisma: MockPrisma = {
+      term: {
+        findUnique: async () => masterTerm,
+        findMany: async () => [],
+        create: async () => masterTerm,
+        update: async () => masterTerm,
+        delete: async () => masterTerm
+      },
+      subject: { count: async () => 3 }
+    };
+    const service = makeService(prisma);
+    await assert.rejects(
+      () => service.getChildCount(masterTerm.id, "user-admin", "admin"),
+      (err: ForbiddenException) => {
+        const body = err.getResponse() as { errorCode: string };
+        return body.errorCode === "ROLE_HIERARCHY_VIOLATION";
+      }
+    );
+  });
+
+  it("admin → own term child-count → success", async () => {
+    const ownTerm = termRow({ createdById: "user-admin" });
+    const prisma: MockPrisma = {
+      term: {
+        findUnique: async () => ownTerm,
+        findMany: async () => [],
+        create: async () => ownTerm,
+        update: async () => ownTerm,
+        delete: async () => ownTerm
+      },
+      subject: { count: async () => 2 }
+    };
+    const service = makeService(prisma);
+    const result = await service.getChildCount(ownTerm.id, "user-admin", "admin");
+    assert.deepEqual(result, { subjectCount: 2 });
+  });
+});
+
+// ─── Codex Round-2 P1 — termUpdateSchema partial update + service invariant ──
+
+describe("Codex Round-2 P1 — update merge invariant (partial update)", () => {
+  it("PUT { endDate } 만 보내고 결합된 startDate > endDate 면 400", async () => {
+    const before = termRow({
+      startDate: new Date("2026-05-01T00:00:00.000Z"),
+      endDate: null,
+      createdById: "user-master"
+    });
+    const prisma: MockPrisma = {
+      term: {
+        findUnique: async () => before,
+        findMany: async () => [],
+        create: async () => before,
+        update: async () => before,
+        delete: async () => before
+      },
+      subject: { count: async () => 0 }
+    };
+    const service = makeService(prisma);
+    await assert.rejects(
+      () =>
+        service.update(
+          before.id,
+          { endDate: new Date("2026-03-01T00:00:00.000Z") },
+          "user-master",
+          "master"
+        ),
+      (err: BadRequestException) => {
+        const body = err.getResponse() as { errorCode: string };
+        return body.errorCode === "INVALID_INPUT";
+      }
+    );
+  });
+
+  it("PUT { endDate } 가 결합된 startDate 이후면 성공", async () => {
+    const before = termRow({
+      startDate: new Date("2026-03-01T00:00:00.000Z"),
+      endDate: null,
+      createdById: "user-master"
+    });
+    const updated = { ...before, endDate: new Date("2026-06-30T00:00:00.000Z") };
+    const prisma: MockPrisma = {
+      term: {
+        findUnique: async () => before,
+        findMany: async () => [],
+        create: async () => before,
+        update: async () => updated,
+        delete: async () => before
+      },
+      subject: { count: async () => 0 }
+    };
+    const service = makeService(prisma);
+    const result = await service.update(
+      before.id,
+      { endDate: new Date("2026-06-30T00:00:00.000Z") },
+      "user-master",
+      "master"
+    );
+    assert.ok(result.endDate);
+  });
+
+  it("PUT { startDate=null } 으로 기존 startDate 제거 → endDate 만 남아도 통과", async () => {
+    const before = termRow({
+      startDate: new Date("2026-05-01T00:00:00.000Z"),
+      endDate: new Date("2026-06-30T00:00:00.000Z"),
+      createdById: "user-master"
+    });
+    const updated = { ...before, startDate: null };
+    const prisma: MockPrisma = {
+      term: {
+        findUnique: async () => before,
+        findMany: async () => [],
+        create: async () => before,
+        update: async () => updated,
+        delete: async () => before
+      },
+      subject: { count: async () => 0 }
+    };
+    const service = makeService(prisma);
+    const result = await service.update(
+      before.id,
+      { startDate: null },
+      "user-master",
+      "master"
+    );
+    assert.equal(result.startDate, null);
   });
 });

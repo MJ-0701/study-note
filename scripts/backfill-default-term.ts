@@ -63,6 +63,15 @@ async function main(): Promise<void> {
 
     console.log(`[backfill-default-term] orphan Subject (termId IS NULL): ${orphanCount}`);
     if (existingTerm) {
+      // Codex Round-2 P2: 기존 default Term row 가 MASTER_USER_ID 가 만든 row 인지
+      // 확인. 다른 admin/master 가 이전에 같은 (grade,semester,title) Term 을
+      // 만든 상태에서 backfill 이 silent reuse 하면 ownership audit 깨짐.
+      if (existingTerm.createdById !== masterUserId) {
+        console.error(
+          `[backfill-default-term] existing default Term id=${existingTerm.id} createdBy=${existingTerm.createdById} != MASTER_USER_ID=${masterUserId}. Aborting to avoid silent ownership mismatch.`
+        );
+        process.exit(2);
+      }
       console.log(
         `[backfill-default-term] default Term exists: id=${existingTerm.id} createdBy=${existingTerm.createdById}`
       );

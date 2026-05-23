@@ -83,8 +83,12 @@ export class SubjectsController {
   @Get("subjects/:id/child-count")
   @UseGuards(SessionAuthGuard, RoleGuard)
   @Roles("master", "admin")
-  async childCount(@Param("id") id: string): Promise<{ materialCount: number }> {
-    return this.subjects.getChildCount(id);
+  async childCount(
+    @Param("id") id: string,
+    @Req() req: NestRequest
+  ): Promise<{ materialCount: number }> {
+    const actor = req.user as UserProfile;
+    return this.subjects.getChildCount(id, actor.id, actor.role);
   }
 }
 

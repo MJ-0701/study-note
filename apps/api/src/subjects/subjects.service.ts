@@ -96,8 +96,13 @@ export class SubjectsService {
     );
   }
 
-  async getChildCount(id: string): Promise<{ materialCount: number }> {
-    await this.findOrThrow(id);
+  async getChildCount(
+    id: string,
+    actorId: string,
+    actorRole: "master" | "admin" | "normal"
+  ): Promise<{ materialCount: number }> {
+    const subject = await this.findOrThrow(id);
+    await this.ensureParentTermAllowed(subject.termId, actorId, actorRole);
     const materialCount = await this.prisma.pdfMaterial.count({
       where: { subjectId: id, deletedAt: null }
     });

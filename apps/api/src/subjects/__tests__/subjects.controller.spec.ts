@@ -259,6 +259,72 @@ describe("AC4 — delete = 409 HAS_CHILDREN (PdfMaterial deletedAt IS NULL)", ()
   });
 });
 
+// ─── AC5b (Codex Round-2 blocking) child-count 위계 ─────────────────────────
+
+describe("AC5b — child-count 부모 Term 위계 검사 (Codex Round-2 blocking)", () => {
+  it("admin → subject under master-owned term → child-count 403 ROLE_HIERARCHY_VIOLATION", async () => {
+    const masterTerm = term({ createdById: "user-master" });
+    const target = subj({ termId: masterTerm.id });
+    const prisma: MockPrisma = {
+      term: { findUnique: async () => masterTerm },
+      subject: {
+        findUnique: async () => target,
+        findMany: async () => [target],
+        create: async () => target,
+        update: async () => target,
+        delete: async () => target
+      },
+      pdfMaterial: { count: async () => 4 }
+    };
+    const service = makeService(prisma);
+    await assert.rejects(
+      () => service.getChildCount(target.id, "user-admin", "admin"),
+      (err: ForbiddenException) => {
+        const body = err.getResponse() as { errorCode: string };
+        return body.errorCode === "ROLE_HIERARCHY_VIOLATION";
+      }
+    );
+  });
+
+  it("master → any subject child-count → success", async () => {
+    const someTerm = term({ createdById: "user-admin-x" });
+    const target = subj({ termId: someTerm.id });
+    const prisma: MockPrisma = {
+      term: { findUnique: async () => someTerm },
+      subject: {
+        findUnique: async () => target,
+        findMany: async () => [target],
+        create: async () => target,
+        update: async () => target,
+        delete: async () => target
+      },
+      pdfMaterial: { count: async () => 2 }
+    };
+    const service = makeService(prisma);
+    const result = await service.getChildCount(target.id, "user-master", "master");
+    assert.deepEqual(result, { materialCount: 2 });
+  });
+
+  it("admin → subject under own term → child-count 성공", async () => {
+    const ownTerm = term({ createdById: "user-admin" });
+    const target = subj({ termId: ownTerm.id });
+    const prisma: MockPrisma = {
+      term: { findUnique: async () => ownTerm },
+      subject: {
+        findUnique: async () => target,
+        findMany: async () => [target],
+        create: async () => target,
+        update: async () => target,
+        delete: async () => target
+      },
+      pdfMaterial: { count: async () => 1 }
+    };
+    const service = makeService(prisma);
+    const result = await service.getChildCount(target.id, "user-admin", "admin");
+    assert.deepEqual(result, { materialCount: 1 });
+  });
+});
+
 // ─── AC4 create — term not found → 404 ──────────────────────────────────────
 
 describe("AC4 — create under missing term → 404 TERM_NOT_FOUND", () => {

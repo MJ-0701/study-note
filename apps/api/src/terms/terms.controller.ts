@@ -90,8 +90,12 @@ export class TermsController {
   @Get(":id/child-count")
   @UseGuards(SessionAuthGuard, RoleGuard)
   @Roles("master", "admin")
-  async childCount(@Param("id") id: string): Promise<{ subjectCount: number }> {
-    return this.terms.getChildCount(id);
+  async childCount(
+    @Param("id") id: string,
+    @Req() req: NestRequest
+  ): Promise<{ subjectCount: number }> {
+    const actor = req.user as UserProfile;
+    return this.terms.getChildCount(id, actor.id, actor.role);
   }
 }
 

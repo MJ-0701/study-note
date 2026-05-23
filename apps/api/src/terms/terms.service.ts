@@ -7,6 +7,7 @@
 // - delete = 409 HAS_CHILDREN reject only (cascade soft-delete 폐기)
 
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -65,6 +66,17 @@ export class TermsService {
     const before = await this.findOrThrow(id);
     ensureTermHierarchyAllowed(before, actorId, actorRole);
 
+    // Merge before + input → validate combined startDate/endDate invariant.
+    // Schema-level refine 가 부분 update 의 절반만 검증하던 leak fix (Codex Round-2 P1).
+    const mergedStart = input.startDate === undefined ? before.startDate : input.startDate;
+    const mergedEnd = input.endDate === undefined ? before.endDate : input.endDate;
+    if (mergedStart && mergedEnd && mergedStart.getTime() > mergedEnd.getTime()) {
+      throw new BadRequestException({
+        errorCode: "INVALID_INPUT",
+        errorMessage: "endDate must be on or after startDate"
+      });
+    }
+
     try {
       const updated = await this.prisma.term.update({
         where: { id },
@@ -111,8 +123,13 @@ export class TermsService {
     this.logger.warn(`[Term] action=delete id=${id} actor=${actorId} before=${termSummary(before)}`);
   }
 
-  async getChildCount(id: string): Promise<{ subjectCount: number }> {
-    await this.findOrThrow(id);
+  async getChildCount(
+    id: string,
+    actorId: string,
+    actorRole: "master" | "admin" | "normal"
+  ): Promise<{ subjectCount: number }> {
+    const term = await this.findOrThrow(id);
+    ensureTermHierarchyAllowed(term, actorId, actorRole);
     const subjectCount = await this.prisma.subject.count({ where: { termId: id } });
     return { subjectCount };
   }

@@ -51,6 +51,9 @@ export const termCreateSchema = z
     path: ["endDate"]
   });
 
+// Update 는 schema-level refine 으로 startDate<=endDate 보장 불가능 — 부분 update
+// 가 기존 DB row 와 결합되어야 invariant 검증 가능. service.update 가 merged
+// (before + input) date pair 를 다시 검증한다. (Codex Round-2 P1 fix)
 export const termUpdateSchema = z
   .object({
     grade: z.number().int().min(1).max(4).optional(),
@@ -62,10 +65,6 @@ export const termUpdateSchema = z
   .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "at least one field is required"
-  })
-  .refine(startEndRefine, {
-    message: "endDate must be on or after startDate",
-    path: ["endDate"]
   });
 
 export type TermCreateInput = z.infer<typeof termCreateSchema>;
