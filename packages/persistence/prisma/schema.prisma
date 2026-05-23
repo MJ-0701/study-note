@@ -38,11 +38,31 @@ model Session {
   @@index([userId])
 }
 
+model Term {
+  id          String    @id @default(cuid())
+  grade       Int
+  semester    Int
+  title       String
+  startDate   DateTime? @db.Date
+  endDate     DateTime? @db.Date
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  subjects    Subject[]
+
+  @@unique([grade, semester, title])
+  @@index([grade, semester])
+}
+
 model Subject {
-  id        String        @id
+  id        String        @id @default(cuid())
   title     String
+  termId    String?
   createdAt DateTime      @default(now())
   materials PdfMaterial[]
+  term      Term?         @relation(fields: [termId], references: [id])
+
+  @@index([termId])
 }
 
 model PdfMaterial {

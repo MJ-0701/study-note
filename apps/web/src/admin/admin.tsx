@@ -4,6 +4,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import "./styles.css";
+import { TermsPanel } from "./terms-panel";
 
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
@@ -458,6 +459,8 @@ function AdminApp() {
             handleReview={handleReview}
           />
         )}
+
+        <TermsPanel viewerId={viewer!.userId} viewerRole={viewerRole} />
       </div>
     </div>
   );

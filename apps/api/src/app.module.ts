@@ -13,6 +13,8 @@ import { PrismaModule } from "@study-note/persistence";
 import { createStorageProvider, StoragePort } from "@study-note/storage";
 import { UserNotesModule } from "./user-notes/user-notes.module";
 import { PdfAnnotationsModule } from "./pdf-annotations/pdf-annotations.module";
+import { TermsModule } from "./terms/terms.module";
+import { SubjectsModule } from "./subjects/subjects.module";
 
 @Module({
   imports: [
@@ -22,7 +24,9 @@ import { PdfAnnotationsModule } from "./pdf-annotations/pdf-annotations.module";
     PersonaModule,
     AdminModule,
     UserNotesModule,
-    PdfAnnotationsModule
+    PdfAnnotationsModule,
+    TermsModule,
+    SubjectsModule
   ],
   controllers: [
     AuthController,
