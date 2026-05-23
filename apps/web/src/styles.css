@@ -3641,3 +3641,48 @@ body[data-route="pdf-workspace"] .content {
     grid-template-columns: 1fr;
   }
 }
+
+/* sprint-W21-sprint-1 / S6 — 별표 (star) widget */
+.pdf-star-mark {
+  position: absolute;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+.pdf-star-mark__glyph {
+  font-size: clamp(20px, 6vw, 96px);
+  line-height: 1;
+  color: inherit;
+  text-shadow: 0 0 2px rgba(0,0,0,0.2);
+}
+.pdf-star-mark__controls {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: none;
+  gap: 2px;
+}
+.pdf-star-mark:hover .pdf-star-mark__controls,
+.pdf-star-mark:focus-within .pdf-star-mark__controls {
+  display: inline-flex;
+}
+.pdf-star-mark__btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pdf-star-mark__btn--danger {
+  border-color: #dc2626;
+  color: #dc2626;
+}
