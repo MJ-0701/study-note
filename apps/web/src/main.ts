@@ -1,3 +1,8 @@
+// hotfix(pdf-canvas): polyfills 가 가장 먼저 평가돼야 한다 — pdfjs-dist 가
+// 호출하는 `Map.prototype.getOrInsertComputed` (TC39 upsert proposal) 가 iPad
+// Safari 18.5 에서 누락된 사례 회복. dynamic import 가 아니라 top-level import
+// 라야 다른 모든 모듈 평가 전에 prototype 이 패치된다.
+import "./polyfills";
 import morphdom from "morphdom";
 import {
   clearDatadogRumUser,
