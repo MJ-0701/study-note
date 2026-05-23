@@ -116,6 +116,42 @@ export class SubjectsService {
     );
   }
 
+  /**
+   * S7 AC32 — Subject move. Subject.termId 만 변경, 자식 PdfMaterial/R2 key 영향 0
+   * (Subject = metadata-only, ADR-4). 출발지 + 도착지 Term 둘 다 위계 검사.
+   */
+  async move(
+    id: string,
+    targetTermId: string,
+    actorId: string,
+    actorRole: "master" | "admin" | "normal"
+  ): Promise<PrismaSubject> {
+    const before = await this.findOrThrow(id);
+    await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
+    // 동일 termId no-op (AC34 case h).
+    if (before.termId === targetTermId) {
+      return before;
+    }
+    // 도착지 Term 존재 + 위계 검사.
+    const targetTerm = await this.prisma.term.findUnique({ where: { id: targetTermId } });
+    if (!targetTerm) {
+      throw new NotFoundException({
+        errorCode: "TERM_NOT_FOUND",
+        errorMessage: "target term not found"
+      });
+    }
+    ensureTermHierarchyAllowed(targetTerm, actorId, actorRole);
+
+    const updated = await this.prisma.subject.update({
+      where: { id },
+      data: { termId: targetTermId }
+    });
+    this.logger.warn(
+      `[Subject] action=move id=${id} from=${before.termId ?? "null"} to=${targetTermId} actor=${actorId}`
+    );
+    return updated;
+  }
+
   async getChildCount(
     id: string,
     actorId: string,
