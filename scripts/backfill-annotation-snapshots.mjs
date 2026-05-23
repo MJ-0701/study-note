@@ -191,14 +191,24 @@ async function main() {
       const savedAt = pickSavedAt(bodyJson, lastModified);
 
       if (APPLY) {
-        await prisma.annotationSnapshot.create({
-          data: {
+        // codex P1 (PR #38 post-merge review): read-then-create on the
+        // unique key (materialId, ownerId) races against live PUT traffic.
+        // A concurrent user PUT between the `findUnique` above and `create`
+        // raises P2002 and aborts the script mid-run, leaving the remaining
+        // keys unprocessed in a partial backfill state. Use `upsert` (matches
+        // the script header doc) so the run stays idempotent under live
+        // traffic — the update branch is an explicit no-op (no fields
+        // change) but consumes the unique-conflict cleanly.
+        await prisma.annotationSnapshot.upsert({
+          where: { materialId_ownerId: { materialId, ownerId: userId } },
+          create: {
             materialId,
             ownerId: userId,
             schemaVersion: 1,
             payload: Prisma.JsonNull,
             savedAt
-          }
+          },
+          update: {}
         });
       }
 
