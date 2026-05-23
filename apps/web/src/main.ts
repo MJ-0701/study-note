@@ -2397,6 +2397,26 @@ function getSubjectPdfMaterials(subjectId: string): PdfMaterialDraft[] {
   return getPdfWorkspaceMaterials(getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId));
 }
 
+// S3 AC11/AC12 — canonical YYYY-MM-DD validator (calendar overflow 차단).
+function isCanonicalIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
+// S3 AC13 — WeekNote.label fallback: ISO date 형식이면 한국식 ("M월 D일") 변환,
+// 아니면 원래 label, 그도 없으면 "(날짜 미지정)".
+function formatWeekLabel(label: string | undefined | null, classDate?: string | null): string {
+  const candidate = (classDate && classDate.length > 0 ? classDate : label) ?? "";
+  if (!candidate) return "(날짜 미지정)";
+  if (isCanonicalIsoDate(candidate)) {
+    const [, month, day] = candidate.split("-");
+    return `${Number(month)}월 ${Number(day)}일`;
+  }
+  return candidate;
+}
+
 function addSubjectClassDate(formData: FormData): void {
   const subjectId = String(formData.get("subjectId") ?? "").trim();
   const classDate = String(formData.get("classDate") ?? "").trim();
@@ -2413,11 +2433,13 @@ function addSubjectClassDate(formData: FormData): void {
     return;
   }
 
-  if (!classDate) {
+  // S3 AC11/AC15: ISO YYYY-MM-DD 만 허용 (date input native). 비ISO/calendar
+  // overflow reject.
+  if (!isCanonicalIsoDate(classDate)) {
     intakeFeedback = {
       kind: "error",
-      title: "수업일을 입력하세요.",
-      detail: "예: 5월 14일(목)처럼 sidebar와 카드에 표시할 날짜를 적어 주세요."
+      title: "수업일 형식이 잘못되었습니다.",
+      detail: "YYYY-MM-DD (예: 2026-05-14) 형식만 사용할 수 있습니다."
     };
     renderApp();
     return;
@@ -9290,7 +9312,8 @@ function renderClassDateAddSection(subject: SubjectNote): string {
         <input type="hidden" name="subjectId" value="${escapeHtml(subject.id)}" />
         <label>
           <span>수업일</span>
-          <input name="classDate" type="text" placeholder="예: 5월 14일(목)" autocomplete="off" />
+          <!-- S3 AC11/AC15: text → date input. ISO YYYY-MM-DD 만 허용. -->
+          <input name="classDate" type="date" required autocomplete="off" />
         </label>
         <label>
           <span>수업 제목</span>
@@ -9313,7 +9336,7 @@ function renderClassDayCard(
   return `
     <article class="class-day-card">
       <div>
-        <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
+        <p class="meta">${escapeHtml(formatWeekLabel(week.label))} · ${formatReviewStatus(week.reviewStatus)}</p>
         <h3>${week.title}</h3>
         <p>${week.focus}</p>
       </div>
@@ -9475,7 +9498,7 @@ function renderSummaryDayCard(subject: SubjectNote, week: WeekNote): string {
   return `
     <article class="class-day-card">
       <div>
-        <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
+        <p class="meta">${escapeHtml(formatWeekLabel(week.label))} · ${formatReviewStatus(week.reviewStatus)}</p>
         <h3>${week.title}</h3>
         <p>${week.focus}</p>
       </div>

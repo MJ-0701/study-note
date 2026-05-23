@@ -62,7 +62,8 @@ export class MaterialsService {
         id: materialId,
         ownerId,
         subjectId,
-        classDate: requireString(input.classDate, "classDate"),
+        // S3 AC12: input.classDate (YYYY-MM-DD string) → canonical Date.
+        classDate: parseIsoDateOrThrow(input.classDate, "classDate"),
         fileName,
         fileSize,
         pageCount: Math.max(
@@ -313,7 +314,7 @@ export class MaterialsService {
     const saved = await this.prisma.pdfMaterial.update({
       where: { id: material.id },
       data: {
-        classDate: requireString(input.classDate, "classDate")
+        classDate: parseIsoDateOrThrow(input.classDate, "classDate")
       }
     });
 
@@ -514,6 +515,23 @@ function requireString(value: string, name: string): string {
   }
 
   return trimmed;
+}
+
+// S3 AC12 — canonical YYYY-MM-DD reparse. calendar overflow (2026-02-30) 차단.
+function parseIsoDateOrThrow(value: string, name: string): Date {
+  const trimmed = requireString(value, name);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new BadRequestException(`${name} must be YYYY-MM-DD`);
+  }
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException(`${name} invalid date`);
+  }
+  const canonical = parsed.toISOString().slice(0, 10);
+  if (canonical !== trimmed) {
+    throw new BadRequestException(`${name} calendar overflow (non-canonical)`);
+  }
+  return parsed;
 }
 
 function requirePdfFileName(value: string): string {

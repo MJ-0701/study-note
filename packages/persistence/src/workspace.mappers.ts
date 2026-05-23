@@ -19,7 +19,9 @@ type PdfMaterialRow = {
   id: string;
   ownerId: string;
   subjectId: string;
-  classDate: string;
+  // sprint-W21-sprint-1 / S3 / AC12 — Date column (was String). Mapper converts
+  // to ISO YYYY-MM-DD string for FE.
+  classDate: Date;
   fileName: string;
   fileSize: number;
   pageCount: number;
@@ -29,6 +31,10 @@ type PdfMaterialRow = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+function dateToIsoDay(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
 
 type AnnotationSnapshotRow = {
   materialId: string;
@@ -57,7 +63,7 @@ export function toPdfMaterialRecord(material: PdfMaterialRow): PdfMaterialRecord
     ownerId: material.ownerId,
     uploaderId: material.ownerId,
     subjectId: material.subjectId,
-    classDate: material.classDate,
+    classDate: dateToIsoDay(material.classDate),
     fileName: material.fileName,
     fileSize: material.fileSize,
     pageCount: material.pageCount,

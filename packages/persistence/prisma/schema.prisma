@@ -70,7 +70,9 @@ model PdfMaterial {
   id          String               @id @default(cuid())
   ownerId     String
   subjectId   String
-  classDate   String
+  // sprint-W21-sprint-1 / S3 / AC12 — String → DateTime @db.Date migration.
+  // Native date sort + canonical reparse 차단 (calendar overflow).
+  classDate   DateTime             @db.Date
   fileName    String
   fileSize    Int
   pageCount   Int
