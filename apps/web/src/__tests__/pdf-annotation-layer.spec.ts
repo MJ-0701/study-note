@@ -82,5 +82,13 @@ describe("PDF annotation layer page stickiness", () => {
     assert.match(mainTs, /async function disposePdfDocumentCache/);
     assert.match(mainTs, /disposePdfDocumentCache\(previousUrl\)/);
     assert.match(mainTs, /import\(["']\.\/pdf\/pdf-canvas-viewer["']\)/);
+    // sprint-W21-sprint-4/S3: annotation overlay 5종 (sticky/textBox/checklist/
+    // table/chart) 의 좌표 mapping 이 모두 norm × 100% surface-relative 패턴 →
+    // canvas CSS stretch (S2) 와 정합. canvas migration 회귀 0.
+    assert.match(mainTs, /style="left: \$\{note\.anchor\.x \* 100\}%; top: \$\{note\.anchor\.y \* 100\}%;"/);
+    assert.match(mainTs, /style="left: \$\{tb\.position\.x \* 100\}%; top: \$\{tb\.position\.y \* 100\}%;"/);
+    assert.match(mainTs, /style="left: \$\{cl\.position\.x \* 100\}%; top: \$\{cl\.position\.y \* 100\}%;"/);
+    assert.match(mainTs, /article\.style\.left = String\(chart\.position\.x \* 100\) \+ "%"/);
+    assert.match(mainTs, /article\.style\.left = String\(table\.position\.x \* 100\) \+ "%"/);
   });
 });
