@@ -405,9 +405,18 @@ export class PdfAnnotationsService {
         updatedAt: created.savedAt.toISOString()
       });
     } catch (err) {
-      // compensating: delete Prisma row.
+      // codex P1 (PR #35 round-5): compare-and-delete rollback. A concurrent
+      // CAS update could land between our `create` and this R2 failure (the
+      // newer write happens against the row we just created with savedAt =
+      // newSavedAt). An unconditional `delete` on (materialId, ownerId) would
+      // wipe that newer write, silently losing data and leaving an R2 orphan.
+      // Restrict the compensating delete to the exact revision we created so
+      // it rolls back only our own attempt and no-ops if someone else has
+      // since taken ownership of the row.
       await this.prisma.annotationSnapshot
-        .delete({ where: { materialId_ownerId: { materialId, ownerId } } })
+        .deleteMany({
+          where: { materialId, ownerId, savedAt: created.savedAt }
+        })
         .catch(() => undefined);
       this.logger.warn(
         `pdf-annotations.create.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back`

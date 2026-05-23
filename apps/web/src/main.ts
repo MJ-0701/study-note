@@ -775,7 +775,16 @@ const lastHydratedAnnotationRevision = new Map<string, string>();
 // sprint-W21-sprint-2/S2 (plan §R3): once-per-subject batch hydrate marker.
 // key = `${userId}:${subjectId}`. ensures the batch GET fires exactly once
 // per subject view (R3 AC3). cleared on session transition / clearAuthSession.
+//
+// codex P2 (PR #35 round-5): split "in-flight" from "completed". The hot-path
+// gate in renderApp uses the *completed* marker as "batch already finished, no
+// need for single-GET"; if we promoted the marker before the network call
+// returned, any re-render during the in-flight window would race a duplicate
+// single-GET against the still-pending batch — exactly the regression S2 is
+// trying to eliminate. Inflight prevents duplicate batch dispatches without
+// unlocking the single-GET fallback.
 const annotationSubjectBatchFetched = new Set<string>();
+const annotationSubjectBatchInflight = new Set<string>();
 const syncFailureTracker: SyncFailureTracker = {
   recentFailures: [],
   paused: false
@@ -1325,10 +1334,17 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
     return;
   }
   const subjectBatchKey = `${sessionUserId}:${subjectId}`;
-  if (annotationSubjectBatchFetched.has(subjectBatchKey)) {
+  // codex P2 (PR #35 round-5): inflight 와 fetched 둘 다 확인. 어느 한쪽이라도
+  // set 이면 이미 fetch 가 진행 중이거나 끝난 상태 → 재진입 X. 마커는 네트워크
+  // 호출이 *완료* 된 시점에만 fetched 로 승격된다 (renderApp 의 batch-gated
+  // single-GET 분기와 정합).
+  if (
+    annotationSubjectBatchInflight.has(subjectBatchKey) ||
+    annotationSubjectBatchFetched.has(subjectBatchKey)
+  ) {
     return;
   }
-  annotationSubjectBatchFetched.add(subjectBatchKey);
+  annotationSubjectBatchInflight.add(subjectBatchKey);
 
   // codex P1 (PR #35): batch HTTP 실패 시 active material 의 single-GET
   // fallback 발사 — renderApp 의 redundant single-GET 제거 이후 유일한
@@ -1348,7 +1364,7 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
       { credentials: "include" }
     );
   } catch (error) {
-    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    annotationSubjectBatchInflight.delete(subjectBatchKey);
     console.warn("[study-note] annotation batch GET network error", error);
     recordFetchFailure();
     fallbackToSingleGet();
@@ -1356,12 +1372,12 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
   }
 
   if (response.status === 401 || response.status === 403) {
-    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    annotationSubjectBatchInflight.delete(subjectBatchKey);
     handleAuthExpiredFromSync();
     return;
   }
   if (!response.ok) {
-    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    annotationSubjectBatchInflight.delete(subjectBatchKey);
     if (response.status >= 500) {
       recordFetchFailure();
     }
@@ -1378,9 +1394,15 @@ async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
   try {
     json = (await response.json()) as typeof json;
   } catch {
-    annotationSubjectBatchFetched.delete(subjectBatchKey);
+    annotationSubjectBatchInflight.delete(subjectBatchKey);
     return;
   }
+
+  // codex P2 (PR #35 round-5): 응답 parse 성공 = batch 가 끝난 시점. 이제
+  // fetched 로 승격하여 renderApp 의 single-GET 경로를 해제한다. inflight 도
+  // 함께 release 해서 set 메모리가 새지 않도록.
+  annotationSubjectBatchFetched.add(subjectBatchKey);
+  annotationSubjectBatchInflight.delete(subjectBatchKey);
 
   // session re-validate (sprint-2/S2 fix pattern).
   if (authSession?.user.id !== sessionUserId) {
@@ -1722,6 +1744,7 @@ function applySessionTransitionForUser(newUserId: string): void {
   // 새 user 의 PUT 에 잘못된 clientRevision 으로 흘러가지 않도록.
   lastHydratedAnnotationRevision.clear();
   annotationSubjectBatchFetched.clear();
+  annotationSubjectBatchInflight.clear();
   // sprint-2/S3 fix (self-review): also reset sync-failure tracker + banner
   // state. Without this, user A's accumulated PUT failures (and the resulting
   // `paused = true` autosave halt) silently persist into user B's session,
@@ -1772,6 +1795,7 @@ function clearAuthSession(): void {
   lastHydratedAnnotationByMaterial.clear();
   lastHydratedAnnotationRevision.clear();
   annotationSubjectBatchFetched.clear();
+  annotationSubjectBatchInflight.clear();
   syncFailureTracker.paused = false;
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
@@ -6024,6 +6048,11 @@ function renderApp(): void {
     // 결정. 첫 entry = batch 만. batch 끝난 후 (또는 material 전환) = single-GET.
     // fetchAnnotationsForSubject 자체가 truncated / batch 실패 시 active
     // material 의 single-GET fallback 을 내부에서 발사한다 (아래 함수 참조).
+    //
+    // codex P2 (PR #35 round-5): fetched 마커는 batch 응답 parse 가 끝난
+    // 시점에만 add 된다. inflight 동안에는 fetched=false 라서 else 분기로 떨어져
+    // fetchAnnotationsForSubject() 가 다시 호출되지만, 그 함수가 inflight guard
+    // 로 즉시 return 한다 → 단일 GET 이 중복 발사되지 않는다.
     const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
     const material = workspace.material;
     const sessionUserIdForGate = authSession?.user.id;
