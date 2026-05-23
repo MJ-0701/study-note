@@ -244,9 +244,15 @@ export class PdfAnnotationsService {
       });
     }
 
-    const clientRevision = rawClientRevision
-      ? this.parseClientRevision(rawClientRevision)
-      : undefined;
+    // codex P2 (PR #35 round-6): distinguish "field not provided" from
+    // "provided but empty/invalid". A truthy check would silently treat
+    // `clientRevision: ""` as undefined and fall into the create path, hiding
+    // a client bug behind the wrong status. `parseClientRevision("")` produces
+    // an Invalid Date and surfaces the documented 400 INVALID_REVISION.
+    const clientRevision =
+      rawClientRevision !== undefined
+        ? this.parseClientRevision(rawClientRevision)
+        : undefined;
     const newSavedAt = new Date();
 
     if (clientRevision !== undefined) {

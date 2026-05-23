@@ -352,6 +352,24 @@ describe("AC4: PUT revision 분기", () => {
     assert.equal(body.errorCode, "INVALID_REVISION");
   });
 
+  it("codex round-6 P2: clientRevision 빈 문자열 → 400 INVALID_REVISION (falsy 가 create 로 새지 않음)", async () => {
+    const prisma = basePrisma({});
+    const storage: MockStorage = {
+      getJsonObject: async () => null,
+      putJsonObject: async () => undefined
+    };
+    const service = makeService(prisma, storage);
+    let err: BadRequestException | null = null;
+    try {
+      await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "");
+    } catch (e) {
+      err = e as BadRequestException;
+    }
+    assert.ok(err instanceof BadRequestException);
+    const body = err.getResponse() as { errorCode: string };
+    assert.equal(body.errorCode, "INVALID_REVISION");
+  });
+
   it("clientRevision undefined + 신규 storage → 201 정상 create", async () => {
     const createdAt = new Date("2026-05-22T13:00:00Z");
     const prisma = basePrisma({
