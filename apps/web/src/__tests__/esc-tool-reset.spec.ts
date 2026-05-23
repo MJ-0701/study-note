@@ -84,7 +84,7 @@ describe("AC22 — main.ts ESC handler 가 commit/cancel 헬퍼를 호출하는�
     // reset-tool 분기 안 in-progress stroke commit 호출 회기.
     assert.ok(src.includes("commitActiveInkStrokeOnEsc()"), "main.ts must call commitActiveInkStrokeOnEsc() in reset-tool branch");
     assert.ok(src.includes("cancelActiveDragsOnEsc()"), "main.ts must call cancelActiveDragsOnEsc() in reset-tool branch");
-    // PR #48 codex R1 P1: cancelActiveDragsOnEsc 가 모든 drag state 비우는지 source guard.
+    // PR #48 codex R1 P1: cancelActiveDragsOnEsc 가 모든 drag state 다루는지 source guard.
     const cancelBlockMatch = src.match(/function cancelActiveDragsOnEsc\(\)[\s\S]*?\n\}/);
     assert.ok(cancelBlockMatch, "cancelActiveDragsOnEsc function block must be findable");
     const cancelBlock = cancelBlockMatch[0];
@@ -101,6 +101,26 @@ describe("AC22 — main.ts ESC handler 가 commit/cancel 헬퍼를 호출하는�
         `cancelActiveDragsOnEsc must clear ${dragVar} (PR #48 codex R1 P1)`
       );
     }
+    // PR #48 codex R2 P1: 진짜 cancel = drag start 좌표로 apply*Move 한 번 더 호출.
+    // pointermove 가 매 frame applyXxxMove 로 store 좌표 commit 했으므로 active
+    // pointer nulling 만으로는 원위치 복귀 X — startNormX/Y revert call 필요.
+    for (const applyFn of [
+      "applyTextBoxMove",
+      "applyStickyMove",
+      "applyChecklistMove",
+      "applyTableMove",
+      "applyChartMove"
+    ]) {
+      assert.ok(
+        cancelBlock.includes(applyFn),
+        `cancelActiveDragsOnEsc must call ${applyFn} to revert drag (PR #48 codex R2 P1)`
+      );
+    }
+    // eraser drag = continuous action, no per-widget revert — just stop.
+    assert.ok(
+      /Eraser drag.*continuous|continuous erase action/.test(cancelBlock),
+      "cancelActiveDragsOnEsc must document why eraser drag has no revert (continuous action)"
+    );
     // setPdfTool("read") 호출 후 renderApp.
     assert.ok(src.includes('setPdfTool(subjectId, "read")'), "main.ts must reset tool to 'read' on ESC");
     // preventDefault + stopPropagation 으로 browser default (fullscreen 종료) 차단.

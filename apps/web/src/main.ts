@@ -4059,18 +4059,41 @@ function commitActiveInkStrokeOnEsc(): void {
   activeInkStroke = undefined;
 }
 
-// sprint-W21-sprint-1/S5/AC22 — ESC reset 시 in-progress drag cancel.
-// drag start 시 capture 한 startNormX/startNormY 가 store 안에 그대로
-// 남아있고 active drag 상태만 비우면 다음 render 가 원래 위치로 복귀.
-// PR #48 codex R1 P1 fix: textbox/sticky 외에 checklist/table/chart/eraser
-// drag 도 cancel — 안 비우면 ESC 후 pointermove/pointerup 가 새 read 모드에서
-// 의도치 않게 위치 mutate 하거나 erase 계속 진행.
+// sprint-W21-sprint-1/S5/AC22 — ESC reset 시 in-progress drag 진짜 cancel.
+// pointermove 가 매 frame applyXxxMove 로 store 에 좌표를 commit 했으므로
+// active drag pointer 만 nulling 하면 widget 이 drag 마지막 위치에 멈춤 (= 의도치
+// 않은 placement commit). 진짜 cancel = drag start 시점 좌표 (startNormX/Y) 로
+// apply*Move 한 번 더 호출해서 원위치 revert.
+// PR #48 codex R1 P1 (drag scope) + R2 P1 (real revert) 누적 fix.
 function cancelActiveDragsOnEsc(): void {
-  activeTextBoxDrag = undefined;
-  activeStickyDrag = undefined;
-  activeChecklistDrag = undefined;
-  activeTableDrag = undefined;
-  activeChartDrag = undefined;
+  if (activeTextBoxDrag) {
+    const { subjectId, textBoxId, startNormX, startNormY } = activeTextBoxDrag;
+    applyTextBoxMove(subjectId, textBoxId, { x: startNormX, y: startNormY });
+    activeTextBoxDrag = undefined;
+  }
+  if (activeStickyDrag) {
+    const { subjectId, noteId, startNormX, startNormY } = activeStickyDrag;
+    applyStickyMove(subjectId, noteId, { x: startNormX, y: startNormY });
+    activeStickyDrag = undefined;
+  }
+  if (activeChecklistDrag) {
+    const { subjectId, checklistId, startNormX, startNormY } = activeChecklistDrag;
+    applyChecklistMove(subjectId, checklistId, { x: startNormX, y: startNormY });
+    activeChecklistDrag = undefined;
+  }
+  if (activeTableDrag) {
+    const { subjectId, tableId, startNormX, startNormY } = activeTableDrag;
+    applyTableMove(subjectId, tableId, { x: startNormX, y: startNormY });
+    activeTableDrag = undefined;
+  }
+  if (activeChartDrag) {
+    const { subjectId, chartId, startNormX, startNormY } = activeChartDrag;
+    applyChartMove(subjectId, chartId, { x: startNormX, y: startNormY });
+    activeChartDrag = undefined;
+  }
+  // Eraser drag = continuous erase action (no per-widget revert); ESC simply
+  // stops further erase. Already-erased ink/sticky stays deleted (consistent
+  // with pointerup commit semantics — eraser drag is not "drag-to-move").
   activeEraserDrag = undefined;
 }
 
