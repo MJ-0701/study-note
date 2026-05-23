@@ -1,3 +1,15 @@
+export interface Term {
+  id: string;
+  grade: number;
+  semester: number;
+  title: string;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt: string;
+  createdById?: string;
+  updatedAt?: string;
+}
+
 export type SourceKind = "professor-pdf" | "claude-summary" | "manual-keyword";
 export type SourceVisibility = "private-source" | "derived-note-only";
 export type KeywordCoverageStatus = "covered" | "missing";
@@ -71,6 +83,8 @@ export type ExamPhase = "midterm" | "final";
 export interface SubjectNote {
   id: string;
   title: string;
+  /** sprint-W21-sprint-1: Term FK. Backfill 단계는 null 가능; AC7 tighten 후 required. */
+  termId?: string | null;
   professor: string;
   examLabel: string;
   /** sprint-2: 현재 학기 기준 subject 의 시험 구간. WeekNote.examPhase 가 override. */

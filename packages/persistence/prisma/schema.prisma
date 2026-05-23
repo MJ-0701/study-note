@@ -38,11 +38,32 @@ model Session {
   @@index([userId])
 }
 
+model Term {
+  id          String    @id @default(cuid())
+  grade       Int
+  semester    Int
+  title       String
+  startDate   DateTime? @db.Date
+  endDate     DateTime? @db.Date
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  subjects    Subject[]
+
+  @@unique([grade, semester, title])
+  @@index([grade, semester])
+}
+
 model Subject {
-  id        String        @id
+  id        String        @id @default(cuid())
   title     String
+  termId    String?
   createdAt DateTime      @default(now())
   materials PdfMaterial[]
+  // ON DELETE RESTRICT — race-safe vs count-then-delete (Codex Round-3 P1).
+  term      Term?         @relation(fields: [termId], references: [id], onDelete: Restrict)
+
+  @@index([termId])
 }
 
 model PdfMaterial {
