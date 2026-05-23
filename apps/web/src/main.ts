@@ -410,6 +410,14 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     // 보고됐는데 (iPhone/Mac 정상), 콘솔 접근이 막혀 있어 진단이 막혔다.
     // 한 sprint 동안만 화면에 mount phase / device 정보 / error 를 표시하는
     // debug badge 를 켜둔다. 원인이 잡히면 곧장 제거.
+    //
+    // codex P2 (PR #42 post-merge): failed/timeout 직후의 stale badge 를 cleanup
+    // 안 하면 onError 가 dataset.pdfMounted 를 풀어주는 순간 다음 render 가
+    // mount 를 재시도하고 같은 container 에 badge 가 누적된다. 새 attempt 전에
+    // 같은 div 안의 기존 badge 를 전부 제거.
+    div
+      .querySelectorAll<HTMLElement>('[data-pdf-debug-badge="true"]')
+      .forEach((stale) => stale.remove());
     const debugBadge = document.createElement("div");
     debugBadge.dataset.pdfDebugBadge = "true";
     Object.assign(debugBadge.style, {
