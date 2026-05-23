@@ -84,6 +84,23 @@ describe("AC22 — main.ts ESC handler 가 commit/cancel 헬퍼를 호출하는�
     // reset-tool 분기 안 in-progress stroke commit 호출 회기.
     assert.ok(src.includes("commitActiveInkStrokeOnEsc()"), "main.ts must call commitActiveInkStrokeOnEsc() in reset-tool branch");
     assert.ok(src.includes("cancelActiveDragsOnEsc()"), "main.ts must call cancelActiveDragsOnEsc() in reset-tool branch");
+    // PR #48 codex R1 P1: cancelActiveDragsOnEsc 가 모든 drag state 비우는지 source guard.
+    const cancelBlockMatch = src.match(/function cancelActiveDragsOnEsc\(\)[\s\S]*?\n\}/);
+    assert.ok(cancelBlockMatch, "cancelActiveDragsOnEsc function block must be findable");
+    const cancelBlock = cancelBlockMatch[0];
+    for (const dragVar of [
+      "activeTextBoxDrag",
+      "activeStickyDrag",
+      "activeChecklistDrag",
+      "activeTableDrag",
+      "activeChartDrag",
+      "activeEraserDrag"
+    ]) {
+      assert.ok(
+        cancelBlock.includes(`${dragVar} = undefined`),
+        `cancelActiveDragsOnEsc must clear ${dragVar} (PR #48 codex R1 P1)`
+      );
+    }
     // setPdfTool("read") 호출 후 renderApp.
     assert.ok(src.includes('setPdfTool(subjectId, "read")'), "main.ts must reset tool to 'read' on ESC");
     // preventDefault + stopPropagation 으로 browser default (fullscreen 종료) 차단.

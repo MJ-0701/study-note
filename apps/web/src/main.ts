@@ -4059,12 +4059,19 @@ function commitActiveInkStrokeOnEsc(): void {
   activeInkStroke = undefined;
 }
 
-// sprint-W21-sprint-1/S5/AC22 — ESC reset 시 in-progress textbox/sticky drag
-// cancel. drag start 시 capture 한 startNormX/startNormY 가 store 안에 그대로
+// sprint-W21-sprint-1/S5/AC22 — ESC reset 시 in-progress drag cancel.
+// drag start 시 capture 한 startNormX/startNormY 가 store 안에 그대로
 // 남아있고 active drag 상태만 비우면 다음 render 가 원래 위치로 복귀.
+// PR #48 codex R1 P1 fix: textbox/sticky 외에 checklist/table/chart/eraser
+// drag 도 cancel — 안 비우면 ESC 후 pointermove/pointerup 가 새 read 모드에서
+// 의도치 않게 위치 mutate 하거나 erase 계속 진행.
 function cancelActiveDragsOnEsc(): void {
   activeTextBoxDrag = undefined;
   activeStickyDrag = undefined;
+  activeChecklistDrag = undefined;
+  activeTableDrag = undefined;
+  activeChartDrag = undefined;
+  activeEraserDrag = undefined;
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
