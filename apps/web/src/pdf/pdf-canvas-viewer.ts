@@ -63,7 +63,15 @@ function getDocument(blobUrl: string): Promise<PDFDocumentProxy> {
   return promise;
 }
 
-function pickEffectiveDpr(cssWidth: number, cssHeight: number): number {
+/**
+ * Pick effective DPR for a target CSS-px viewport.
+ *
+ * Returns `min(devicePixelRatio, MAX_DPR=2.0)` capped further so backing-store
+ * pixel count (`cssWidth × cssHeight × dpr²`) never exceeds `MAX_PIXELS_PER_PAGE
+ * = 4 MP`. Retina iPad/iPhone 의 메모리 폭주 방지 + 50+ page PDF preload 의 heap
+ * spike 차단 (plan §3 AC6 + §11 DPR clamp 정책).
+ */
+export function pickEffectiveDpr(cssWidth: number, cssHeight: number): number {
   const raw = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
   const clamped = Math.min(raw, MAX_DPR);
   const candidatePx = cssWidth * cssHeight * clamped * clamped;
@@ -80,6 +88,14 @@ function ensureCanvas(container: HTMLElement): HTMLCanvasElement {
     canvas = document.createElement("canvas");
     canvas.dataset.pdfCanvas = "true";
     canvas.style.display = "block";
+    // sprint-W21-sprint-4/S2: CSS stretch — annotation overlay (pdf-annotation-surface)
+    // 와 정확히 같은 stage 사이즈 100% × 100% 로 표시. backing-store 는 PDF 의
+    // native aspect ratio 보존 (선명도 유지). browser GPU 가 bilinear resample
+    // 으로 stretch. pointer-events: none — pen/sticky/textBox click 이 surface
+    // 로 통과해야 함 (iframe 시절 동작 회귀 X).
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.pointerEvents = "none";
     container.appendChild(canvas);
   }
   return canvas;
@@ -133,10 +149,11 @@ export async function mountPdfCanvas(
       throw new Error("canvas 2d context unavailable");
     }
 
+    // sprint-W21-sprint-4/S2: backing-store 는 viewport.width/height × DPR (PDF
+    // native aspect 보존, 선명도 유지). CSS size 는 ensureCanvas 에서 100% × 100%
+    // 으로 stretch → surface 와 좌표계 정합 (annotation overlay 의 0~1 ratio 그대로).
     canvas.width = Math.floor(viewport.width * effectiveDpr);
     canvas.height = Math.floor(viewport.height * effectiveDpr);
-    canvas.style.width = `${viewport.width}px`;
-    canvas.style.height = `${viewport.height}px`;
 
     ctx.setTransform(effectiveDpr, 0, 0, effectiveDpr, 0, 0);
 
