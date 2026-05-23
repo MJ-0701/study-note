@@ -25,6 +25,7 @@ import {
   type PdfMaterialRecord
 } from "./api/materials";
 import { parseAuthMePayload, requestAuthMe, signIn, signOut, signUp } from "./auth/authApi";
+import { resolveEscapeAction } from "./pdf-workspace/esc-action";
 import {
   meResponseToSession,
   type AuthMode,
@@ -3907,14 +3908,36 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
 
   const hasMetaOrCtrl = event.metaKey || event.ctrlKey;
 
-  // === sprint-1/S2 modal close keys — always processed regardless of state ===
+  // === sprint-W21-sprint-1/S5 (AC21-AC22, ADR-8) — ESC priority ===
+  //   1. hotkey help modal 닫기 (existing behavior)
+  //   2. selectedTool !== "read" → tool reset (in-progress stroke commit + drag cancel)
+  //   3. passthrough → browser default (전체화면 종료 등)
+  // 도구 선택 상태에서 ESC 가 곧장 fullscreen 을 끄는 회기 방지 + 2-step UX.
+  if (event.code === "Escape") {
+    const workspaceForEsc = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+    const escAction = resolveEscapeAction({
+      modalOpen: hotkeyHelpModalOpen,
+      selectedTool: (workspaceForEsc.material?.selectedTool ?? "read") as string
+    });
 
-  // Esc closes the hotkey help modal first, regardless of focus.
-  if (event.code === "Escape" && hotkeyHelpModalOpen) {
-    event.preventDefault();
-    hotkeyHelpModalOpen = false;
-    renderApp();
-    return;
+    if (escAction === "close-modal") {
+      event.preventDefault();
+      hotkeyHelpModalOpen = false;
+      renderApp();
+      return;
+    }
+
+    if (escAction === "reset-tool") {
+      // AC22: 부작용 0. in-progress stroke commit + active drag cancel.
+      event.preventDefault();
+      event.stopPropagation();
+      commitActiveInkStrokeOnEsc();
+      cancelActiveDragsOnEsc();
+      setPdfTool(subjectId, "read");
+      renderApp();
+      return;
+    }
+    // passthrough — fullscreen exit 등 browser default 유지.
   }
 
   // "?" toggles the help modal. Match by event.key === "?" first so any layout
@@ -4017,6 +4040,61 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   event.preventDefault();
   setPdfTool(subjectId, tool);
   renderApp();
+}
+
+// sprint-W21-sprint-1/S5/AC22 — ESC reset 시 in-progress stroke commit.
+// pointerup commit path (commitActiveInkStroke pointerup 분기) 와 동일 로직.
+// stroke 손실 방지 (points >= 2 면 stroke create + workspace push).
+function commitActiveInkStrokeOnEsc(): void {
+  if (!activeInkStroke) return;
+  const { subjectId, pageNumber, points } = activeInkStroke;
+  if (points.length > 1) {
+    const stroke = createInkStroke(pageNumber, points);
+    updatePdfWorkspace(subjectId, (workspace) => ({
+      ...workspace,
+      inkStrokes: [...workspace.inkStrokes, stroke]
+    }));
+  }
+  activeInkStroke.livePolyline.remove();
+  activeInkStroke = undefined;
+}
+
+// sprint-W21-sprint-1/S5/AC22 — ESC reset 시 in-progress drag 진짜 cancel.
+// pointermove 가 매 frame applyXxxMove 로 store 에 좌표를 commit 했으므로
+// active drag pointer 만 nulling 하면 widget 이 drag 마지막 위치에 멈춤 (= 의도치
+// 않은 placement commit). 진짜 cancel = drag start 시점 좌표 (startNormX/Y) 로
+// apply*Move 한 번 더 호출해서 원위치 revert.
+// PR #48 codex R1 P1 (drag scope) + R2 P1 (real revert) 누적 fix.
+function cancelActiveDragsOnEsc(): void {
+  if (activeTextBoxDrag) {
+    const { subjectId, textBoxId, startNormX, startNormY } = activeTextBoxDrag;
+    applyTextBoxMove(subjectId, textBoxId, { x: startNormX, y: startNormY });
+    activeTextBoxDrag = undefined;
+  }
+  if (activeStickyDrag) {
+    const { subjectId, noteId, startNormX, startNormY } = activeStickyDrag;
+    applyStickyMove(subjectId, noteId, { x: startNormX, y: startNormY });
+    activeStickyDrag = undefined;
+  }
+  if (activeChecklistDrag) {
+    const { subjectId, checklistId, startNormX, startNormY } = activeChecklistDrag;
+    applyChecklistMove(subjectId, checklistId, { x: startNormX, y: startNormY });
+    activeChecklistDrag = undefined;
+  }
+  if (activeTableDrag) {
+    const { subjectId, tableId, startNormX, startNormY } = activeTableDrag;
+    applyTableMove(subjectId, tableId, { x: startNormX, y: startNormY });
+    activeTableDrag = undefined;
+  }
+  if (activeChartDrag) {
+    const { subjectId, chartId, startNormX, startNormY } = activeChartDrag;
+    applyChartMove(subjectId, chartId, { x: startNormX, y: startNormY });
+    activeChartDrag = undefined;
+  }
+  // Eraser drag = continuous erase action (no per-widget revert); ESC simply
+  // stops further erase. Already-erased ink/sticky stays deleted (consistent
+  // with pointerup commit semantics — eraser drag is not "drag-to-move").
+  activeEraserDrag = undefined;
 }
 
 function handleDocumentPointerDown(event: PointerEvent): void {
@@ -7272,7 +7350,7 @@ function renderHotkeyHelpModal(): string {
     ["Cmd/Ctrl + ]", "다음 페이지"],
     ["F", "전체화면 토글"],
     ["?", "이 도움말 열기 / 닫기"],
-    ["Esc", "도움말 닫기 / 전체화면 종료"]
+    ["Esc", "도구 해제 (도구 선택 시) / 도움말 닫기 / 전체화면 종료"]
   ];
 
   const body = rows
