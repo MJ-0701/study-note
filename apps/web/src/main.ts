@@ -181,7 +181,6 @@ type LoginFeedback =
 const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
-const PDF_FRAME_READY_DELAY_MS = 180;
 const DRILL_HIGHLIGHT_DURATION_MS = 1500;
 const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
 const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
@@ -237,11 +236,6 @@ const activePdfObjectUrls = new Map<string, string>();
 const activePdfObjectUrlMaterialIds = new Map<string, string>();
 const activePdfPreviewLoads = new Set<string>();
 const failedPdfPreviewLoadKeys = new Set<string>();
-const loadedPdfFrameKeys = new Set<string>();
-const pdfFrameReadyTimers = new Map<string, ReturnType<typeof setTimeout>>();
-let pendingPdfPageTransition:
-  | { subjectId: string; materialId: string; fromPage: number; toPage: number }
-  | undefined;
 let activeInkStroke: ActiveInkStroke | undefined;
 // sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
 // Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
@@ -355,6 +349,17 @@ function renderInto(html: string): void {
         return false;
       }
 
+      // sprint-W21-sprint-4/S1: PDF canvas mount preservation.
+      // 동일 (material, page, blob) 의 div 는 fromEl + 자식 canvas 보존,
+      // class (is-active/is-preload toggle) 만 sync. 매 render 마다 mountPdfCanvas
+      // 호출되어 canvas 재 paint 되는 비효율 차단.
+      if (shouldPreservePdfCanvasMount(fromEl, toEl)) {
+        if (fromEl instanceof HTMLElement && toEl instanceof HTMLElement) {
+          fromEl.className = toEl.className;
+        }
+        return false;
+      }
+
       return true;
     }
   });
@@ -362,6 +367,53 @@ function renderInto(html: string): void {
   refreshChartWidgets();
   applyQueuedDrillHighlight();
   refreshActiveDrillHighlights();
+  void applyPdfCanvasMounts(appRoot);
+}
+
+// sprint-W21-sprint-4/S1: render 후 PDF canvas mount effect.
+// renderPdfFrameStack 가 출력한 `<div data-pdf-mount="true">` 마다 pdfjs-dist
+// 호출 + canvas paint. dynamic import 로 lazy bundle (PDF workspace 진입 전
+// main entry 영향 0).
+//
+// idempotent: 같은 (blobUrl, pageNumber) 면 skip. 다른 page 면 re-mount
+// (viewer 내부에서 in-flight render cancel + 새 render).
+async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
+  const mounts = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-pdf-mount="true"]')
+  );
+  if (mounts.length === 0) {
+    return;
+  }
+  const { mountPdfCanvas } = await import("./pdf/pdf-canvas-viewer");
+  for (const div of mounts) {
+    const blobUrl = div.dataset.blobUrl;
+    const pageRaw = div.dataset.pageNumber;
+    const pageNumber = pageRaw ? Number(pageRaw) : NaN;
+    if (!blobUrl || !Number.isFinite(pageNumber) || pageNumber < 1) {
+      continue;
+    }
+    const mountedKey = `${blobUrl}:${pageNumber}`;
+    if (div.dataset.pdfMounted === mountedKey) {
+      continue;
+    }
+    div.dataset.pdfMounted = mountedKey;
+    // codex P2 (PR #40 round-2): mountPdfCanvas swallows worker/render errors
+    // via its `onError` callback and resolves cleanly, so the trailing `.catch`
+    // alone would never fire and the marker would remain — leaving the page
+    // permanently blank until a key change/reload. Clear the marker from inside
+    // `onError` so the next render attempt actually remounts. Keep the trailing
+    // `.catch` as a defensive net for unexpected rejections (e.g., if the viewer
+    // ever throws outside its own try/catch).
+    void mountPdfCanvas(div, blobUrl, pageNumber, {
+      onError: (err) => {
+        console.warn("[study-note] pdf canvas mount failed", err);
+        delete div.dataset.pdfMounted;
+      }
+    }).catch((err) => {
+      console.warn("[study-note] pdf canvas mount rejected", err);
+      delete div.dataset.pdfMounted;
+    });
+  }
 }
 
 function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
@@ -379,6 +431,22 @@ function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
   return (
     fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
     fromEl.getAttribute("src") !== toEl.getAttribute("src")
+  );
+}
+
+// sprint-W21-sprint-4/S1: same (material, page, blob) PDF canvas mount div 는
+// morphdom 이 update 하지 않고 fromEl + canvas 그대로 두도록 표식.
+function shouldPreservePdfCanvasMount(fromEl: Element, toEl: Element): boolean {
+  if (!(fromEl instanceof HTMLElement) || !(toEl instanceof HTMLElement)) {
+    return false;
+  }
+  if (fromEl.dataset.pdfMount !== "true" || toEl.dataset.pdfMount !== "true") {
+    return false;
+  }
+  return (
+    fromEl.dataset.materialId === toEl.dataset.materialId &&
+    fromEl.dataset.pageNumber === toEl.dataset.pageNumber &&
+    fromEl.dataset.blobUrl === toEl.dataset.blobUrl
   );
 }
 
@@ -551,13 +619,22 @@ if (isBrowserRuntime) {
   document.addEventListener("change", handleDocumentChange);
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("input", handleDocumentInput);
-  document.addEventListener("load", handleDocumentLoad, true);
   document.addEventListener("submit", handleDocumentSubmit);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("pointermove", handleDocumentPointerMove);
   document.addEventListener("pointerup", handleDocumentPointerUp);
   document.addEventListener("pointercancel", handleDocumentPointerUp);
   document.addEventListener("keydown", handleDocumentKeyDown);
+  // sprint-W21-sprint-4/S1: iOS Safari fast-tap dual handler — page nav
+  // button 의 click 이 일부 mobile context 에서 누락되거나 지연될 때 touchend
+  // 가 즉시 trigger. preventDefault 로 click 중복 발사 차단 (desktop 은
+  // touchend 미발사 → click handler 가 정상 처리).
+  // sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture — read tool
+  // 인 빈 영역 single-touch 만 candidate. touchstart/move/end/cancel 사이클.
+  document.addEventListener("touchstart", handleDocumentTouchStart, { passive: true });
+  document.addEventListener("touchmove", handleDocumentTouchMove, { passive: true });
+  document.addEventListener("touchend", handleDocumentTouchEnd, { passive: false });
+  document.addEventListener("touchcancel", handleDocumentTouchCancel, { passive: true });
   document.addEventListener("fullscreenchange", () => {
     // sprint-1/S3: re-render so the toolbar button label reflects current
     // fullscreen state ("전체화면" → "전체화면 종료").
@@ -1828,7 +1905,6 @@ function setActivePdfObjectUrl(
   objectUrl: string
 ): void {
   clearActivePdfObjectUrl(subjectId);
-  clearPdfFrameReadiness();
 
   activePdfObjectUrls.set(subjectId, objectUrl);
   activePdfObjectUrlMaterialIds.set(subjectId, materialId);
@@ -1840,6 +1916,9 @@ function clearActivePdfObjectUrl(subjectId: string): void {
 
   if (previousUrl) {
     URL.revokeObjectURL(previousUrl);
+    // sprint-W21-sprint-4/S1: pdfjs-dist document cache dispose. lazy import
+    // 으로 viewer module 미 load 시 no-op.
+    void disposePdfDocumentCache(previousUrl);
   }
 
   activePdfObjectUrls.delete(subjectId);
@@ -1847,19 +1926,27 @@ function clearActivePdfObjectUrl(subjectId: string): void {
 }
 
 function revokeAllPdfObjectUrls(): void {
-  activePdfObjectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  const urls = Array.from(activePdfObjectUrls.values());
+  urls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  // sprint-W21-sprint-4/S1: bulk dispose pdfjs document cache.
+  if (urls.length > 0) {
+    void disposePdfDocumentCache();
+  }
   activePdfObjectUrls.clear();
   activePdfObjectUrlMaterialIds.clear();
   activePdfPreviewLoads.clear();
   failedPdfPreviewLoadKeys.clear();
-  clearPdfFrameReadiness();
 }
 
-function clearPdfFrameReadiness(): void {
-  pdfFrameReadyTimers.forEach((timer) => clearTimeout(timer));
-  pdfFrameReadyTimers.clear();
-  loadedPdfFrameKeys.clear();
-  pendingPdfPageTransition = undefined;
+// sprint-W21-sprint-4/S1: pdf-canvas-viewer 의 PDFDocumentProxy cache 를 lazy
+// dispose. viewer module 가 dynamic import 라 module 미 load 시 no-op.
+async function disposePdfDocumentCache(blobUrl?: string): Promise<void> {
+  try {
+    const { clearPdfDocumentCache } = await import("./pdf/pdf-canvas-viewer");
+    clearPdfDocumentCache(blobUrl);
+  } catch {
+    /* viewer module 미 load — no-op. */
+  }
 }
 
 async function revalidateStoredSession(options: { attempt?: number } = {}): Promise<void> {
@@ -2681,6 +2768,158 @@ export function handleDrillItemClick(
   (options.render ?? renderApp)();
 
   return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
+}
+
+// sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture state.
+// single-touch only. multi-touch (pinch zoom 후보 — 다음 sprint v2) 시 무시.
+// threshold = max(surface 폭 × SWIPE_THRESHOLD_RATIO, SWIPE_THRESHOLD_MIN_PX).
+// 좌→우 dx>0 = 이전 page, 우→좌 dx<0 = 다음 page.
+const SWIPE_THRESHOLD_RATIO = 0.2;
+const SWIPE_THRESHOLD_MIN_PX = 60;
+let activeSwipeGesture: {
+  subjectId: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+} | null = null;
+
+// sprint-W21-sprint-4/S1: iOS Safari fast-tap dual handler for page nav
+// buttons. touchend 가 click 보다 먼저 발사되거나 click 이 누락되는 mobile
+// edge case 보완. preventDefault 로 ghost click 중복 차단.
+function handleDocumentTouchEnd(event: TouchEvent): void {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    activeSwipeGesture = null;
+    return;
+  }
+  const navButton = target.closest<HTMLButtonElement>(
+    'button[data-action="pdf-prev-page"], button[data-action="pdf-next-page"]'
+  );
+  if (navButton && !navButton.disabled) {
+    const action = navButton.dataset.action;
+    const subjectId = navButton.dataset.subjectId;
+    if (subjectId && (action === "pdf-prev-page" || action === "pdf-next-page")) {
+      // click 중복 발사 차단. desktop 은 touchend 발사 X → 영향 없음.
+      event.preventDefault();
+      movePdfPage(subjectId, action === "pdf-prev-page" ? -1 : 1);
+      renderApp();
+      activeSwipeGesture = null;
+      return;
+    }
+  }
+
+  // sprint-W21-sprint-4/S4: PDF 영역 swipe gesture commit.
+  commitPdfSwipeGesture(event);
+}
+
+// sprint-W21-sprint-4/S4: PDF 빈 영역 touchstart — read tool + single-touch +
+// annotation element 미터치 시에만 swipe 후보 기록.
+function handleDocumentTouchStart(event: TouchEvent): void {
+  if (event.touches.length !== 1) {
+    // multi-touch 시작 = pinch zoom 등 — 진행 중 swipe 도 취소.
+    activeSwipeGesture = null;
+    return;
+  }
+  const touch = event.touches[0]!;
+  const target = touch.target instanceof Element ? touch.target : null;
+  if (!target) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  const surface = target.closest<HTMLElement>("[data-pdf-annotation-surface]");
+  if (!surface) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  // read tool 외 (pen / eraser / sticky / textbox / checklist / table / chart)
+  // 에서는 swipe 무시 — tool 우선.
+  if (!surface.classList.contains("is-read-mode")) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  // annotation element (sticky / textBox / checklist / table / chart / ink stroke)
+  // 위 touch 시 swipe 무시 — drag/click 우선.
+  if (
+    target.closest(
+      "[data-note-id], [data-textbox-id], [data-checklist-id], [data-table-mount-id], [data-chart-mount-id], [data-stroke-id], button, a, input, textarea"
+    )
+  ) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  const subjectId = surface.dataset.subjectId;
+  if (!subjectId) {
+    activeSwipeGesture = null;
+    return;
+  }
+
+  activeSwipeGesture = {
+    subjectId,
+    pointerId: touch.identifier,
+    startX: touch.clientX,
+    startY: touch.clientY
+  };
+}
+
+// sprint-W21-sprint-4/S4: touchmove — multi-touch 진입 시 swipe 후보 취소.
+function handleDocumentTouchMove(event: TouchEvent): void {
+  if (!activeSwipeGesture) {
+    return;
+  }
+  if (event.touches.length !== 1) {
+    activeSwipeGesture = null;
+  }
+}
+
+// sprint-W21-sprint-4/S4: touchend / touchcancel 에서 swipe threshold 평가 후
+// page nav 또는 무시.
+function commitPdfSwipeGesture(event: TouchEvent): void {
+  const gesture = activeSwipeGesture;
+  activeSwipeGesture = null;
+  if (!gesture) {
+    return;
+  }
+  const touch = Array.from(event.changedTouches).find(
+    (t) => t.identifier === gesture.pointerId
+  );
+  if (!touch) {
+    return;
+  }
+  const dx = touch.clientX - gesture.startX;
+  const dy = touch.clientY - gesture.startY;
+  // vertical 우선: |dy| > |dx| = vertical scroll. swipe 아님.
+  if (Math.abs(dy) > Math.abs(dx)) {
+    return;
+  }
+  const surface = document.querySelector<HTMLElement>(
+    `[data-pdf-annotation-surface][data-subject-id="${gesture.subjectId}"]`
+  );
+  if (!surface) {
+    return;
+  }
+  const surfaceWidth = surface.getBoundingClientRect().width;
+  const threshold = Math.max(
+    SWIPE_THRESHOLD_MIN_PX,
+    surfaceWidth * SWIPE_THRESHOLD_RATIO
+  );
+  if (Math.abs(dx) < threshold) {
+    return;
+  }
+  // 좌→우 dx>0 = 이전 page, 우→좌 dx<0 = 다음 page.
+  movePdfPage(gesture.subjectId, dx > 0 ? -1 : 1);
+  renderApp();
+}
+
+function handleDocumentTouchCancel(event: TouchEvent): void {
+  if (activeSwipeGesture) {
+    // touchcancel = OS / scroll engine 이 gesture 가로챔. commit 없이 cleanup.
+    activeSwipeGesture = null;
+  }
+  void event;
 }
 
 function handleDocumentClick(event: MouseEvent): void {
@@ -3789,51 +4028,6 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
 
   event.preventDefault();
   setPdfTool(subjectId, tool);
-  renderApp();
-}
-
-function handleDocumentLoad(event: Event): void {
-  const target = event.target;
-
-  if (!(target instanceof HTMLIFrameElement) || target.dataset.pdfFrame !== "true") {
-    return;
-  }
-
-  const frameKey = target.dataset.pdfFrameKey;
-
-  if (!frameKey) {
-    return;
-  }
-
-  const previousTimer = pdfFrameReadyTimers.get(frameKey);
-
-  if (previousTimer) {
-    clearTimeout(previousTimer);
-  }
-
-  const timer = setTimeout(() => {
-    pdfFrameReadyTimers.delete(frameKey);
-    loadedPdfFrameKeys.add(frameKey);
-    completePendingPdfPageTransition(frameKey);
-  }, PDF_FRAME_READY_DELAY_MS);
-
-  pdfFrameReadyTimers.set(frameKey, timer);
-}
-
-function completePendingPdfPageTransition(frameKey: string): void {
-  if (!pendingPdfPageTransition) {
-    return;
-  }
-
-  const pending = pendingPdfPageTransition;
-  const pendingKey = getPdfFrameKey(pending.materialId, pending.toPage);
-
-  if (frameKey !== pendingKey) {
-    return;
-  }
-
-  pendingPdfPageTransition = undefined;
-  setPdfPage(pending.subjectId, pending.toPage);
   renderApp();
 }
 
@@ -5241,29 +5435,13 @@ function requestPdfPage(subjectId: string, pageNumber: number): void {
     return;
   }
 
+  // sprint-W21-sprint-4/S1 P0 fix: pdfjs canvas mount path replaces the iframe
+  // load-event gating. `applyPdfCanvasMounts` paints `selectedPage ± 1` on every
+  // render, so the next-page canvas is already mounted by the time the user
+  // navigates. Commit the new page synchronously — waiting for an iframe `load`
+  // signal that never fires would leave the navigation stuck.
   const nextPage = Math.min(material.pageCount, Math.max(1, pageNumber));
-
-  if (nextPage === material.selectedPage) {
-    pendingPdfPageTransition = undefined;
-    setPdfPage(subjectId, nextPage);
-    return;
-  }
-
-  const materialId = material.backendMaterialId ?? "";
-  const frameKey = getPdfFrameKey(materialId, nextPage);
-
-  if (!materialId || loadedPdfFrameKeys.has(frameKey)) {
-    pendingPdfPageTransition = undefined;
-    setPdfPage(subjectId, nextPage);
-    return;
-  }
-
-  pendingPdfPageTransition = {
-    subjectId,
-    materialId,
-    fromPage: material.selectedPage,
-    toPage: nextPage
-  };
+  setPdfPage(subjectId, nextPage);
 }
 
 function setPdfPage(subjectId: string, pageNumber: number): void {
@@ -7896,11 +8074,7 @@ function getPdfFrameKey(materialId: string, pageNumber: number): string {
   return `pdf-frame:${materialId}:${pageNumber}`;
 }
 
-function getPdfFramePages(
-  selectedPage: number,
-  pageCount: number,
-  pending?: { fromPage: number; toPage: number }
-): number[] {
+function getPdfFramePages(selectedPage: number, pageCount: number): number[] {
   const pages = [selectedPage];
 
   if (selectedPage > 1) {
@@ -7909,10 +8083,6 @@ function getPdfFramePages(
 
   if (selectedPage < pageCount) {
     pages.push(selectedPage + 1);
-  }
-
-  if (pending) {
-    pages.push(pending.fromPage, pending.toPage);
   }
 
   return [...new Set(pages)].filter((page) => page >= 1 && page <= pageCount);
@@ -7925,28 +8095,27 @@ function renderPdfFrameStack(
   selectedPage: number
 ): string {
   const materialId = material.backendMaterialId ?? "";
-  const pending =
-    pendingPdfPageTransition?.subjectId === subject.id &&
-    pendingPdfPageTransition.materialId === materialId
-      ? pendingPdfPageTransition
-      : undefined;
 
-  return getPdfFramePages(selectedPage, material.pageCount, pending).map((pageNumber) => {
+  return getPdfFramePages(selectedPage, material.pageCount).map((pageNumber) => {
     const isActive = pageNumber === selectedPage;
     const frameKey = getPdfFrameKey(materialId, pageNumber);
-    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=Fit`;
-    const preloadAttrs = isActive ? "" : ' aria-hidden="true" tabindex="-1"';
+    const preloadAttrs = isActive ? "" : ' aria-hidden="true"';
 
-    return `<iframe
+    // sprint-W21-sprint-4/S1: native browser PDF viewer (iframe + `#page=N`) 는
+    // iOS Safari 가 fragment 무시 / Android Chrome 가 native viewer 부재 →
+    // cross-mobile 동작 X. pdfjs-dist canvas mount placeholder 로 교체.
+    // applyPdfCanvasMounts (renderInto 후 effect) 가 data-pdf-mount 발견 시
+    // dynamic import 로 viewer 호출 + canvas paint.
+    return `<div
       class="pdf-frame ${isActive ? "is-active" : "is-preload"}"
-      data-pdf-frame="true"
+      role="img"
+      aria-label="${escapeHtml(subject.title)} PDF page ${pageNumber}"
+      data-pdf-mount="true"
       data-pdf-frame-key="${escapeHtml(frameKey)}"
       data-material-id="${escapeHtml(materialId)}"
       data-page-number="${pageNumber}"
-      title="${escapeHtml(subject.title)} PDF preview"
-      src="${escapeHtml(frameSrc)}"
-      loading="eager"${preloadAttrs}
-    ></iframe>`;
+      data-blob-url="${escapeHtml(objectUrl)}"${preloadAttrs}
+    ></div>`;
   }).join("");
 }
 
