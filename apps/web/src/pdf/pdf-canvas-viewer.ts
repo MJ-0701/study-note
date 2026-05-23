@@ -26,10 +26,21 @@
 //   - worker chunk = pdfjs-dist worker 1개. Vite 가 별도 asset.
 //   - DOM mount 는 idempotent (같은 container 에 두 번 호출 시 기존 canvas 재사용).
 
-import * as pdfjsLib from "pdfjs-dist";
+// hotfix(pdf-canvas): "legacy" build 사용. modern build (`pdfjs-dist`) 는
+// TC39 upsert proposal (Map.prototype.getOrInsertComputed) / Promise.try /
+// Array.fromAsync / Iterator helpers 같은 최신 spec 에 의존한다. iPad Safari
+// 18.5 + Mac Safari 18 등이 일부 호환되지만 minor version 분포가 넓어서
+// 사용자 환경마다 다른 silent throw 가 발생한다. legacy build 는 core-js
+// 가 prototype 패치를 같이 emit 하므로 광범위 브라우저 (Safari 16+, 구
+// Chromium, 임베디드 WebView 등) 까지 안전.
+//
+// Bundle 영향: lazy `await import("./pdf-canvas-viewer")` 안에서만 끌고 오는
+// chunk 라 main bundle size 영향 0. worker chunk 만 modern → legacy 로 같이
+// 교체 (entry-worker mismatch 시 protocol 불일치로 fail).
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
 // Vite native: ?url 은 asset path 를 string 으로 export. worker 가 별도 chunk 로 emit.
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
