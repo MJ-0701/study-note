@@ -76,5 +76,11 @@ describe("PDF annotation layer page stickiness", () => {
     assert.match(mainTs, /function applyPdfCanvasMounts/);
     assert.match(mainTs, /function shouldPreservePdfCanvasMount/);
     assert.match(mainTs, /function handleDocumentTouchEnd/);
+    // sprint-W21-sprint-4/S1: pdfjs document cache lifecycle wire 검증.
+    // clearActivePdfObjectUrl + revokeAllPdfObjectUrls 가 viewer module 의
+    // clearPdfDocumentCache 를 lazy dispose. memory leak / AC6 resource cap.
+    assert.match(mainTs, /async function disposePdfDocumentCache/);
+    assert.match(mainTs, /disposePdfDocumentCache\(previousUrl\)/);
+    assert.match(mainTs, /import\(["']\.\/pdf\/pdf-canvas-viewer["']\)/);
   });
 });

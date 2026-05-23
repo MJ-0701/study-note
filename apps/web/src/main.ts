@@ -1581,6 +1581,9 @@ function clearActivePdfObjectUrl(subjectId: string): void {
 
   if (previousUrl) {
     URL.revokeObjectURL(previousUrl);
+    // sprint-W21-sprint-4/S1: pdfjs-dist document cache dispose. lazy import
+    // 으로 viewer module 미 load 시 no-op.
+    void disposePdfDocumentCache(previousUrl);
   }
 
   activePdfObjectUrls.delete(subjectId);
@@ -1588,12 +1591,28 @@ function clearActivePdfObjectUrl(subjectId: string): void {
 }
 
 function revokeAllPdfObjectUrls(): void {
-  activePdfObjectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  const urls = Array.from(activePdfObjectUrls.values());
+  urls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  // sprint-W21-sprint-4/S1: bulk dispose pdfjs document cache.
+  if (urls.length > 0) {
+    void disposePdfDocumentCache();
+  }
   activePdfObjectUrls.clear();
   activePdfObjectUrlMaterialIds.clear();
   activePdfPreviewLoads.clear();
   failedPdfPreviewLoadKeys.clear();
   clearPdfFrameReadiness();
+}
+
+// sprint-W21-sprint-4/S1: pdf-canvas-viewer 의 PDFDocumentProxy cache 를 lazy
+// dispose. viewer module 가 dynamic import 라 module 미 load 시 no-op.
+async function disposePdfDocumentCache(blobUrl?: string): Promise<void> {
+  try {
+    const { clearPdfDocumentCache } = await import("./pdf/pdf-canvas-viewer");
+    clearPdfDocumentCache(blobUrl);
+  } catch {
+    /* viewer module 미 load — no-op. */
+  }
 }
 
 function clearPdfFrameReadiness(): void {
