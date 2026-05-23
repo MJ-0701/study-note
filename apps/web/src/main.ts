@@ -24,6 +24,27 @@ import {
   type MaterialUploadIntent,
   type PdfMaterialRecord
 } from "./api/materials";
+import { parseAuthMePayload, requestAuthMe, signIn, signOut, signUp } from "./auth/authApi";
+import {
+  meResponseToSession,
+  type AuthMode,
+  type AuthSession,
+  type LoginFeedback
+} from "./auth/authSession";
+import {
+  clearAuthSessionHint,
+  getAuthBootRetryNotice,
+  getAuthBootStateForMode,
+  getInitialAuthBootState,
+  readAuthSessionHint,
+  writeAuthSessionHint,
+  type AuthBootNotice,
+  type AuthBootState
+} from "./auth/sessionBoot";
+import {
+  renderLoginPage as renderAuthLoginPage,
+  renderSessionCheckPage as renderAuthSessionCheckPage
+} from "./auth/authViews";
 import {
   getConceptById,
   getIntegrityWarnings,
@@ -139,24 +160,6 @@ interface QuickNote {
   primaryLabel?: string;
 }
 
-// slice-2: AuthSession now mirrors the /v1/auth/me response shape.
-// token is no longer stored in JS (F2 — httpOnly cookie only).
-interface AuthSession {
-  user: {
-    id: string;
-    displayName: string;
-    studentNumber: string;
-    role: string;
-    email?: string;
-  };
-}
-
-type AuthBootState = "checking" | "ready";
-
-type AuthBootNotice = "checking" | "waking" | "retryable";
-
-type AuthMode = "login" | "signup";
-
 export type InspectorDrillType = "sticky" | "ink" | "textbox" | "checklist" | "table" | "chart";
 
 export type InspectorDrillState = Record<InspectorDrillType, boolean>;
@@ -175,14 +178,6 @@ interface ActiveDrillHighlight {
   annotationId: string;
   expiresAt: number;
 }
-
-type LoginFeedback =
-  | {
-      kind: "error" | "success";
-      title: string;
-      detail: string;
-    }
-  | undefined;
 
 const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
@@ -231,7 +226,7 @@ const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
-let authBootState: AuthBootState = "checking";
+let authBootState: AuthBootState = getInitialAuthBootState(readAuthSessionHint());
 let authBootNotice: AuthBootNotice = "checking";
 let authBootRequestId = 0;
 let authBootNoticeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -735,7 +730,9 @@ if (isBrowserRuntime) {
   renderApp();
 
   // slice-2: always rehydrate from server — cookie carries the session token.
-  void revalidateStoredSession();
+  // First-time visitors should see login/signup immediately; only browsers
+  // with a prior sign-in hint get the blocking cold-start session check.
+  void revalidateStoredSession({ blocking: readAuthSessionHint() });
 }
 
 // sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
@@ -968,6 +965,7 @@ function handleAuthExpiredFromSync(): void {
     return;
   }
   authExpiryHandled = true;
+  clearAuthSessionHint();
   clearAuthSession();
   authMode = "login";
   loginFeedback = {
@@ -1972,6 +1970,13 @@ function clearAuthBootTimers(): void {
   }
 }
 
+function cancelAuthBootRequest(): void {
+  authBootRequestId += 1;
+  clearAuthBootTimers();
+  authBootState = "ready";
+  authBootNotice = "checking";
+}
+
 function setActivePdfObjectUrl(
   subjectId: string,
   materialId: string,
@@ -2022,16 +2027,17 @@ async function disposePdfDocumentCache(blobUrl?: string): Promise<void> {
   }
 }
 
-async function revalidateStoredSession(options: { attempt?: number } = {}): Promise<void> {
+async function revalidateStoredSession(
+  options: { attempt?: number; blocking?: boolean } = {}
+): Promise<void> {
   const attempt = options.attempt ?? 0;
-  const requestId = beginAuthBootRequest();
+  const blocking = options.blocking ?? readAuthSessionHint();
+  const requestId = beginAuthBootRequest({ blocking });
 
   try {
     // slice-2: cookie-based session rehydration — credentials:include sends the
     // httpOnly study_note_session cookie. No localStorage fallback (F2).
-    const response = await fetchWithTimeout(`${apiBaseUrl}/v1/auth/me`, {
-      credentials: "include"
-    }, AUTH_SESSION_REQUEST_TIMEOUT_MS);
+    const response = await requestAuthMe(apiBaseUrl, AUTH_SESSION_REQUEST_TIMEOUT_MS);
 
     if (requestId !== authBootRequestId) {
       return;
@@ -2041,23 +2047,25 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
 
     if (!response.ok) {
       if (response.status >= 500) {
-        scheduleAuthBootRetry(attempt);
+        scheduleAuthBootRetry(attempt, { blocking });
         return;
       }
 
       // 401/403 = no valid cookie or insufficient auth for /me. Either way:
       // leave the cold-start lane and show the login page quickly.
       authSession = undefined;
+      clearAuthSessionHint();
       authBootState = "ready";
       authBootNotice = "checking";
       renderApp();
       return;
     }
 
-    const payload = (await response.json()) as unknown;
+    const payload = parseAuthMePayload(await response.json());
 
-    if (!isAuthMeResponse(payload)) {
+    if (!payload) {
       authSession = undefined;
+      clearAuthSessionHint();
       authBootState = "ready";
       authBootNotice = "checking";
       renderApp();
@@ -2065,6 +2073,7 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
     }
 
     authSession = meResponseToSession(payload);
+    writeAuthSessionHint();
     setDatadogRumUser({
       id: authSession.user.id,
       role: authSession.user.role
@@ -2091,17 +2100,21 @@ async function revalidateStoredSession(options: { attempt?: number } = {}): Prom
     }
 
     clearAuthBootTimers();
-    scheduleAuthBootRetry(attempt);
+    scheduleAuthBootRetry(attempt, { blocking });
   }
 }
 
-function beginAuthBootRequest(): number {
+function beginAuthBootRequest(options: { blocking: boolean }): number {
   const requestId = authBootRequestId + 1;
   authBootRequestId = requestId;
   clearAuthBootTimers();
-  authBootState = "checking";
+  authBootState = getAuthBootStateForMode(options.blocking);
   authBootNotice = "checking";
   renderApp();
+
+  if (!options.blocking) {
+    return requestId;
+  }
 
   authBootNoticeTimer = setTimeout(() => {
     if (authBootState !== "checking" || requestId !== authBootRequestId) {
@@ -2115,88 +2128,21 @@ function beginAuthBootRequest(): number {
   return requestId;
 }
 
-function scheduleAuthBootRetry(attempt: number): void {
+function scheduleAuthBootRetry(attempt: number, options: { blocking: boolean }): void {
   authSession = undefined;
-  authBootState = "checking";
+  authBootState = getAuthBootStateForMode(options.blocking);
 
   if (attempt >= AUTH_SESSION_MAX_AUTO_RETRIES) {
-    authBootNotice = "retryable";
+    authBootNotice = getAuthBootRetryNotice(options.blocking, true);
     renderApp();
     return;
   }
 
-  authBootNotice = "waking";
+  authBootNotice = getAuthBootRetryNotice(options.blocking, false);
   renderApp();
   authBootRetryTimer = setTimeout(() => {
-    void revalidateStoredSession({ attempt: attempt + 1 });
+    void revalidateStoredSession({ attempt: attempt + 1, blocking: options.blocking });
   }, AUTH_SESSION_RETRY_DELAY_MS);
-}
-
-async function fetchWithTimeout(
-  input: RequestInfo | URL,
-  init: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-// slice-2: /v1/auth/me response shape — {userId, studentNumber, name, role}
-interface AuthMeResponse {
-  userId: string;
-  studentNumber: string;
-  name: string;
-  role: string;
-}
-
-function isAuthMeResponse(value: unknown): value is AuthMeResponse {
-  if (!value || typeof value !== "object") return false;
-  const c = value as Partial<AuthMeResponse>;
-  return (
-    typeof c.userId === "string" &&
-    typeof c.studentNumber === "string" &&
-    typeof c.name === "string" &&
-    typeof c.role === "string"
-  );
-}
-
-function meResponseToSession(resp: AuthMeResponse): AuthSession {
-  return {
-    user: {
-      id: resp.userId,
-      displayName: resp.name,
-      studentNumber: resp.studentNumber,
-      role: resp.role
-    }
-  };
-}
-
-// sign-in response shape — same as /me but returned on POST sign-in
-interface AuthSignInResponse {
-  userId: string;
-  studentNumber: string;
-  name: string;
-  role: string;
-}
-
-function isAuthSignInResponse(value: unknown): value is AuthSignInResponse {
-  if (!value || typeof value !== "object") return false;
-  const c = value as Partial<AuthSignInResponse>;
-  return (
-    typeof c.userId === "string" &&
-    typeof c.studentNumber === "string" &&
-    typeof c.name === "string" &&
-    typeof c.role === "string"
-  );
 }
 
 // sprint-3/S2: userId-scoped pdfWorkspaceStore localStorage key. Mirrors the
@@ -3055,10 +3001,8 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "logout") {
     // slice-2: call sign-out API to clear cookie; fire-and-forget (idempotent)
-    void fetch(`${apiBaseUrl}/v1/auth/sign-out`, {
-      method: "POST",
-      credentials: "include"
-    });
+    void signOut(apiBaseUrl);
+    clearAuthSessionHint();
     clearAuthSession();
     authMode = "login";
     loginFeedback = {
@@ -3071,7 +3015,7 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "retry-session-check") {
-    void revalidateStoredSession();
+    void revalidateStoredSession({ blocking: true });
     return;
   }
 
@@ -3608,30 +3552,12 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
   }
 
   if (action === "login") {
+    cancelAuthBootRequest();
     try {
-      // slice-2: migrated to /v1/auth/sign-in; credentials:include for cookie receipt.
-      const response = await fetch(`${apiBaseUrl}/v1/auth/sign-in`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        credentials: "include",
-        body: JSON.stringify({ name, studentNumber })
-      });
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { errorCode?: string; errorMessage?: string };
-        throw new Error(body.errorMessage ?? "이름 또는 학번이 올바르지 않습니다.");
-      }
-
-      const payload = (await response.json()) as unknown;
-
-      if (!isAuthSignInResponse(payload)) {
-        throw new Error("로그인 응답 형식이 올바르지 않습니다.");
-      }
-
-      const session = meResponseToSession(payload as AuthMeResponse);
+      const payload = await signIn(apiBaseUrl, { name, studentNumber });
+      const session = meResponseToSession(payload);
       authSession = session;
+      writeAuthSessionHint();
       setDatadogRumUser({
         id: session.user.id,
         role: session.user.role
@@ -3672,26 +3598,15 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
   // action === "signup"
   // slice-3: sign-up from lecture-reader home. On success, re-call /me to populate
   // full session (including PDF restore) via revalidateStoredSession().
+  cancelAuthBootRequest();
   try {
-    const response = await fetch(`${apiBaseUrl}/v1/auth/sign-up`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      credentials: "include",
-      body: JSON.stringify({ name, studentNumber })
-    });
-
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { errorCode?: string; errorMessage?: string };
-      throw new Error(body.errorMessage ?? `가입에 실패했습니다. (${String(response.status)})`);
-    }
+    await signUp(apiBaseUrl, { name, studentNumber });
 
     // Server sets cookie on 200. Re-validate via /me to populate session + PDF restore.
     loginFeedback = undefined;
     authMode = "login";
     trackRumAction("sign_up_completed");
-    await revalidateStoredSession();
+    await revalidateStoredSession({ blocking: true });
   } catch (error) {
     loginFeedback = {
       kind: "error",
@@ -4910,6 +4825,7 @@ function handleMaterialAuthError(error: unknown): boolean {
     return false;
   }
 
+  clearAuthSessionHint();
   clearAuthSession();
   loginFeedback = {
     kind: "error",
@@ -6242,13 +6158,13 @@ async function importWeekNoteFile(
 function renderApp(): void {
   if (authBootState === "checking") {
     document.body.removeAttribute("data-route");
-    renderInto(renderSessionCheckPage());
+    renderInto(renderAuthSessionCheckPage(authBootNotice));
     return;
   }
 
   if (!authSession) {
     document.body.removeAttribute("data-route");
-    renderInto(renderLoginPage());
+    renderInto(renderAuthLoginPage(authMode, loginFeedback));
     return;
   }
 
@@ -7381,89 +7297,6 @@ function renderHotkeyHelpModal(): string {
         <p class="hotkey-help-modal__hint">PDF 작업공간에서 동작합니다. 입력 중에는 단일 키 단축키가 일시 비활성화됩니다.</p>
       </div>
     </div>
-  `;
-}
-
-function renderLoginPage(): string {
-  const isLogin = authMode === "login";
-  return `
-    <main class="login-screen" data-login-screen="true">
-      <section class="login-panel" aria-labelledby="login-title">
-        <p class="meta">PRIVATE STUDY WORKSPACE</p>
-        <h1 id="login-title">study-note</h1>
-        <p class="lede">강의 PDF와 필기 데이터는 사용자별 작업공간에서 관리됩니다.</p>
-
-        <div class="auth-tabs" role="tablist" aria-label="인증 방식 선택">
-          <button
-            class="auth-tab${isLogin ? " is-active" : ""}"
-            type="button"
-            role="tab"
-            aria-selected="${isLogin ? "true" : "false"}"
-            data-action="auth-tab-login"
-          >로그인</button>
-          <button
-            class="auth-tab${!isLogin ? " is-active" : ""}"
-            type="button"
-            role="tab"
-            aria-selected="${!isLogin ? "true" : "false"}"
-            data-action="auth-tab-signup"
-          >회원가입</button>
-        </div>
-
-        <form class="login-form" data-action="${isLogin ? "login" : "signup"}">
-          <label>
-            <span>이름</span>
-            <input name="name" autocomplete="name" required />
-          </label>
-          <label>
-            <span>학번</span>
-            <input name="studentNumber" inputmode="numeric" autocomplete="off" required />
-          </label>
-          <button class="primary-action" type="submit">
-            ${isLogin ? "로그인" : "회원가입"}
-          </button>
-        </form>
-        ${
-          loginFeedback
-            ? `<div class="login-feedback is-${loginFeedback.kind}">
-                <strong>${loginFeedback.title}</strong>
-                <p>${loginFeedback.detail}</p>
-              </div>`
-            : ""
-        }
-      </section>
-    </main>
-  `;
-}
-
-function renderSessionCheckPage(): string {
-  // hotfix(session): "세션 확인 중" / "서버를 깨우는 중" 두 화면이 깜빡이며
-  // 교차하던 UX 를 단일 타이틀로 통합. 자동 retry 가 진행되는 동안은 동일한
-  // 안내문을 유지하고, 자동 retry 가 모두 소진된 retryable 상태에서만 안내문이
-  // "수동 재시도 필요" 로 바뀌며 "다시 확인" 버튼이 노출된다 (codex P2 fix —
-  // retryable 에서는 자동 retry 가 멈췄으므로 "자동 확인" 문구는 거짓).
-  const isRetryable = authBootNotice === "retryable";
-  const detail = isRetryable
-    ? "자동 확인이 끝났습니다. 아래 버튼을 눌러 다시 시도해 주세요."
-    : "서버와 로그인 정보를 확인하고 있습니다. 첫 요청은 백엔드가 깨어나는 데 시간이 걸릴 수 있으며 자동으로 다시 확인합니다.";
-
-  return `
-    <main class="login-screen" data-session-checking="true">
-      <section class="login-panel" aria-live="polite" aria-busy="${isRetryable ? "false" : "true"}">
-        <p class="meta">SESSION CHECK</p>
-        <h1>세션 확인 중</h1>
-        <p class="lede">${detail}</p>
-        ${
-          isRetryable
-            ? `<div class="session-check-actions">
-                <button class="secondary-action" type="button" data-action="retry-session-check">
-                  다시 확인
-                </button>
-              </div>`
-            : ""
-        }
-      </section>
-    </main>
   `;
 }
 
