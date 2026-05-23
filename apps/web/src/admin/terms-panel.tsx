@@ -160,6 +160,55 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
         <p className="terms-empty">등록된 학기가 없습니다. "학기 추가" 로 시작하세요.</p>
       )}
 
+      {/* Codex Round-2 P2: backfill 전 termId=null orphan Subject 가 invisible
+          하지 않도록 별도 section. master 만 수정/삭제 가능 (BE ensureParentTermAllowed). */}
+      {(() => {
+        const orphans = subjectsByTerm.get("__orphan__") ?? [];
+        if (orphans.length === 0) return null;
+        const canMutateOrphan = viewerRole === "master";
+        return (
+          <section className="term-card term-card-orphan" aria-label="미할당 과목">
+            <div className="term-card-header">
+              <span className="term-card-meta" style={{ color: "#b45309" }}>⚠ 미할당</span>
+              <strong className="term-card-title">학기 미배정 과목 ({orphans.length}건)</strong>
+              <span className="term-card-date" style={{ color: "#b45309" }}>
+                backfill 스크립트 실행 전까지 임시 표시 — master 만 수정/삭제 가능
+              </span>
+            </div>
+            <ul className="subject-list">
+              {orphans.map((subject) => (
+                <li key={subject.id} className="subject-row">
+                  <span className="subject-title">{subject.title}</span>
+                  <span className="subject-row-actions">
+                    <button
+                      type="button"
+                      className="action-btn small"
+                      disabled={!canMutateOrphan}
+                      title={canMutateOrphan ? "수정" : "master 권한 필요"}
+                      onClick={() => {
+                        setEditingSubject(subject);
+                        setMode("edit-subject");
+                      }}
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      className="action-btn small danger"
+                      disabled={!canMutateOrphan}
+                      title={canMutateOrphan ? "삭제" : "master 권한 필요"}
+                      onClick={() => openDeleteSubject(subject)}
+                    >
+                      삭제
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
+
       <ul className="terms-list">
         {terms.map((term) => {
           const termSubjects = subjectsByTerm.get(term.id) ?? [];

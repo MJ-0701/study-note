@@ -627,3 +627,10 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+/* sprint-W21-sprint-1 S1 — orphan subject section (Codex Round-2 P2 fix) */
+.term-card-orphan {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  margin-bottom: 12px;
+}
