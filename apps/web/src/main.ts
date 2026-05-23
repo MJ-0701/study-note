@@ -181,7 +181,6 @@ type LoginFeedback =
 const notebookStorageKey = "study-note.notebook.v2";
 const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
-const PDF_FRAME_READY_DELAY_MS = 180;
 const DRILL_HIGHLIGHT_DURATION_MS = 1500;
 const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
 const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
@@ -237,11 +236,6 @@ const activePdfObjectUrls = new Map<string, string>();
 const activePdfObjectUrlMaterialIds = new Map<string, string>();
 const activePdfPreviewLoads = new Set<string>();
 const failedPdfPreviewLoadKeys = new Set<string>();
-const loadedPdfFrameKeys = new Set<string>();
-const pdfFrameReadyTimers = new Map<string, ReturnType<typeof setTimeout>>();
-let pendingPdfPageTransition:
-  | { subjectId: string; materialId: string; fromPage: number; toPage: number }
-  | undefined;
 let activeInkStroke: ActiveInkStroke | undefined;
 // sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
 // Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
@@ -613,7 +607,6 @@ if (isBrowserRuntime) {
   document.addEventListener("change", handleDocumentChange);
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("input", handleDocumentInput);
-  document.addEventListener("load", handleDocumentLoad, true);
   document.addEventListener("submit", handleDocumentSubmit);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
   document.addEventListener("pointermove", handleDocumentPointerMove);
@@ -1574,7 +1567,6 @@ function setActivePdfObjectUrl(
   objectUrl: string
 ): void {
   clearActivePdfObjectUrl(subjectId);
-  clearPdfFrameReadiness();
 
   activePdfObjectUrls.set(subjectId, objectUrl);
   activePdfObjectUrlMaterialIds.set(subjectId, materialId);
@@ -1606,7 +1598,6 @@ function revokeAllPdfObjectUrls(): void {
   activePdfObjectUrlMaterialIds.clear();
   activePdfPreviewLoads.clear();
   failedPdfPreviewLoadKeys.clear();
-  clearPdfFrameReadiness();
 }
 
 // sprint-W21-sprint-4/S1: pdf-canvas-viewer 의 PDFDocumentProxy cache 를 lazy
@@ -1618,13 +1609,6 @@ async function disposePdfDocumentCache(blobUrl?: string): Promise<void> {
   } catch {
     /* viewer module 미 load — no-op. */
   }
-}
-
-function clearPdfFrameReadiness(): void {
-  pdfFrameReadyTimers.forEach((timer) => clearTimeout(timer));
-  pdfFrameReadyTimers.clear();
-  loadedPdfFrameKeys.clear();
-  pendingPdfPageTransition = undefined;
 }
 
 async function revalidateStoredSession(options: { attempt?: number } = {}): Promise<void> {
@@ -3709,51 +3693,6 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   renderApp();
 }
 
-function handleDocumentLoad(event: Event): void {
-  const target = event.target;
-
-  if (!(target instanceof HTMLIFrameElement) || target.dataset.pdfFrame !== "true") {
-    return;
-  }
-
-  const frameKey = target.dataset.pdfFrameKey;
-
-  if (!frameKey) {
-    return;
-  }
-
-  const previousTimer = pdfFrameReadyTimers.get(frameKey);
-
-  if (previousTimer) {
-    clearTimeout(previousTimer);
-  }
-
-  const timer = setTimeout(() => {
-    pdfFrameReadyTimers.delete(frameKey);
-    loadedPdfFrameKeys.add(frameKey);
-    completePendingPdfPageTransition(frameKey);
-  }, PDF_FRAME_READY_DELAY_MS);
-
-  pdfFrameReadyTimers.set(frameKey, timer);
-}
-
-function completePendingPdfPageTransition(frameKey: string): void {
-  if (!pendingPdfPageTransition) {
-    return;
-  }
-
-  const pending = pendingPdfPageTransition;
-  const pendingKey = getPdfFrameKey(pending.materialId, pending.toPage);
-
-  if (frameKey !== pendingKey) {
-    return;
-  }
-
-  pendingPdfPageTransition = undefined;
-  setPdfPage(pending.subjectId, pending.toPage);
-  renderApp();
-}
-
 function handleDocumentPointerDown(event: PointerEvent): void {
   const target = event.target;
 
@@ -5158,29 +5097,13 @@ function requestPdfPage(subjectId: string, pageNumber: number): void {
     return;
   }
 
+  // sprint-W21-sprint-4/S1 P0 fix: pdfjs canvas mount path replaces the iframe
+  // load-event gating. `applyPdfCanvasMounts` paints `selectedPage ± 1` on every
+  // render, so the next-page canvas is already mounted by the time the user
+  // navigates. Commit the new page synchronously — waiting for an iframe `load`
+  // signal that never fires would leave the navigation stuck.
   const nextPage = Math.min(material.pageCount, Math.max(1, pageNumber));
-
-  if (nextPage === material.selectedPage) {
-    pendingPdfPageTransition = undefined;
-    setPdfPage(subjectId, nextPage);
-    return;
-  }
-
-  const materialId = material.backendMaterialId ?? "";
-  const frameKey = getPdfFrameKey(materialId, nextPage);
-
-  if (!materialId || loadedPdfFrameKeys.has(frameKey)) {
-    pendingPdfPageTransition = undefined;
-    setPdfPage(subjectId, nextPage);
-    return;
-  }
-
-  pendingPdfPageTransition = {
-    subjectId,
-    materialId,
-    fromPage: material.selectedPage,
-    toPage: nextPage
-  };
+  setPdfPage(subjectId, nextPage);
 }
 
 function setPdfPage(subjectId: string, pageNumber: number): void {
@@ -7791,11 +7714,7 @@ function getPdfFrameKey(materialId: string, pageNumber: number): string {
   return `pdf-frame:${materialId}:${pageNumber}`;
 }
 
-function getPdfFramePages(
-  selectedPage: number,
-  pageCount: number,
-  pending?: { fromPage: number; toPage: number }
-): number[] {
+function getPdfFramePages(selectedPage: number, pageCount: number): number[] {
   const pages = [selectedPage];
 
   if (selectedPage > 1) {
@@ -7804,10 +7723,6 @@ function getPdfFramePages(
 
   if (selectedPage < pageCount) {
     pages.push(selectedPage + 1);
-  }
-
-  if (pending) {
-    pages.push(pending.fromPage, pending.toPage);
   }
 
   return [...new Set(pages)].filter((page) => page >= 1 && page <= pageCount);
@@ -7820,13 +7735,8 @@ function renderPdfFrameStack(
   selectedPage: number
 ): string {
   const materialId = material.backendMaterialId ?? "";
-  const pending =
-    pendingPdfPageTransition?.subjectId === subject.id &&
-    pendingPdfPageTransition.materialId === materialId
-      ? pendingPdfPageTransition
-      : undefined;
 
-  return getPdfFramePages(selectedPage, material.pageCount, pending).map((pageNumber) => {
+  return getPdfFramePages(selectedPage, material.pageCount).map((pageNumber) => {
     const isActive = pageNumber === selectedPage;
     const frameKey = getPdfFrameKey(materialId, pageNumber);
     const preloadAttrs = isActive ? "" : ' aria-hidden="true"';

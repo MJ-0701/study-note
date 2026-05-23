@@ -50,12 +50,6 @@ describe("PDF annotation layer page stickiness", () => {
     assert.match(mainTs, /getNodeKey/);
     assert.match(mainTs, /function shouldReplacePdfFrame/);
     assert.match(mainTs, /function getPdfFramePages/);
-    assert.match(mainTs, /loadedPdfFrameKeys/);
-    assert.match(mainTs, /PDF_FRAME_READY_DELAY_MS/);
-    assert.match(mainTs, /pdfFrameReadyTimers/);
-    assert.match(mainTs, /pendingPdfPageTransition/);
-    assert.match(mainTs, /function handleDocumentLoad/);
-    assert.match(mainTs, /function completePendingPdfPageTransition/);
     assert.match(mainTs, /function requestPdfPage/);
     // sprint-W21-sprint-4/S1: native iframe (`<iframe src="*.pdf#page=N">`) 가
     // iOS Safari `#page` fragment 무시 + Android Chrome native viewer 부재 →
@@ -66,12 +60,18 @@ describe("PDF annotation layer page stickiness", () => {
     assert.match(mainTs, /data-blob-url="\$\{escapeHtml\(objectUrl\)\}"/);
     assert.match(mainTs, /pages\.push\(selectedPage - 1\)/);
     assert.match(mainTs, /pages\.push\(selectedPage \+ 1\)/);
-    assert.match(mainTs, /pages\.push\(pending\.fromPage, pending\.toPage\)/);
-    assert.match(mainTs, /loadedPdfFrameKeys\.has\(frameKey\)/);
-    assert.match(mainTs, /setTimeout\(\(\) => \{/);
-    assert.match(mainTs, /setPdfPage\(pending\.subjectId, pending\.toPage\)/);
     assert.match(mainTs, /is-preload/);
     assert.match(mainTs, /fromEl\.replaceWith\(toEl\.cloneNode\(true\)\)/);
+    // sprint-W21-sprint-4/S1 P0 fix: canvas mount path has no iframe `load`
+    // event, so requestPdfPage must commit setPdfPage synchronously. Any
+    // re-introduction of the old loadedPdfFrameKeys / pendingPdfPageTransition
+    // gating would re-trigger the stuck-navigation regression.
+    assert.doesNotMatch(mainTs, /loadedPdfFrameKeys/);
+    assert.doesNotMatch(mainTs, /pendingPdfPageTransition/);
+    assert.doesNotMatch(mainTs, /pdfFrameReadyTimers/);
+    assert.doesNotMatch(mainTs, /PDF_FRAME_READY_DELAY_MS/);
+    assert.doesNotMatch(mainTs, /function handleDocumentLoad/);
+    assert.doesNotMatch(mainTs, /function completePendingPdfPageTransition/);
     // sprint-W21-sprint-4/S1: canvas mount lifecycle.
     assert.match(mainTs, /function applyPdfCanvasMounts/);
     assert.match(mainTs, /function shouldPreservePdfCanvasMount/);
