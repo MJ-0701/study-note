@@ -86,15 +86,17 @@ export class SubjectsService {
     const before = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
 
-    // Service-level 409 (deletedAt=null 만 count). DB FK (PdfMaterial.subjectId
-    // = default RESTRICT) 가 race condition defense-in-depth (Codex Round-3 P1).
+    // Service-level 409. DB FK (PdfMaterial.subjectId = default RESTRICT) 는
+    // deletedAt=null/not-null 구분 없이 모든 referencing row 를 block 하므로
+    // preflight 도 동일하게 count all 해야 UI/DB 정합 (Codex Round-4 P1).
+    // 살아있는 / soft-deleted 도 모두 count.
     const materialCount = await this.prisma.pdfMaterial.count({
-      where: { subjectId: id, deletedAt: null }
+      where: { subjectId: id }
     });
     if (materialCount > 0) {
       throw new ConflictException({
         errorCode: "HAS_CHILDREN",
-        errorMessage: "cannot delete subject that contains materials"
+        errorMessage: "cannot delete subject that contains materials (including soft-deleted)"
       });
     }
 
@@ -121,8 +123,10 @@ export class SubjectsService {
   ): Promise<{ materialCount: number }> {
     const subject = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(subject.termId, actorId, actorRole);
+    // Codex Round-4 P1: delete preflight 과 동일하게 deletedAt 무관 count
+    // (FK RESTRICT 가 모든 row block 하므로 preflight 도 정합 필요).
     const materialCount = await this.prisma.pdfMaterial.count({
-      where: { subjectId: id, deletedAt: null }
+      where: { subjectId: id }
     });
     return { materialCount };
   }

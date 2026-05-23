@@ -259,7 +259,7 @@ describe("AC4 — delete = 409 HAS_CHILDREN (PdfMaterial deletedAt IS NULL)", ()
     assert.equal(deleted, true);
   });
 
-  it("count only PdfMaterial with deletedAt=null (soft-delete 제외)", async () => {
+  it("(Codex Round-4 P1) preflight count = all PdfMaterial (soft-deleted 포함, FK 정합)", async () => {
     const parentTerm = term({ createdById: "user-master" });
     const target = subj({ termId: parentTerm.id });
     let capturedWhere: Record<string, unknown> | undefined;
@@ -281,7 +281,9 @@ describe("AC4 — delete = 409 HAS_CHILDREN (PdfMaterial deletedAt IS NULL)", ()
     };
     const service = makeService(prisma);
     await service.delete(target.id, "user-master", "master");
-    assert.equal((capturedWhere as { deletedAt: null }).deletedAt, null);
+    // deletedAt 필드 제외 — FK 가 모든 row block 하므로 preflight 도 동일.
+    assert.equal("deletedAt" in (capturedWhere ?? {}), false);
+    assert.equal((capturedWhere as { subjectId: string }).subjectId, target.id);
   });
 });
 
