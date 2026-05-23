@@ -397,8 +397,20 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
       continue;
     }
     div.dataset.pdfMounted = mountedKey;
-    void mountPdfCanvas(div, blobUrl, pageNumber).catch((err) => {
-      console.warn("[study-note] pdf canvas mount failed", err);
+    // codex P2 (PR #40 round-2): mountPdfCanvas swallows worker/render errors
+    // via its `onError` callback and resolves cleanly, so the trailing `.catch`
+    // alone would never fire and the marker would remain — leaving the page
+    // permanently blank until a key change/reload. Clear the marker from inside
+    // `onError` so the next render attempt actually remounts. Keep the trailing
+    // `.catch` as a defensive net for unexpected rejections (e.g., if the viewer
+    // ever throws outside its own try/catch).
+    void mountPdfCanvas(div, blobUrl, pageNumber, {
+      onError: (err) => {
+        console.warn("[study-note] pdf canvas mount failed", err);
+        delete div.dataset.pdfMounted;
+      }
+    }).catch((err) => {
+      console.warn("[study-note] pdf canvas mount rejected", err);
       delete div.dataset.pdfMounted;
     });
   }
