@@ -40,6 +40,9 @@ project 로 감지하므로 broad scan 전 `llm-wiki/README.md` + `llm-wiki/ddd/
 - `modules/` — 코드 모듈 별 지도 (apps/web, apps/api, packages/domain)
 - `flows/` — cross-aggregate 흐름 (autosave, session transition, storage namespacing)
 - `references/` — sprint / decision / standards 색인
+  - [references/sfs-harness-gaps](references/sfs-harness-gaps.md) — SFS 구현
+    gate / user escalation / cross-layer DDD/TDD / QA-QC ledger /
+    parallel sub-agent 하네스 결함 register
 
 ## 원칙
 
@@ -70,6 +73,7 @@ project 로 감지하므로 broad scan 전 `llm-wiki/README.md` + `llm-wiki/ddd/
 | sprint close | `references/sprints.md` + 닿은 aggregate / flow page (각 page 의 "변경 이력") |
 | 새 표준 문서 (`docs/standards/*.md`) 추가 | `references/standards.md` (gap 섹션 → 표 섹션 이동) |
 | user-facing 용어 / 카피 변경 | `ddd/ubiquitous-language.md` + `docs/solon/domain-map.md` 양쪽 일관성 확인 |
+| SFS harness / agent 행동 규칙 gap 발견 | `references/sfs-harness-gaps.md` + `references/standards.md` |
 
 ## 워크스페이스 boundary
 

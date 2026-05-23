@@ -30,6 +30,7 @@ context 로 끌어오지 않는다.
 | `.sfs-local/decisions/`, `docs/solon/decisions/` | ADR — [references/decisions](decisions.md) 참조 |
 | `.sfs-local/sprints/`, `docs/solon/handoff/`, `docs/solon/work-slice/` | sprint history — [references/sprints](sprints.md) 참조 |
 | `docs/solon/domain-map.md` | 도메인 용어 일부 — 현 study-note 용어는 [ddd/ubiquitous-language](../ddd/ubiquitous-language.md) 가 갱신본 |
+| `llm-wiki/references/sfs-harness-gaps.md` | 사용자 지적 기반 SFS harness 결함 register — 구현 Gate, user escalation, cross-layer DDD/TDD, QA/QC evidence ledger, parallel sub-agent 관련 수정 요구 |
 
 ## SFS 슬래시 명령 (dispatch table — `CLAUDE.md` SSoT)
 
@@ -80,6 +81,12 @@ repo 안에 안착된 운영 규칙만 정리. 개인 environment 의 working me
 
 - commit message 는 사용자/저장소의 native 언어 (`CLAUDE.md` SFS 0.6.102 §Commit policy).
 - self-review (diff + 7 영역) → codex `@codex review` 순. push 직후 codex 자동 트리거 금지.
+- 구현 단계에서는 Gate 3 plan PASS 만으로 충분하지 않다. AC/ADR 별 implementation
+  ledger + spec/evidence mapping 이 없으면 Gate 6 PASS 로 보지 않는다
+  ([sfs-harness-gaps](sfs-harness-gaps.md)).
+- PASS 는 범위를 명시한다. 테스트만 돌린 것은 `local PASS`, 실제 프로젝트 적용
+  후 QA/QC 까지 확인한 것은 `project-applied PASS`, 운영/배포/DB apply 까지
+  확인한 것은 `prod-applied PASS` 로 기록한다.
 - `@codex review` 트리거 후 30~60초 후 inline + reaction 재확인.
 - SFS push 정책: `sfs commit apply` 는 current branch push 가 default; `--no-push` 는 local sandbox 한정.
 - host-local `/commit` skill 은 SFS workflow 가 아니므로 SFS 작업에 쓰지 않는다.

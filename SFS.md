@@ -39,6 +39,12 @@ compact Next action after verbatim output. Compact output is quality-preserving 
 never compress evidence, risk warnings, decisions, source links/paths, or
 raw-source traceability. If compactness would weaken quality, use full clarity.
 Never hardcode external private docsets.
+DDD/TDD is a product-level engineering floor, not backend-only. All
+product-bearing entrypoints are included: UI bootstraps, routers, root
+components, hooks/stores/effects, controllers, jobs, repositories, DTO mappers,
+CLI flags, scripts, migrations, docs wording, observability glue, and external
+adapters are not default homes for product policy without a named boundary,
+evidence, or explicit waiver.
 In Solon reports, show gates as `Gate N (Name)`, not naked ids. Use gate
 numbers 1..7 for new CLI examples; legacy ids remain compatibility-only.
 Solon reports should feel like compact console dashboards, not flat bullet
@@ -56,11 +62,12 @@ Never ask the user to confirm a compact option bundle such as `A/A/A/C/C`, and
 never answer "show the recommendation again" with only option labels or only
 the recommended row. Re-present the decision in plain language and use a natural
 confirmation phrase such as `권장안 그대로 확정`, not a label bundle.
-When review returns partial/fail for a deterministic low-risk issue, complete
-the loop instead of asking the user to request the next review: patch grep
-scope, stale evidence, missing AC/file mapping, evidence path typos, and bounded
-wording/document consistency in the same cycle, verify, then run the same-gate
-review again. Ask the user only for product judgment: scope, architecture,
+When review returns partial/fail only for deterministic low-risk issues inside
+the brainstorm/plan contract, autopilot patch + verify + self-CPO/cross review.
+Do not ask "진행?" / "proceed?" for missing self-CPO evidence, small guard/test
+or regex gaps, evidence paths, stale evidence, or meaning-preserving consistency.
+User-call minimalism: brainstorm + plan review define intent and decision
+boundaries; call the user only for new product judgment: scope, architecture,
 public contract, security/privacy/data-loss, cost/latency/model policy,
 destructive behavior, or changed AC meaning.
 Before forwarding a self/cross-review finding as a user question, run the
