@@ -404,14 +404,75 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     // `onError` so the next render attempt actually remounts. Keep the trailing
     // `.catch` as a defensive net for unexpected rejections (e.g., if the viewer
     // ever throws outside its own try/catch).
+    //
+    // hotfix(ipad-debug): iPad 에서 PDF canvas 가 빈 화면으로 나오는 증상이
+    // 보고됐는데 (iPhone/Mac 정상), 콘솔 접근이 막혀 있어 진단이 막혔다.
+    // 한 sprint 동안만 화면에 mount phase / device 정보 / error 를 표시하는
+    // debug badge 를 켜둔다. 원인이 잡히면 곧장 제거.
+    const debugBadge = document.createElement("div");
+    debugBadge.dataset.pdfDebugBadge = "true";
+    Object.assign(debugBadge.style, {
+      position: "absolute",
+      top: "8px",
+      left: "8px",
+      zIndex: "9999",
+      background: "rgba(0,0,0,0.85)",
+      color: "#fff",
+      font: "11px/1.4 ui-monospace, monospace",
+      padding: "6px 8px",
+      borderRadius: "4px",
+      maxWidth: "calc(100% - 16px)",
+      whiteSpace: "pre-wrap",
+      wordBreak: "break-word",
+      pointerEvents: "none"
+    });
+    const info = {
+      page: pageNumber,
+      cw: div.clientWidth,
+      ch: div.clientHeight,
+      dpr: window.devicePixelRatio || 1,
+      ua: navigator.userAgent.slice(0, 90)
+    };
+    debugBadge.textContent = `[mount start] p${info.page} cw=${info.cw} ch=${info.ch} dpr=${info.dpr}`;
+    div.appendChild(debugBadge);
+    const watchdog = window.setTimeout(() => {
+      if (div.dataset.pdfMounted === mountedKey) {
+        debugBadge.style.background = "rgba(202,138,4,0.92)";
+        debugBadge.textContent =
+          `[TIMEOUT 10s] p${info.page}\nstill mounting after 10s\n` +
+          `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}\nua=${info.ua}`;
+      }
+    }, 10000);
     void mountPdfCanvas(div, blobUrl, pageNumber, {
+      onReady: (vp) => {
+        window.clearTimeout(watchdog);
+        debugBadge.textContent =
+          `[OK] p${vp.pageNumber} vp=${Math.round(vp.width)}x${Math.round(vp.height)} dpr=${info.dpr}`;
+        window.setTimeout(() => debugBadge.remove(), 2500);
+      },
       onError: (err) => {
+        window.clearTimeout(watchdog);
         console.warn("[study-note] pdf canvas mount failed", err);
         delete div.dataset.pdfMounted;
+        debugBadge.style.background = "rgba(220,38,38,0.92)";
+        const e = err as { message?: unknown; stack?: unknown; name?: unknown } | null;
+        debugBadge.textContent =
+          `[FAIL] p${info.page} ${String(e?.name ?? "")}\n` +
+          `${String(e?.message ?? err)}\n` +
+          `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}\n` +
+          `ua=${info.ua}\n` +
+          `stack=${String(e?.stack ?? "").slice(0, 220)}`;
       }
     }).catch((err) => {
+      window.clearTimeout(watchdog);
       console.warn("[study-note] pdf canvas mount rejected", err);
       delete div.dataset.pdfMounted;
+      debugBadge.style.background = "rgba(220,38,38,0.92)";
+      const e = err as { message?: unknown; stack?: unknown; name?: unknown } | null;
+      debugBadge.textContent =
+        `[REJECT] p${info.page} ${String(e?.name ?? "")}\n` +
+        `${String(e?.message ?? err)}\n` +
+        `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}`;
     });
   }
 }
