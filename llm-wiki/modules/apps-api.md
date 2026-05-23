@@ -58,8 +58,11 @@ NestJS global prefix = `app.setGlobalPrefix("api")` (`apps/api/src/main.ts:38`).
 | GET | `/api/materials/:materialId/export-bundle` | materials | cookie | 내보내기 번들 |
 | GET | `/api/v1/notes/subject/:subjectId/week/:weekId` | user-notes | cookie → `request.user.id` 로 storage key 구성 | WeekNote.userNotes hot path GET |
 | PUT | `/api/v1/notes/subject/:subjectId/week/:weekId` | user-notes | 동일 | autosave PUT (userId 는 URL 에 없음 — cookie session 에서 추출) |
-| GET | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | cookie → `request.user.id` 로 storage key 구성 | annotation hot path GET |
-| PUT | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | 동일 | annotation autosave (subjectId/userId 는 URL 에 없음) |
+| GET | `/api/v1/pdf-annotations/by-subject/:subjectId` | pdf-annotations | cookie → `request.user.id` × subjectId 로 material enumerate | **sprint-W21-sprint-2/S2 신규 batch GET**. 응답 = canonical schema `{ annotations:{[matId]:{payload,updatedAt}}, truncated, total, returned }`. cap = 50 material / 1MB. foreign/nonexistent/empty 모두 동일 `200 {annotations:{}}`. |
+| GET | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | cookie + material ownership pre-check (Prisma `pdfMaterial.findFirst where ownerId+id`) | annotation single-material GET. 응답 = canonical schema (1 entry 또는 empty). foreign/nonexistent → 404 indistinguishable. |
+| PUT | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | 동일 + atomic CAS on `AnnotationSnapshot.savedAt` | body = `{ payload, clientRevision? }`. clientRevision exact equality. 409 = stale (canonical body 동봉). |
+| ~~PUT~~ | ~~`/api/materials/:materialId/annotation`~~ | materials | — | **410 Gone (sprint-W21-sprint-2/S2 R6 deprecation)**. Use `/api/v1/pdf-annotations/:materialId`. |
+| ~~GET~~ | ~~`/api/materials/:materialId/annotation`~~ | materials | — | **410 Gone**. |
 | GET | `/api/health` | health | — | LB / keep-alive (`HealthController` 는 prefix 없이 `@Controller("health")`) |
 
 핵심: **userId / subjectId 는 path key 에 들어가지 않는다.** userNotes 와

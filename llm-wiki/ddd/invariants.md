@@ -57,6 +57,27 @@ aggregate 별 invariant 는 각 aggregate page 에. 여기는 **여러 context �
 - **원문**: `apps/web/src/main.ts` `applySessionTransitionForUser` (S3 이후
   wipe 는 사라졌지만 abort 는 유지).
 
+## I9. Optimistic concurrency on annotation PUT (sprint-W21-sprint-2/S3)
+
+> annotation PUT 은 `clientRevision` exact equality 검증 + Prisma row-level
+> atomic CAS 를 통과한 PUT 만 성공한다. cross-device race 시 stale write 는
+> 409 거부 + canonical schema body (server 최신 상태) 동봉.
+
+- FE: `lastHydratedAnnotationRevision: Map<key, string>` 에서 가져온
+  server-issued `updatedAt` 을 PUT body 의 `clientRevision` 으로 동봉.
+- BE: `prisma.annotationSnapshot.updateMany({ where: { materialId, ownerId, savedAt: clientRevision }, data: { savedAt: now } })`
+  → count===1 = 통과, count===0 = stale → 409.
+- 409 body = canonical schema `{ annotations: { [materialId]: { payload, updatedAt } } }`.
+  FE 가 silent hydrate (banner X) + chain drop + 다음 user mutation 이 새
+  revision 으로 자동 재PUT.
+- compensating recovery: MySQL CAS 성공 후 R2 putObject 실패 → Prisma row
+  rollback (`savedAt` 이전 값으로). drift 0.
+- 위반 = revision check 없이 PUT → 두 device 동시 편집 시 last-write-wins
+  로 한 쪽 commit 소실.
+- **원문**: `apps/api/src/pdf-annotations/pdf-annotations.service.ts`
+  (`putAnnotation` + `writePayloadOrRollbackUpdate` + `createWithPayloadOrRollback`),
+  `apps/web/src/main.ts` (`putAnnotationToBE` + `handleAnnotationStaleResponse`).
+
 ## I3. PUT ordering per key
 
 > 같은 key (userId+subjectId / materialId) 의 PUT 은 server 도착 순서가

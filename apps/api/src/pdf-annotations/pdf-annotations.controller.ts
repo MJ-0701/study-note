@@ -4,7 +4,6 @@ import {
   Controller,
   Get,
   HttpCode,
-  NotFoundException,
   Param,
   Put,
   Query,
@@ -21,6 +20,7 @@ interface AuthenticatedRequest {
 
 interface PutBody {
   payload?: unknown;
+  clientRevision?: string;
 }
 
 @Controller({ path: "v1/pdf-annotations" })
@@ -28,6 +28,7 @@ interface PutBody {
 export class PdfAnnotationsController {
   constructor(private readonly annotations: PdfAnnotationsService) {}
 
+  /** GET /api/v1/pdf-annotations — opt-in cursor listing (admin/export). */
   @Get()
   async listAllAnnotations(
     @Req() request: AuthenticatedRequest,
@@ -36,6 +37,31 @@ export class PdfAnnotationsController {
     return this.annotations.listAnnotations(request.user.id, cursor ?? undefined);
   }
 
+  /**
+   * GET /api/v1/pdf-annotations/by-subject/:subjectId — plan §R2 batch GET.
+   * server-side material enumeration via `subjectId × ownerId`. fail-closed:
+   * foreign/nonexistent/own-empty subject 모두 동일 응답
+   * `{ annotations:{}, truncated:false, total:0, returned:0 }`.
+   */
+  @Get("by-subject/:subjectId")
+  async batchBySubject(
+    @Req() request: AuthenticatedRequest,
+    @Param("subjectId") subjectId: string
+  ) {
+    if (!subjectId.trim()) {
+      throw new BadRequestException({
+        errorCode: "INVALID_SUBJECT_ID",
+        errorMessage: "subjectId is required"
+      });
+    }
+    return this.annotations.batchGetBySubject(request.user.id, subjectId);
+  }
+
+  /**
+   * GET /api/v1/pdf-annotations/:materialId — plan §R6 single-material.
+   * material ownership pre-check → not owned: 404. snapshot 없음: empty
+   * canonical response.
+   */
   @Get(":materialId")
   async getAnnotation(
     @Req() request: AuthenticatedRequest,
@@ -47,16 +73,14 @@ export class PdfAnnotationsController {
         errorMessage: "materialId is required"
       });
     }
-    const record = await this.annotations.getAnnotation(request.user.id, materialId);
-    if (!record) {
-      throw new NotFoundException({
-        errorCode: "ANNOTATION_NOT_FOUND",
-        errorMessage: `annotation not found for materialId=${materialId}`
-      });
-    }
-    return { materialId, ...record };
+    return this.annotations.getSingleAnnotation(request.user.id, materialId);
   }
 
+  /**
+   * PUT /api/v1/pdf-annotations/:materialId — plan §R4 + §R9 (Hybrid CAS).
+   * body = { payload, clientRevision? }. clientRevision 없으면 신규 create.
+   * 409 = stale revision (canonical schema body 동봉).
+   */
   @Put(":materialId")
   @HttpCode(200)
   async putAnnotation(
@@ -70,10 +94,7 @@ export class PdfAnnotationsController {
         errorMessage: "materialId is required"
       });
     }
-    // sprint-2/S1 fix (codex P2): enforce object (or array) payload — primitives
-    // (string/number/boolean) round-trip but the web hydrate path only applies
-    // typeof === "object" payloads, so primitives would become silently
-    // unreadable. Reject early at the controller.
+    // sprint-2/S1 fix (codex P2): enforce object (or array) payload.
     if (
       body?.payload === undefined ||
       body.payload === null ||
@@ -84,11 +105,20 @@ export class PdfAnnotationsController {
         errorMessage: "payload field must be an object"
       });
     }
-    const record = await this.annotations.putAnnotation(
+    if (
+      body.clientRevision !== undefined &&
+      typeof body.clientRevision !== "string"
+    ) {
+      throw new BadRequestException({
+        errorCode: "INVALID_REVISION",
+        errorMessage: "clientRevision must be a string"
+      });
+    }
+    return this.annotations.putAnnotation(
       request.user.id,
       materialId,
-      body.payload
+      body.payload,
+      body.clientRevision
     );
-    return { materialId, ...record };
   }
 }
