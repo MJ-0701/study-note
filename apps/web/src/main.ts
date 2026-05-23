@@ -3,7 +3,8 @@ import {
   clearDatadogRumUser,
   initializeDatadogRum,
   setDatadogRumUser,
-  trackRumAction
+  trackRumAction,
+  trackRumError
 } from "./observability/datadogRum";
 import { sampleLectureNote } from "./data/sampleLectureNote";
 import { localIntakeGuide } from "./data/intakeGuide";
@@ -409,6 +410,14 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     // 보고됐는데 (iPhone/Mac 정상), 콘솔 접근이 막혀 있어 진단이 막혔다.
     // 한 sprint 동안만 화면에 mount phase / device 정보 / error 를 표시하는
     // debug badge 를 켜둔다. 원인이 잡히면 곧장 제거.
+    //
+    // codex P2 (PR #42 post-merge): failed/timeout 직후의 stale badge 를 cleanup
+    // 안 하면 onError 가 dataset.pdfMounted 를 풀어주는 순간 다음 render 가
+    // mount 를 재시도하고 같은 container 에 badge 가 누적된다. 새 attempt 전에
+    // 같은 div 안의 기존 badge 를 전부 제거.
+    div
+      .querySelectorAll<HTMLElement>('[data-pdf-debug-badge="true"]')
+      .forEach((stale) => stale.remove());
     const debugBadge = document.createElement("div");
     debugBadge.dataset.pdfDebugBadge = "true";
     Object.assign(debugBadge.style, {
@@ -435,12 +444,31 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
     };
     debugBadge.textContent = `[mount start] p${info.page} cw=${info.cw} ch=${info.ch} dpr=${info.dpr}`;
     div.appendChild(debugBadge);
+    // RUM observability: backend-visible event for iPad blank-canvas diagnosis.
+    // user 가 iPad Safari 콘솔/Network 접근 불가 → Datadog dashboard 에서
+    // mount phase/dpr/cw/ch/ua 분포 확인. iPad-only failure 추적.
+    trackRumAction("pdf-canvas.mount.start", {
+      page: info.page,
+      cw: info.cw,
+      ch: info.ch,
+      dpr: info.dpr,
+      ua: info.ua
+    });
+    const mountStartedAt = performance.now();
     const watchdog = window.setTimeout(() => {
       if (div.dataset.pdfMounted === mountedKey) {
         debugBadge.style.background = "rgba(202,138,4,0.92)";
         debugBadge.textContent =
           `[TIMEOUT 10s] p${info.page}\nstill mounting after 10s\n` +
           `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}\nua=${info.ua}`;
+        trackRumAction("pdf-canvas.mount.timeout", {
+          page: info.page,
+          cw: info.cw,
+          ch: info.ch,
+          dpr: info.dpr,
+          ua: info.ua,
+          timeout_ms: 10000
+        });
       }
     }, 10000);
     void mountPdfCanvas(div, blobUrl, pageNumber, {
@@ -449,6 +477,15 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
         debugBadge.textContent =
           `[OK] p${vp.pageNumber} vp=${Math.round(vp.width)}x${Math.round(vp.height)} dpr=${info.dpr}`;
         window.setTimeout(() => debugBadge.remove(), 2500);
+        trackRumAction("pdf-canvas.mount.ok", {
+          page: info.page,
+          vp_w: Math.round(vp.width),
+          vp_h: Math.round(vp.height),
+          dpr: info.dpr,
+          cw: info.cw,
+          ch: info.ch,
+          duration_ms: Math.round(performance.now() - mountStartedAt)
+        });
       },
       onError: (err) => {
         window.clearTimeout(watchdog);
@@ -462,6 +499,16 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
           `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}\n` +
           `ua=${info.ua}\n` +
           `stack=${String(e?.stack ?? "").slice(0, 220)}`;
+        trackRumError(err, {
+          phase: "pdf-canvas.mount.error",
+          page: info.page,
+          dpr: info.dpr,
+          cw: info.cw,
+          ch: info.ch,
+          ua: info.ua,
+          error_name: String(e?.name ?? ""),
+          duration_ms: Math.round(performance.now() - mountStartedAt)
+        });
       }
     }).catch((err) => {
       window.clearTimeout(watchdog);
@@ -473,6 +520,16 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
         `[REJECT] p${info.page} ${String(e?.name ?? "")}\n` +
         `${String(e?.message ?? err)}\n` +
         `dpr=${info.dpr} cw=${info.cw} ch=${info.ch}`;
+      trackRumError(err, {
+        phase: "pdf-canvas.mount.reject",
+        page: info.page,
+        dpr: info.dpr,
+        cw: info.cw,
+        ch: info.ch,
+        ua: info.ua,
+        error_name: String(e?.name ?? ""),
+        duration_ms: Math.round(performance.now() - mountStartedAt)
+      });
     });
   }
 }
