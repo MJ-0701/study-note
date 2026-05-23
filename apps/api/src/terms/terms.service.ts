@@ -111,6 +111,8 @@ export class TermsService {
     const before = await this.findOrThrow(id);
     ensureTermHierarchyAllowed(before, actorId, actorRole);
 
+    // Service-level 409 (fast path). DB FK ON DELETE RESTRICT 가 race condition
+    // defense-in-depth (Codex Round-3 P1).
     const childCount = await this.prisma.subject.count({ where: { termId: id } });
     if (childCount > 0) {
       throw new ConflictException({
@@ -119,7 +121,19 @@ export class TermsService {
       });
     }
 
-    await this.prisma.term.delete({ where: { id } });
+    try {
+      await this.prisma.term.delete({ where: { id } });
+    } catch (err) {
+      // P2003 = FK constraint failed. concurrent Subject INSERT 가 count-after-check
+      // 사이에 끼면 여기서 잡혀서 동일한 409 응답 (race window 보호).
+      if (isForeignKeyViolation(err)) {
+        throw new ConflictException({
+          errorCode: "HAS_CHILDREN",
+          errorMessage: "cannot delete term that contains subjects (concurrent insert)"
+        });
+      }
+      throw err;
+    }
     this.logger.warn(`[Term] action=delete id=${id} actor=${actorId} before=${termSummary(before)}`);
   }
 
@@ -169,6 +183,12 @@ function isUniqueConstraintError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const code = (err as { code?: string }).code;
   return code === "P2002";
+}
+
+function isForeignKeyViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: string }).code;
+  return code === "P2003";
 }
 
 function termSummary(term: PrismaTerm): string {

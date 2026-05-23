@@ -313,6 +313,30 @@ describe("AC3 — delete = 409 HAS_CHILDREN reject only", () => {
     );
   });
 
+  it("(Codex Round-3 P1) FK P2003 violation during delete → 409 HAS_CHILDREN (race window)", async () => {
+    const target = termRow({ id: "t-race" });
+    const prisma: MockPrisma = {
+      term: {
+        findUnique: async () => target,
+        findMany: async () => [],
+        create: async () => target,
+        update: async () => target,
+        delete: async () => {
+          throw Object.assign(new Error("FK constraint"), { code: "P2003" });
+        }
+      },
+      subject: { count: async () => 0 }
+    };
+    const service = makeService(prisma);
+    await assert.rejects(
+      () => service.delete("t-race", "user-master", "master"),
+      (err: ConflictException) => {
+        const body = err.getResponse() as { errorCode: string };
+        return body.errorCode === "HAS_CHILDREN";
+      }
+    );
+  });
+
   it("Term delete with subjects = 0 → success", async () => {
     const target = termRow({ id: "t-empty" });
     let deleted = false;

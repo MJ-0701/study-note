@@ -60,7 +60,8 @@ model Subject {
   termId    String?
   createdAt DateTime      @default(now())
   materials PdfMaterial[]
-  term      Term?         @relation(fields: [termId], references: [id])
+  // ON DELETE RESTRICT — race-safe vs count-then-delete (Codex Round-3 P1).
+  term      Term?         @relation(fields: [termId], references: [id], onDelete: Restrict)
 
   @@index([termId])
 }

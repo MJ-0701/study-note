@@ -210,6 +210,32 @@ describe("AC4 — delete = 409 HAS_CHILDREN (PdfMaterial deletedAt IS NULL)", ()
     );
   });
 
+  it("(Codex Round-3 P1) FK P2003 violation during delete → 409 HAS_CHILDREN (race window)", async () => {
+    const parentTerm = term({ createdById: "user-master" });
+    const target = subj({ termId: parentTerm.id });
+    const prisma: MockPrisma = {
+      term: { findUnique: async () => parentTerm },
+      subject: {
+        findUnique: async () => target,
+        findMany: async () => [target],
+        create: async () => target,
+        update: async () => target,
+        delete: async () => {
+          throw Object.assign(new Error("FK constraint"), { code: "P2003" });
+        }
+      },
+      pdfMaterial: { count: async () => 0 }
+    };
+    const service = makeService(prisma);
+    await assert.rejects(
+      () => service.delete(target.id, "user-master", "master"),
+      (err: ConflictException) => {
+        const body = err.getResponse() as { errorCode: string };
+        return body.errorCode === "HAS_CHILDREN";
+      }
+    );
+  });
+
   it("subject with materials = 0 → success", async () => {
     const parentTerm = term({ createdById: "user-master" });
     const target = subj({ termId: parentTerm.id });

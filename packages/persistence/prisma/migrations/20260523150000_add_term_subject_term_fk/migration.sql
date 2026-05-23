@@ -18,7 +18,11 @@ CREATE TABLE `Term` (
 
 ALTER TABLE `Subject` ADD COLUMN `termId` VARCHAR(191) NULL;
 CREATE INDEX `Subject_termId_idx` ON `Subject`(`termId`);
+-- Codex Round-3 P1: ON DELETE RESTRICT (not SET NULL) — count-then-delete in
+-- service.delete 는 atomic 아니므로 concurrent subject INSERT 가 사이에 끼면
+-- SET NULL 시 silent orphan. RESTRICT 는 DB-level 로 parent delete 차단해서
+-- service 409 + DB 둘 다 guard (defense-in-depth, ADR-6 invariant 보장).
 ALTER TABLE `Subject`
   ADD CONSTRAINT `Subject_termId_fkey`
   FOREIGN KEY (`termId`) REFERENCES `Term`(`id`)
-  ON DELETE SET NULL ON UPDATE CASCADE;
+  ON DELETE RESTRICT ON UPDATE CASCADE;

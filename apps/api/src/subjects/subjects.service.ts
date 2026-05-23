@@ -12,6 +12,12 @@ import {
 import { PrismaService } from "@study-note/persistence";
 import type { Subject as PrismaSubject } from "@prisma/client";
 import { ensureTermHierarchyAllowed } from "../terms/terms.service";
+
+function isForeignKeyViolation(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: string }).code;
+  return code === "P2003";
+}
 import type { SubjectCreateInput, SubjectUpdateInput } from "./subjects.dto";
 
 @Injectable()
@@ -80,6 +86,8 @@ export class SubjectsService {
     const before = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
 
+    // Service-level 409 (deletedAt=null 만 count). DB FK (PdfMaterial.subjectId
+    // = default RESTRICT) 가 race condition defense-in-depth (Codex Round-3 P1).
     const materialCount = await this.prisma.pdfMaterial.count({
       where: { subjectId: id, deletedAt: null }
     });
@@ -90,7 +98,17 @@ export class SubjectsService {
       });
     }
 
-    await this.prisma.subject.delete({ where: { id } });
+    try {
+      await this.prisma.subject.delete({ where: { id } });
+    } catch (err) {
+      if (isForeignKeyViolation(err)) {
+        throw new ConflictException({
+          errorCode: "HAS_CHILDREN",
+          errorMessage: "cannot delete subject that contains materials (concurrent insert or soft-deleted row)"
+        });
+      }
+      throw err;
+    }
     this.logger.warn(
       `[Subject] action=delete id=${id} actor=${actorId} title=${before.title} term=${before.termId ?? "null"}`
     );
