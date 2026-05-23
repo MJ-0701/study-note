@@ -27,6 +27,16 @@ import {
 import { parseAuthMePayload, requestAuthMe, signIn, signOut, signUp } from "./auth/authApi";
 import { resolveEscapeAction } from "./pdf-workspace/esc-action";
 import {
+  getDefaultOpenTermIds,
+  groupSubjectsByTerm,
+  parseStoredOpenState,
+  resolveOpenTermIds,
+  sidebarTermOpenStorageKey,
+  type SidebarGroup,
+  type SidebarSubject,
+  type SidebarTerm
+} from "./sidebar/term-grouping";
+import {
   meResponseToSession,
   type AuthMode,
   type AuthSession,
@@ -227,6 +237,13 @@ const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
+
+// sprint-W21-sprint-1/S2 (AC8-AC10) — sidebar term grouping cache. Fetched once
+// per auth-ready transition via loadSidebarTermsCache(). null = not loaded yet
+// (renderSidebarSubjectGroups falls back to flat notebook list).
+let sidebarTermsCache: SidebarTerm[] | null = null;
+let sidebarSubjectsCache: SidebarSubject[] | null = null;
+let sidebarOpenTermIds: Set<string> = new Set();
 let authBootState: AuthBootState = getInitialAuthBootState(readAuthSessionHint());
 let authBootNotice: AuthBootNotice = "checking";
 let authBootRequestId = 0;
@@ -1919,6 +1936,11 @@ function clearAuthSession(): void {
   clearDatadogRumUser();
   clearAuthBootTimers();
   revokeAllPdfObjectUrls();
+  // sprint-W21-sprint-1/S2 — clear sidebar term cache on session reset so the
+  // next user's terms/subjects don't leak from prior session.
+  sidebarTermsCache = null;
+  sidebarSubjectsCache = null;
+  sidebarOpenTermIds = new Set();
   // sprint-1/S2 fix (codex P2): drop transient overlays that should not survive
   // a session reset. Without this the hotkey help modal could persist into the
   // post-login render and lock the shell in `inert`.
@@ -2094,6 +2116,9 @@ async function revalidateStoredSession(
     loginFeedback = undefined;
     authBootState = "ready";
     authBootNotice = "checking";
+    // sprint-W21-sprint-1/S2 (AC8-AC10) — fetch terms/subjects for sidebar grouping
+    // (fire-and-forget; sidebar renders flat fallback until cache lands).
+    void loadSidebarTermsCache().then(() => renderApp());
     renderApp();
   } catch {
     if (requestId !== authBootRequestId) {
@@ -2978,6 +3003,17 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-W21-sprint-1/S2/AC9 — sidebar term group <details><summary> toggle.
+  // 기본 <details> 동작은 native (브라우저가 open attr toggle) — 우리는 click
+  // 시점에 localStorage 에 next state 를 기록만 한다. preventDefault X.
+  if (quickNoteButton?.dataset.action === "sidebar-term-toggle") {
+    const termId = quickNoteButton.dataset.termId;
+    if (termId && termId !== "__orphan__") {
+      toggleSidebarTermOpen(termId);
+    }
+    return;
+  }
+
   if (target instanceof HTMLElement && target.dataset.action === "close-hotkey-help-backdrop") {
     // Click on the backdrop element itself (not bubbled from the inner panel).
     hotkeyHelpModalOpen = false;
@@ -3581,6 +3617,8 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
         return;
       }
       loginFeedback = undefined;
+      // sprint-W21-sprint-1/S2 — sidebar term cache after login.
+      void loadSidebarTermsCache().then(() => renderApp());
       renderApp();
     } catch (error) {
       loginFeedback = {
@@ -7435,6 +7473,119 @@ const PERSONA_BY_SUBJECT: Record<string, { nick: string; active: boolean }> = {
   "computer-introduction": { nick: "컴론이", active: false }
 };
 
+// sprint-W21-sprint-1/S2/AC8-AC10 — sidebar term cache loader + render.
+async function loadSidebarTermsCache(): Promise<void> {
+  const userId = authSession?.user.id;
+  if (!userId) return;
+  try {
+    const [termsRes, subjectsRes] = await Promise.all([
+      fetch(`${apiBaseUrl}/v1/terms`, { credentials: "include" }),
+      fetch(`${apiBaseUrl}/v1/subjects`, { credentials: "include" })
+    ]);
+    if (!termsRes.ok || !subjectsRes.ok) {
+      sidebarTermsCache = [];
+      sidebarSubjectsCache = [];
+      return;
+    }
+    const termsJson = (await termsRes.json()) as Array<{
+      id: string;
+      grade: number;
+      semester: number;
+      title: string;
+      startDate: string | null;
+      endDate: string | null;
+    }>;
+    const subjectsJson = (await subjectsRes.json()) as Array<{
+      id: string;
+      title: string;
+      termId: string | null;
+    }>;
+    sidebarTermsCache = termsJson.map((t) => ({
+      id: t.id,
+      grade: t.grade,
+      semester: t.semester,
+      title: t.title,
+      startDate: t.startDate ?? null,
+      endDate: t.endDate ?? null
+    }));
+    sidebarSubjectsCache = subjectsJson.map((s) => ({
+      id: s.id,
+      title: s.title,
+      termId: s.termId ?? null
+    }));
+    refreshSidebarOpenTermIds();
+  } catch {
+    sidebarTermsCache = [];
+    sidebarSubjectsCache = [];
+  }
+}
+
+function refreshSidebarOpenTermIds(): void {
+  const userId = authSession?.user.id;
+  if (!userId || !sidebarTermsCache || !sidebarSubjectsCache) return;
+  const groups = groupSubjectsByTerm(sidebarSubjectsCache, sidebarTermsCache);
+  const defaults = getDefaultOpenTermIds(groups, new Date().toISOString());
+  const stored = isBrowserRuntime
+    ? parseStoredOpenState(window.localStorage.getItem(sidebarTermOpenStorageKey(userId)))
+    : {};
+  sidebarOpenTermIds = resolveOpenTermIds(groups, defaults, stored);
+}
+
+function toggleSidebarTermOpen(termId: string): void {
+  const userId = authSession?.user.id;
+  if (!userId || !isBrowserRuntime) return;
+  const next = !sidebarOpenTermIds.has(termId);
+  if (next) sidebarOpenTermIds.add(termId);
+  else sidebarOpenTermIds.delete(termId);
+  const key = sidebarTermOpenStorageKey(userId);
+  const stored = parseStoredOpenState(window.localStorage.getItem(key));
+  stored[termId] = next;
+  window.localStorage.setItem(key, JSON.stringify(stored));
+  renderApp();
+}
+
+function renderSidebarTermGroups(currentSubject: SubjectNote, route: Route): string | null {
+  if (!sidebarTermsCache || !sidebarSubjectsCache) return null;
+  // Merge BE subjects with FE notebook subjects (subject.id matching).
+  // FE notebook holds rich SubjectNote shape; BE subjects 가 source-of-truth 인
+  // termId 만 가져온다.
+  const notebookIds = new Set(notebook.subjects.map((s) => s.id));
+  const enrichedSubjects: SidebarSubject[] = notebook.subjects.map((s) => {
+    const beSubject = sidebarSubjectsCache!.find((bs) => bs.id === s.id);
+    return { id: s.id, title: s.title, termId: beSubject?.termId ?? null };
+  });
+  // BE subjects 가 FE notebook 에 없는 경우 (admin 신규 추가) — 미표시 (route 미정).
+  void notebookIds;
+  const groups = groupSubjectsByTerm(enrichedSubjects, sidebarTermsCache);
+  if (groups.length === 0) return null;
+  return groups
+    .map((group) => renderSidebarTermGroup(group, currentSubject, route))
+    .join("");
+}
+
+function renderSidebarTermGroup(group: SidebarGroup, currentSubject: SubjectNote, route: Route): string {
+  const termId = group.term?.id ?? "__orphan__";
+  const isOpen = group.term ? sidebarOpenTermIds.has(group.term.id) : true;
+  const subjectsHtml = group.subjects
+    .map((s) => {
+      const notebookEntry = notebook.subjects.find((n) => n.id === s.id);
+      if (!notebookEntry) return "";
+      return renderSubjectNavItem(notebookEntry, currentSubject, route);
+    })
+    .join("");
+  return `
+    <details class="sidebar-term-group" ${isOpen ? "open" : ""} data-term-id="${escapeHtml(termId)}">
+      <summary class="sidebar-term-group__summary" data-action="sidebar-term-toggle" data-term-id="${escapeHtml(termId)}">
+        ${escapeHtml(group.label)}
+        <span class="sidebar-term-group__count">${group.subjects.length}</span>
+      </summary>
+      <div class="sidebar-term-group__body">
+        ${subjectsHtml}
+      </div>
+    </details>
+  `;
+}
+
 function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
   const currentSession =
     route.name === "week"
@@ -7447,7 +7598,12 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
       <div class="sidebar-group sidebar-group--subjects">
         <p class="group-label">과목 공부</p>
         <nav aria-label="과목별 학습 화면">
-          ${notebook.subjects.map((item) => renderSubjectNavItem(item, subject, route)).join("")}
+          ${
+            // sprint-W21-sprint-1/S2 (AC8-AC10): term cache 로드되면 그룹별 렌더,
+            // 아니면 기존 flat 리스트 (fallback).
+            renderSidebarTermGroups(subject, route) ??
+            notebook.subjects.map((item) => renderSubjectNavItem(item, subject, route)).join("")
+          }
         </nav>
       </div>
       <div class="sidebar-group sidebar-group--workspaces">

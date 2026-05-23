@@ -3641,3 +3641,46 @@ body[data-route="pdf-workspace"] .content {
     grid-template-columns: 1fr;
   }
 }
+
+/* sprint-W21-sprint-1 / S2 — sidebar term group nesting (AC8-AC10) */
+.sidebar-term-group {
+  margin-bottom: 6px;
+}
+.sidebar-term-group__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--ds-fg-soft, #6b7280);
+  user-select: none;
+  list-style: none;
+}
+.sidebar-term-group__summary::-webkit-details-marker {
+  display: none;
+}
+.sidebar-term-group__summary::before {
+  content: "▶";
+  margin-right: 6px;
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+.sidebar-term-group[open] > .sidebar-term-group__summary::before {
+  transform: rotate(90deg);
+}
+.sidebar-term-group__summary:hover {
+  background: var(--ds-bg-hover, #f3f4f6);
+}
+.sidebar-term-group__count {
+  font-size: 11px;
+  color: var(--ds-muted, #9ca3af);
+  background: var(--ds-bg-soft, #f9fafb);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.sidebar-term-group__body {
+  padding-left: 12px;
+  margin-top: 2px;
+}
