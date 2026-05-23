@@ -96,3 +96,7 @@ export function clearDatadogRumUser(): void {
 export function trackRumAction(name: string, context?: RumActionContext): void {
   rumClient?.addAction(name, context);
 }
+
+export function trackRumError(error: unknown, context?: RumActionContext): void {
+  rumClient?.addError(error, context);
+}
