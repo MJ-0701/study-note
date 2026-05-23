@@ -1251,6 +1251,24 @@ async function handleAnnotationStaleResponse(
         handleAuthExpiredFromSync();
         return false;
       }
+      if (retryResp.status === 409) {
+        // codex P1 (PR #35 round-4): retry 도중 concurrent client 가 snapshot 을
+        // 만들어 server 가 canonical 409 (P2002) 로 응답. body entry 로 hydrate
+        // 하면 사용자 다음 mutation 이 새 revision 으로 issue → silent drop 차단.
+        // entry 없는 double NO_RECORD edge 는 false (failure tracker 정상 동작).
+        try {
+          const retryJson = (await retryResp.json()) as {
+            annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
+          };
+          const retryEntry = retryJson.annotations?.[materialId];
+          if (retryEntry) {
+            return hydrateAnnotationFromCanonicalEntry(userId, materialId, retryEntry);
+          }
+        } catch {
+          /* body parse 실패 = recover 불가. failure 로 처리. */
+        }
+        return false;
+      }
       console.warn(
         "[study-note] annotation NO_RECORD retry failed",
         retryResp.status,
@@ -1268,12 +1286,22 @@ async function handleAnnotationStaleResponse(
       return false;
     }
   }
+  return hydrateAnnotationFromCanonicalEntry(userId, materialId, entry);
+}
+
+// codex P1 (PR #35 round-4): canonical 409/200 응답 body 의 entry 로 workspace +
+// revision cache hydrate. handleAnnotationStaleResponse 의 non-retry / retry-409
+// 분기에서 공유. retry-409 시 재귀 호출 대신 inline 처리 → infinite loop 방지.
+function hydrateAnnotationFromCanonicalEntry(
+  userId: string,
+  materialId: string,
+  entry: { payload?: unknown; updatedAt?: unknown }
+): boolean {
   if (typeof entry.updatedAt !== "string") {
     return false;
   }
   if (entry.payload && typeof entry.payload === "object") {
     const incoming = entry.payload as Partial<SubjectPdfWorkspace>;
-    // find subjectId via current workspace lookup.
     for (const [subjectId, workspace] of Object.entries(pdfWorkspaceStore.workspaces)) {
       const activeMat = workspace.material?.backendMaterialId ?? workspace.material?.id;
       if (activeMat === materialId) {
@@ -1283,8 +1311,6 @@ async function handleAnnotationStaleResponse(
     }
   }
   lastHydratedAnnotationRevision.set(`${userId}:${materialId}`, entry.updatedAt);
-  // stale hydrate 성공 — caller 가 recordSyncSuccess 호출 OK. user 의 다음
-  // mutation 이 새 revision 으로 issue.
   return true;
 }
 

@@ -367,6 +367,63 @@ describe("AC4: PUT revision 분기", () => {
     assert.equal(res.annotations["mat-001"]?.updatedAt, createdAt.toISOString());
   });
 
+  it("clientRevision 보냈는데 snapshot 없음 (다른 device 에서 삭제) → 409 STALE_REVISION_NO_RECORD (canonical empty body)", async () => {
+    const prisma = basePrisma({
+      updateMany: async () => ({ count: 0 }),
+      findUnique: async () => null
+    });
+    const storage: MockStorage = {
+      getJsonObject: async () => null,
+      putJsonObject: async () => undefined
+    };
+    const service = makeService(prisma, storage);
+    let err: ConflictException | null = null;
+    try {
+      await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "2026-05-22T10:00:00Z");
+    } catch (e) {
+      err = e as ConflictException;
+    }
+    assert.ok(err instanceof ConflictException);
+    const body = err.getResponse() as {
+      errorCode: string;
+      annotations: Record<string, unknown>;
+      total: number;
+      returned: number;
+    };
+    assert.equal(body.errorCode, "STALE_REVISION_NO_RECORD");
+    assert.equal(body.total, 0);
+    assert.equal(body.returned, 0);
+    assert.deepEqual(body.annotations, {});
+  });
+
+  it("codex round-4: ownsMaterial pre-check 와 CAS 사이에 material 삭제됨 → 404 MATERIAL_NOT_FOUND (NO_RECORD race fix)", async () => {
+    // pre-check 시 자료 존재, CAS 직전 ownership 재확인 시 삭제됨.
+    let findFirstCalls = 0;
+    const prisma = basePrisma({
+      updateMany: async () => ({ count: 0 }),
+      findUnique: async () => null
+    });
+    prisma.pdfMaterial.findFirst = async () => {
+      findFirstCalls += 1;
+      return findFirstCalls === 1 ? { id: "mat-001" } : null;
+    };
+    const storage: MockStorage = {
+      getJsonObject: async () => null,
+      putJsonObject: async () => undefined
+    };
+    const service = makeService(prisma, storage);
+    let err: NotFoundException | null = null;
+    try {
+      await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "2026-05-22T10:00:00Z");
+    } catch (e) {
+      err = e as NotFoundException;
+    }
+    assert.ok(err instanceof NotFoundException);
+    const body = err.getResponse() as { errorCode: string };
+    assert.equal(body.errorCode, "MATERIAL_NOT_FOUND");
+    assert.equal(findFirstCalls, 2);
+  });
+
   it("clientRevision undefined + 이미 snapshot 있음 → P2002 unique violation → 409", async () => {
     const serverSaved = new Date("2026-05-22T12:00:00Z");
     const prisma = basePrisma({

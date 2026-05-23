@@ -288,6 +288,13 @@ export class PdfAnnotationsService {
           returned: 1
         });
       }
+      // codex P2 (PR #35 round-4): CAS count=0 + existing=null 은 (a) snapshot
+      // 만 삭제되어 client 가 stale revision 을 보낸 경우 (NO_RECORD 정상), 또는
+      // (b) ownsMaterial pre-check 와 CAS 사이에 material 자체가 삭제된 race.
+      // (b) 의 의도는 R6 의 404. ownership 재확인으로 두 case 를 분기.
+      if (!(await this.ownsMaterial(ownerId, materialId))) {
+        this.throwMaterialNotFound();
+      }
       // record 없음 + clientRevision != undefined → stale empty (canonical).
       throw new ConflictException({
         errorCode: "STALE_REVISION_NO_RECORD",
