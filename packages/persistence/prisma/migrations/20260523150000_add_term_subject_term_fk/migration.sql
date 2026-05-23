@@ -14,7 +14,7 @@ CREATE TABLE `Term` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `Term_grade_semester_title_key` (`grade`, `semester`, `title`),
   KEY `Term_grade_semester_idx` (`grade`, `semester`)
-);
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ALTER TABLE `Subject` ADD COLUMN `termId` VARCHAR(191) NULL;
 CREATE INDEX `Subject_termId_idx` ON `Subject`(`termId`);
