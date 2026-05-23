@@ -355,6 +355,17 @@ function renderInto(html: string): void {
         return false;
       }
 
+      // sprint-W21-sprint-4/S1: PDF canvas mount preservation.
+      // 동일 (material, page, blob) 의 div 는 fromEl + 자식 canvas 보존,
+      // class (is-active/is-preload toggle) 만 sync. 매 render 마다 mountPdfCanvas
+      // 호출되어 canvas 재 paint 되는 비효율 차단.
+      if (shouldPreservePdfCanvasMount(fromEl, toEl)) {
+        if (fromEl instanceof HTMLElement && toEl instanceof HTMLElement) {
+          fromEl.className = toEl.className;
+        }
+        return false;
+      }
+
       return true;
     }
   });
@@ -362,6 +373,41 @@ function renderInto(html: string): void {
   refreshChartWidgets();
   applyQueuedDrillHighlight();
   refreshActiveDrillHighlights();
+  void applyPdfCanvasMounts(appRoot);
+}
+
+// sprint-W21-sprint-4/S1: render 후 PDF canvas mount effect.
+// renderPdfFrameStack 가 출력한 `<div data-pdf-mount="true">` 마다 pdfjs-dist
+// 호출 + canvas paint. dynamic import 로 lazy bundle (PDF workspace 진입 전
+// main entry 영향 0).
+//
+// idempotent: 같은 (blobUrl, pageNumber) 면 skip. 다른 page 면 re-mount
+// (viewer 내부에서 in-flight render cancel + 새 render).
+async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
+  const mounts = Array.from(
+    root.querySelectorAll<HTMLElement>('[data-pdf-mount="true"]')
+  );
+  if (mounts.length === 0) {
+    return;
+  }
+  const { mountPdfCanvas } = await import("./pdf/pdf-canvas-viewer");
+  for (const div of mounts) {
+    const blobUrl = div.dataset.blobUrl;
+    const pageRaw = div.dataset.pageNumber;
+    const pageNumber = pageRaw ? Number(pageRaw) : NaN;
+    if (!blobUrl || !Number.isFinite(pageNumber) || pageNumber < 1) {
+      continue;
+    }
+    const mountedKey = `${blobUrl}:${pageNumber}`;
+    if (div.dataset.pdfMounted === mountedKey) {
+      continue;
+    }
+    div.dataset.pdfMounted = mountedKey;
+    void mountPdfCanvas(div, blobUrl, pageNumber).catch((err) => {
+      console.warn("[study-note] pdf canvas mount failed", err);
+      delete div.dataset.pdfMounted;
+    });
+  }
 }
 
 function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
@@ -379,6 +425,22 @@ function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
   return (
     fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
     fromEl.getAttribute("src") !== toEl.getAttribute("src")
+  );
+}
+
+// sprint-W21-sprint-4/S1: same (material, page, blob) PDF canvas mount div 는
+// morphdom 이 update 하지 않고 fromEl + canvas 그대로 두도록 표식.
+function shouldPreservePdfCanvasMount(fromEl: Element, toEl: Element): boolean {
+  if (!(fromEl instanceof HTMLElement) || !(toEl instanceof HTMLElement)) {
+    return false;
+  }
+  if (fromEl.dataset.pdfMount !== "true" || toEl.dataset.pdfMount !== "true") {
+    return false;
+  }
+  return (
+    fromEl.dataset.materialId === toEl.dataset.materialId &&
+    fromEl.dataset.pageNumber === toEl.dataset.pageNumber &&
+    fromEl.dataset.blobUrl === toEl.dataset.blobUrl
   );
 }
 
@@ -558,6 +620,11 @@ if (isBrowserRuntime) {
   document.addEventListener("pointerup", handleDocumentPointerUp);
   document.addEventListener("pointercancel", handleDocumentPointerUp);
   document.addEventListener("keydown", handleDocumentKeyDown);
+  // sprint-W21-sprint-4/S1: iOS Safari fast-tap dual handler — page nav
+  // button 의 click 이 일부 mobile context 에서 누락되거나 지연될 때 touchend
+  // 가 즉시 trigger. preventDefault 로 click 중복 발사 차단 (desktop 은
+  // touchend 미발사 → click handler 가 정상 처리).
+  document.addEventListener("touchend", handleDocumentTouchEnd, { passive: false });
   document.addEventListener("fullscreenchange", () => {
     // sprint-1/S3: re-render so the toolbar button label reflects current
     // fullscreen state ("전체화면" → "전체화면 종료").
@@ -2355,6 +2422,31 @@ export function handleDrillItemClick(
   (options.render ?? renderApp)();
 
   return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
+}
+
+// sprint-W21-sprint-4/S1: iOS Safari fast-tap dual handler for page nav
+// buttons. touchend 가 click 보다 먼저 발사되거나 click 이 누락되는 mobile
+// edge case 보완. preventDefault 로 ghost click 중복 차단.
+function handleDocumentTouchEnd(event: TouchEvent): void {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  const navButton = target.closest<HTMLButtonElement>(
+    'button[data-action="pdf-prev-page"], button[data-action="pdf-next-page"]'
+  );
+  if (!navButton || navButton.disabled) {
+    return;
+  }
+  const action = navButton.dataset.action;
+  const subjectId = navButton.dataset.subjectId;
+  if (!subjectId || (action !== "pdf-prev-page" && action !== "pdf-next-page")) {
+    return;
+  }
+  // click 중복 발사 차단. desktop 은 touchend 발사 X → 영향 없음.
+  event.preventDefault();
+  movePdfPage(subjectId, action === "pdf-prev-page" ? -1 : 1);
+  renderApp();
 }
 
 function handleDocumentClick(event: MouseEvent): void {
@@ -7586,19 +7678,23 @@ function renderPdfFrameStack(
   return getPdfFramePages(selectedPage, material.pageCount, pending).map((pageNumber) => {
     const isActive = pageNumber === selectedPage;
     const frameKey = getPdfFrameKey(materialId, pageNumber);
-    const frameSrc = `${objectUrl}#page=${pageNumber}&toolbar=0&navpanes=0&view=Fit`;
-    const preloadAttrs = isActive ? "" : ' aria-hidden="true" tabindex="-1"';
+    const preloadAttrs = isActive ? "" : ' aria-hidden="true"';
 
-    return `<iframe
+    // sprint-W21-sprint-4/S1: native browser PDF viewer (iframe + `#page=N`) 는
+    // iOS Safari 가 fragment 무시 / Android Chrome 가 native viewer 부재 →
+    // cross-mobile 동작 X. pdfjs-dist canvas mount placeholder 로 교체.
+    // applyPdfCanvasMounts (renderInto 후 effect) 가 data-pdf-mount 발견 시
+    // dynamic import 로 viewer 호출 + canvas paint.
+    return `<div
       class="pdf-frame ${isActive ? "is-active" : "is-preload"}"
-      data-pdf-frame="true"
+      role="img"
+      aria-label="${escapeHtml(subject.title)} PDF page ${pageNumber}"
+      data-pdf-mount="true"
       data-pdf-frame-key="${escapeHtml(frameKey)}"
       data-material-id="${escapeHtml(materialId)}"
       data-page-number="${pageNumber}"
-      title="${escapeHtml(subject.title)} PDF preview"
-      src="${escapeHtml(frameSrc)}"
-      loading="eager"${preloadAttrs}
-    ></iframe>`;
+      data-blob-url="${escapeHtml(objectUrl)}"${preloadAttrs}
+    ></div>`;
   }).join("");
 }
 

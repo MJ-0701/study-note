@@ -57,9 +57,13 @@ describe("PDF annotation layer page stickiness", () => {
     assert.match(mainTs, /function handleDocumentLoad/);
     assert.match(mainTs, /function completePendingPdfPageTransition/);
     assert.match(mainTs, /function requestPdfPage/);
-    assert.match(mainTs, /data-pdf-frame="true"/);
+    // sprint-W21-sprint-4/S1: native iframe (`<iframe src="*.pdf#page=N">`) 가
+    // iOS Safari `#page` fragment 무시 + Android Chrome native viewer 부재 →
+    // pdfjs-dist canvas mount placeholder `<div data-pdf-mount="true">` 로 교체.
+    assert.match(mainTs, /data-pdf-mount="true"/);
     assert.match(mainTs, /data-pdf-frame-key="\$\{escapeHtml\(frameKey\)\}"/);
     assert.match(mainTs, /data-page-number="\$\{pageNumber\}"/);
+    assert.match(mainTs, /data-blob-url="\$\{escapeHtml\(objectUrl\)\}"/);
     assert.match(mainTs, /pages\.push\(selectedPage - 1\)/);
     assert.match(mainTs, /pages\.push\(selectedPage \+ 1\)/);
     assert.match(mainTs, /pages\.push\(pending\.fromPage, pending\.toPage\)/);
@@ -67,7 +71,10 @@ describe("PDF annotation layer page stickiness", () => {
     assert.match(mainTs, /setTimeout\(\(\) => \{/);
     assert.match(mainTs, /setPdfPage\(pending\.subjectId, pending\.toPage\)/);
     assert.match(mainTs, /is-preload/);
-    assert.match(mainTs, /loading="eager"/);
     assert.match(mainTs, /fromEl\.replaceWith\(toEl\.cloneNode\(true\)\)/);
+    // sprint-W21-sprint-4/S1: canvas mount lifecycle.
+    assert.match(mainTs, /function applyPdfCanvasMounts/);
+    assert.match(mainTs, /function shouldPreservePdfCanvasMount/);
+    assert.match(mainTs, /function handleDocumentTouchEnd/);
   });
 });
