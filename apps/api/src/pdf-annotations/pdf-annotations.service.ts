@@ -220,6 +220,10 @@ export class PdfAnnotationsService {
       returned += 1;
     }
 
+    // Datadog metric — batch shape distribution (truncated 비율, returned 분포).
+    this.logger.log(
+      `pdf-annotations.batch.size ownerId=${ownerId} total=${total} returned=${returned} truncated=${truncated} metric=annotation.batch.size`
+    );
     return { annotations, truncated, total, returned };
   }
 
@@ -281,6 +285,9 @@ export class PdfAnnotationsService {
         const obj = await this.storage.getJsonObject<{ payload: unknown }>(
           this.key(ownerId, materialId)
         );
+        this.logger.warn(
+          `pdf-annotations.cas.stale ownerId=${ownerId} materialId=${materialId} metric=annotation.cas.stale`
+        );
         throw new ConflictException({
           errorCode: "STALE_REVISION",
           annotations: {
@@ -337,13 +344,19 @@ export class PdfAnnotationsService {
         })
         .catch(() => undefined);
       this.logger.warn(
-        `pdf-annotations.put.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back`
+        `pdf-annotations.put.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back metric=sync.put.failure reason=r2_write_failed`
       );
       throw new ServiceUnavailableException({
         errorCode: "STORAGE_WRITE_FAILED",
         errorMessage: "annotation payload write failed; please retry"
       });
     }
+    // Datadog metric (per docs/solon/handoff/20260523-datadog-ops-monitoring.md
+    // 핵심 비즈니스 API 그룹 = PDF Annotation). log scraper 가 `metric=` field 를
+    // 인식해서 count + latency 추출.
+    this.logger.log(
+      `pdf-annotations.put.success ownerId=${ownerId} materialId=${materialId} metric=sync.put.success type=update`
+    );
     return this.singleEntryResponse(materialId, payload, newSavedAt);
   }
 
@@ -425,13 +438,16 @@ export class PdfAnnotationsService {
         })
         .catch(() => undefined);
       this.logger.warn(
-        `pdf-annotations.create.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back`
+        `pdf-annotations.create.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back metric=sync.put.failure reason=r2_write_failed`
       );
       throw new ServiceUnavailableException({
         errorCode: "STORAGE_WRITE_FAILED",
         errorMessage: "annotation payload write failed; please retry"
       });
     }
+    this.logger.log(
+      `pdf-annotations.put.success ownerId=${ownerId} materialId=${materialId} metric=sync.put.success type=create`
+    );
     return this.singleEntryResponse(materialId, payload, created.savedAt);
   }
 }
