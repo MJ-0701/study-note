@@ -4714,20 +4714,43 @@ function handleDocumentPointerUp(event: PointerEvent): void {
     performance.mark(markId);
   }
   requestAnimationFrame(() => {
-    // PR #53 codex R1 P1 fix: RAF 가 발사되기 전 새 stroke 가 시작됐다면
-    // renderApp 이 live ink layer 를 rebuild 해서 새 stroke 의 livePolyline 이
-    // detach 되고 후속 pointermove update 가 off-DOM. defer render 자체를 skip.
-    // PR #53 codex R2 P2: render skip 시 measure 도 skip (RAF 가 새 stroke 의
-    // next-paint 를 잘못 기록하지 않게). cleanup mark/measure 로 leak 방지.
-    if (activeInkStroke) {
-      if (typeof performance !== "undefined" && performance.clearMarks) {
-        performance.clearMarks(markId);
-      }
-      return;
-    }
+    // PR #53 codex R3 P2 fix: 새 stroke 가 진행 중이어도 commit 된 stroke 는
+    // 화면에 paint 되어야 함 (R2 P2 의 skip 은 invisible commit 야기). 항상
+    // renderApp 호출. 단 renderApp 이 live ink layer rebuild 하므로 activeInkStroke
+    // 의 livePolyline 이 detach — 새 SVG 안에 polyline 재생성 + reference 갱신
+    // (R1 P1 의 off-DOM update race 차단).
+    const carriedStroke = activeInkStroke;
     renderApp();
-    measurePenStrokeNextPaintFromMark(markId);
+    if (carriedStroke && activeInkStroke === carriedStroke) {
+      reattachLiveInkPolyline(carriedStroke);
+    }
+    // PR #53 codex R3 P1: RAF callback 은 paint 직전 실행. measure 가 같은
+    // RAF 안에 있으면 paint 완료 전 duration → systematic under-report.
+    // 다음 RAF (paint 완료 후) 에서 measure 호출.
+    requestAnimationFrame(() => {
+      measurePenStrokeNextPaintFromMark(markId);
+    });
   });
+}
+
+// PR #53 codex R3 P2 — renderApp 후 새 SVG 안에 livePolyline 재생성.
+// pointermove update 가 off-DOM detach 된 polyline 에 쓰이지 않게.
+function reattachLiveInkPolyline(stroke: ActiveInkStroke): void {
+  const surface = document.querySelector<HTMLElement>(
+    `[data-pdf-annotation-surface][data-subject-id="${stroke.subjectId}"]`
+  );
+  if (!surface) return;
+  const liveLayer = surface.querySelector<SVGElement>("[data-live-ink-layer]");
+  if (!liveLayer) return;
+  const SVG_NS_LOCAL = "http://www.w3.org/2000/svg";
+  const fresh = document.createElementNS(SVG_NS_LOCAL, "polyline");
+  // 기존 detached element 의 stroke / class / width 등 attribute 복원.
+  for (const attr of Array.from(stroke.livePolyline.attributes)) {
+    fresh.setAttribute(attr.name, attr.value);
+  }
+  fresh.setAttribute("points", stroke.points.map(formatSvgPoint).join(" "));
+  liveLayer.appendChild(fresh);
+  stroke.livePolyline = fresh;
 }
 
 async function importPdfMaterialFile(file: File, subjectId: string): Promise<void> {
