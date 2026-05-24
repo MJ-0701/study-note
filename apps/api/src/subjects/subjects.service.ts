@@ -18,6 +18,12 @@ function isForeignKeyViolation(err: unknown): boolean {
   const code = (err as { code?: string }).code;
   return code === "P2003";
 }
+
+function isRecordNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: string }).code;
+  return code === "P2025";
+}
 import type { SubjectCreateInput, SubjectUpdateInput } from "./subjects.dto";
 
 @Injectable()
@@ -114,6 +120,64 @@ export class SubjectsService {
     this.logger.warn(
       `[Subject] action=delete id=${id} actor=${actorId} title=${before.title} term=${before.termId ?? "null"}`
     );
+  }
+
+  /**
+   * S7 AC32 — Subject move. Subject.termId 만 변경, 자식 PdfMaterial/R2 key 영향 0
+   * (Subject = metadata-only, ADR-4). 출발지 + 도착지 Term 둘 다 위계 검사.
+   */
+  async move(
+    id: string,
+    targetTermId: string,
+    actorId: string,
+    actorRole: "master" | "admin" | "normal"
+  ): Promise<PrismaSubject> {
+    const before = await this.findOrThrow(id);
+    await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
+    // 동일 termId no-op (AC34 case h).
+    if (before.termId === targetTermId) {
+      return before;
+    }
+    // 도착지 Term 존재 + 위계 검사.
+    const targetTerm = await this.prisma.term.findUnique({ where: { id: targetTermId } });
+    if (!targetTerm) {
+      throw new NotFoundException({
+        errorCode: "TERM_NOT_FOUND",
+        errorMessage: "target term not found"
+      });
+    }
+    ensureTermHierarchyAllowed(targetTerm, actorId, actorRole);
+
+    let updated: PrismaSubject;
+    try {
+      updated = await this.prisma.subject.update({
+        where: { id },
+        data: { termId: targetTermId }
+      });
+    } catch (err) {
+      // PR #50 codex Round-1 P2: targetTerm findUnique 와 update 사이에 target
+      // term 이 concurrent delete 되면 FK violation. delete 분기 패턴 일관
+      // 회기 — P2003 catch → 404 TERM_NOT_FOUND.
+      if (isForeignKeyViolation(err)) {
+        throw new NotFoundException({
+          errorCode: "TERM_NOT_FOUND",
+          errorMessage: "target term not found (concurrent delete)"
+        });
+      }
+      // PR #50 codex R2 P2: subject 자체가 findOrThrow 후 update 사이에 삭제되면
+      // P2025 (record to update not found). 다른 404 path 와 일관 SUBJECT_NOT_FOUND.
+      if (isRecordNotFoundError(err)) {
+        throw new NotFoundException({
+          errorCode: "SUBJECT_NOT_FOUND",
+          errorMessage: "subject not found (concurrent delete)"
+        });
+      }
+      throw err;
+    }
+    this.logger.warn(
+      `[Subject] action=move id=${id} from=${before.termId ?? "null"} to=${targetTermId} actor=${actorId}`
+    );
+    return updated;
   }
 
   async getChildCount(

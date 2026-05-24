@@ -19,6 +19,7 @@ import type { UserProfile } from "@study-note/domain";
 import { SubjectsService } from "./subjects.service";
 import {
   subjectCreateSchema,
+  subjectMoveSchema,
   subjectUpdateSchema,
   toSubjectPublic,
   type SubjectPublicResponse
@@ -89,6 +90,23 @@ export class SubjectsController {
   ): Promise<{ materialCount: number }> {
     const actor = req.user as UserProfile;
     return this.subjects.getChildCount(id, actor.id, actor.role);
+  }
+
+  // S7 AC32 — Subject move. Subject = metadata-only (ADR-4) — termId 만 변경.
+  @Put("subjects/:id/move")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SessionAuthGuard, RoleGuard)
+  @Roles("master", "admin")
+  async move(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @Req() req: NestRequest
+  ): Promise<SubjectPublicResponse> {
+    const actor = req.user as UserProfile;
+    const parsed = subjectMoveSchema.safeParse(body);
+    if (!parsed.success) throwInvalidInput(parsed.error.issues);
+    const updated = await this.subjects.move(id, parsed.data.targetTermId, actor.id, actor.role);
+    return toSubjectPublic(updated);
   }
 }
 

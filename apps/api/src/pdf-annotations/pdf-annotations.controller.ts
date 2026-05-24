@@ -1,3 +1,4 @@
+import { validateStarMarksInPayload } from "./starMark.dto";
 import {
   BadRequestException,
   Body,
@@ -112,6 +113,16 @@ export class PdfAnnotationsController {
       throw new BadRequestException({
         errorCode: "INVALID_REVISION",
         errorMessage: "clientRevision must be a string"
+      });
+    }
+    // S6 AC25 + ADR-12 — starMark whole-reject. payload 안 starMarks 1개라도
+    // invalid 면 전체 save 400 reject (개별 drop 폐기, audit 투명성).
+    try {
+      validateStarMarksInPayload(body.payload);
+    } catch (err) {
+      throw new BadRequestException({
+        errorCode: "INVALID_ANNOTATION_PAYLOAD",
+        errorMessage: err instanceof Error ? err.message : "invalid starMark payload"
       });
     }
     return this.annotations.putAnnotation(

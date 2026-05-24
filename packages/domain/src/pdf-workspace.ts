@@ -12,7 +12,9 @@ export type PdfWorkspaceTool =
   | "text"
   | "checklist"
   | "table"
-  | "chart";
+  | "chart"
+  // sprint-W21-sprint-1 / S6 — 별표 마스킹 widget.
+  | "star";
 
 export function isPdfWorkspaceTool(tool: unknown): tool is PdfWorkspaceTool {
   return (
@@ -23,7 +25,8 @@ export function isPdfWorkspaceTool(tool: unknown): tool is PdfWorkspaceTool {
     tool === "text" ||
     tool === "checklist" ||
     tool === "table" ||
-    tool === "chart"
+    tool === "chart" ||
+    tool === "star"
   );
 }
 
@@ -83,6 +86,23 @@ export interface PdfTextBox {
   position: { x: number; y: number };       // normalized 0..1
   size: { width: number; height: number };  // normalized 0..1
   content: string;                          // plain text (no HTML)
+  createdAt: string;                        // ISO string
+  updatedAt: string;
+}
+
+// sprint-W21-sprint-1 / S6 / AC25-AC31 — 별표 (★) masking widget.
+// PDF annotation surface 의 임의 위치에 별표 stamp. drag-resize 로 크기 조절.
+// per plan ADR-7 — persistence = AnnotationSnapshot.payload JSON collection
+// (별도 table 없음). Round 5 P1-C: hex color strict. Round 6 P1 (ADR-12):
+// payload 안 starMark 1개라도 invalid 면 전체 annotation save 400 whole-reject
+// (개별 drop 폐기, audit 투명성).
+export interface PdfStarMark {
+  id: string;                               // cuid
+  pageNumber: number;                       // 1-based PDF page
+  xRatio: number;                           // 0..1 (page width)
+  yRatio: number;                           // 0..1 (page height)
+  sizeRatio: number;                        // 0.02..0.3 (page width 기준)
+  color: string;                            // hex strict /^#[0-9a-fA-F]{6}$/
   createdAt: string;                        // ISO string
   updatedAt: string;
 }
@@ -196,6 +216,8 @@ export interface SubjectPdfWorkspace {
   // sprint-13 신규 슬라이스
   tables: PdfTable[];
   charts: PdfChart[];
+  // sprint-W21-sprint-1 / S6 — 별표 masking widget.
+  starMarks: PdfStarMark[];
   updatedAt: string;
 }
 
@@ -221,6 +243,7 @@ export function createEmptyPdfWorkspace(subjectId: string): SubjectPdfWorkspace 
     checklists: [],
     tables: [],
     charts: [],
+    starMarks: [],
     updatedAt: new Date().toISOString()
   };
 }
@@ -1058,6 +1081,14 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
         .filter((chart): chart is PdfChart => chart !== null)
     : [];
 
+  // sprint-W21-sprint-1 / S6 — starMarks. validateStarMark 가 invalid 면 skip.
+  // BC: 기존 serialized payload 에 starMarks 없으면 빈 배열.
+  const starMarks: PdfStarMark[] = Array.isArray(r.starMarks)
+    ? r.starMarks
+        .map(validateStarMark)
+        .filter((sm): sm is PdfStarMark => sm !== null)
+    : [];
+
   const material = validatePdfMaterialDraft(r.material);
   const materials: PdfMaterialDraft[] = Array.isArray(r.materials)
     ? r.materials
@@ -1081,6 +1112,37 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
     checklists,
     tables,
     charts,
+    starMarks,
     updatedAt
+  };
+}
+
+// sprint-W21-sprint-1 / S6 — defensive validator (hex color + ratio range).
+// BE 가 whole-reject 하지만 client 에서도 individual drop fallback (corrupt persisted
+// payload 안전성).
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+function validateStarMark(raw: unknown): PdfStarMark | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r.id !== "string" || r.id.length === 0 ||
+    typeof r.pageNumber !== "number" || !Number.isInteger(r.pageNumber) || r.pageNumber < 1 ||
+    typeof r.xRatio !== "number" || r.xRatio < 0 || r.xRatio > 1 ||
+    typeof r.yRatio !== "number" || r.yRatio < 0 || r.yRatio > 1 ||
+    typeof r.sizeRatio !== "number" || r.sizeRatio < 0.02 || r.sizeRatio > 0.3 ||
+    typeof r.color !== "string" || !HEX_COLOR_RE.test(r.color) ||
+    typeof r.createdAt !== "string" || typeof r.updatedAt !== "string"
+  ) {
+    return null;
+  }
+  return {
+    id: r.id,
+    pageNumber: r.pageNumber,
+    xRatio: r.xRatio,
+    yRatio: r.yRatio,
+    sizeRatio: r.sizeRatio,
+    color: r.color,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt
   };
 }
