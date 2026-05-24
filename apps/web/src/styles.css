@@ -3652,15 +3652,18 @@ body[data-route="pdf-workspace"] .content {
   user-select: none;
   cursor: pointer;
   transform: translate(-50%, -50%);
+  /* PR #52 codex R2 P1: container queries 로 glyph 크기를 container 폭
+     (= sizeRatio * pageWidth) 에 bind. viewport (vw) 대신 cqw 사용 — split
+     pane / browser zoom / sidebar 무관 정확. */
+  container-type: inline-size;
 }
 .pdf-star-mark__glyph {
-  /* PR #52 codex Round-1 P2 — sizeRatio 가 container width 만 바꿔서 시각
-     크기 안 바뀌던 문제. font-size 를 container 100% 로 결합해서 sizeRatio
-     변경이 실제 ★ 크기에 반영. */
-  font-size: 100%;
+  font-size: 100cqw;
   line-height: 1;
   color: inherit;
   text-shadow: 0 0 2px rgba(0,0,0,0.2);
+  display: block;
+  text-align: center;
 }
 .pdf-star-mark__controls {
   position: absolute;

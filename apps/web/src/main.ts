@@ -3003,8 +3003,10 @@ function handleDocumentClick(event: MouseEvent): void {
       const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
       const mark = (workspace.starMarks ?? []).find((m) => m.id === markId);
       if (mark) {
-        // cycle 0.04 → 0.08 → 0.16 → 0.04 (wraps).
-        const cycles = [0.04, 0.08, 0.16];
+        // PR #52 R2 P2 fix: 0.06 (initial default) 가 cycle 에 누락되어 첫
+        // resize 가 무조건 0.04 점프. 0.06 포함 → 사용자 기대대로 순회.
+        // cycle = 0.04 → 0.06 → 0.08 → 0.16 → 0.04 (wraps).
+        const cycles = [0.04, 0.06, 0.08, 0.16];
         const currentIdx = cycles.findIndex((c) => Math.abs(c - mark.sizeRatio) < 0.005);
         const nextSize = cycles[(currentIdx + 1) % cycles.length] ?? 0.08;
         resizeStarMark(subjectId, markId, nextSize);
@@ -8887,16 +8889,17 @@ function renderStarMark(subjectId: string, mark: PdfStarMark): string {
   const HEX = /^#[0-9a-fA-F]{6}$/;
   const safeColor = HEX.test(mark.color) ? mark.color : "#f59e0b";
   const sizePct = (mark.sizeRatio * 100).toFixed(2);
-  // PR #52 codex Round-1 P2: sizeRatio 가 시각 ★ 크기 결정하도록 font-size 를
-  // viewport 의 sizeRatio*100 vw 단위로 inline 설정. .glyph CSS 의 100% 와
-  // 결합되어 container 와 glyph 가 동일 크기.
-  const fontSizeVw = (mark.sizeRatio * 100).toFixed(2);
+  // PR #52 codex Round-2 P1: viewport (vw) 단위가 PDF surface 폭 무관해서
+  // split pane / 다른 zoom 에서 시각 크기 불일치. container query (cqw) 로
+  // 변경 — glyph font-size 가 container 폭에 정확히 따라감 (= sizeRatio *
+  // pageWidth). .pdf-star-mark { container-type: inline-size } +
+  // .glyph { font-size: 100cqw } 조합.
   return `
     <div
       class="pdf-star-mark"
       data-star-mark-id="${escapeHtml(mark.id)}"
       data-subject-id="${escapeHtml(subjectId)}"
-      style="left: ${(mark.xRatio * 100).toFixed(2)}%; top: ${(mark.yRatio * 100).toFixed(2)}%; width: ${sizePct}%; height: auto; color: ${escapeHtml(safeColor)}; font-size: ${fontSizeVw}vw;"
+      style="left: ${(mark.xRatio * 100).toFixed(2)}%; top: ${(mark.yRatio * 100).toFixed(2)}%; width: ${sizePct}%; aspect-ratio: 1; color: ${escapeHtml(safeColor)};"
       aria-label="별표 마스킹"
     >
       <span class="pdf-star-mark__glyph" aria-hidden="true">★</span>
