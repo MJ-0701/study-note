@@ -222,20 +222,13 @@ const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 // the session attaches. See applySessionTransitionForUser refactor for the
 // load wiring.
 let notebook: StudyNotebook = sampleLectureNote;
-// sprint-3/S2: pdfWorkspaceStore is no longer loaded at module init — without
-// an authenticated userId we cannot pick the correct namespaced key. Boot
-// starts empty; revalidate / sign-in success paths call
-// `loadPdfWorkspaceStore(session.user.id)` from `applySessionTransitionForUser`
-// to populate the user's data once the session attaches. Mirrors the notebook
-// loading semantics introduced in sprint-3/S1.
+// sprint-3/S2: pdfWorkspaceStore — userId-namespaced lazy load (sprint-3/S1 패턴).
 let pdfWorkspaceStore: PdfWorkspaceStore = { workspaces: {} };
 // sprint-4/S1: in-memory tracker for the last session userId attached during
 // this page lifetime. Used by applySessionTransitionForUser to distinguish
 // "first attach" (no sync state to reset) from "different user transition"
-// (reset in-flight PUT + sync caches). Page reload starts undefined: any
-// pending PUT from a previous tab is already gone with the closed page, so
-// no localStorage marker is needed. Marker (`study-note.session.lastUserId`)
-// removed in sprint-4/S1 — legacy unscoped keys are no longer migrated.
+// (reset in-flight PUT + sync caches). Page reload starts undefined: pending
+// PUT from a previous tab is gone with the closed page.
 let lastSessionUserId: string | undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
@@ -1786,9 +1779,6 @@ function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = 
   }
 }
 
-// slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
-// Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
-
 // sprint-2/S3 fix (codex P1) → sprint-3/S2+S3: on session attach (revalidate /
 // sign-in), load each user's localStorage data from their userId-namespaced
 // key. The destructive wipe-on-transition path is gone — the namespace itself
@@ -1800,11 +1790,9 @@ function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = 
 // cookie (cross-namespace authorship leak is structurally impossible, but a
 // PUT already on the wire carries the previous body and must be aborted).
 //
-// First-load semantics: lastSessionUserId starts undefined on every page load
-// (in-memory only, marker removed in sprint-4/S1). The very first session
-// attach is treated as "first attach" — no sync caches exist yet to reset.
-// Subsequent A→B attaches within the same page lifetime trigger the cache
-// reset below.
+// First-load semantics: lastSessionUserId starts undefined on every page
+// load (in-memory only). First session attach = "first attach" — no sync
+// caches exist yet to reset. Subsequent A→B attaches trigger the reset below.
 //
 // Called from the two session-attach success paths (revalidate, sign-in)
 // only — never from clearAuthSession, because that fires on transient
@@ -6686,9 +6674,6 @@ function renderApp(): void {
     void fetchUserNoteIfMissing(subject.id, week.id);
   }
 
-  // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
-  // iframe reload trigger → PDF 미표시. mountPdfFrame 폐기. 점멸 fix 후속 별 sprint
-  // (selective re-render 또는 PDF stage 외부 mount 큰 변경 필요).
 }
 
 interface CsvSeriesPoint {
