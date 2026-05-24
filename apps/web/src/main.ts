@@ -7552,10 +7552,17 @@ function toggleSidebarTermOpen(termId: string): void {
   const next = !sidebarOpenTermIds.has(termId);
   if (next) sidebarOpenTermIds.add(termId);
   else sidebarOpenTermIds.delete(termId);
-  const key = sidebarTermOpenStorageKey(userId);
-  const stored = parseStoredOpenState(window.localStorage.getItem(key));
-  stored[termId] = next;
-  window.localStorage.setItem(key, JSON.stringify(stored));
+  // PR #49 codex R3 P2 — localStorage quota / private window / safari ITP 등에서
+  // getItem/setItem 이 throw 가능. in-memory state 는 갱신되었으므로 persist
+  // 실패해도 UI 동작은 유지 (다음 trigger 가 재시도).
+  try {
+    const key = sidebarTermOpenStorageKey(userId);
+    const stored = parseStoredOpenState(window.localStorage.getItem(key));
+    stored[termId] = next;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+  } catch {
+    // localStorage unavailable / quota — silent skip (in-memory state survives 세션).
+  }
   renderApp();
 }
 
