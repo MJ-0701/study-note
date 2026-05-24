@@ -125,6 +125,18 @@ import {
   type SubjectPdfWorkspace
 } from "@study-note/domain";
 import "./styles.css";
+import {
+  intakePath,
+  parseRoute,
+  subjectClassPath,
+  subjectIntakePath,
+  subjectMcpPath,
+  subjectMemorizePath,
+  subjectPdfWorkspacePath,
+  subjectSummaryPath,
+  weekSummaryPath,
+  type Route
+} from "./app/routes";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -135,20 +147,6 @@ initializeDatadogRum();
 // Zod 통과 + FE 가 sentinel 로 인식 (실 수업일과 충돌 없음).
 const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending"; // FE-local legacy marker
 const PDF_MATERIAL_UNASSIGNED_WIRE_DATE = "1970-01-01"; // BE wire sentinel
-
-type Route =
-  | { name: "home" }
-  | { name: "intake" }
-  | { name: "pdf-workspaces" }
-  | { name: "subject"; subjectId: string }
-  | { name: "subject-class"; subjectId: string }
-  | { name: "subject-summaries"; subjectId: string }
-  | { name: "subject-summary-detail"; subjectId: string; weekId: string }
-  | { name: "subject-mcp"; subjectId: string }
-  | { name: "subject-memorize"; subjectId: string }
-  | { name: "subject-intake"; subjectId: string }
-  | { name: "pdf-workspace"; subjectId: string }
-  | { name: "week"; subjectId: string; weekId: string };
 
 type IntakeFeedback =
   | {
@@ -6743,100 +6741,6 @@ function renderApp(): void {
   // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
   // iframe reload trigger → PDF 미표시. mountPdfFrame 폐기. 점멸 fix 후속 별 sprint
   // (selective re-render 또는 PDF stage 외부 mount 큰 변경 필요).
-}
-
-function parseRoute(hash: string): Route {
-  const path = hash.replace(/^#\/?/, "");
-  const rawParts = path.split("/").filter(Boolean);
-  const parts = rawParts.map((part) => {
-    try {
-      return decodeURIComponent(part);
-    } catch {
-      return part;
-    }
-  });
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "weeks" && parts[3]) {
-    return { name: "week", subjectId: parts[1], weekId: parts[3] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "intake") {
-    return { name: "subject-intake", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "pdf-workspace") {
-    return { name: "pdf-workspace", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "class") {
-    return { name: "subject-class", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "summaries" && parts[3]) {
-    return { name: "subject-summary-detail", subjectId: parts[1], weekId: parts[3] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "summaries") {
-    return { name: "subject-summaries", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "summary") {
-    return { name: "subject-summaries", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "mcp") {
-    return { name: "subject-mcp", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "memorize") {
-    return { name: "subject-memorize", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1]) {
-    return { name: "subject", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "pdf-workspaces") {
-    return { name: "pdf-workspaces" };
-  }
-
-  if (parts[0] === "intake") {
-    return { name: "intake" };
-  }
-
-  return { name: "home" };
-}
-
-function intakePath(): string {
-  return "#/intake";
-}
-
-function subjectClassPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/class`;
-}
-
-function subjectSummaryPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/summaries`;
-}
-
-function weekSummaryPath(subject: SubjectNote, week: WeekNote): string {
-  return `#/subjects/${subject.id}/summaries/${week.id}`;
-}
-
-function subjectMcpPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/mcp`;
-}
-
-function subjectMemorizePath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/memorize`;
-}
-
-function subjectIntakePath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/intake`;
-}
-
-function subjectPdfWorkspacePath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/pdf-workspace`;
 }
 
 interface CsvSeriesPoint {
