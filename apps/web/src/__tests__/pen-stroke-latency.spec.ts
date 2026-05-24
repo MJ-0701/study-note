@@ -57,15 +57,17 @@ describe("AC17 — RAF batch live stroke paint", () => {
   });
 });
 
-describe("AC18 — pointerup renderApp RAF defer", () => {
-  it("handleDocumentPointerUp ink branch 가 requestAnimationFrame 안에서 renderApp", async () => {
+describe("AC18 — pointerup renderApp RAF defer + race guard (codex R1 P1)", () => {
+  it("handleDocumentPointerUp ink branch 가 requestAnimationFrame 안에 새 stroke race guard 포함", async () => {
     const src = await read();
-    // pattern: activeInkStroke = undefined; ... requestAnimationFrame(() => { renderApp(); ... });
-    assert.match(src, /activeInkStroke = undefined;\s*[\s\S]*?requestAnimationFrame\(\(\)\s*=>\s*\{\s*renderApp\(\);/);
+    // activeInkStroke clear 후 RAF defer
+    assert.match(src, /activeInkStroke = undefined;\s*[\s\S]*?requestAnimationFrame\(/);
+    // race guard: RAF 안에서 새 stroke 시작됐으면 render skip.
+    assert.match(src, /if\s*\(!activeInkStroke\)\s*\{\s*renderApp\(\);/);
   });
 });
 
-describe("AC19 — Datadog RUM next-paint emit", () => {
+describe("AC19 — Datadog RUM next-paint emit (codex R1 P2 — per-stroke closure)", () => {
   it("performance.mark + measure + trackRumAction call site", async () => {
     const src = await read();
     assert.match(src, /performance\.mark\(/);
@@ -73,8 +75,10 @@ describe("AC19 — Datadog RUM next-paint emit", () => {
     assert.match(src, /trackRumAction\("pen-stroke\.next-paint",\s*\{\s*durationMs/);
   });
 
-  it("measurePenStrokeNextPaint helper exists", async () => {
+  it("measurePenStrokeNextPaintFromMark helper takes markId arg (shared global 폐기)", async () => {
     const src = await read();
-    assert.match(src, /function measurePenStrokeNextPaint\(\)/);
+    assert.match(src, /function measurePenStrokeNextPaintFromMark\(markId: string\)/);
+    // 회기 — shared global inkStrokeCommitMarkId 폐기.
+    assert.equal(/let inkStrokeCommitMarkId/.test(src), false);
   });
 });

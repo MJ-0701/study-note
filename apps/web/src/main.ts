@@ -4700,13 +4700,20 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-W21-sprint-1/S4/AC18 — renderApp 을 RAF 안으로 defer 해서 다음 stroke
   // 의 첫 pointermove 가 commit 차단되지 않게 한다 (textbox drag 패턴 동일).
   // AC19 — performance.mark + RUM action 으로 next-paint 측정.
-  inkStrokeCommitMarkId = `pen-commit-${Date.now()}`;
+  // PR #53 codex R1 P2 fix: per-stroke markId 를 closure 로 격리 → 연속 stroke
+  // 의 telemetry 가 서로 덮어쓰지 않게.
+  const markId = `pen-commit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   if (typeof performance !== "undefined" && performance.mark) {
-    performance.mark(inkStrokeCommitMarkId);
+    performance.mark(markId);
   }
   requestAnimationFrame(() => {
-    renderApp();
-    measurePenStrokeNextPaint();
+    // PR #53 codex R1 P1 fix: RAF 가 발사되기 전 새 stroke 가 시작됐다면
+    // renderApp 이 live ink layer 를 rebuild 해서 새 stroke 의 livePolyline 이
+    // detach 되고 후속 pointermove update 가 off-DOM. defer render 자체를 skip.
+    if (!activeInkStroke) {
+      renderApp();
+    }
+    measurePenStrokeNextPaintFromMark(markId);
   });
 }
 
@@ -5002,22 +5009,18 @@ function scheduleLiveStrokeRender(): void {
 
 // sprint-W21-sprint-1/S4/AC19 — next-paint latency 측정.
 // pointerup commit 시 mark, 다음 RAF render 후 measure → Datadog RUM emit.
-let inkStrokeCommitMarkId: string | undefined;
-function measurePenStrokeNextPaint(): void {
-  if (!inkStrokeCommitMarkId) return;
+// PR #53 codex R1 P2 — per-stroke markId 를 closure 로 받음 (shared global 폐기).
+function measurePenStrokeNextPaintFromMark(markId: string): void {
   if (typeof performance === "undefined" || !performance.mark || !performance.measure) {
-    inkStrokeCommitMarkId = undefined;
     return;
   }
-  const id = inkStrokeCommitMarkId;
-  inkStrokeCommitMarkId = undefined;
   try {
-    const measureName = `pen-stroke-next-paint-${id}`;
-    performance.measure(measureName, id);
+    const measureName = `pen-stroke-next-paint-${markId}`;
+    performance.measure(measureName, markId);
     const entries = performance.getEntriesByName(measureName);
     const durationMs = entries.length > 0 ? Math.round(entries[entries.length - 1]!.duration) : -1;
     trackRumAction("pen-stroke.next-paint", { durationMs });
-    performance.clearMarks(id);
+    performance.clearMarks(markId);
     performance.clearMeasures(measureName);
   } catch {
     // performance.measure 에러는 무시 — RUM emit 못 해도 stroke commit 자체는 정상.
