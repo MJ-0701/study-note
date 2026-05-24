@@ -126,3 +126,11 @@ export function deleteSubject(id: string): Promise<void> {
 export function getSubjectChildCount(id: string): Promise<{ materialCount: number }> {
   return request<{ materialCount: number }>(`/api/v1/subjects/${encodeURIComponent(id)}/child-count`);
 }
+
+/** S7 AC32 — Subject move. Subject.termId 만 변경 (Subject = metadata-only, ADR-4). */
+export function moveSubject(id: string, targetTermId: string): Promise<SubjectResponse> {
+  return request<SubjectResponse>(`/api/v1/subjects/${encodeURIComponent(id)}/move`, {
+    method: "PUT",
+    body: JSON.stringify({ targetTermId })
+  });
+}
