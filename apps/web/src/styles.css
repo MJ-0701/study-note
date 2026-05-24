@@ -3127,7 +3127,10 @@ body[data-route="pdf-workspace"] .content {
   max-width: none;
 }
 
-@media (max-width: 820px) {
+/* sprint-W21-sprint-1 / iPad media breakpoint fix (sfs-harness-gaps audit
+   evidence #11): 768px iPad portrait 가 mobile compact 로 collapse 되던 문제
+   fix. 820px → 767px (iPad 768px 는 tablet layout 유지, < 768 phone 만 compact). */
+@media (max-width: 767px) {
   :root {
     --ds-space-xl: 44px;
   }
@@ -3487,7 +3490,10 @@ body[data-route="pdf-workspace"] .content {
   }
 }
 
-@media (max-width: 820px) {
+/* sprint-W21-sprint-1 / iPad media breakpoint fix (sfs-harness-gaps audit
+   evidence #11): 768px iPad portrait 가 mobile compact 로 collapse 되던 문제
+   fix. 820px → 767px (iPad 768px 는 tablet layout 유지, < 768 phone 만 compact). */
+@media (max-width: 767px) {
   .topbar {
     align-items: center;
     flex-direction: row;
@@ -3640,4 +3646,64 @@ body[data-route="pdf-workspace"] .content {
   .metric-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* sprint-W21-sprint-1 / S6 — 별표 (star) widget */
+.pdf-star-mark {
+  position: absolute;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  /* PR #52 codex R2 P1: container queries 로 glyph 크기를 container 폭
+     (= sizeRatio * pageWidth) 에 bind. viewport (vw) 대신 cqw 사용 — split
+     pane / browser zoom / sidebar 무관 정확. */
+  container-type: inline-size;
+}
+.pdf-star-mark__glyph {
+  font-size: 100cqw;
+  line-height: 1;
+  color: inherit;
+  text-shadow: 0 0 2px rgba(0,0,0,0.2);
+  display: block;
+  text-align: center;
+}
+.pdf-star-mark__controls {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  /* PR #52 codex Round-1 P1 — touch device 는 hover 없음. 기본 표시 (touch
+     접근성). desktop hover 가 있는 환경에선 hover/focus 으로 fade 처리. */
+  display: inline-flex;
+  gap: 2px;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pdf-star-mark__controls {
+    opacity: 0;
+  }
+  .pdf-star-mark:hover .pdf-star-mark__controls,
+  .pdf-star-mark:focus-within .pdf-star-mark__controls {
+    opacity: 1;
+  }
+}
+.pdf-star-mark__btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pdf-star-mark__btn--danger {
+  border-color: #dc2626;
+  color: #dc2626;
 }

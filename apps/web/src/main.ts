@@ -106,6 +106,7 @@ import {
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfMaterialDraft,
+  type PdfStarMark,
   type PdfTable,
   type PdfTextBox,
   type PdfWorkspaceStore,
@@ -2270,7 +2271,11 @@ function updatePdfWorkspace(
       textBoxes: updated.textBoxes,
       checklists: updated.checklists,
       tables: updated.tables,
-      charts: updated.charts
+      charts: updated.charts,
+      // PR #52 codex Round-1 P1 — starMarks 가 annotation PUT 에 누락되어
+      // reload 후 사라지던 문제. BE Zod whole-reject (starMark.dto.ts) 가
+      // valid payload 만 통과시킴.
+      starMarks: updated.starMarks ?? []
     };
     scheduleAnnotationPut(nextId!, payload);
   }
@@ -3027,6 +3032,39 @@ function handleDocumentClick(event: MouseEvent): void {
   if (quickNoteButton?.dataset.action === "close-hotkey-help") {
     hotkeyHelpModalOpen = false;
     renderApp();
+    return;
+  }
+
+  // sprint-W21-sprint-1 / S6 / AC30 — 별표 삭제 (hover delete button).
+  if (quickNoteButton?.dataset.action === "remove-star-mark") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const markId = quickNoteButton.dataset.starMarkId;
+    if (subjectId && markId) {
+      removeStarMark(subjectId, markId);
+      renderApp();
+    }
+    return;
+  }
+
+  // sprint-W21-sprint-1 / S6 / AC29 — 별표 크기 cycle (small / default / large).
+  // drag-resize handle 의 MVP 대체 — click 으로 3-step 사이클. iPad 펜 친화적.
+  if (quickNoteButton?.dataset.action === "resize-star-mark") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const markId = quickNoteButton.dataset.starMarkId;
+    if (subjectId && markId) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+      const mark = (workspace.starMarks ?? []).find((m) => m.id === markId);
+      if (mark) {
+        // PR #52 R2 P2 fix: 0.06 (initial default) 가 cycle 에 누락되어 첫
+        // resize 가 무조건 0.04 점프. 0.06 포함 → 사용자 기대대로 순회.
+        // cycle = 0.04 → 0.06 → 0.08 → 0.16 → 0.04 (wraps).
+        const cycles = [0.04, 0.06, 0.08, 0.16];
+        const currentIdx = cycles.findIndex((c) => Math.abs(c - mark.sizeRatio) < 0.005);
+        const nextSize = cycles[(currentIdx + 1) % cycles.length] ?? 0.08;
+        resizeStarMark(subjectId, markId, nextSize);
+        renderApp();
+      }
+    }
     return;
   }
 
@@ -3853,7 +3891,9 @@ const PDF_TOOL_HOTKEYS: Record<string, LocalPdfTool> = {
   KeyT: "text",
   KeyC: "checklist",
   KeyB: "table",
-  KeyG: "chart"
+  KeyG: "chart",
+  // sprint-W21-sprint-1 / S6 / AC27 — 별표 (star) widget.
+  KeyY: "star"
 };
 
 // sprint-1/S2: visible badge labels for each tool. Lookup by tool id.
@@ -3865,7 +3905,8 @@ const PDF_TOOL_HOTKEY_LABELS: Partial<Record<LocalPdfTool, string>> = {
   text: "T",
   checklist: "C",
   table: "B",
-  chart: "G"
+  chart: "G",
+  star: "Y"
 };
 
 // sprint-1/S2 fix (codex P2): map by the produced character so layouts where
@@ -3879,7 +3920,8 @@ const PDF_TOOL_KEY_LABEL_LOOKUP: Record<string, LocalPdfTool> = {
   t: "text",
   c: "checklist",
   b: "table",
-  g: "chart"
+  g: "chart",
+  y: "star"
 };
 
 let hotkeyHelpModalOpen = false;
@@ -4392,6 +4434,15 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-13/slice-3: chart tool — click-to-place a new chart at the surface point.
   if ((material.selectedTool as LocalPdfTool) === "chart") {
     addChart(subjectId, point);
+    setPdfTool(subjectId, "read");
+    renderApp();
+    event.preventDefault();
+    return;
+  }
+
+  // sprint-W21-sprint-1 / S6 / AC27 — 별표 click-to-add at point.
+  if ((material.selectedTool as LocalPdfTool) === "star") {
+    addStarMark(subjectId, point);
     setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
@@ -5117,7 +5168,10 @@ function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
     tool === "text" ||
     tool === "checklist" ||
     tool === "table" ||
-    tool === "chart"
+    tool === "chart" ||
+    // PR #52 codex Round-1 P1: toolbar 클릭이 set-pdf-tool 분기로 가는데 이
+    // 가드가 "star" 를 reject 해서 touch 사용자가 별표 도구 활성화 불가.
+    tool === "star"
   );
 }
 
@@ -5959,6 +6013,65 @@ function addChart(
   updatePdfWorkspace(subjectId, (current) => ({
     ...current,
     charts: [...current.charts, chart]
+  }));
+}
+
+// sprint-W21-sprint-1 / S6 / AC27+AC29+AC30 — 별표 add / delete.
+// Default size 0.06 (page width 의 6%). cuid-ish id (browser crypto.randomUUID
+// 가 hyphen 포함이라 hex만 컴팩트). createdAt/updatedAt ISO.
+function makeStarMarkId(): string {
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return "sm" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function addStarMark(
+  subjectId: string,
+  position: { x: number; y: number }
+): void {
+  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const page = workspace.material?.selectedPage ?? 1;
+  const now = new Date().toISOString();
+  const mark: PdfStarMark = {
+    id: makeStarMarkId(),
+    pageNumber: page,
+    xRatio: Math.min(1, Math.max(0, position.x)),
+    yRatio: Math.min(1, Math.max(0, position.y)),
+    sizeRatio: 0.06,
+    color: "#f59e0b",
+    createdAt: now,
+    updatedAt: now
+  };
+
+  updatePdfWorkspace(subjectId, (current) => ({
+    ...current,
+    starMarks: [...(current.starMarks ?? []), mark]
+  }));
+}
+
+function removeStarMark(subjectId: string, markId: string): void {
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    starMarks: (workspace.starMarks ?? []).filter((m) => m.id !== markId)
+  }));
+}
+
+function resizeStarMark(
+  subjectId: string,
+  markId: string,
+  sizeRatio: number
+): void {
+  const clamped = Math.min(0.3, Math.max(0.02, sizeRatio));
+  const now = new Date().toISOString();
+  updatePdfWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    starMarks: (workspace.starMarks ?? []).map((m) =>
+      m.id === markId ? { ...m, sizeRatio: clamped, updatedAt: now } : m
+    )
   }));
 }
 
@@ -8218,6 +8331,10 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const pageCharts = workspace.charts.filter(
     (chart) => chart.page === selectedPage
   );
+  // sprint-W21-sprint-1 / S6 / AC28 — filter starMarks for current page.
+  const pageStarMarks = (workspace.starMarks ?? []).filter(
+    (mark) => mark.pageNumber === selectedPage
+  );
   const inputId = `pdf-file-${subject.id}`;
   const selectedPageLabel = escapeHtml(String(selectedPage));
 
@@ -8337,6 +8454,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
             ${pageChecklists.map((cl) => renderChecklist(subject.id, cl)).join("")}
             ${pageTables.map((table) => renderTableMount(subject.id, table)).join("")}
             ${pageCharts.map((chart) => renderChartMount(subject.id, chart)).join("")}
+            ${pageStarMarks.map((mark) => renderStarMark(subject.id, mark)).join("")}
           </div>
         </div>
 
@@ -8485,6 +8603,7 @@ function renderPdfToolbar(
         ${renderToolButton(subjectId, "checklist", selectedTool, "체크리스트")}
         ${renderToolButton(subjectId, "table", selectedTool, "표")}
         ${renderToolButton(subjectId, "chart", selectedTool, "그래프")}
+        ${renderToolButton(subjectId, "star", selectedTool, "별표")}
       </div>
       <div class="pdf-tool-group" role="group" aria-label="화면 전환">
         ${renderFullscreenToggleButton()}
@@ -8824,6 +8943,38 @@ function renderChartMount(subjectId: string, chart: PdfChart): string {
       data-chart-mount-id="${escapeHtml(chart.id)}"
       data-subject-id="${escapeHtml(subjectId)}"
     ></div>
+  `;
+}
+
+// sprint-W21-sprint-1 / S6 / AC28 — 별표 render.
+// SVG injection hardening (ADR-9 Round 5 P1-C): color 가 hex regex 통과해야 함.
+// raw innerHTML / template string interp 직접 삽입 X. JSX/HTML escape 가 모든
+// user-controllable value 에 적용.
+function renderStarMark(subjectId: string, mark: PdfStarMark): string {
+  // Color 는 hydration validateStarMark 가 hex regex 통과해야만 도착. 추가 방어:
+  // 잘못된 color 면 default. (defense in depth)
+  const HEX = /^#[0-9a-fA-F]{6}$/;
+  const safeColor = HEX.test(mark.color) ? mark.color : "#f59e0b";
+  const sizePct = (mark.sizeRatio * 100).toFixed(2);
+  // PR #52 codex Round-2 P1: viewport (vw) 단위가 PDF surface 폭 무관해서
+  // split pane / 다른 zoom 에서 시각 크기 불일치. container query (cqw) 로
+  // 변경 — glyph font-size 가 container 폭에 정확히 따라감 (= sizeRatio *
+  // pageWidth). .pdf-star-mark { container-type: inline-size } +
+  // .glyph { font-size: 100cqw } 조합.
+  return `
+    <div
+      class="pdf-star-mark"
+      data-star-mark-id="${escapeHtml(mark.id)}"
+      data-subject-id="${escapeHtml(subjectId)}"
+      style="left: ${(mark.xRatio * 100).toFixed(2)}%; top: ${(mark.yRatio * 100).toFixed(2)}%; width: ${sizePct}%; aspect-ratio: 1; color: ${escapeHtml(safeColor)};"
+      aria-label="별표 마스킹"
+    >
+      <span class="pdf-star-mark__glyph" aria-hidden="true">★</span>
+      <div class="pdf-star-mark__controls" aria-hidden="true">
+        <button type="button" class="pdf-star-mark__btn" data-action="resize-star-mark" data-subject-id="${escapeHtml(subjectId)}" data-star-mark-id="${escapeHtml(mark.id)}" title="크기 변경">⤢</button>
+        <button type="button" class="pdf-star-mark__btn pdf-star-mark__btn--danger" data-action="remove-star-mark" data-subject-id="${escapeHtml(subjectId)}" data-star-mark-id="${escapeHtml(mark.id)}" title="삭제">×</button>
+      </div>
+    </div>
   `;
 }
 
@@ -10573,7 +10724,8 @@ function formatPdfTool(tool: LocalPdfTool): string {
     text: "텍스트 박스",
     checklist: "체크리스트",
     table: "표",
-    chart: "그래프"
+    chart: "그래프",
+    star: "별표"
   };
 
   return labels[tool];

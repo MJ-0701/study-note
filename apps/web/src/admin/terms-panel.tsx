@@ -17,6 +17,7 @@ import {
   getTermChildCount,
   listSubjects,
   listTerms,
+  moveSubject,
   updateSubject,
   updateTerm,
   type SubjectResponse,
@@ -30,7 +31,7 @@ export interface TermsPanelProps {
   viewerRole: UserRole;
 }
 
-type Mode = "list" | "create-term" | "edit-term" | "create-subject" | "edit-subject";
+type Mode = "list" | "create-term" | "edit-term" | "create-subject" | "edit-subject" | "move-subject";
 
 interface ConfirmDelete {
   kind: "term" | "subject";
@@ -49,6 +50,7 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
   const [mode, setMode] = useState<Mode>("list");
   const [editingTerm, setEditingTerm] = useState<TermAdminResponse | null>(null);
   const [editingSubject, setEditingSubject] = useState<SubjectResponse | null>(null);
+  const [movingSubject, setMovingSubject] = useState<SubjectResponse | null>(null);
   const [confirm, setConfirm] = useState<ConfirmDelete | null>(null);
 
   const refresh = useCallback(async () => {
@@ -266,6 +268,25 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
                       >
                         수정
                       </button>
+                      {/* S7 AC33 — Subject 이관 (다른 학기로 옮기기). */}
+                      <button
+                        type="button"
+                        className="action-btn small"
+                        disabled={!editable || terms.length < 2}
+                        title={
+                          terms.length < 2
+                            ? "이관할 다른 학기가 없습니다"
+                            : editable
+                              ? "다른 학기로 이관"
+                              : "이관 권한 없음"
+                        }
+                        onClick={() => {
+                          setMovingSubject(subject);
+                          setMode("move-subject");
+                        }}
+                      >
+                        이관
+                      </button>
                       <button
                         type="button"
                         className="action-btn small danger"
@@ -356,6 +377,29 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
         />
       )}
 
+      {mode === "move-subject" && movingSubject && (
+        <SubjectMoveDialog
+          subject={movingSubject}
+          terms={terms}
+          viewerId={viewerId}
+          viewerRole={viewerRole}
+          onClose={() => {
+            setMode("list");
+            setMovingSubject(null);
+          }}
+          onMove={async (targetTermId) => {
+            try {
+              await moveSubject(movingSubject.id, targetTermId);
+              setMode("list");
+              setMovingSubject(null);
+              await refresh();
+            } catch (err) {
+              throw err instanceof ApiError ? err : new Error("과목 이관 실패");
+            }
+          }}
+        />
+      )}
+
       {confirm && (
         <DeleteConfirmDialog
           confirm={confirm}
@@ -364,6 +408,80 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
         />
       )}
     </section>
+  );
+}
+
+interface SubjectMoveDialogProps {
+  subject: SubjectResponse;
+  terms: TermAdminResponse[];
+  viewerId: string;
+  viewerRole: UserRole;
+  onClose: () => void;
+  onMove: (targetTermId: string) => Promise<void>;
+}
+
+function SubjectMoveDialog({ subject, terms, viewerId, viewerRole, onClose, onMove }: SubjectMoveDialogProps) {
+  // 출발지 학기 제외 + PR #50 codex Round-1 P2: BE 가 actor 위계 검사 (도착지
+  // Term 도 admin↔master ADR-5) 이므로 UI 도 동일하게 destination 후보를
+  // 위계 허용된 것만 표시. admin 이 master/other-admin 학기로 이관 시도해서
+  // 100% 403 fail 하는 dead UX 차단.
+  const canMoveTo = (t: TermAdminResponse): boolean => {
+    if (viewerRole === "master") return true;
+    if (viewerRole !== "admin") return false;
+    return t.createdById === viewerId;
+  };
+  const candidates = terms.filter((t) => t.id !== subject.termId && canMoveTo(t));
+  const [targetTermId, setTargetTermId] = useState<string>(candidates[0]?.id ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!targetTermId) {
+      setError("이관 대상 학기를 선택하세요");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onMove(targetTermId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "이관 실패");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-label="과목 이관">
+      <form className="dialog" onSubmit={handleSubmit}>
+        <h3>과목 이관</h3>
+        <p className="dialog-body">대상: <strong>{subject.title}</strong></p>
+        {candidates.length === 0 ? (
+          <p className="dialog-error" role="alert">이관 가능한 다른 학기가 없습니다.</p>
+        ) : (
+          <label className="dialog-field">
+            <span>이동할 학기</span>
+            <select value={targetTermId} onChange={(e) => setTargetTermId(e.target.value)} required>
+              {candidates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.grade}학년 {t.semester}학기 {t.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {error && <p className="dialog-error" role="alert">{error}</p>}
+        <div className="dialog-actions">
+          <button type="button" className="action-btn" onClick={onClose} disabled={saving}>취소</button>
+          <button
+            type="submit"
+            className="action-btn primary"
+            disabled={saving || candidates.length === 0 || !targetTermId}
+          >
+            {saving ? "이관 중..." : "이관"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
