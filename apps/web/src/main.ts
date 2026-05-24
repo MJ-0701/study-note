@@ -144,6 +144,15 @@ import {
   type AppShellContext,
   type RenderSink
 } from "./app/appShell";
+import {
+  clearAnnotationSyncCaches,
+  fetchAnnotationIfMissing as fetchAnnotationIfMissingSync,
+  fetchAnnotationsForSubject as fetchAnnotationsForSubjectSync,
+  scheduleAnnotationPut as scheduleAnnotationPutSync,
+  type AnnotationHydrationEntry,
+  type AnnotationSyncCallbacks,
+  type AnnotationSyncContext
+} from "./pdf-workspace/annotation-sync";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -840,12 +849,13 @@ function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
 let notebookStorageErrorReported = false;
 let notebookStorageError: string | undefined;
 
-// sprint-2/S2: BE sync layer state — debounce timers + in-flight tracking for
-// userNotes / pdf-annotations. Plan §8b: per-resource hot path GET on view,
-// debounced PUT (userNotes 500ms, annotations 750ms), max in-flight 3,
-// backoff on consecutive 5xx (3회 / 5분 → autosave pause + banner).
+// sprint-2/S2: BE sync layer state — user-notes 측 잔류 (annotation 측은
+// apps/web/src/pdf-workspace/annotation-sync.ts 가 module-private 보유,
+// sprint-2026-W22-sprint-1 / layer B/slice-1). main.ts 는
+// AnnotationSyncContext + AnnotationSyncCallbacks 만 구성하여 호출.
+// syncFailureTracker / syncBackendError 는 user-notes 측 share — annotation
+// 측 callback (setSyncBackendError) 도 같은 banner 변수 갱신하여 단일 UX.
 const USER_NOTES_PUT_DEBOUNCE_MS = 500;
-const ANNOTATION_PUT_DEBOUNCE_MS = 750;
 const SYNC_FAILURE_PAUSE_THRESHOLD = 3;
 const SYNC_FAILURE_PAUSE_WINDOW_MS = 5 * 60 * 1000;
 
@@ -855,52 +865,9 @@ interface SyncFailureTracker {
 }
 
 const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
-// sprint-2/S3 fix (codex P1): per-key AbortControllers for hard termination
-// on logout / user transition. Cancelling client-side does NOT guarantee the
-// server hasn't already processed the request — server-order safety comes
-// from the chain map below.
 const userNotesPutAborts = new Map<string, AbortController>();
-const annotationPutAborts = new Map<string, AbortController>();
-// sprint-2/S3 fix (codex P1 #NEW-22): per-key promise chains that serialize
-// PUTs FIFO. Without this, two debounced PUTs can be on the wire concurrently
-// and the server may persist the older body on top of the newer one. Each
-// new PUT awaits the prior chain entry before issuing fetch(), so server
-// arrival order matches client-issue order on this device. Cross-device
-// races are governed by plan §5.2 last-write-wins; server-side revision
-// checks are a sprint-3 follow-up.
 const userNotesPutChains = new Map<string, Promise<void>>();
-const annotationPutChains = new Map<string, Promise<void>>();
 const userNotesFetchedKeys = new Set<string>();
-const annotationFetchedKeys = new Set<string>();
-// sprint-2/S3 fix (codex P2): track which materialId currently occupies the
-// in-memory bundle for `${userId}:${subjectId}`. The previous fix released
-// the cache key after every successful GET so material A→B→A revisit would
-// re-fetch, but renderApp() re-invokes fetchAnnotationIfMissing on every
-// render and the released cache made that a per-render network storm.
-// Keep the cache marker set after success and instead force a refetch only
-// when the active material differs from the last hydrated material for the
-// same subject (the real revisit signal).
-const lastHydratedAnnotationByMaterial = new Map<string, string>();
-// sprint-W21-sprint-2/S2 + S3 (plan §R4): per-material server-issued revision
-// cache. key = `${userId}:${materialId}`, value = wire `updatedAt` (ISO 8601
-// = server `AnnotationSnapshot.savedAt`). updated on every GET/PUT success +
-// 409 hydrate. used as `clientRevision` in subsequent PUT bodies for atomic
-// CAS on the server. local mutator `SubjectPdfWorkspace.updatedAt` 와 분리.
-const lastHydratedAnnotationRevision = new Map<string, string>();
-// sprint-W21-sprint-2/S2 (plan §R3): once-per-subject batch hydrate marker.
-// key = `${userId}:${subjectId}`. ensures the batch GET fires exactly once
-// per subject view (R3 AC3). cleared on session transition / clearAuthSession.
-//
-// codex P2 (PR #35 round-5): split "in-flight" from "completed". The hot-path
-// gate in renderApp uses the *completed* marker as "batch already finished, no
-// need for single-GET"; if we promoted the marker before the network call
-// returned, any re-render during the in-flight window would race a duplicate
-// single-GET against the still-pending batch — exactly the regression S2 is
-// trying to eliminate. Inflight prevents duplicate batch dispatches without
-// unlocking the single-GET fallback.
-const annotationSubjectBatchFetched = new Set<string>();
-const annotationSubjectBatchInflight = new Set<string>();
 const syncFailureTracker: SyncFailureTracker = {
   recentFailures: [],
   paused: false
@@ -978,6 +945,108 @@ function recordFetchSuccess(): void {
 // read-side 실패가 write-side 차단을 유발하면 안 됨.
 function recordFetchFailure(): void {
   /* no-op intentionally — GET 실패가 PUT paused 카운트를 키우지 않는다. */
+}
+
+// ─── sprint-2026-W22-sprint-1 / layer B/slice-1 — annotation sync wiring ──
+// annotation-sync 모듈의 Context (least-privilege read) + Callbacks (least-
+// privilege write) 를 매 호출 시 구성한다. broad PdfWorkspaceStore /
+// authSession 객체 노출 X.
+function getAnnotationSyncContext(): AnnotationSyncContext {
+  return {
+    apiBaseUrl,
+    getSessionUserId: () => authSession?.user.id,
+    getSyncBackendPaused: () => syncFailureTracker.paused,
+    readSubjectWorkspace: (subjectId) =>
+      pdfWorkspaceStore.workspaces[subjectId]
+  };
+}
+
+function getAnnotationSyncCallbacks(): AnnotationSyncCallbacks {
+  return {
+    setSyncBackendError: (message) => {
+      syncBackendError = message;
+    },
+    setSyncBackendErrorReported: (reported) => {
+      syncBackendErrorReported = reported;
+    },
+    triggerRenderApp: () => {
+      try {
+        renderApp();
+      } catch {
+        /* ignore */
+      }
+    },
+    applyAnnotationHydration: (subjectId, hydration) => {
+      // subjectId === "" = handleAnnotationStaleResponse 의 fallback path
+      // (canonical entry 안에 subject 알 수 없음) — store walk 로 active
+      // material 찾기.
+      if (subjectId === "") {
+        for (const entry of hydration) {
+          for (const [sid, ws] of Object.entries(pdfWorkspaceStore.workspaces)) {
+            const active = ws.material?.backendMaterialId ?? ws.material?.id;
+            if (active === entry.materialId) {
+              applyAnnotationHydrationToStore(sid, entry);
+              break;
+            }
+          }
+        }
+        return;
+      }
+      for (const entry of hydration) {
+        applyAnnotationHydrationToStore(subjectId, entry);
+      }
+    },
+    handleAuthExpired: () => handleAuthExpiredFromSync(),
+    onSyncMetricEvent: () => {
+      // sprint-2026-W22-sprint-1 backlog: Datadog RUM emit 자리. 본 sprint
+      // 는 callback hook 만 노출 (no-op). 후속 sprint 의 ops monitoring
+      // sprint 에서 trackRumAction 결선.
+    }
+  };
+}
+
+function applyAnnotationHydrationToStore(
+  subjectId: string,
+  entry: AnnotationHydrationEntry
+): void {
+  const current = pdfWorkspaceStore.workspaces[subjectId];
+  if (!current) {
+    return;
+  }
+  const material = current.material;
+  if (!material) {
+    return;
+  }
+  const currentMaterialId = material.backendMaterialId ?? material.id;
+  if (currentMaterialId !== entry.materialId) {
+    return;
+  }
+  const incoming = entry.payload;
+  const merged: SubjectPdfWorkspace = {
+    ...current,
+    stickyNotes: Array.isArray(incoming.stickyNotes)
+      ? incoming.stickyNotes
+      : current.stickyNotes,
+    inkStrokes: Array.isArray(incoming.inkStrokes)
+      ? incoming.inkStrokes
+      : current.inkStrokes,
+    textBoxes: Array.isArray(incoming.textBoxes)
+      ? incoming.textBoxes
+      : current.textBoxes,
+    checklists: Array.isArray(incoming.checklists)
+      ? incoming.checklists
+      : current.checklists,
+    tables: Array.isArray(incoming.tables) ? incoming.tables : current.tables,
+    charts: Array.isArray(incoming.charts) ? incoming.charts : current.charts,
+    updatedAt: new Date().toISOString()
+  };
+  pdfWorkspaceStore = {
+    workspaces: {
+      ...pdfWorkspaceStore.workspaces,
+      [subjectId]: merged
+    }
+  };
+  savePdfWorkspaceStore();
 }
 
 async function putUserNoteToBE(
@@ -1181,570 +1250,6 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
   }
 }
 
-async function putAnnotationToBE(materialId: string, payload: unknown): Promise<void> {
-  if (syncFailureTracker.paused) {
-    return;
-  }
-  // sprint-2/S3 fix (codex P1 #NEW-22): chain per material so server arrival
-  // order matches client-issue order. AbortController inside is for hard
-  // termination on logout / user transition.
-  const sessionUserIdAtSchedule = authSession?.user.id;
-  if (!sessionUserIdAtSchedule) {
-    return;
-  }
-  const previous = annotationPutChains.get(materialId) ?? Promise.resolve();
-  const work = previous
-    .catch(() => {})
-    .then(async () => {
-      if (authSession?.user.id !== sessionUserIdAtSchedule) {
-        return;
-      }
-      if (syncFailureTracker.paused) {
-        return;
-      }
-      const abortController = new AbortController();
-      annotationPutAborts.set(materialId, abortController);
-      try {
-        // sprint-W21-sprint-2/S2+S3 (plan §R4): include `clientRevision` from
-        // per-material server-issued revision cache. cache miss = neue create
-        // path (BE 가 record 없음 + clientRevision undefined 면 201 create).
-        const revisionKey = `${sessionUserIdAtSchedule}:${materialId}`;
-        const cachedRevision = lastHydratedAnnotationRevision.get(revisionKey);
-        const requestBody: Record<string, unknown> = { payload };
-        if (cachedRevision !== undefined) {
-          requestBody.clientRevision = cachedRevision;
-        }
-        const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(requestBody),
-          signal: abortController.signal
-        });
-        if (response.status === 413) {
-          console.warn("[study-note] annotation PUT 413 PAYLOAD_TOO_LARGE", materialId);
-          return;
-        }
-        if (response.status === 400) {
-          // plan §R5: invalid request (e.g. malformed clientRevision).
-          // backoff X — request shape 문제, retry 안 함.
-          console.warn("[study-note] annotation PUT 400 INVALID_BODY", materialId);
-          return;
-        }
-        if (response.status === 401 || response.status === 403) {
-          console.warn("[study-note] annotation PUT auth expired", response.status, materialId);
-          handleAuthExpiredFromSync();
-          return;
-        }
-        if (response.status === 404) {
-          // plan §R6: material ownership pre-check 실패 (material 삭제/소유 변경).
-          // 추가 retry X — material 자체가 사라진 상태.
-          console.warn("[study-note] annotation PUT 404 MATERIAL_NOT_FOUND", materialId);
-          return;
-        }
-        if (response.status === 409) {
-          // plan §R5: silent stale-write recovery. body = canonical schema.
-          // codex P1 (PR #35 round-3): handleAnnotationStaleResponse 가 boolean
-          // 반환 — recovered (true) 일 때만 recordSyncSuccess. NO_RECORD retry
-          // 가 5xx/network 로 실패하면 false → recordSyncSuccess 안 부름 →
-          // failure tracker 가 backoff/banner 정상 발사. silent edit drop 차단.
-          const recovered = await handleAnnotationStaleResponse(
-            sessionUserIdAtSchedule,
-            materialId,
-            response,
-            payload,
-            abortController.signal
-          );
-          if (recovered) {
-            recordSyncSuccess();
-          }
-          return;
-        }
-        if (!response.ok) {
-          console.warn("[study-note] annotation PUT failed", response.status, materialId);
-          if (response.status >= 500 || response.status === 429) {
-            recordSyncFailure();
-          }
-          return;
-        }
-        // plan §R4 + canonical schema: 200 body = `{ annotations: { [materialId]: { payload, updatedAt } } }`.
-        // updatedAt 를 revision cache 에 저장해 다음 PUT 의 clientRevision 으로.
-        try {
-          const json = (await response.json()) as {
-            annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
-          };
-          const entry = json.annotations?.[materialId];
-          if (entry && typeof entry.updatedAt === "string") {
-            lastHydratedAnnotationRevision.set(revisionKey, entry.updatedAt);
-          }
-        } catch {
-          /* response body parse 실패 = revision cache 업데이트만 못 함, PUT 자체는 성공 */
-        }
-        recordSyncSuccess();
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        console.warn("[study-note] annotation PUT network error", error);
-        recordSyncFailure();
-      } finally {
-        if (annotationPutAborts.get(materialId) === abortController) {
-          annotationPutAborts.delete(materialId);
-        }
-      }
-    });
-  annotationPutChains.set(materialId, work);
-  try {
-    await work;
-  } finally {
-    if (annotationPutChains.get(materialId) === work) {
-      annotationPutChains.delete(materialId);
-    }
-  }
-}
-
-function scheduleAnnotationPut(materialId: string, payload: unknown): void {
-  const existing = annotationPutTimers.get(materialId);
-  if (existing) {
-    clearTimeout(existing);
-  }
-  const timer = setTimeout(() => {
-    annotationPutTimers.delete(materialId);
-    void putAnnotationToBE(materialId, payload);
-  }, ANNOTATION_PUT_DEBOUNCE_MS);
-  annotationPutTimers.set(materialId, timer);
-}
-
-// sprint-W21-sprint-2/S2+S3 (plan §R5): silent stale-write 복원.
-// 409 응답 body = canonical schema. server 최신 payload 로 workspace 갱신 +
-// revision cache 업데이트. chain entry drop 은 putAnnotationToBE 의 finally
-// 가 처리. 다음 user mutation 의 PUT 이 새 revision 으로 issue.
-async function handleAnnotationStaleResponse(
-  userId: string,
-  materialId: string,
-  response: Response,
-  retryPayload: unknown,
-  abortSignal: AbortSignal
-): Promise<boolean> {
-  // codex P1 (PR #35 round-3): return true = recovered (caller 가 recordSyncSuccess),
-  // false = unrecovered (caller 가 recordSyncSuccess 호출 X — backoff 정책
-  // 안 우회 + 사용자 편집 silent drop 안 함).
-  let json: {
-    annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
-  };
-  try {
-    json = (await response.json()) as typeof json;
-  } catch {
-    return false;
-  }
-  const entry = json.annotations?.[materialId];
-  if (!entry) {
-    // codex P1 (PR #35 round-2): STALE_REVISION_NO_RECORD = client 가 cache
-    // revision 보냈지만 server 에 snapshot 없음 (예: 다른 device 에서 삭제
-    // / migration). cache drop 후 즉시 retry with clientRevision undefined
-    // → BE 의 create 분기가 사용자 payload 로 신규 snapshot 생성.
-    lastHydratedAnnotationRevision.delete(`${userId}:${materialId}`);
-    try {
-      const retryResp = await fetch(
-        `${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`,
-        {
-          method: "PUT",
-          credentials: "include",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ payload: retryPayload }),
-          signal: abortSignal
-        }
-      );
-      if (retryResp.ok) {
-        try {
-          const retryJson = (await retryResp.json()) as {
-            annotations?: Record<string, { updatedAt?: unknown }>;
-          };
-          const created = retryJson.annotations?.[materialId];
-          if (created && typeof created.updatedAt === "string") {
-            lastHydratedAnnotationRevision.set(
-              `${userId}:${materialId}`,
-              created.updatedAt
-            );
-          }
-        } catch {
-          /* response body parse 실패 = revision cache 못 갱신, 다음 mutation
-             이 다시 STALE_REVISION_NO_RECORD path 거치며 또 retry 됨 */
-        }
-        return true;
-      }
-      if (retryResp.status === 401 || retryResp.status === 403) {
-        handleAuthExpiredFromSync();
-        return false;
-      }
-      if (retryResp.status === 409) {
-        // codex P1 (PR #35 round-4): retry 도중 concurrent client 가 snapshot 을
-        // 만들어 server 가 canonical 409 (P2002) 로 응답. body entry 로 hydrate
-        // 하면 사용자 다음 mutation 이 새 revision 으로 issue → silent drop 차단.
-        // entry 없는 double NO_RECORD edge 는 false (failure tracker 정상 동작).
-        try {
-          const retryJson = (await retryResp.json()) as {
-            annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
-          };
-          const retryEntry = retryJson.annotations?.[materialId];
-          if (retryEntry) {
-            return hydrateAnnotationFromCanonicalEntry(userId, materialId, retryEntry);
-          }
-        } catch {
-          /* body parse 실패 = recover 불가. failure 로 처리. */
-        }
-        return false;
-      }
-      console.warn(
-        "[study-note] annotation NO_RECORD retry failed",
-        retryResp.status,
-        materialId
-      );
-      if (retryResp.status >= 500 || retryResp.status === 429) {
-        recordSyncFailure();
-      }
-      return false;
-    } catch (err) {
-      if (!(err instanceof DOMException && err.name === "AbortError")) {
-        console.warn("[study-note] annotation NO_RECORD retry network error", err);
-        recordSyncFailure();
-      }
-      return false;
-    }
-  }
-  return hydrateAnnotationFromCanonicalEntry(userId, materialId, entry);
-}
-
-// codex P1 (PR #35 round-4): canonical 409/200 응답 body 의 entry 로 workspace +
-// revision cache hydrate. handleAnnotationStaleResponse 의 non-retry / retry-409
-// 분기에서 공유. retry-409 시 재귀 호출 대신 inline 처리 → infinite loop 방지.
-function hydrateAnnotationFromCanonicalEntry(
-  userId: string,
-  materialId: string,
-  entry: { payload?: unknown; updatedAt?: unknown }
-): boolean {
-  if (typeof entry.updatedAt !== "string") {
-    return false;
-  }
-  if (entry.payload && typeof entry.payload === "object") {
-    const incoming = entry.payload as Partial<SubjectPdfWorkspace>;
-    for (const [subjectId, workspace] of Object.entries(pdfWorkspaceStore.workspaces)) {
-      const activeMat = workspace.material?.backendMaterialId ?? workspace.material?.id;
-      if (activeMat === materialId) {
-        updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
-        break;
-      }
-    }
-  }
-  lastHydratedAnnotationRevision.set(`${userId}:${materialId}`, entry.updatedAt);
-  return true;
-}
-
-// sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
-// once per subject view (annotationSubjectBatchFetched 마커). hot path
-// network 호출 1회 → 모든 material 의 annotation + revision 일괄 hydrate.
-// truncated: true (R7 cap) 시 누락 material 의 single-material GET fallback
-// (R3 fallback path; AC9).
-async function fetchAnnotationsForSubject(subjectId: string): Promise<void> {
-  const sessionUserId = authSession?.user.id;
-  if (!sessionUserId) {
-    return;
-  }
-  const subjectBatchKey = `${sessionUserId}:${subjectId}`;
-  // codex P2 (PR #35 round-5): inflight 와 fetched 둘 다 확인. 어느 한쪽이라도
-  // set 이면 이미 fetch 가 진행 중이거나 끝난 상태 → 재진입 X. 마커는 네트워크
-  // 호출이 *완료* 된 시점에만 fetched 로 승격된다 (renderApp 의 batch-gated
-  // single-GET 분기와 정합).
-  if (
-    annotationSubjectBatchInflight.has(subjectBatchKey) ||
-    annotationSubjectBatchFetched.has(subjectBatchKey)
-  ) {
-    return;
-  }
-  annotationSubjectBatchInflight.add(subjectBatchKey);
-
-  // codex P1 (PR #35): batch HTTP 실패 시 active material 의 single-GET
-  // fallback 발사 — renderApp 의 redundant single-GET 제거 이후 유일한
-  // fallback 경로. degraded mode 동안 사용자 작업 가능.
-  const fallbackToSingleGet = () => {
-    const ws = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-    const active = ws.material?.backendMaterialId ?? ws.material?.id;
-    if (active) {
-      void fetchAnnotationIfMissing(subjectId, active);
-    }
-  };
-
-  let response: Response;
-  try {
-    response = await fetch(
-      `${apiBaseUrl}/v1/pdf-annotations/by-subject/${encodeURIComponent(subjectId)}`,
-      { credentials: "include" }
-    );
-  } catch (error) {
-    annotationSubjectBatchInflight.delete(subjectBatchKey);
-    console.warn("[study-note] annotation batch GET network error", error);
-    recordFetchFailure();
-    fallbackToSingleGet();
-    return;
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    annotationSubjectBatchInflight.delete(subjectBatchKey);
-    handleAuthExpiredFromSync();
-    return;
-  }
-  if (!response.ok) {
-    annotationSubjectBatchInflight.delete(subjectBatchKey);
-    if (response.status >= 500) {
-      recordFetchFailure();
-    }
-    fallbackToSingleGet();
-    return;
-  }
-
-  let json: {
-    annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
-    truncated?: boolean;
-    total?: number;
-    returned?: number;
-  };
-  try {
-    json = (await response.json()) as typeof json;
-  } catch {
-    annotationSubjectBatchInflight.delete(subjectBatchKey);
-    return;
-  }
-
-  // codex P2 (PR #35 round-5): 응답 parse 성공 = batch 가 끝난 시점. 이제
-  // fetched 로 승격하여 renderApp 의 single-GET 경로를 해제한다. inflight 도
-  // 함께 release 해서 set 메모리가 새지 않도록.
-  annotationSubjectBatchFetched.add(subjectBatchKey);
-  annotationSubjectBatchInflight.delete(subjectBatchKey);
-
-  // session re-validate (sprint-2/S2 fix pattern).
-  if (authSession?.user.id !== sessionUserId) {
-    return;
-  }
-  recordFetchSuccess();
-
-  const annotations = json.annotations ?? {};
-  for (const [materialId, entry] of Object.entries(annotations)) {
-    if (typeof entry.updatedAt === "string") {
-      lastHydratedAnnotationRevision.set(`${sessionUserId}:${materialId}`, entry.updatedAt);
-    }
-    // per-material hydrate marker so subsequent fetchAnnotationIfMissing
-    // short-circuits.
-    const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
-    annotationFetchedKeys.add(cacheKey);
-    // hydrate the active material's workspace if it matches.
-    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-    const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
-    if (active === materialId && entry.payload && typeof entry.payload === "object") {
-      updatePdfWorkspaceStoreFromServer(
-        subjectId,
-        materialId,
-        entry.payload as Partial<SubjectPdfWorkspace>
-      );
-      lastHydratedAnnotationByMaterial.set(`${sessionUserId}:${subjectId}`, materialId);
-    }
-  }
-
-  // R7 partial fallback + post-batch active material 누락 fallback.
-  // codex P1 (PR #35): renderApp 의 redundant single-GET 호출을 batch-gated 로
-  // 옮겼으니, batch 가 active material 을 cover 못한 경우 single-GET fallback
-  // 책임이 batch 함수로 통합. truncated 와 무관하게 active material 이
-  // 응답에 없으면 single-GET 발사.
-  const workspaceAfter = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const activeAfter = workspaceAfter.material?.backendMaterialId ?? workspaceAfter.material?.id;
-  if (activeAfter && !annotations[activeAfter]) {
-    void fetchAnnotationIfMissing(subjectId, activeAfter);
-  }
-
-  try { renderApp(); } catch { /* ignore */ }
-}
-
-async function fetchAnnotationIfMissing(subjectId: string, materialId: string): Promise<void> {
-  // sprint-2/S2 fix (codex P1): scope cache key to authenticated user.
-  const sessionUserId = authSession?.user.id;
-  if (!sessionUserId) {
-    return;
-  }
-  const cacheKey = `${sessionUserId}:${subjectId}:${materialId}`;
-  const subjectKey = `${sessionUserId}:${subjectId}`;
-  // sprint-2/S3 fix (codex P2): force a refetch when the active material
-  // differs from the last hydrated material for this subject (real A→B→A
-  // revisit signal). For same-material re-renders the cache short-circuit
-  // still applies, preventing the per-render network storm caused by the
-  // previous "release on success" approach.
-  if (
-    annotationFetchedKeys.has(cacheKey)
-    && lastHydratedAnnotationByMaterial.get(subjectKey) === materialId
-  ) {
-    return;
-  }
-  if (lastHydratedAnnotationByMaterial.get(subjectKey) !== materialId) {
-    annotationFetchedKeys.delete(cacheKey);
-  }
-  if (annotationFetchedKeys.has(cacheKey)) {
-    return;
-  }
-  annotationFetchedKeys.add(cacheKey);
-  const releaseCache = () => annotationFetchedKeys.delete(cacheKey);
-  // sprint-2/S3 fix (codex P2): before recording lastHydrated, re-check that
-  // the active material is still the one this fetch was started for. A fast
-  // A→B switch can let an older A response resolve after the newer B response;
-  // without this guard, A's resolution would overwrite the freshly-correct B
-  // marker and trigger a redundant B refetch on the next render.
-  const isStillActiveMaterial = (): boolean => {
-    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-    const active = workspace.material?.backendMaterialId ?? workspace.material?.id;
-    return active === materialId;
-  };
-  try {
-    const response = await fetch(`${apiBaseUrl}/v1/pdf-annotations/${encodeURIComponent(materialId)}`, {
-      credentials: "include"
-    });
-    if (response.status === 404) {
-      // sprint-W21-sprint-2/S2 (plan §R6): 404 = material ownership pre-check
-      // 실패 (material 삭제 / 다른 user 소유 / 비존재). 신규 의미 — 이전
-      // sprint-2 의 "no annotation" 의미와 다름 (그건 이제 200 empty canonical
-      // body 로 옴). cache marker 만 보존 (storm 방지) + revision cache drop +
-      // hydrate 안 함.
-      lastHydratedAnnotationRevision.delete(`${sessionUserId}:${materialId}`);
-      if (isStillActiveMaterial()) {
-        lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
-      } else {
-        releaseCache();
-      }
-      return;
-    }
-    if (response.status === 401 || response.status === 403) {
-      // sprint-2/S3 fix (codex P2): GET auth expiry also surfaces re-login.
-      releaseCache();
-      handleAuthExpiredFromSync();
-      return;
-    }
-    if (!response.ok) {
-      annotationFetchedKeys.delete(cacheKey);
-      if (response.status >= 500) {
-        recordFetchFailure();
-      }
-      return;
-    }
-    // sprint-W21-sprint-2/S2: canonical schema 응답 parse.
-    // shape = `{ annotations: { [materialId]: { payload, updatedAt } }, truncated, total, returned }`.
-    // empty `{ annotations: {} }` = own material w/o snapshot (R6).
-    const json = (await response.json()) as {
-      annotations?: Record<string, { payload?: unknown; updatedAt?: unknown }>;
-    };
-    // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
-    // logout/login between fetch start and resolve must NOT apply user A's
-    // server data into user B's workspace.
-    if (authSession?.user.id !== sessionUserId) {
-      return;
-    }
-    // sprint-2/S2 fix (codex P1): skip hydrate when a local PUT is still
-    // pending for this material — annotation writes are debounced (750ms),
-    // so a stale GET could overwrite fresh local edits before the user's
-    // changes are flushed to the server.
-    if (annotationPutTimers.has(materialId)) {
-      if (isStillActiveMaterial()) {
-        lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
-      } else {
-        releaseCache();
-      }
-      return;
-    }
-    recordFetchSuccess();
-
-    const entry = json.annotations?.[materialId];
-    if (entry) {
-      if (typeof entry.updatedAt === "string") {
-        // sprint-W21-sprint-2/S2 (plan §R4): server-issued revision cache
-        // 갱신. 다음 PUT 의 clientRevision 으로 사용.
-        lastHydratedAnnotationRevision.set(
-          `${sessionUserId}:${materialId}`,
-          entry.updatedAt
-        );
-      }
-      if (entry.payload && typeof entry.payload === "object") {
-        const incoming = entry.payload as Partial<SubjectPdfWorkspace>;
-        updatePdfWorkspaceStoreFromServer(subjectId, materialId, incoming);
-      }
-    }
-    // sprint-2/S3 fix (codex P2): keep the cache marker AND record which
-    // material currently occupies the subject's in-memory bundle. The
-    // material-switch guard at the top of this function clears the cache key
-    // when the active material differs, so revisits still re-fetch.
-    // Race guard: only mark if user is still on this material; otherwise
-    // updatePdfWorkspaceStoreFromServer already declined the hydrate, so
-    // setting lastHydrated would lie about in-memory state.
-    if (isStillActiveMaterial()) {
-      lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
-    } else {
-      releaseCache();
-    }
-  } catch (error) {
-    releaseCache();
-    console.warn("[study-note] annotation GET network error", error);
-    recordFetchFailure();
-  }
-}
-
-// sprint-2/S2 fix (codex P1): apply server snapshot to local workspace store.
-// We bypass `updatePdfWorkspace` here so the hydrate write does not trigger
-// another PUT (it would loop). `savePdfWorkspaceStore` persists to
-// localStorage and `renderApp` reflects in the UI.
-function updatePdfWorkspaceStoreFromServer(
-  subjectId: string,
-  materialId: string,
-  incoming: Partial<SubjectPdfWorkspace>
-): void {
-  const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const material = current.material;
-  // Only hydrate when the active material matches; otherwise defer until the
-  // user selects that material (lazy default — plan §8b.3).
-  // sprint-2/S2 fix (codex P1): when active material mismatches (user switched
-  // between GET start and resolve), clear the cache key for the *fetched*
-  // material so re-entry retries instead of permanently believing it was
-  // already hydrated.
-  // cache key is `${userId}:${subjectId}:${materialId}` (sprint-2/S2 fix).
-  // Re-derive from current authSession so the delete on early return matches
-  // the key added in fetchAnnotationIfMissing.
-  const cacheUserId = authSession?.user.id;
-  const cacheKey = cacheUserId ? `${cacheUserId}:${subjectId}:${materialId}` : null;
-  if (!material) {
-    if (cacheKey) {
-      annotationFetchedKeys.delete(cacheKey);
-    }
-    return;
-  }
-  const currentMaterialId = material.backendMaterialId ?? material.id;
-  if (currentMaterialId !== materialId) {
-    if (cacheKey) {
-      annotationFetchedKeys.delete(cacheKey);
-    }
-    return;
-  }
-  const merged: SubjectPdfWorkspace = {
-    ...current,
-    stickyNotes: Array.isArray(incoming.stickyNotes) ? incoming.stickyNotes : current.stickyNotes,
-    inkStrokes: Array.isArray(incoming.inkStrokes) ? incoming.inkStrokes : current.inkStrokes,
-    textBoxes: Array.isArray(incoming.textBoxes) ? incoming.textBoxes : current.textBoxes,
-    checklists: Array.isArray(incoming.checklists) ? incoming.checklists : current.checklists,
-    tables: Array.isArray(incoming.tables) ? incoming.tables : current.tables,
-    charts: Array.isArray(incoming.charts) ? incoming.charts : current.charts,
-    updatedAt: new Date().toISOString()
-  };
-  pdfWorkspaceStore = {
-    workspaces: {
-      ...pdfWorkspaceStore.workspaces,
-      [subjectId]: merged
-    }
-  };
-  savePdfWorkspaceStore();
-  try { renderApp(); } catch { /* ignore */ }
-}
 
 function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = authSession?.user.id): boolean {
   // sprint-3/S1 (codex P1 backlog): require an authenticated userId to write.
@@ -1828,40 +1333,19 @@ function applySessionTransitionForUser(newUserId: string): void {
     clearTimeout(timer);
   }
   userNotesPutTimers.clear();
-  for (const timer of annotationPutTimers.values()) {
-    clearTimeout(timer);
-  }
-  annotationPutTimers.clear();
-  // sprint-2/S3 fix (codex P1): abort in-flight PUTs so a delayed completion
-  // cannot land on the new session with the previous user's body.
   for (const ac of userNotesPutAborts.values()) {
     ac.abort();
   }
   userNotesPutAborts.clear();
-  for (const ac of annotationPutAborts.values()) {
-    ac.abort();
-  }
-  annotationPutAborts.clear();
-  // sprint-2/S3 fix (codex P1 #NEW-22 / advisor): drop chained PUT promises
-  // so queued continuations after the current in-flight do not fire under
-  // the new session's cookie. The body re-validates session before fetch,
-  // but clearing the chain here avoids the post-abort .then() running at all.
   userNotesPutChains.clear();
-  annotationPutChains.clear();
   userNotesFetchedKeys.clear();
-  annotationFetchedKeys.clear();
-  lastHydratedAnnotationByMaterial.clear();
-  // sprint-W21-sprint-2/S2 (plan §R4 + §R3): cross-user revision/batch cache
-  // 도 함께 reset. 다른 user 의 server revision 또는 batch hydrate marker 가
-  // 새 user 의 PUT 에 잘못된 clientRevision 으로 흘러가지 않도록.
-  lastHydratedAnnotationRevision.clear();
-  annotationSubjectBatchFetched.clear();
-  annotationSubjectBatchInflight.clear();
-  // sprint-2/S3 fix (self-review): also reset sync-failure tracker + banner
-  // state. Without this, user A's accumulated PUT failures (and the resulting
-  // `paused = true` autosave halt) silently persist into user B's session,
-  // disabling B's autosave on first edit despite B having no failures.
-  // Mirrors the equivalent reset block in clearAuthSession.
+  // sprint-2026-W22-sprint-1 / layer B/slice-1: annotation sync caches
+  // (timers/aborts/chains/fetched/by-material/revision/batch/inflight/tracker)
+  // 는 annotation-sync 모듈이 module-private 으로 보유. 한 줄 API 로 reset.
+  clearAnnotationSyncCaches();
+  // sprint-2/S3 fix (self-review): user-notes 측 sync-failure tracker +
+  // banner state 도 함께 reset. annotation 측 tracker 는 위
+  // clearAnnotationSyncCaches() 가 처리.
   syncFailureTracker.paused = false;
   // PR #49 codex R5 P1 — A→B revalidate transition 시 sidebar term cache 도
   // 무효화. 이전 user A 의 term/subject metadata 가 B session UI 에 leak 차단.
@@ -1897,28 +1381,15 @@ function clearAuthSession(): void {
     clearTimeout(timer);
   }
   userNotesPutTimers.clear();
-  for (const timer of annotationPutTimers.values()) {
-    clearTimeout(timer);
-  }
-  annotationPutTimers.clear();
-  // sprint-2/S3 fix (codex P1): also abort in-flight PUTs.
   for (const ac of userNotesPutAborts.values()) {
     ac.abort();
   }
   userNotesPutAborts.clear();
-  for (const ac of annotationPutAborts.values()) {
-    ac.abort();
-  }
-  annotationPutAborts.clear();
-  // sprint-2/S3 fix (codex P1 #NEW-22): drop chained PUT promises on logout.
   userNotesPutChains.clear();
-  annotationPutChains.clear();
   userNotesFetchedKeys.clear();
-  annotationFetchedKeys.clear();
-  lastHydratedAnnotationByMaterial.clear();
-  lastHydratedAnnotationRevision.clear();
-  annotationSubjectBatchFetched.clear();
-  annotationSubjectBatchInflight.clear();
+  // sprint-2026-W22-sprint-1 / layer B/slice-1: annotation sync caches
+  // 는 annotation-sync 모듈이 module-private 으로 보유. 한 줄 reset.
+  clearAnnotationSyncCaches();
   syncFailureTracker.paused = false;
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
@@ -2241,7 +1712,12 @@ function updatePdfWorkspace(
       // valid payload 만 통과시킴.
       starMarks: updated.starMarks ?? []
     };
-    scheduleAnnotationPut(nextId!, payload);
+    scheduleAnnotationPutSync(
+      nextId!,
+      payload,
+      getAnnotationSyncContext(),
+      getAnnotationSyncCallbacks()
+    );
   }
 }
 
@@ -6588,33 +6064,26 @@ function renderApp(): void {
       `${subject.title} / PDF 작업공간`
     ));
     // sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
-    // codex P1 (PR #35): first entry 에서 batch + single 두 GET 동시 발사 race
-    // 방지. 분기 = batch 가 끝났는지 (annotationSubjectBatchFetched 마커) 로
-    // 결정. 첫 entry = batch 만. batch 끝난 후 (또는 material 전환) = single-GET.
-    // fetchAnnotationsForSubject 자체가 truncated / batch 실패 시 active
-    // material 의 single-GET fallback 을 내부에서 발사한다 (아래 함수 참조).
-    //
-    // codex P2 (PR #35 round-5): fetched 마커는 batch 응답 parse 가 끝난
-    // 시점에만 add 된다. inflight 동안에는 fetched=false 라서 else 분기로 떨어져
-    // fetchAnnotationsForSubject() 가 다시 호출되지만, 그 함수가 inflight guard
-    // 로 즉시 return 한다 → 단일 GET 이 중복 발사되지 않는다.
+    // sprint-2026-W22-sprint-1 / layer B/slice-1: annotation-sync 가 자체
+    // inflight/fetched dedup. main.ts 는 batch + single-GET 둘 다 항상 호출
+    // (annotation-sync 가 중복 fetch 차단). batch 가 truncated/실패 시 자체
+    // fallback 으로 active material single-GET 발사. material 전환 시 single
+    // 직접 호출도 안전 (dedup).
     const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
     const material = workspace.material;
-    const sessionUserIdForGate = authSession?.user.id;
-    const subjectBatchKey = sessionUserIdForGate
-      ? `${sessionUserIdForGate}:${subject.id}`
-      : null;
-    if (subjectBatchKey && annotationSubjectBatchFetched.has(subjectBatchKey)) {
-      // batch 이미 끝남 → material 전환 단일-fetch (dedup 은
-      // annotationFetchedKeys 가 처리).
-      if (material) {
-        const materialId = material.backendMaterialId ?? material.id;
-        void fetchAnnotationIfMissing(subject.id, materialId);
-      }
-    } else {
-      // 첫 entry → batch 1회. 내부에서 active material 의 single-GET fallback
-      // 도 발사 (truncated / 응답에 없음 / batch HTTP 실패).
-      void fetchAnnotationsForSubject(subject.id);
+    void fetchAnnotationsForSubjectSync(
+      subject.id,
+      getAnnotationSyncContext(),
+      getAnnotationSyncCallbacks()
+    );
+    if (material) {
+      const materialId = material.backendMaterialId ?? material.id;
+      void fetchAnnotationIfMissingSync(
+        subject.id,
+        materialId,
+        getAnnotationSyncContext(),
+        getAnnotationSyncCallbacks()
+      );
     }
     return;
   }
