@@ -7493,9 +7493,10 @@ async function loadSidebarTermsCache(): Promise<void> {
     ]);
     // session race guard — A의 응답이 B 세션에 쓰이지 않게.
     if (authSession?.user.id !== userIdAtStart) return;
+    // PR #49 codex R2 P2 — fetch fail 시 cache 를 빈 array 로 "loaded" 표시
+    // 하면 sidebar 가 grouped (orphan 한 그룹) 로 영구 전환됨. flat fallback
+    // 유지 위해 null 그대로 두고 다음 trigger 에서 retry.
     if (!termsRes.ok || !subjectsRes.ok) {
-      sidebarTermsCache = [];
-      sidebarSubjectsCache = [];
       return;
     }
     const termsJson = (await termsRes.json()) as Array<{
@@ -7529,8 +7530,8 @@ async function loadSidebarTermsCache(): Promise<void> {
     refreshSidebarOpenTermIds();
   } catch {
     if (authSession?.user.id !== userIdAtStart) return;
-    sidebarTermsCache = [];
-    sidebarSubjectsCache = [];
+    // PR #49 codex R2 P2 — 네트워크 error 도 cache 를 빈 array 로 채우지 않음
+    // (flat fallback 유지). 다음 trigger 에서 retry.
   }
 }
 

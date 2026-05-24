@@ -88,11 +88,20 @@ export function getDefaultOpenTermIds(
   nowIso: string
 ): string[] {
   const now = new Date(nowIso);
+  if (Number.isNaN(now.getTime())) return [];
   const matched: string[] = [];
   for (const group of groups) {
     if (!group.term) continue;
-    const start = group.term.startDate ? new Date(group.term.startDate) : null;
-    const end = group.term.endDate ? new Date(group.term.endDate) : null;
+    // PR #49 codex R2 P2 — Invalid Date (malformed startDate/endDate) 면 NaN
+    // 보장 X. parse 결과 NaN 이면 그 boundary 는 무시 (해당 row 가 default
+    // open 으로 false-positive 잡히지 않게).
+    const parseOrNull = (raw: string | null): Date | null => {
+      if (!raw) return null;
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const start = parseOrNull(group.term.startDate);
+    const end = parseOrNull(group.term.endDate);
     if (!start && !end) continue;
     if (start && now.getTime() < start.getTime()) continue;
     if (end && now.getTime() > end.getTime() + 24 * 60 * 60 * 1000 - 1) continue; // inclusive endDate (end of day)
