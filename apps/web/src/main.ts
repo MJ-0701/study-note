@@ -2559,14 +2559,28 @@ async function assignPdfMaterialClassDate(
     return;
   }
 
+  // PR #51 codex R3 P2 — BE 가 ISO date 강제. sentinel "metadata-pending"
+  // 보내면 400. UI "수업일 미지정" 선택 시 sentinel 대신 placeholder ISO
+  // (오늘) 전송하고 FE-local 에서 sentinel 로 표시 유지. (intent path 와 동일
+  // 패턴, R2 fix 후 확장).
+  const wireClassDate =
+    nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE
+      ? new Date().toISOString().slice(0, 10)
+      : nextClassDate;
+
   try {
     const updated = await updatePdfMaterialMetadata(apiBaseUrl, material.backendMaterialId, {
-      classDate: nextClassDate
+      classDate: wireClassDate
     });
     const updatedDraft = createPdfMaterialFromBackend(updated, {
       selectedPage: material.selectedPage,
       selectedTool: material.selectedTool
     });
+    // PR #51 codex R3 P2 — UI "수업일 미지정" 선택이면 BE 가 ISO 저장하더라도
+    // FE-local 표시는 sentinel 유지. import path 와 동일 패턴.
+    if (nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE) {
+      updatedDraft.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
+    }
     replacePdfWorkspaceMaterial(subjectId, materialId, updatedDraft);
     intakeFeedback = {
       kind: "success",
