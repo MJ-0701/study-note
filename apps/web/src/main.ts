@@ -1925,6 +1925,11 @@ function applySessionTransitionForUser(newUserId: string): void {
   // disabling B's autosave on first edit despite B having no failures.
   // Mirrors the equivalent reset block in clearAuthSession.
   syncFailureTracker.paused = false;
+  // PR #49 codex R5 P1 — A→B revalidate transition 시 sidebar term cache 도
+  // 무효화. 이전 user A 의 term/subject metadata 가 B session UI 에 leak 차단.
+  sidebarTermsCache = null;
+  sidebarSubjectsCache = null;
+  sidebarOpenTermIds = new Set();
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
   syncBackendErrorReported = false;
@@ -7747,9 +7752,16 @@ function refreshSidebarOpenTermIds(): void {
   if (!userId || !sidebarTermsCache || !sidebarSubjectsCache) return;
   const groups = groupSubjectsByTerm(sidebarSubjectsCache, sidebarTermsCache);
   const defaults = getDefaultOpenTermIds(groups, new Date().toISOString());
-  const stored = isBrowserRuntime
-    ? parseStoredOpenState(window.localStorage.getItem(sidebarTermOpenStorageKey(userId)))
-    : {};
+  // PR #49 codex R5 P2 — localStorage getItem 도 SecurityError 던질 수 있음
+  // (private window, ITP). try/catch + fallback {} 으로 보호.
+  let stored: Record<string, boolean> = {};
+  if (isBrowserRuntime) {
+    try {
+      stored = parseStoredOpenState(window.localStorage.getItem(sidebarTermOpenStorageKey(userId)));
+    } catch {
+      stored = {};
+    }
+  }
   sidebarOpenTermIds = resolveOpenTermIds(groups, defaults, stored);
 }
 
