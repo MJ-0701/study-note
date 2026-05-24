@@ -3,7 +3,6 @@
 // Safari 18.5 에서 누락된 사례 회복. dynamic import 가 아니라 top-level import
 // 라야 다른 모든 모듈 평가 전에 prototype 이 패치된다.
 import "./polyfills";
-import morphdom from "morphdom";
 import {
   clearDatadogRumUser,
   initializeDatadogRum,
@@ -125,6 +124,26 @@ import {
   type SubjectPdfWorkspace
 } from "@study-note/domain";
 import "./styles.css";
+import {
+  intakePath,
+  parseRoute,
+  subjectClassPath,
+  subjectIntakePath,
+  subjectMcpPath,
+  subjectMemorizePath,
+  subjectPdfWorkspacePath,
+  subjectSummaryPath,
+  weekSummaryPath,
+  type Route
+} from "./app/routes";
+import { escapeHtml } from "./app/escape-html";
+import {
+  renderInto as renderIntoSink,
+  renderShell as renderAppShell,
+  renderNotFound,
+  type AppShellContext,
+  type RenderSink
+} from "./app/appShell";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -135,20 +154,6 @@ initializeDatadogRum();
 // Zod 통과 + FE 가 sentinel 로 인식 (실 수업일과 충돌 없음).
 const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending"; // FE-local legacy marker
 const PDF_MATERIAL_UNASSIGNED_WIRE_DATE = "1970-01-01"; // BE wire sentinel
-
-type Route =
-  | { name: "home" }
-  | { name: "intake" }
-  | { name: "pdf-workspaces" }
-  | { name: "subject"; subjectId: string }
-  | { name: "subject-class"; subjectId: string }
-  | { name: "subject-summaries"; subjectId: string }
-  | { name: "subject-summary-detail"; subjectId: string; weekId: string }
-  | { name: "subject-mcp"; subjectId: string }
-  | { name: "subject-memorize"; subjectId: string }
-  | { name: "subject-intake"; subjectId: string }
-  | { name: "pdf-workspace"; subjectId: string }
-  | { name: "week"; subjectId: string; weekId: string };
 
 type IntakeFeedback =
   | {
@@ -217,20 +222,13 @@ const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 // the session attaches. See applySessionTransitionForUser refactor for the
 // load wiring.
 let notebook: StudyNotebook = sampleLectureNote;
-// sprint-3/S2: pdfWorkspaceStore is no longer loaded at module init — without
-// an authenticated userId we cannot pick the correct namespaced key. Boot
-// starts empty; revalidate / sign-in success paths call
-// `loadPdfWorkspaceStore(session.user.id)` from `applySessionTransitionForUser`
-// to populate the user's data once the session attaches. Mirrors the notebook
-// loading semantics introduced in sprint-3/S1.
+// sprint-3/S2: pdfWorkspaceStore — userId-namespaced lazy load (sprint-3/S1 패턴).
 let pdfWorkspaceStore: PdfWorkspaceStore = { workspaces: {} };
 // sprint-4/S1: in-memory tracker for the last session userId attached during
 // this page lifetime. Used by applySessionTransitionForUser to distinguish
 // "first attach" (no sync state to reset) from "different user transition"
-// (reset in-flight PUT + sync caches). Page reload starts undefined: any
-// pending PUT from a previous tab is already gone with the closed page, so
-// no localStorage marker is needed. Marker (`study-note.session.lastUserId`)
-// removed in sprint-4/S1 — legacy unscoped keys are no longer migrated.
+// (reset in-flight PUT + sync caches). Page reload starts undefined: pending
+// PUT from a previous tab is gone with the closed page.
 let lastSessionUserId: string | undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
@@ -345,53 +343,28 @@ if (isBrowserRuntime && !app) {
 
 const appRoot = app;
 
-// sprint-12/slice-7: morphdom DOM diff 도입.
-// 이전 = appRoot.innerHTML = html 매 호출 시 전체 DOM teardown + rebuild → PDF iframe
-// 재생성 → blob URL 재로드 → 점멸. morphdom = element-level diff, iframe element 의
-// src attribute 가 동일하면 setAttribute 호출 X → iframe reload 0 = 점멸 해결.
-function renderInto(html: string): void {
-  if (!appRoot) {
+// sprint-12/slice-7: morphdom DOM diff 도입. renderInto = app/appShell.ts.
+// sprint-2026-W21-sprint-2 / layer A: module state 의존 (appRoot + widget
+// post-mount effect 5종) 은 main.ts 가 1회 구성한 RenderSink 로 주입.
+// renderInto sink helper = main.ts 가 호출하는 thin wrapper.
+const mainRenderSink: RenderSink | null = appRoot
+  ? {
+      appRoot,
+      postMountEffects: [
+        () => refreshTableWidgets(),
+        () => refreshChartWidgets(),
+        () => applyQueuedDrillHighlight(),
+        () => refreshActiveDrillHighlights(),
+        (root) => applyPdfCanvasMounts(root)
+      ]
+    }
+  : null;
+
+function mountRender(html: string): void {
+  if (!mainRenderSink) {
     return;
   }
-
-  // morphdom 가 wrapper element 의 children 만 diff 적용.
-  const wrapper = document.createElement("div");
-  wrapper.id = appRoot.id;
-  wrapper.innerHTML = html;
-  morphdom(appRoot, wrapper, {
-    childrenOnly: true,
-    getNodeKey(node) {
-      if (node instanceof HTMLElement && node.dataset.pdfFrameKey) {
-        return node.dataset.pdfFrameKey;
-      }
-
-      return node instanceof Element ? node.id : undefined;
-    },
-    onBeforeElUpdated(fromEl, toEl) {
-      if (shouldReplacePdfFrame(fromEl, toEl)) {
-        fromEl.replaceWith(toEl.cloneNode(true));
-        return false;
-      }
-
-      // sprint-W21-sprint-4/S1: PDF canvas mount preservation.
-      // 동일 (material, page, blob) 의 div 는 fromEl + 자식 canvas 보존,
-      // class (is-active/is-preload toggle) 만 sync. 매 render 마다 mountPdfCanvas
-      // 호출되어 canvas 재 paint 되는 비효율 차단.
-      if (shouldPreservePdfCanvasMount(fromEl, toEl)) {
-        if (fromEl instanceof HTMLElement && toEl instanceof HTMLElement) {
-          fromEl.className = toEl.className;
-        }
-        return false;
-      }
-
-      return true;
-    }
-  });
-  refreshTableWidgets();
-  refreshChartWidgets();
-  applyQueuedDrillHighlight();
-  refreshActiveDrillHighlights();
-  void applyPdfCanvasMounts(appRoot);
+  renderIntoSink(html, mainRenderSink);
 }
 
 // sprint-W21-sprint-4/S1: render 후 PDF canvas mount effect.
@@ -505,40 +478,6 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
       });
     });
   }
-}
-
-function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
-  if (fromEl.tagName !== "IFRAME" || toEl.tagName !== "IFRAME") {
-    return false;
-  }
-
-  const fromFrame = fromEl as HTMLElement;
-  const toFrame = toEl as HTMLElement;
-
-  if (fromFrame.dataset.pdfFrame !== "true" || toFrame.dataset.pdfFrame !== "true") {
-    return false;
-  }
-
-  return (
-    fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
-    fromEl.getAttribute("src") !== toEl.getAttribute("src")
-  );
-}
-
-// sprint-W21-sprint-4/S1: same (material, page, blob) PDF canvas mount div 는
-// morphdom 이 update 하지 않고 fromEl + canvas 그대로 두도록 표식.
-function shouldPreservePdfCanvasMount(fromEl: Element, toEl: Element): boolean {
-  if (!(fromEl instanceof HTMLElement) || !(toEl instanceof HTMLElement)) {
-    return false;
-  }
-  if (fromEl.dataset.pdfMount !== "true" || toEl.dataset.pdfMount !== "true") {
-    return false;
-  }
-  return (
-    fromEl.dataset.materialId === toEl.dataset.materialId &&
-    fromEl.dataset.pageNumber === toEl.dataset.pageNumber &&
-    fromEl.dataset.blobUrl === toEl.dataset.blobUrl
-  );
 }
 
 function getDrillHighlightSelector(type: InspectorDrillType): string {
@@ -1840,9 +1779,6 @@ function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = 
   }
 }
 
-// slice-2: loadAuthSession / saveAuthSession removed (F2 — localStorage auth forbidden).
-// Session is cookie-based; in-memory authSession is rehydrated via /v1/auth/me on boot.
-
 // sprint-2/S3 fix (codex P1) → sprint-3/S2+S3: on session attach (revalidate /
 // sign-in), load each user's localStorage data from their userId-namespaced
 // key. The destructive wipe-on-transition path is gone — the namespace itself
@@ -1854,11 +1790,9 @@ function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = 
 // cookie (cross-namespace authorship leak is structurally impossible, but a
 // PUT already on the wire carries the previous body and must be aborted).
 //
-// First-load semantics: lastSessionUserId starts undefined on every page load
-// (in-memory only, marker removed in sprint-4/S1). The very first session
-// attach is treated as "first attach" — no sync caches exist yet to reset.
-// Subsequent A→B attaches within the same page lifetime trigger the cache
-// reset below.
+// First-load semantics: lastSessionUserId starts undefined on every page
+// load (in-memory only). First session attach = "first attach" — no sync
+// caches exist yet to reset. Subsequent A→B attaches trigger the reset below.
 //
 // Called from the two session-attach success paths (revalidate, sign-in)
 // only — never from clearAuthSession, because that fires on transient
@@ -6557,13 +6491,13 @@ async function importWeekNoteFile(
 function renderApp(): void {
   if (authBootState === "checking") {
     document.body.removeAttribute("data-route");
-    renderInto(renderAuthSessionCheckPage(authBootNotice));
+    mountRender(renderAuthSessionCheckPage(authBootNotice));
     return;
   }
 
   if (!authSession) {
     document.body.removeAttribute("data-route");
-    renderInto(renderAuthLoginPage(authMode, loginFeedback));
+    mountRender(renderAuthLoginPage(authMode, loginFeedback));
     return;
   }
 
@@ -6593,7 +6527,7 @@ function renderApp(): void {
     route.name !== "pdf-workspaces" &&
     !subject
   ) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, { name: "home" }),
       renderNotFound(),
       "study-note / 찾을 수 없음"
@@ -6602,7 +6536,7 @@ function renderApp(): void {
   }
 
   if ((route.name === "week" || route.name === "subject-summary-detail") && subject && !week) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderNotFound(),
       `${subject.title} / 찾을 수 없음`
@@ -6611,7 +6545,7 @@ function renderApp(): void {
   }
 
   if (route.name === "home") {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, route),
       renderHome(notebook),
       `${notebook.title} / 홈`
@@ -6620,7 +6554,7 @@ function renderApp(): void {
   }
 
   if (route.name === "intake") {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, route),
       renderIntakeGuide(notebook),
       `${notebook.title} / 자료 투입`
@@ -6629,7 +6563,7 @@ function renderApp(): void {
   }
 
   if (route.name === "pdf-workspaces") {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, route),
       renderPdfWorkspaceIndex(notebook),
       `${notebook.title} / PDF 작업공간`
@@ -6638,7 +6572,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-intake" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectIntakeGuide(subject),
       `${subject.title} / 자료 투입`
@@ -6648,7 +6582,7 @@ function renderApp(): void {
 
   if (route.name === "pdf-workspace" && subject) {
     ensurePdfPreviewForWorkspace(subject.id);
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
@@ -6686,7 +6620,7 @@ function renderApp(): void {
   }
 
   if ((route.name === "subject" || route.name === "subject-class") && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectClassPage(subject),
       `${subject.title} / 수업`
@@ -6695,7 +6629,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-summaries" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectSummariesPage(subject),
       `${subject.title} / 요약본`
@@ -6704,7 +6638,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-summary-detail" && subject && week) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderWeekSummaryPage(subject, week),
       `${subject.title} / ${week.label} 요약본`
@@ -6713,7 +6647,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-mcp" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectMcpPage(subject),
       `${subject.title} / MCP 호출`
@@ -6722,7 +6656,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-memorize" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectMemorizePage(subject),
       `${subject.title} / 필수 암기노트`
@@ -6731,7 +6665,7 @@ function renderApp(): void {
   }
 
   if (route.name === "week" && subject && week) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderWeekPage(subject, week),
       `${subject.title} / ${week.label}`
@@ -6740,103 +6674,6 @@ function renderApp(): void {
     void fetchUserNoteIfMissing(subject.id, week.id);
   }
 
-  // sprint-12/slice-6 revert: iframe detach/re-attach 패턴 = Chromium HTML spec 으로
-  // iframe reload trigger → PDF 미표시. mountPdfFrame 폐기. 점멸 fix 후속 별 sprint
-  // (selective re-render 또는 PDF stage 외부 mount 큰 변경 필요).
-}
-
-function parseRoute(hash: string): Route {
-  const path = hash.replace(/^#\/?/, "");
-  const rawParts = path.split("/").filter(Boolean);
-  const parts = rawParts.map((part) => {
-    try {
-      return decodeURIComponent(part);
-    } catch {
-      return part;
-    }
-  });
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "weeks" && parts[3]) {
-    return { name: "week", subjectId: parts[1], weekId: parts[3] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "intake") {
-    return { name: "subject-intake", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "pdf-workspace") {
-    return { name: "pdf-workspace", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "class") {
-    return { name: "subject-class", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "summaries" && parts[3]) {
-    return { name: "subject-summary-detail", subjectId: parts[1], weekId: parts[3] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "summaries") {
-    return { name: "subject-summaries", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "summary") {
-    return { name: "subject-summaries", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "mcp") {
-    return { name: "subject-mcp", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1] && parts[2] === "memorize") {
-    return { name: "subject-memorize", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "subjects" && parts[1]) {
-    return { name: "subject", subjectId: parts[1] };
-  }
-
-  if (parts[0] === "pdf-workspaces") {
-    return { name: "pdf-workspaces" };
-  }
-
-  if (parts[0] === "intake") {
-    return { name: "intake" };
-  }
-
-  return { name: "home" };
-}
-
-function intakePath(): string {
-  return "#/intake";
-}
-
-function subjectClassPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/class`;
-}
-
-function subjectSummaryPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/summaries`;
-}
-
-function weekSummaryPath(subject: SubjectNote, week: WeekNote): string {
-  return `#/subjects/${subject.id}/summaries/${week.id}`;
-}
-
-function subjectMcpPath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/mcp`;
-}
-
-function subjectMemorizePath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/memorize`;
-}
-
-function subjectIntakePath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/intake`;
-}
-
-function subjectPdfWorkspacePath(subject: SubjectNote): string {
-  return `#/subjects/${subject.id}/pdf-workspace`;
 }
 
 interface CsvSeriesPoint {
@@ -7598,105 +7435,23 @@ function weekPath(subject: SubjectNote, week: WeekNote): string {
   return `#/subjects/${subject.id}/weeks/${week.id}`;
 }
 
-function renderShell(sidebar: string, mainContent: string, crumb: string): string {
-  // sprint-1/S2 fix (codex P2): only apply `inert` when the help modal will
-  // actually render. The modal is gated by both `hotkeyHelpModalOpen` and the
-  // current route being the PDF workspace; if either is false the inert flag
-  // would lock the shell without a visible dialog to close it.
-  const modalWillRender = hotkeyHelpModalOpen && !!getActivePdfWorkspaceSubjectId();
-  const shellInertAttr = modalWillRender ? " inert" : "";
-  return `
-    <div class="app-shell"${shellInertAttr}>
-      ${sidebar}
-      <div class="main-area">
-        <header class="topbar">
-          <span class="crumb">${crumb}</span>
-          <div class="topbar-session">
-            <span class="topbar-meta">${authSession ? `${authSession.user.displayName} · ` : ""}${notebook.updatedAt} 업데이트</span>
-            <button class="text-button" type="button" data-action="logout">로그아웃</button>
-          </div>
-        </header>
-        ${renderNotebookStorageBanner()}
-        <main class="content">${mainContent}</main>
-        <footer class="site-footer">
-          study-note · 과목 총정리, 날짜별 노트, 로컬 자료 투입 · 원문 PDF 공개 공유 없음
-        </footer>
-      </div>
-    </div>
-    ${renderHotkeyHelpModal()}
-  `;
+// sprint-2026-W21-sprint-2 / layer A: renderShell / banner / modal =
+// app/appShell.ts. AppShellContext = least-privilege narrow (broad
+// authSession / notebook 객체 노출 X). 매 renderApp 호출 시 module
+// state 에서 narrow.
+function getAppShellContext(): AppShellContext {
+  return {
+    displayName: authSession?.user.displayName ?? null,
+    notebookUpdatedAt: notebook.updatedAt,
+    notebookStorageError: notebookStorageError ?? null,
+    syncBackendError: syncBackendError ?? null,
+    hotkeyHelpModalOpen,
+    activePdfWorkspaceSubjectId: getActivePdfWorkspaceSubjectId() ?? null
+  };
 }
 
-function renderNotebookStorageBanner(): string {
-  // sprint-2/S2 fix (codex P1): show either banner (localStorage save fail OR
-  // BE sync pause). Two independent sources; dismiss button clears both for UX
-  // simplicity. localStorage 우선 (더 치명적).
-  const message = notebookStorageError ?? syncBackendError;
-  if (!message) {
-    return "";
-  }
-  return `
-    <div class="storage-error-banner" role="alert">
-      <p>${escapeHtml(message)}</p>
-      <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
-    </div>
-  `;
-}
-
-// sprint-1/S2: hotkey help modal — listed shortcuts so users do not have to memorise.
-function renderHotkeyHelpModal(): string {
-  if (!hotkeyHelpModalOpen) {
-    return "";
-  }
-
-  // sprint-1/S2 fix (codex P2): only render the modal on the PDF workspace
-  // route. Outside it the keyboard handler returns early and the user would be
-  // unable to close the modal, while the shell `inert` attribute would lock
-  // navigation. Defensive — hashchange already clears the flag, but a stale
-  // flag from a non-shell path (auth reset, direct deep-link) is possible.
-  if (!getActivePdfWorkspaceSubjectId()) {
-    return "";
-  }
-
-  const rows: Array<[string, string]> = [
-    ["R", "읽기"],
-    ["S", "포스트잇"],
-    ["P", "펜"],
-    ["E", "지우개"],
-    ["T", "텍스트 박스"],
-    ["C", "체크리스트"],
-    ["B", "표"],
-    ["G", "그래프"],
-    ["Cmd/Ctrl + [", "이전 페이지"],
-    ["Cmd/Ctrl + ]", "다음 페이지"],
-    ["F", "전체화면 토글"],
-    ["?", "이 도움말 열기 / 닫기"],
-    ["Esc", "도구 해제 (도구 선택 시) / 도움말 닫기 / 전체화면 종료"]
-  ];
-
-  const body = rows
-    .map(
-      ([key, action]) => `
-        <li>
-          <kbd class="tool-button__key">${escapeHtml(key)}</kbd>
-          <span>${escapeHtml(action)}</span>
-        </li>
-      `
-    )
-    .join("");
-
-  return `
-    <div class="hotkey-help-modal" role="dialog" aria-modal="true" aria-labelledby="hotkey-help-title" data-action="close-hotkey-help-backdrop">
-      <div class="hotkey-help-modal__panel" role="document">
-        <header class="hotkey-help-modal__header">
-          <h2 id="hotkey-help-title">단축키 도움말</h2>
-          <button class="text-button" type="button" data-action="close-hotkey-help" autofocus>닫기</button>
-        </header>
-        <ul class="hotkey-help-modal__list">${body}</ul>
-        <p class="hotkey-help-modal__hint">PDF 작업공간에서 동작합니다. 입력 중에는 단일 키 단축키가 일시 비활성화됩니다.</p>
-      </div>
-    </div>
-  `;
+function composeShell(sidebar: string, mainContent: string, crumb: string): string {
+  return renderAppShell(sidebar, mainContent, crumb, getAppShellContext());
 }
 
 function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
@@ -8329,15 +8084,6 @@ function renderIntakeFeedback(
       ${retryButton}
     </div>
   `;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 const DRILL_LABEL_LIMIT = 30;
@@ -10636,17 +10382,6 @@ function getPdfMaterialOwnerLabel(material: PdfMaterialDraft): string {
 function canManagePdfMaterials(): boolean {
   const role = authSession?.user.role.toLowerCase();
   return role === "master" || role === "admin";
-}
-
-function renderNotFound(): string {
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">찾을 수 없음</p>
-      <h1>페이지를 찾을 수 없습니다.</h1>
-      <p class="lede">홈에서 과목을 다시 선택하세요.</p>
-      <p><a href="#/">홈으로 돌아가기</a></p>
-    </section>
-  `;
 }
 
 function renderMetric(label: string, value: string, description: string): string {

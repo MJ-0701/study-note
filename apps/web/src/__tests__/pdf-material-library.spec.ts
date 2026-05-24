@@ -9,15 +9,42 @@ import { describe, it } from "node:test";
 
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 const mainTs = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+// sprint-2026-W21-sprint-2 / layer A: routing/shell 모듈 분리 후 일부
+// 함수 (parseRoute + path helpers) 가 app/routes.ts 로 이동. spec 의
+// source-grep 패턴이 두 곳을 모두 검색하도록 SOURCES 확장.
+const appRoutesTs = readFileSync(new URL("../app/routes.ts", import.meta.url), "utf8");
+const SOURCES: Array<{ name: string; text: string }> = [
+  { name: "main.ts", text: mainTs },
+  { name: "app/routes.ts", text: appRoutesTs }
+];
 
 function getFunctionBlock(name: string): string {
-  const startToken = `function ${name}`;
-  const startIndex = mainTs.indexOf(startToken);
+  for (const source of SOURCES) {
+    const text = source.text;
+    // function / export function 둘 다 매치 (app/routes.ts 의 export 형태).
+    const tokens = [`function ${name}`, `export function ${name}`];
+    let startIndex = -1;
+    let matchedToken = "";
+    for (const token of tokens) {
+      const idx = text.indexOf(token);
+      if (idx !== -1 && (startIndex === -1 || idx < startIndex)) {
+        startIndex = idx;
+        matchedToken = token;
+      }
+    }
+    if (startIndex === -1) {
+      continue;
+    }
+    const offset = startIndex + matchedToken.length;
+    const candidates = [
+      text.indexOf("\nfunction ", offset),
+      text.indexOf("\nexport function ", offset)
+    ].filter((value) => value !== -1);
+    const nextFunctionIndex = candidates.length === 0 ? -1 : Math.min(...candidates);
+    return text.slice(startIndex, nextFunctionIndex === -1 ? undefined : nextFunctionIndex);
+  }
 
-  assert.notEqual(startIndex, -1, `expected ${name} to exist`);
-
-  const nextFunctionIndex = mainTs.indexOf("\nfunction ", startIndex + startToken.length);
-  return mainTs.slice(startIndex, nextFunctionIndex === -1 ? undefined : nextFunctionIndex);
+  assert.fail(`expected ${name} to exist`);
 }
 
 function getCssRuleBlock(selector: string): string {
