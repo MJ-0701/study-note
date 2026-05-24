@@ -4745,9 +4745,14 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 
   try {
     const pageCount = estimatePdfPageCount(await file.arrayBuffer());
+    // S3 AC12 (codex PR #51 P0 fix): BE 가 classDate ISO 강제 → 업로드 시점에
+    // 오늘 날짜를 placeholder 로 전송. 사용자는 이후 updateMaterialMetadata
+    // 로 실제 수업일 갱신. PDF_MATERIAL_UNASSIGNED_CLASS_DATE 는 in-memory
+    // 표시용으로만 잔존 (legacy local data BC).
+    const todayIso = new Date().toISOString().slice(0, 10);
     const intent = await createMaterialUploadIntent(apiBaseUrl, {
       subjectId,
-      classDate: PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
+      classDate: todayIso,
       fileName: file.name,
       fileSize: file.size,
       pageCount,
