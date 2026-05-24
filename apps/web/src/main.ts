@@ -3006,12 +3006,18 @@ function handleDocumentClick(event: MouseEvent): void {
   // sprint-W21-sprint-1/S2/AC9 — sidebar term group <details><summary> toggle.
   // 기본 <details> 동작은 native (브라우저가 open attr toggle) — 우리는 click
   // 시점에 localStorage 에 next state 를 기록만 한다. preventDefault X.
-  if (quickNoteButton?.dataset.action === "sidebar-term-toggle") {
-    const termId = quickNoteButton.dataset.termId;
-    if (termId && termId !== "__orphan__") {
-      toggleSidebarTermOpen(termId);
+  // PR #49 codex Round-1 P1 fix: `quickNoteButton` 은 closest("[data-action]")
+  // 을 HTMLButtonElement 로 typing 해서 <summary> click 을 못 잡음. summary
+  // 는 별도 closest 검색.
+  if (target instanceof Element) {
+    const sidebarTermSummary = target.closest<HTMLElement>("[data-action='sidebar-term-toggle']");
+    if (sidebarTermSummary) {
+      const termId = sidebarTermSummary.dataset.termId;
+      if (termId && termId !== "__orphan__") {
+        toggleSidebarTermOpen(termId);
+      }
+      return;
     }
-    return;
   }
 
   if (target instanceof HTMLElement && target.dataset.action === "close-hotkey-help-backdrop") {
@@ -7474,14 +7480,19 @@ const PERSONA_BY_SUBJECT: Record<string, { nick: string; active: boolean }> = {
 };
 
 // sprint-W21-sprint-1/S2/AC8-AC10 — sidebar term cache loader + render.
+// PR #49 codex Round-1 P1 fix: user A 의 fetch 가 resolve 되는 사이 user B 로
+// 로그인 전환되면 stale response 가 cache 를 오염시킴. capture user 후 await,
+// resolve 시점에 authSession.user.id 가 여전히 동일한지 확인 후에만 write.
 async function loadSidebarTermsCache(): Promise<void> {
-  const userId = authSession?.user.id;
-  if (!userId) return;
+  const userIdAtStart = authSession?.user.id;
+  if (!userIdAtStart) return;
   try {
     const [termsRes, subjectsRes] = await Promise.all([
       fetch(`${apiBaseUrl}/v1/terms`, { credentials: "include" }),
       fetch(`${apiBaseUrl}/v1/subjects`, { credentials: "include" })
     ]);
+    // session race guard — A의 응답이 B 세션에 쓰이지 않게.
+    if (authSession?.user.id !== userIdAtStart) return;
     if (!termsRes.ok || !subjectsRes.ok) {
       sidebarTermsCache = [];
       sidebarSubjectsCache = [];
@@ -7500,6 +7511,8 @@ async function loadSidebarTermsCache(): Promise<void> {
       title: string;
       termId: string | null;
     }>;
+    // race guard 재확인 (await json 사이 race 가능).
+    if (authSession?.user.id !== userIdAtStart) return;
     sidebarTermsCache = termsJson.map((t) => ({
       id: t.id,
       grade: t.grade,
@@ -7515,6 +7528,7 @@ async function loadSidebarTermsCache(): Promise<void> {
     }));
     refreshSidebarOpenTermIds();
   } catch {
+    if (authSession?.user.id !== userIdAtStart) return;
     sidebarTermsCache = [];
     sidebarSubjectsCache = [];
   }
