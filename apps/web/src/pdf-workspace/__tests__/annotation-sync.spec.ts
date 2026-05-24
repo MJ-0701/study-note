@@ -459,15 +459,26 @@ describe("AC2 (k) — invalid revision token skipped", () => {
 
 describe("AC2 (l) — metric context scrub allowlist", () => {
   it("onSyncMetricEvent ctx 가 sensitive field (payload/userId/raw materialId/raw error.message) 미포함", async () => {
+    const SECRET_USER_ID = "u1";
+    const SECRET_MATERIAL_ID = "secret-material-id-abc-xyz-123";
+    const SECRET_PAYLOAD_VALUE = "secret-payload-value-not-in-log";
+    const SECRET_ERROR_MESSAGE = "network down — secret in message";
+    const SECRET_REVISION = "secret-revision-token-2026-xyz";
     const harness = makeHarness({
-      sessionUserId: "u1",
-      workspace: makeWorkspace("m1"),
+      sessionUserId: SECRET_USER_ID,
+      workspace: makeWorkspace(SECRET_MATERIAL_ID),
       fetchImpl: async () => {
-        throw new TypeError("network down — secret in message");
+        throw new TypeError(SECRET_ERROR_MESSAGE);
       }
     });
     try {
-      await putAnnotationToBE("m1", { secret: "shh" }, harness.ctx, harness.cb);
+      await putAnnotationToBE(
+        SECRET_MATERIAL_ID,
+        { secret: SECRET_PAYLOAD_VALUE, revisionToken: SECRET_REVISION },
+        harness.ctx,
+        harness.cb
+      );
+      // (1) allowed key 만 사용
       for (const call of harness.metricCalls) {
         const keys = Object.keys(call.ctx ?? {});
         for (const k of keys) {
@@ -476,6 +487,30 @@ describe("AC2 (l) — metric context scrub allowlist", () => {
             `metric ctx field ${k} must be in allowlist`
           );
         }
+      }
+      // (2) value-level non-leakage assertion (Gate 6 round-3 P1)
+      const allMetricValues = harness.metricCalls.flatMap((c) =>
+        Object.values(c.ctx ?? {}).map((v) => String(v))
+      );
+      const serializedMetrics = JSON.stringify(harness.metricCalls);
+      const forbiddenValues = [
+        SECRET_USER_ID,
+        SECRET_MATERIAL_ID,
+        SECRET_PAYLOAD_VALUE,
+        SECRET_ERROR_MESSAGE,
+        SECRET_REVISION
+      ];
+      for (const forbidden of forbiddenValues) {
+        for (const value of allMetricValues) {
+          assert.ok(
+            !value.includes(forbidden),
+            `metric value must not leak '${forbidden}' (got '${value}')`
+          );
+        }
+        assert.ok(
+          !serializedMetrics.includes(forbidden),
+          `serialized metric must not leak '${forbidden}'`
+        );
       }
     } finally {
       harness.restore();
