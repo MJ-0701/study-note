@@ -8,7 +8,15 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
-const mainTs = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+// sprint-2026-W21-sprint-2 / layer A: morphdom callback (getNodeKey,
+// shouldReplacePdfFrame, shouldPreservePdfCanvasMount, renderInto) 와
+// shell view 가 app/appShell.ts 로 이동. main.ts-bound regression grep 은
+// 두 source 합쳐서 본다. layer A 분해가 회귀 ID (예: loadedPdfFrameKeys)
+// 를 새 모듈로 옮기지 않았는지 verify 도 합본 기준.
+const mainTs =
+  readFileSync(new URL("../main.ts", import.meta.url), "utf8") +
+  "\n" +
+  readFileSync(new URL("../app/appShell.ts", import.meta.url), "utf8");
 
 function getCssRuleBlock(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

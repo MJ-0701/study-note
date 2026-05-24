@@ -3,7 +3,6 @@
 // Safari 18.5 에서 누락된 사례 회복. dynamic import 가 아니라 top-level import
 // 라야 다른 모든 모듈 평가 전에 prototype 이 패치된다.
 import "./polyfills";
-import morphdom from "morphdom";
 import {
   clearDatadogRumUser,
   initializeDatadogRum,
@@ -137,6 +136,14 @@ import {
   weekSummaryPath,
   type Route
 } from "./app/routes";
+import { escapeHtml } from "./app/escape-html";
+import {
+  renderInto as renderIntoSink,
+  renderShell as renderAppShell,
+  renderNotFound,
+  type AppShellContext,
+  type RenderSink
+} from "./app/appShell";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -343,53 +350,28 @@ if (isBrowserRuntime && !app) {
 
 const appRoot = app;
 
-// sprint-12/slice-7: morphdom DOM diff 도입.
-// 이전 = appRoot.innerHTML = html 매 호출 시 전체 DOM teardown + rebuild → PDF iframe
-// 재생성 → blob URL 재로드 → 점멸. morphdom = element-level diff, iframe element 의
-// src attribute 가 동일하면 setAttribute 호출 X → iframe reload 0 = 점멸 해결.
+// sprint-12/slice-7: morphdom DOM diff 도입. renderInto = app/appShell.ts.
+// sprint-2026-W21-sprint-2 / layer A: module state 의존 (appRoot + widget
+// post-mount effect 5종) 은 main.ts 가 1회 구성한 RenderSink 로 주입.
+// renderInto sink helper = main.ts 가 호출하는 thin wrapper.
+const mainRenderSink: RenderSink | null = appRoot
+  ? {
+      appRoot,
+      postMountEffects: [
+        () => refreshTableWidgets(),
+        () => refreshChartWidgets(),
+        () => applyQueuedDrillHighlight(),
+        () => refreshActiveDrillHighlights(),
+        (root) => applyPdfCanvasMounts(root)
+      ]
+    }
+  : null;
+
 function renderInto(html: string): void {
-  if (!appRoot) {
+  if (!mainRenderSink) {
     return;
   }
-
-  // morphdom 가 wrapper element 의 children 만 diff 적용.
-  const wrapper = document.createElement("div");
-  wrapper.id = appRoot.id;
-  wrapper.innerHTML = html;
-  morphdom(appRoot, wrapper, {
-    childrenOnly: true,
-    getNodeKey(node) {
-      if (node instanceof HTMLElement && node.dataset.pdfFrameKey) {
-        return node.dataset.pdfFrameKey;
-      }
-
-      return node instanceof Element ? node.id : undefined;
-    },
-    onBeforeElUpdated(fromEl, toEl) {
-      if (shouldReplacePdfFrame(fromEl, toEl)) {
-        fromEl.replaceWith(toEl.cloneNode(true));
-        return false;
-      }
-
-      // sprint-W21-sprint-4/S1: PDF canvas mount preservation.
-      // 동일 (material, page, blob) 의 div 는 fromEl + 자식 canvas 보존,
-      // class (is-active/is-preload toggle) 만 sync. 매 render 마다 mountPdfCanvas
-      // 호출되어 canvas 재 paint 되는 비효율 차단.
-      if (shouldPreservePdfCanvasMount(fromEl, toEl)) {
-        if (fromEl instanceof HTMLElement && toEl instanceof HTMLElement) {
-          fromEl.className = toEl.className;
-        }
-        return false;
-      }
-
-      return true;
-    }
-  });
-  refreshTableWidgets();
-  refreshChartWidgets();
-  applyQueuedDrillHighlight();
-  refreshActiveDrillHighlights();
-  void applyPdfCanvasMounts(appRoot);
+  renderIntoSink(html, mainRenderSink);
 }
 
 // sprint-W21-sprint-4/S1: render 후 PDF canvas mount effect.
@@ -503,40 +485,6 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
       });
     });
   }
-}
-
-function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
-  if (fromEl.tagName !== "IFRAME" || toEl.tagName !== "IFRAME") {
-    return false;
-  }
-
-  const fromFrame = fromEl as HTMLElement;
-  const toFrame = toEl as HTMLElement;
-
-  if (fromFrame.dataset.pdfFrame !== "true" || toFrame.dataset.pdfFrame !== "true") {
-    return false;
-  }
-
-  return (
-    fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
-    fromEl.getAttribute("src") !== toEl.getAttribute("src")
-  );
-}
-
-// sprint-W21-sprint-4/S1: same (material, page, blob) PDF canvas mount div 는
-// morphdom 이 update 하지 않고 fromEl + canvas 그대로 두도록 표식.
-function shouldPreservePdfCanvasMount(fromEl: Element, toEl: Element): boolean {
-  if (!(fromEl instanceof HTMLElement) || !(toEl instanceof HTMLElement)) {
-    return false;
-  }
-  if (fromEl.dataset.pdfMount !== "true" || toEl.dataset.pdfMount !== "true") {
-    return false;
-  }
-  return (
-    fromEl.dataset.materialId === toEl.dataset.materialId &&
-    fromEl.dataset.pageNumber === toEl.dataset.pageNumber &&
-    fromEl.dataset.blobUrl === toEl.dataset.blobUrl
-  );
 }
 
 function getDrillHighlightSelector(type: InspectorDrillType): string {
@@ -7502,105 +7450,23 @@ function weekPath(subject: SubjectNote, week: WeekNote): string {
   return `#/subjects/${subject.id}/weeks/${week.id}`;
 }
 
+// sprint-2026-W21-sprint-2 / layer A: renderShell / banner / modal =
+// app/appShell.ts. AppShellContext = least-privilege narrow (broad
+// authSession / notebook 객체 노출 X). 매 renderApp 호출 시 module
+// state 에서 narrow.
+function getAppShellContext(): AppShellContext {
+  return {
+    displayName: authSession?.user.displayName ?? null,
+    notebookUpdatedAt: notebook.updatedAt,
+    notebookStorageError: notebookStorageError ?? null,
+    syncBackendError: syncBackendError ?? null,
+    hotkeyHelpModalOpen,
+    activePdfWorkspaceSubjectId: getActivePdfWorkspaceSubjectId() ?? null
+  };
+}
+
 function renderShell(sidebar: string, mainContent: string, crumb: string): string {
-  // sprint-1/S2 fix (codex P2): only apply `inert` when the help modal will
-  // actually render. The modal is gated by both `hotkeyHelpModalOpen` and the
-  // current route being the PDF workspace; if either is false the inert flag
-  // would lock the shell without a visible dialog to close it.
-  const modalWillRender = hotkeyHelpModalOpen && !!getActivePdfWorkspaceSubjectId();
-  const shellInertAttr = modalWillRender ? " inert" : "";
-  return `
-    <div class="app-shell"${shellInertAttr}>
-      ${sidebar}
-      <div class="main-area">
-        <header class="topbar">
-          <span class="crumb">${crumb}</span>
-          <div class="topbar-session">
-            <span class="topbar-meta">${authSession ? `${authSession.user.displayName} · ` : ""}${notebook.updatedAt} 업데이트</span>
-            <button class="text-button" type="button" data-action="logout">로그아웃</button>
-          </div>
-        </header>
-        ${renderNotebookStorageBanner()}
-        <main class="content">${mainContent}</main>
-        <footer class="site-footer">
-          study-note · 과목 총정리, 날짜별 노트, 로컬 자료 투입 · 원문 PDF 공개 공유 없음
-        </footer>
-      </div>
-    </div>
-    ${renderHotkeyHelpModal()}
-  `;
-}
-
-function renderNotebookStorageBanner(): string {
-  // sprint-2/S2 fix (codex P1): show either banner (localStorage save fail OR
-  // BE sync pause). Two independent sources; dismiss button clears both for UX
-  // simplicity. localStorage 우선 (더 치명적).
-  const message = notebookStorageError ?? syncBackendError;
-  if (!message) {
-    return "";
-  }
-  return `
-    <div class="storage-error-banner" role="alert">
-      <p>${escapeHtml(message)}</p>
-      <button class="text-button" type="button" data-action="dismiss-notebook-storage-error">닫기</button>
-    </div>
-  `;
-}
-
-// sprint-1/S2: hotkey help modal — listed shortcuts so users do not have to memorise.
-function renderHotkeyHelpModal(): string {
-  if (!hotkeyHelpModalOpen) {
-    return "";
-  }
-
-  // sprint-1/S2 fix (codex P2): only render the modal on the PDF workspace
-  // route. Outside it the keyboard handler returns early and the user would be
-  // unable to close the modal, while the shell `inert` attribute would lock
-  // navigation. Defensive — hashchange already clears the flag, but a stale
-  // flag from a non-shell path (auth reset, direct deep-link) is possible.
-  if (!getActivePdfWorkspaceSubjectId()) {
-    return "";
-  }
-
-  const rows: Array<[string, string]> = [
-    ["R", "읽기"],
-    ["S", "포스트잇"],
-    ["P", "펜"],
-    ["E", "지우개"],
-    ["T", "텍스트 박스"],
-    ["C", "체크리스트"],
-    ["B", "표"],
-    ["G", "그래프"],
-    ["Cmd/Ctrl + [", "이전 페이지"],
-    ["Cmd/Ctrl + ]", "다음 페이지"],
-    ["F", "전체화면 토글"],
-    ["?", "이 도움말 열기 / 닫기"],
-    ["Esc", "도구 해제 (도구 선택 시) / 도움말 닫기 / 전체화면 종료"]
-  ];
-
-  const body = rows
-    .map(
-      ([key, action]) => `
-        <li>
-          <kbd class="tool-button__key">${escapeHtml(key)}</kbd>
-          <span>${escapeHtml(action)}</span>
-        </li>
-      `
-    )
-    .join("");
-
-  return `
-    <div class="hotkey-help-modal" role="dialog" aria-modal="true" aria-labelledby="hotkey-help-title" data-action="close-hotkey-help-backdrop">
-      <div class="hotkey-help-modal__panel" role="document">
-        <header class="hotkey-help-modal__header">
-          <h2 id="hotkey-help-title">단축키 도움말</h2>
-          <button class="text-button" type="button" data-action="close-hotkey-help" autofocus>닫기</button>
-        </header>
-        <ul class="hotkey-help-modal__list">${body}</ul>
-        <p class="hotkey-help-modal__hint">PDF 작업공간에서 동작합니다. 입력 중에는 단일 키 단축키가 일시 비활성화됩니다.</p>
-      </div>
-    </div>
-  `;
+  return renderAppShell(sidebar, mainContent, crumb, getAppShellContext());
 }
 
 function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
@@ -8233,15 +8099,6 @@ function renderIntakeFeedback(
       ${retryButton}
     </div>
   `;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 const DRILL_LABEL_LIMIT = 30;
@@ -10540,17 +10397,6 @@ function getPdfMaterialOwnerLabel(material: PdfMaterialDraft): string {
 function canManagePdfMaterials(): boolean {
   const role = authSession?.user.role.toLowerCase();
   return role === "master" || role === "admin";
-}
-
-function renderNotFound(): string {
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">찾을 수 없음</p>
-      <h1>페이지를 찾을 수 없습니다.</h1>
-      <p class="lede">홈에서 과목을 다시 선택하세요.</p>
-      <p><a href="#/">홈으로 돌아가기</a></p>
-    </section>
-  `;
 }
 
 function renderMetric(label: string, value: string, description: string): string {
