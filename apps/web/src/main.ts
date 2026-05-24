@@ -4671,8 +4671,20 @@ function handleDocumentPointerMove(event: PointerEvent): void {
   }
 
   event.preventDefault();
-  activeInkStroke.points.push(toInkPoint(getSurfacePoint(event, surface), event));
-  updateLiveStroke();
+  // sprint-W21-sprint-1/S4/AC16 — iOS pointermove 가 60Hz 보장 위해 coalesced
+  // events 사용. 단일 PointerMoveEvent 안 여러 sample 을 일괄 push.
+  // desktop pointer 는 coalesced 가 단일 event = 단일 point (AC20 회기).
+  const coalesced =
+    typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+  if (coalesced.length > 0) {
+    for (const c of coalesced) {
+      activeInkStroke.points.push(toInkPoint(getSurfacePoint(c, surface), c));
+    }
+  } else {
+    activeInkStroke.points.push(toInkPoint(getSurfacePoint(event, surface), event));
+  }
+  // sprint-W21-sprint-1/S4/AC17 — RAF batch. setAttribute 는 1 frame = 1 회.
+  scheduleLiveStrokeRender();
 }
 
 function handleDocumentPointerUp(event: PointerEvent): void {
@@ -4724,8 +4736,9 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   }
 
   const { subjectId, pageNumber, points } = activeInkStroke;
+  const committed = points.length > 1;
 
-  if (points.length > 1) {
+  if (committed) {
     const stroke = createInkStroke(pageNumber, points);
 
     updatePdfWorkspace(subjectId, (workspace) => ({
@@ -4736,7 +4749,59 @@ function handleDocumentPointerUp(event: PointerEvent): void {
 
   activeInkStroke.livePolyline.remove();
   activeInkStroke = undefined;
-  renderApp();
+  // sprint-W21-sprint-1/S4/AC18 — renderApp 을 RAF 안으로 defer 해서 다음 stroke
+  // 의 첫 pointermove 가 commit 차단되지 않게 한다 (textbox drag 패턴 동일).
+  // AC19 — performance.mark + RUM action 으로 next-paint 측정.
+  // PR #53 codex R1 P2 fix: per-stroke markId 를 closure 로 격리 → 연속 stroke
+  // 의 telemetry 가 서로 덮어쓰지 않게.
+  // PR #53 codex R2 P2: tap / aborted interaction (points <= 1) 은 commit 안
+  // 되므로 metric emit 도 skip — `pen-stroke.next-paint` 가 stroke commit
+  // latency 만 추적하게.
+  if (!committed) {
+    return;
+  }
+  const markId = `pen-commit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  if (typeof performance !== "undefined" && performance.mark) {
+    performance.mark(markId);
+  }
+  requestAnimationFrame(() => {
+    // PR #53 codex R3 P2 fix: 새 stroke 가 진행 중이어도 commit 된 stroke 는
+    // 화면에 paint 되어야 함 (R2 P2 의 skip 은 invisible commit 야기). 항상
+    // renderApp 호출. 단 renderApp 이 live ink layer rebuild 하므로 activeInkStroke
+    // 의 livePolyline 이 detach — 새 SVG 안에 polyline 재생성 + reference 갱신
+    // (R1 P1 의 off-DOM update race 차단).
+    const carriedStroke = activeInkStroke;
+    renderApp();
+    if (carriedStroke && activeInkStroke === carriedStroke) {
+      reattachLiveInkPolyline(carriedStroke);
+    }
+    // PR #53 codex R3 P1: RAF callback 은 paint 직전 실행. measure 가 같은
+    // RAF 안에 있으면 paint 완료 전 duration → systematic under-report.
+    // 다음 RAF (paint 완료 후) 에서 measure 호출.
+    requestAnimationFrame(() => {
+      measurePenStrokeNextPaintFromMark(markId);
+    });
+  });
+}
+
+// PR #53 codex R3 P2 — renderApp 후 새 SVG 안에 livePolyline 재생성.
+// pointermove update 가 off-DOM detach 된 polyline 에 쓰이지 않게.
+function reattachLiveInkPolyline(stroke: ActiveInkStroke): void {
+  const surface = document.querySelector<HTMLElement>(
+    `[data-pdf-annotation-surface][data-subject-id="${stroke.subjectId}"]`
+  );
+  if (!surface) return;
+  const liveLayer = surface.querySelector<SVGElement>("[data-live-ink-layer]");
+  if (!liveLayer) return;
+  const SVG_NS_LOCAL = "http://www.w3.org/2000/svg";
+  const fresh = document.createElementNS(SVG_NS_LOCAL, "polyline");
+  // 기존 detached element 의 stroke / class / width 등 attribute 복원.
+  for (const attr of Array.from(stroke.livePolyline.attributes)) {
+    fresh.setAttribute(attr.name, attr.value);
+  }
+  fresh.setAttribute("points", stroke.points.map(formatSvgPoint).join(" "));
+  liveLayer.appendChild(fresh);
+  stroke.livePolyline = fresh;
 }
 
 async function importPdfMaterialFile(file: File, subjectId: string): Promise<void> {
@@ -5015,6 +5080,38 @@ function updateLiveStroke(): void {
     "points",
     activeInkStroke.points.map(formatSvgPoint).join(" ")
   );
+}
+
+// sprint-W21-sprint-1/S4/AC17 — RAF batch live stroke paint.
+// pointermove 가 같은 frame 안 N회 발사돼도 다음 RAF tick 1회만 paint.
+// id reset 은 pointerup 시점 (clear on stroke commit/cancel).
+let liveStrokeRafId: number | undefined;
+function scheduleLiveStrokeRender(): void {
+  if (liveStrokeRafId !== undefined) return;
+  liveStrokeRafId = requestAnimationFrame(() => {
+    liveStrokeRafId = undefined;
+    updateLiveStroke();
+  });
+}
+
+// sprint-W21-sprint-1/S4/AC19 — next-paint latency 측정.
+// pointerup commit 시 mark, 다음 RAF render 후 measure → Datadog RUM emit.
+// PR #53 codex R1 P2 — per-stroke markId 를 closure 로 받음 (shared global 폐기).
+function measurePenStrokeNextPaintFromMark(markId: string): void {
+  if (typeof performance === "undefined" || !performance.mark || !performance.measure) {
+    return;
+  }
+  try {
+    const measureName = `pen-stroke-next-paint-${markId}`;
+    performance.measure(measureName, markId);
+    const entries = performance.getEntriesByName(measureName);
+    const durationMs = entries.length > 0 ? Math.round(entries[entries.length - 1]!.duration) : -1;
+    trackRumAction("pen-stroke.next-paint", { durationMs });
+    performance.clearMarks(markId);
+    performance.clearMeasures(measureName);
+  } catch {
+    // performance.measure 에러는 무시 — RUM emit 못 해도 stroke commit 자체는 정상.
+  }
 }
 
 // sprint-12/slice-2: domain PdfWorkspaceTool union now includes "eraser" | "text" | "checklist".
