@@ -25,7 +25,8 @@ interface PdfMaterialRow {
   id: string;
   ownerId: string;
   subjectId: string;
-  classDate: string;
+  // S3 AC12: Date (was string).
+  classDate: Date;
   fileName: string;
   fileSize: number;
   pageCount: number;
@@ -44,7 +45,7 @@ function makeRow(overrides: Partial<PdfMaterialRow> = {}): PdfMaterialRow {
     id: "mat-001",
     ownerId: "user-001",
     subjectId: "digital-engineering",
-    classDate: "2026-05-01",
+    classDate: new Date("2026-05-01T00:00:00.000Z"),
     fileName: "lecture.pdf",
     fileSize: 100,
     pageCount: 5,

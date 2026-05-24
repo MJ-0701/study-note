@@ -11,7 +11,8 @@ interface PdfMaterialRow {
   id: string;
   ownerId: string;
   subjectId: string;
-  classDate: string;
+  // S3 AC12: Date (was string).
+  classDate: Date;
   fileName: string;
   fileSize: number;
   pageCount: number;
@@ -43,7 +44,7 @@ function makeMaterial(overrides: Partial<PdfMaterialRow> = {}): PdfMaterialRow {
     id: "mat-shared",
     ownerId: "admin-1",
     subjectId: "digital-engineering",
-    classDate: "2026-05-01",
+    classDate: new Date("2026-05-01T00:00:00.000Z"),
     fileName: "lecture.pdf",
     fileSize: 100,
     pageCount: 5,
@@ -154,30 +155,52 @@ describe("Materials shared-read contract", () => {
     );
   });
 
-  it("updates classDate only for uploader-owned materials", async () => {
+  it("updates classDate only for uploader-owned materials (S3 AC12 — Date)", async () => {
     const { service, queries } = makeService({
       material: makeMaterial({ ownerId: "admin-1" })
     });
 
     const material = await service.updateMaterialMetadata("admin-1", "mat-shared", {
-      classDate: "5월 7일(목)"
+      classDate: "2026-05-07"
     });
 
-    assert.equal(material.classDate, "5월 7일(목)");
+    assert.equal(material.classDate, "2026-05-07");
     assert.deepEqual(queries.findFirstWheres[0], {
       id: "mat-shared",
       ownerId: "admin-1",
       deletedAt: null
     });
-    assert.deepEqual(queries.updateArgs, {
-      where: { id: "mat-shared" },
-      data: { classDate: "5월 7일(목)" }
-    });
+    const updateArgs = queries.updateArgs as { where: unknown; data: { classDate: Date } };
+    assert.deepEqual(updateArgs.where, { id: "mat-shared" });
+    assert.ok(updateArgs.data.classDate instanceof Date);
+    assert.equal(updateArgs.data.classDate.toISOString().slice(0, 10), "2026-05-07");
   });
 
-  it("parses material metadata update body", () => {
-    assert.deepEqual(parseMaterialMetadataBody({ classDate: "metadata-pending" }), {
-      classDate: "metadata-pending"
+  it("(S3 AC12) update with invalid classDate → 400", async () => {
+    const { service } = makeService({
+      material: makeMaterial({ ownerId: "admin-1" })
+    });
+    await assert.rejects(
+      () => service.updateMaterialMetadata("admin-1", "mat-shared", { classDate: "5월 7일(목)" }),
+      /classDate/
+    );
+  });
+
+  it("(S3 AC12) update with calendar overflow → 400", async () => {
+    const { service } = makeService({
+      material: makeMaterial({ ownerId: "admin-1" })
+    });
+    await assert.rejects(
+      () => service.updateMaterialMetadata("admin-1", "mat-shared", { classDate: "2026-02-30" }),
+      /calendar overflow|invalid/
+    );
+  });
+
+  it("parses material metadata update body (string passthrough)", () => {
+    // parseMaterialMetadataBody 는 dto 단계 (string pass-through). Date 변환은
+    // service.updateMaterialMetadata 내부 parseIsoDateOrThrow 에서 수행.
+    assert.deepEqual(parseMaterialMetadataBody({ classDate: "2026-05-07" }), {
+      classDate: "2026-05-07"
     });
   });
 

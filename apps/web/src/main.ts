@@ -130,7 +130,11 @@ const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
 const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
 initializeDatadogRum();
-const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending";
+// S3 codex R4 P1: BE 가 ISO date 강제 + UI "수업일 미지정" 옵션 보존 위해
+// '1970-01-01' (Unix epoch start) 을 sentinel DATE 로 통일. valid ISO 라 BE
+// Zod 통과 + FE 가 sentinel 로 인식 (실 수업일과 충돌 없음).
+const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending"; // FE-local legacy marker
+const PDF_MATERIAL_UNASSIGNED_WIRE_DATE = "1970-01-01"; // BE wire sentinel
 
 type Route =
   | { name: "home" }
@@ -2432,6 +2436,26 @@ function getSubjectPdfMaterials(subjectId: string): PdfMaterialDraft[] {
   return getPdfWorkspaceMaterials(getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId));
 }
 
+// S3 AC11/AC12 — canonical YYYY-MM-DD validator (calendar overflow 차단).
+function isCanonicalIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
+// S3 AC13 — WeekNote.label fallback: ISO date 형식이면 한국식 ("M월 D일") 변환,
+// 아니면 원래 label, 그도 없으면 "(날짜 미지정)".
+function formatWeekLabel(label: string | undefined | null, classDate?: string | null): string {
+  const candidate = (classDate && classDate.length > 0 ? classDate : label) ?? "";
+  if (!candidate) return "(날짜 미지정)";
+  if (isCanonicalIsoDate(candidate)) {
+    const [, month, day] = candidate.split("-");
+    return `${Number(month)}월 ${Number(day)}일`;
+  }
+  return candidate;
+}
+
 function addSubjectClassDate(formData: FormData): void {
   const subjectId = String(formData.get("subjectId") ?? "").trim();
   const classDate = String(formData.get("classDate") ?? "").trim();
@@ -2448,11 +2472,13 @@ function addSubjectClassDate(formData: FormData): void {
     return;
   }
 
-  if (!classDate) {
+  // S3 AC11/AC15: ISO YYYY-MM-DD 만 허용 (date input native). 비ISO/calendar
+  // overflow reject.
+  if (!isCanonicalIsoDate(classDate)) {
     intakeFeedback = {
       kind: "error",
-      title: "수업일을 입력하세요.",
-      detail: "예: 5월 14일(목)처럼 sidebar와 카드에 표시할 날짜를 적어 주세요."
+      title: "수업일 형식이 잘못되었습니다.",
+      detail: "YYYY-MM-DD (예: 2026-05-14) 형식만 사용할 수 있습니다."
     };
     renderApp();
     return;
@@ -2572,14 +2598,40 @@ async function assignPdfMaterialClassDate(
     return;
   }
 
+  // PR #51 codex R5+ P1×2 — BE 가 strict ISO 강제. UI 가 sentinel 또는
+  // legacy week.label (예: "5월 14일(목)") 보낼 수 있음.
+  // - sentinel "metadata-pending" → wire sentinel '1970-01-01' (FE-local 은
+  //   sentinel 유지).
+  // - 비-ISO legacy label → wire sentinel '1970-01-01' (BE strict reject 회피
+  //   + FE 가 unconfirmed 로 표시).
+  // - 정상 ISO → 그대로.
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const isSentinel = nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
+  const isWireSentinel = nextClassDate === PDF_MATERIAL_UNASSIGNED_WIRE_DATE;
+  const isIso = ISO_DATE.test(nextClassDate);
+  const wireClassDate =
+    isSentinel || isWireSentinel || !isIso
+      ? PDF_MATERIAL_UNASSIGNED_WIRE_DATE
+      : nextClassDate;
+
   try {
     const updated = await updatePdfMaterialMetadata(apiBaseUrl, material.backendMaterialId, {
-      classDate: nextClassDate
+      classDate: wireClassDate
     });
     const updatedDraft = createPdfMaterialFromBackend(updated, {
       selectedPage: material.selectedPage,
       selectedTool: material.selectedTool
     });
+    // PR #51 codex R3/R5 P2 — UI sentinel 선택 OR legacy non-ISO label 이면
+    // BE 가 epoch sentinel 저장하더라도 FE-local 표시는 sentinel 유지.
+    if (
+      isSentinel ||
+      isWireSentinel ||
+      !isIso ||
+      updated.classDate === PDF_MATERIAL_UNASSIGNED_WIRE_DATE
+    ) {
+      updatedDraft.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
+    }
     replacePdfWorkspaceMaterial(subjectId, materialId, updatedDraft);
     intakeFeedback = {
       kind: "success",
@@ -4885,9 +4937,15 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 
   try {
     const pageCount = estimatePdfPageCount(await file.arrayBuffer());
+    // S3 AC12 (codex PR #51 P0 fix): BE 가 classDate ISO 강제 → 업로드 시점에
+    // 오늘 날짜를 placeholder 로 전송. 사용자는 이후 updateMaterialMetadata
+    // 로 실제 수업일 갱신.
+    // PR #51 R5+ P1: today ISO 가 silent mislabel — epoch sentinel '1970-01-01'
+    // (PDF_MATERIAL_UNASSIGNED_WIRE_DATE) 로 통일. valid ISO 라 BE Zod 통과 +
+    // FE 의 isUnconfirmedPdfClassDate 가 인식 → 자동 confirmed 회피.
     const intent = await createMaterialUploadIntent(apiBaseUrl, {
       subjectId,
-      classDate: PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
+      classDate: PDF_MATERIAL_UNASSIGNED_WIRE_DATE,
       fileName: file.name,
       fileSize: file.size,
       pageCount,
@@ -4899,6 +4957,10 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 
     clearActivePdfObjectUrl(subjectId);
     const pendingMaterial = createPdfMaterialFromBackend(intent.material, undefined);
+    // PR #51 R2 P1: classDate 가 today 라 weekNote.label 매칭 시 자동 confirmed
+    // 됨. FE-local 에선 sentinel 로 유지해서 isUnconfirmedPdfClassDate true
+    // 보장. 사용자가 명시 update 시점에 실제 ISO 로 전환.
+    pendingMaterial.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...upsertPdfWorkspaceMaterial(workspace, {
         ...pendingMaterial,
@@ -4915,6 +4977,9 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     pendingPdfRetry = undefined;
 
     const completedMaterial = createPdfMaterialFromBackend(uploadedMaterial, undefined);
+    // PR #51 R2 P1: 동일 sentinel 유지 — uploadMaterialFile 후 BE 가 다시
+    // ISO classDate 반환하므로 FE 표시는 sentinel 로 유지해서 사용자 미확정 신호.
+    completedMaterial.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...upsertPdfWorkspaceMaterial(workspace, {
         ...completedMaterial,
@@ -9725,7 +9790,8 @@ function renderClassDateAddSection(subject: SubjectNote): string {
         <input type="hidden" name="subjectId" value="${escapeHtml(subject.id)}" />
         <label>
           <span>수업일</span>
-          <input name="classDate" type="text" placeholder="예: 5월 14일(목)" autocomplete="off" />
+          <!-- S3 AC11/AC15: text → date input. ISO YYYY-MM-DD 만 허용. -->
+          <input name="classDate" type="date" required autocomplete="off" />
         </label>
         <label>
           <span>수업 제목</span>
@@ -9748,7 +9814,7 @@ function renderClassDayCard(
   return `
     <article class="class-day-card">
       <div>
-        <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
+        <p class="meta">${escapeHtml(formatWeekLabel(week.label))} · ${formatReviewStatus(week.reviewStatus)}</p>
         <h3>${week.title}</h3>
         <p>${week.focus}</p>
       </div>
@@ -9910,7 +9976,7 @@ function renderSummaryDayCard(subject: SubjectNote, week: WeekNote): string {
   return `
     <article class="class-day-card">
       <div>
-        <p class="meta">${week.label} · ${formatReviewStatus(week.reviewStatus)}</p>
+        <p class="meta">${escapeHtml(formatWeekLabel(week.label))} · ${formatReviewStatus(week.reviewStatus)}</p>
         <h3>${week.title}</h3>
         <p>${week.focus}</p>
       </div>
@@ -10486,9 +10552,16 @@ function renderPdfMaterialClassDateControl(
         ${canManagePdfMaterials() ? "" : "disabled"}
       >
         <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
-        ${subject.weekNotes.map((week) => `
-          <option value="${escapeHtml(week.label)}" ${selectedValue === week.label ? "selected" : ""}>${escapeHtml(week.label)}</option>
-        `).join("")}
+        ${subject.weekNotes.map((week) => {
+          // PR #51 codex R7 P1: 비-ISO legacy week.label (예: "5월 14일(목)")
+          // 은 BE 가 reject. 사용자가 선택해도 sentinel 로 unassign 되어
+          // silent regression. disabled + "[migrate 필요]" hint 표시.
+          const ISO = /^\d{4}-\d{2}-\d{2}$/;
+          const isIso = ISO.test(week.label);
+          const sel = selectedValue === week.label ? "selected" : "";
+          const label = isIso ? week.label : `${week.label} (사용 불가 — 이전 형식)`;
+          return `<option value="${escapeHtml(week.label)}" ${sel} ${isIso ? "" : "disabled"}>${escapeHtml(label)}</option>`;
+        }).join("")}
       </select>
     </label>
   `;
@@ -10509,7 +10582,13 @@ function getPdfMaterialClassDateValue(material: PdfMaterialDraft): string {
 function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | undefined): boolean {
   const trimmed = classDate?.trim();
 
-  if (!trimmed || trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE || trimmed === "수업일 미지정") {
+  // PR #51 codex R4: epoch sentinel '1970-01-01' = unassigned (BE wire 표준).
+  if (
+    !trimmed ||
+    trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ||
+    trimmed === PDF_MATERIAL_UNASSIGNED_WIRE_DATE ||
+    trimmed === "수업일 미지정"
+  ) {
     return true;
   }
 
