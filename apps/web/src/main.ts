@@ -2563,13 +2563,20 @@ async function assignPdfMaterialClassDate(
     return;
   }
 
-  // PR #51 codex R3 P2 — BE 가 ISO date 강제. sentinel "metadata-pending"
-  // 보내면 400. UI "수업일 미지정" 선택 시 sentinel 대신 placeholder ISO
-  // (오늘) 전송하고 FE-local 에서 sentinel 로 표시 유지. (intent path 와 동일
-  // 패턴, R2 fix 후 확장).
+  // PR #51 codex R5+ P1×2 — BE 가 strict ISO 강제. UI 가 sentinel 또는
+  // legacy week.label (예: "5월 14일(목)") 보낼 수 있음.
+  // - sentinel "metadata-pending" → wire sentinel '1970-01-01' (FE-local 은
+  //   sentinel 유지).
+  // - 비-ISO legacy label → wire sentinel '1970-01-01' (BE strict reject 회피
+  //   + FE 가 unconfirmed 로 표시).
+  // - 정상 ISO → 그대로.
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const isSentinel = nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
+  const isWireSentinel = nextClassDate === PDF_MATERIAL_UNASSIGNED_WIRE_DATE;
+  const isIso = ISO_DATE.test(nextClassDate);
   const wireClassDate =
-    nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE
-      ? new Date().toISOString().slice(0, 10)
+    isSentinel || isWireSentinel || !isIso
+      ? PDF_MATERIAL_UNASSIGNED_WIRE_DATE
       : nextClassDate;
 
   try {
@@ -2580,9 +2587,14 @@ async function assignPdfMaterialClassDate(
       selectedPage: material.selectedPage,
       selectedTool: material.selectedTool
     });
-    // PR #51 codex R3 P2 — UI "수업일 미지정" 선택이면 BE 가 ISO 저장하더라도
-    // FE-local 표시는 sentinel 유지. import path 와 동일 패턴.
-    if (nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE) {
+    // PR #51 codex R3/R5 P2 — UI sentinel 선택 OR legacy non-ISO label 이면
+    // BE 가 epoch sentinel 저장하더라도 FE-local 표시는 sentinel 유지.
+    if (
+      isSentinel ||
+      isWireSentinel ||
+      !isIso ||
+      updated.classDate === PDF_MATERIAL_UNASSIGNED_WIRE_DATE
+    ) {
       updatedDraft.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
     }
     replacePdfWorkspaceMaterial(subjectId, materialId, updatedDraft);
