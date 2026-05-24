@@ -10268,9 +10268,16 @@ function renderPdfMaterialClassDateControl(
         ${canManagePdfMaterials() ? "" : "disabled"}
       >
         <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
-        ${subject.weekNotes.map((week) => `
-          <option value="${escapeHtml(week.label)}" ${selectedValue === week.label ? "selected" : ""}>${escapeHtml(week.label)}</option>
-        `).join("")}
+        ${subject.weekNotes.map((week) => {
+          // PR #51 codex R7 P1: 비-ISO legacy week.label (예: "5월 14일(목)")
+          // 은 BE 가 reject. 사용자가 선택해도 sentinel 로 unassign 되어
+          // silent regression. disabled + "[migrate 필요]" hint 표시.
+          const ISO = /^\d{4}-\d{2}-\d{2}$/;
+          const isIso = ISO.test(week.label);
+          const sel = selectedValue === week.label ? "selected" : "";
+          const label = isIso ? week.label : `${week.label} (사용 불가 — 이전 형식)`;
+          return `<option value="${escapeHtml(week.label)}" ${sel} ${isIso ? "" : "disabled"}>${escapeHtml(label)}</option>`;
+        }).join("")}
       </select>
     </label>
   `;
