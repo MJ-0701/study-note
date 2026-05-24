@@ -119,7 +119,11 @@ const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
 const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
 initializeDatadogRum();
-const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending";
+// S3 codex R4 P1: BE 가 ISO date 강제 + UI "수업일 미지정" 옵션 보존 위해
+// '1970-01-01' (Unix epoch start) 을 sentinel DATE 로 통일. valid ISO 라 BE
+// Zod 통과 + FE 가 sentinel 로 인식 (실 수업일과 충돌 없음).
+const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending"; // FE-local legacy marker
+const PDF_MATERIAL_UNASSIGNED_WIRE_DATE = "1970-01-01"; // BE wire sentinel
 
 type Route =
   | { name: "home" }
@@ -10126,7 +10130,13 @@ function getPdfMaterialClassDateValue(material: PdfMaterialDraft): string {
 function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | undefined): boolean {
   const trimmed = classDate?.trim();
 
-  if (!trimmed || trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE || trimmed === "수업일 미지정") {
+  // PR #51 codex R4: epoch sentinel '1970-01-01' = unassigned (BE wire 표준).
+  if (
+    !trimmed ||
+    trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ||
+    trimmed === PDF_MATERIAL_UNASSIGNED_WIRE_DATE ||
+    trimmed === "수업일 미지정"
+  ) {
     return true;
   }
 
