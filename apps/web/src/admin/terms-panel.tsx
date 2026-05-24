@@ -381,6 +381,8 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
         <SubjectMoveDialog
           subject={movingSubject}
           terms={terms}
+          viewerId={viewerId}
+          viewerRole={viewerRole}
           onClose={() => {
             setMode("list");
             setMovingSubject(null);
@@ -412,13 +414,23 @@ export function TermsPanel({ viewerId, viewerRole }: TermsPanelProps) {
 interface SubjectMoveDialogProps {
   subject: SubjectResponse;
   terms: TermAdminResponse[];
+  viewerId: string;
+  viewerRole: UserRole;
   onClose: () => void;
   onMove: (targetTermId: string) => Promise<void>;
 }
 
-function SubjectMoveDialog({ subject, terms, onClose, onMove }: SubjectMoveDialogProps) {
-  // 출발지 학기 제외 (no-op 200 BE 처리 가능하나 UX 차원에서 제외).
-  const candidates = terms.filter((t) => t.id !== subject.termId);
+function SubjectMoveDialog({ subject, terms, viewerId, viewerRole, onClose, onMove }: SubjectMoveDialogProps) {
+  // 출발지 학기 제외 + PR #50 codex Round-1 P2: BE 가 actor 위계 검사 (도착지
+  // Term 도 admin↔master ADR-5) 이므로 UI 도 동일하게 destination 후보를
+  // 위계 허용된 것만 표시. admin 이 master/other-admin 학기로 이관 시도해서
+  // 100% 403 fail 하는 dead UX 차단.
+  const canMoveTo = (t: TermAdminResponse): boolean => {
+    if (viewerRole === "master") return true;
+    if (viewerRole !== "admin") return false;
+    return t.createdById === viewerId;
+  };
+  const candidates = terms.filter((t) => t.id !== subject.termId && canMoveTo(t));
   const [targetTermId, setTargetTermId] = useState<string>(candidates[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

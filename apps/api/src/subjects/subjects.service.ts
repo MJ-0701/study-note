@@ -142,10 +142,24 @@ export class SubjectsService {
     }
     ensureTermHierarchyAllowed(targetTerm, actorId, actorRole);
 
-    const updated = await this.prisma.subject.update({
-      where: { id },
-      data: { termId: targetTermId }
-    });
+    let updated: PrismaSubject;
+    try {
+      updated = await this.prisma.subject.update({
+        where: { id },
+        data: { termId: targetTermId }
+      });
+    } catch (err) {
+      // PR #50 codex Round-1 P2: targetTerm findUnique 와 update 사이에 target
+      // term 이 concurrent delete 되면 FK violation. delete 분기 패턴 일관
+      // 회기 — P2003 catch → 404 TERM_NOT_FOUND.
+      if (isForeignKeyViolation(err)) {
+        throw new NotFoundException({
+          errorCode: "TERM_NOT_FOUND",
+          errorMessage: "target term not found (concurrent delete)"
+        });
+      }
+      throw err;
+    }
     this.logger.warn(
       `[Subject] action=move id=${id} from=${before.termId ?? "null"} to=${targetTermId} actor=${actorId}`
     );
