@@ -3648,7 +3648,50 @@ body[data-route="pdf-workspace"] .content {
   }
 }
 
-/* sprint-W21-sprint-1 / S6 — 별표 (star) widget */
+/* sprint-W21-sprint-1 / S2 — sidebar term group nesting (AC8-AC10) */
+.sidebar-term-group {
+  margin-bottom: 6px;
+}
+.sidebar-term-group__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--ds-fg-soft, #6b7280);
+  user-select: none;
+  list-style: none;
+}
+.sidebar-term-group__summary::-webkit-details-marker {
+  display: none;
+}
+.sidebar-term-group__summary::before {
+  content: "▶";
+  margin-right: 6px;
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+.sidebar-term-group[open] > .sidebar-term-group__summary::before {
+  transform: rotate(90deg);
+}
+.sidebar-term-group__summary:hover {
+  background: var(--ds-bg-hover, #f3f4f6);
+}
+.sidebar-term-group__count {
+  font-size: 11px;
+  color: var(--ds-muted, #9ca3af);
+  background: var(--ds-bg-soft, #f9fafb);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+.sidebar-term-group__body {
+  padding-left: 12px;
+  margin-top: 2px;
+}
+
+/* sprint-W21-sprint-1 / S6 — 별표 (star) widget (merged from PR #52) */
 .pdf-star-mark {
   position: absolute;
   pointer-events: auto;
@@ -3658,9 +3701,6 @@ body[data-route="pdf-workspace"] .content {
   user-select: none;
   cursor: pointer;
   transform: translate(-50%, -50%);
-  /* PR #52 codex R2 P1: container queries 로 glyph 크기를 container 폭
-     (= sizeRatio * pageWidth) 에 bind. viewport (vw) 대신 cqw 사용 — split
-     pane / browser zoom / sidebar 무관 정확. */
   container-type: inline-size;
 }
 .pdf-star-mark__glyph {
@@ -3675,8 +3715,6 @@ body[data-route="pdf-workspace"] .content {
   position: absolute;
   top: -8px;
   right: -8px;
-  /* PR #52 codex Round-1 P1 — touch device 는 hover 없음. 기본 표시 (touch
-     접근성). desktop hover 가 있는 환경에선 hover/focus 으로 fade 처리. */
   display: inline-flex;
   gap: 2px;
   opacity: 1;

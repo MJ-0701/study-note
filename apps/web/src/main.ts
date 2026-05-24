@@ -27,6 +27,16 @@ import {
 import { parseAuthMePayload, requestAuthMe, signIn, signOut, signUp } from "./auth/authApi";
 import { resolveEscapeAction } from "./pdf-workspace/esc-action";
 import {
+  getDefaultOpenTermIds,
+  groupSubjectsByTerm,
+  parseStoredOpenState,
+  resolveOpenTermIds,
+  sidebarTermOpenStorageKey,
+  type SidebarGroup,
+  type SidebarSubject,
+  type SidebarTerm
+} from "./sidebar/term-grouping";
+import {
   meResponseToSession,
   type AuthMode,
   type AuthSession,
@@ -228,6 +238,13 @@ const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
+
+// sprint-W21-sprint-1/S2 (AC8-AC10) — sidebar term grouping cache. Fetched once
+// per auth-ready transition via loadSidebarTermsCache(). null = not loaded yet
+// (renderSidebarSubjectGroups falls back to flat notebook list).
+let sidebarTermsCache: SidebarTerm[] | null = null;
+let sidebarSubjectsCache: SidebarSubject[] | null = null;
+let sidebarOpenTermIds: Set<string> = new Set();
 let authBootState: AuthBootState = getInitialAuthBootState(readAuthSessionHint());
 let authBootNotice: AuthBootNotice = "checking";
 let authBootRequestId = 0;
@@ -1908,6 +1925,11 @@ function applySessionTransitionForUser(newUserId: string): void {
   // disabling B's autosave on first edit despite B having no failures.
   // Mirrors the equivalent reset block in clearAuthSession.
   syncFailureTracker.paused = false;
+  // PR #49 codex R5 P1 — A→B revalidate transition 시 sidebar term cache 도
+  // 무효화. 이전 user A 의 term/subject metadata 가 B session UI 에 leak 차단.
+  sidebarTermsCache = null;
+  sidebarSubjectsCache = null;
+  sidebarOpenTermIds = new Set();
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
   syncBackendErrorReported = false;
@@ -1920,6 +1942,11 @@ function clearAuthSession(): void {
   clearDatadogRumUser();
   clearAuthBootTimers();
   revokeAllPdfObjectUrls();
+  // sprint-W21-sprint-1/S2 — clear sidebar term cache on session reset so the
+  // next user's terms/subjects don't leak from prior session.
+  sidebarTermsCache = null;
+  sidebarSubjectsCache = null;
+  sidebarOpenTermIds = new Set();
   // sprint-1/S2 fix (codex P2): drop transient overlays that should not survive
   // a session reset. Without this the hotkey help modal could persist into the
   // post-login render and lock the shell in `inert`.
@@ -2095,6 +2122,9 @@ async function revalidateStoredSession(
     loginFeedback = undefined;
     authBootState = "ready";
     authBootNotice = "checking";
+    // sprint-W21-sprint-1/S2 (AC8-AC10) — fetch terms/subjects for sidebar grouping
+    // (fire-and-forget; sidebar renders flat fallback until cache lands).
+    void loadSidebarTermsCache().then(() => renderApp());
     renderApp();
   } catch {
     if (requestId !== authBootRequestId) {
@@ -2983,6 +3013,23 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // sprint-W21-sprint-1/S2/AC9 — sidebar term group <details><summary> toggle.
+  // 기본 <details> 동작은 native (브라우저가 open attr toggle) — 우리는 click
+  // 시점에 localStorage 에 next state 를 기록만 한다. preventDefault X.
+  // PR #49 codex Round-1 P1 fix: `quickNoteButton` 은 closest("[data-action]")
+  // 을 HTMLButtonElement 로 typing 해서 <summary> click 을 못 잡음. summary
+  // 는 별도 closest 검색.
+  if (target instanceof Element) {
+    const sidebarTermSummary = target.closest<HTMLElement>("[data-action='sidebar-term-toggle']");
+    if (sidebarTermSummary) {
+      const termId = sidebarTermSummary.dataset.termId;
+      if (termId && termId !== "__orphan__") {
+        toggleSidebarTermOpen(termId);
+      }
+      return;
+    }
+  }
+
   // sprint-W21-sprint-1 / S6 / AC30 — 별표 삭제 (hover delete button).
   if (quickNoteButton?.dataset.action === "remove-star-mark") {
     const subjectId = quickNoteButton.dataset.subjectId;
@@ -2994,8 +3041,7 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
-  // sprint-W21-sprint-1 / S6 / AC29 — 별표 크기 cycle (small / default / large).
-  // drag-resize handle 의 MVP 대체 — click 으로 3-step 사이클. iPad 펜 친화적.
+  // sprint-W21-sprint-1 / S6 / AC29 — 별표 크기 cycle.
   if (quickNoteButton?.dataset.action === "resize-star-mark") {
     const subjectId = quickNoteButton.dataset.subjectId;
     const markId = quickNoteButton.dataset.starMarkId;
@@ -3003,9 +3049,7 @@ function handleDocumentClick(event: MouseEvent): void {
       const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
       const mark = (workspace.starMarks ?? []).find((m) => m.id === markId);
       if (mark) {
-        // PR #52 R2 P2 fix: 0.06 (initial default) 가 cycle 에 누락되어 첫
-        // resize 가 무조건 0.04 점프. 0.06 포함 → 사용자 기대대로 순회.
-        // cycle = 0.04 → 0.06 → 0.08 → 0.16 → 0.04 (wraps).
+        // PR #52 R2 P2 fix: 0.06 (initial default) 포함 cycle.
         const cycles = [0.04, 0.06, 0.08, 0.16];
         const currentIdx = cycles.findIndex((c) => Math.abs(c - mark.sizeRatio) < 0.005);
         const nextSize = cycles[(currentIdx + 1) % cycles.length] ?? 0.08;
@@ -3619,6 +3663,8 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
         return;
       }
       loginFeedback = undefined;
+      // sprint-W21-sprint-1/S2 — sidebar term cache after login.
+      void loadSidebarTermsCache().then(() => renderApp());
       renderApp();
     } catch (error) {
       loginFeedback = {
@@ -7645,6 +7691,142 @@ const PERSONA_BY_SUBJECT: Record<string, { nick: string; active: boolean }> = {
   "computer-introduction": { nick: "컴론이", active: false }
 };
 
+// sprint-W21-sprint-1/S2/AC8-AC10 — sidebar term cache loader + render.
+// PR #49 codex Round-1 P1 fix: user A 의 fetch 가 resolve 되는 사이 user B 로
+// 로그인 전환되면 stale response 가 cache 를 오염시킴. capture user 후 await,
+// resolve 시점에 authSession.user.id 가 여전히 동일한지 확인 후에만 write.
+async function loadSidebarTermsCache(): Promise<void> {
+  const userIdAtStart = authSession?.user.id;
+  if (!userIdAtStart) return;
+  try {
+    const [termsRes, subjectsRes] = await Promise.all([
+      fetch(`${apiBaseUrl}/v1/terms`, { credentials: "include" }),
+      fetch(`${apiBaseUrl}/v1/subjects`, { credentials: "include" })
+    ]);
+    // session race guard — A의 응답이 B 세션에 쓰이지 않게.
+    if (authSession?.user.id !== userIdAtStart) return;
+    // PR #49 codex R2 P2 — fetch fail 시 cache 를 빈 array 로 "loaded" 표시
+    // 하면 sidebar 가 grouped (orphan 한 그룹) 로 영구 전환됨. flat fallback
+    // 유지 위해 null 그대로 두고 다음 trigger 에서 retry.
+    if (!termsRes.ok || !subjectsRes.ok) {
+      return;
+    }
+    const termsJson = (await termsRes.json()) as Array<{
+      id: string;
+      grade: number;
+      semester: number;
+      title: string;
+      startDate: string | null;
+      endDate: string | null;
+    }>;
+    const subjectsJson = (await subjectsRes.json()) as Array<{
+      id: string;
+      title: string;
+      termId: string | null;
+    }>;
+    // race guard 재확인 (await json 사이 race 가능).
+    if (authSession?.user.id !== userIdAtStart) return;
+    sidebarTermsCache = termsJson.map((t) => ({
+      id: t.id,
+      grade: t.grade,
+      semester: t.semester,
+      title: t.title,
+      startDate: t.startDate ?? null,
+      endDate: t.endDate ?? null
+    }));
+    sidebarSubjectsCache = subjectsJson.map((s) => ({
+      id: s.id,
+      title: s.title,
+      termId: s.termId ?? null
+    }));
+    refreshSidebarOpenTermIds();
+  } catch {
+    if (authSession?.user.id !== userIdAtStart) return;
+    // PR #49 codex R2 P2 — 네트워크 error 도 cache 를 빈 array 로 채우지 않음
+    // (flat fallback 유지). 다음 trigger 에서 retry.
+  }
+}
+
+function refreshSidebarOpenTermIds(): void {
+  const userId = authSession?.user.id;
+  if (!userId || !sidebarTermsCache || !sidebarSubjectsCache) return;
+  const groups = groupSubjectsByTerm(sidebarSubjectsCache, sidebarTermsCache);
+  const defaults = getDefaultOpenTermIds(groups, new Date().toISOString());
+  // PR #49 codex R5 P2 — localStorage getItem 도 SecurityError 던질 수 있음
+  // (private window, ITP). try/catch + fallback {} 으로 보호.
+  let stored: Record<string, boolean> = {};
+  if (isBrowserRuntime) {
+    try {
+      stored = parseStoredOpenState(window.localStorage.getItem(sidebarTermOpenStorageKey(userId)));
+    } catch {
+      stored = {};
+    }
+  }
+  sidebarOpenTermIds = resolveOpenTermIds(groups, defaults, stored);
+}
+
+function toggleSidebarTermOpen(termId: string): void {
+  const userId = authSession?.user.id;
+  if (!userId || !isBrowserRuntime) return;
+  const next = !sidebarOpenTermIds.has(termId);
+  if (next) sidebarOpenTermIds.add(termId);
+  else sidebarOpenTermIds.delete(termId);
+  // PR #49 codex R3 P2 — localStorage quota / private window / safari ITP 등에서
+  // getItem/setItem 이 throw 가능. in-memory state 는 갱신되었으므로 persist
+  // 실패해도 UI 동작은 유지 (다음 trigger 가 재시도).
+  try {
+    const key = sidebarTermOpenStorageKey(userId);
+    const stored = parseStoredOpenState(window.localStorage.getItem(key));
+    stored[termId] = next;
+    window.localStorage.setItem(key, JSON.stringify(stored));
+  } catch {
+    // localStorage unavailable / quota — silent skip (in-memory state survives 세션).
+  }
+  renderApp();
+}
+
+function renderSidebarTermGroups(currentSubject: SubjectNote, route: Route): string | null {
+  if (!sidebarTermsCache || !sidebarSubjectsCache) return null;
+  // Merge BE subjects with FE notebook subjects (subject.id matching).
+  // FE notebook holds rich SubjectNote shape; BE subjects 가 source-of-truth 인
+  // termId 만 가져온다.
+  const notebookIds = new Set(notebook.subjects.map((s) => s.id));
+  const enrichedSubjects: SidebarSubject[] = notebook.subjects.map((s) => {
+    const beSubject = sidebarSubjectsCache!.find((bs) => bs.id === s.id);
+    return { id: s.id, title: s.title, termId: beSubject?.termId ?? null };
+  });
+  // BE subjects 가 FE notebook 에 없는 경우 (admin 신규 추가) — 미표시 (route 미정).
+  void notebookIds;
+  const groups = groupSubjectsByTerm(enrichedSubjects, sidebarTermsCache);
+  if (groups.length === 0) return null;
+  return groups
+    .map((group) => renderSidebarTermGroup(group, currentSubject, route))
+    .join("");
+}
+
+function renderSidebarTermGroup(group: SidebarGroup, currentSubject: SubjectNote, route: Route): string {
+  const termId = group.term?.id ?? "__orphan__";
+  const isOpen = group.term ? sidebarOpenTermIds.has(group.term.id) : true;
+  const subjectsHtml = group.subjects
+    .map((s) => {
+      const notebookEntry = notebook.subjects.find((n) => n.id === s.id);
+      if (!notebookEntry) return "";
+      return renderSubjectNavItem(notebookEntry, currentSubject, route);
+    })
+    .join("");
+  return `
+    <details class="sidebar-term-group" ${isOpen ? "open" : ""} data-term-id="${escapeHtml(termId)}">
+      <summary class="sidebar-term-group__summary" data-action="sidebar-term-toggle" data-term-id="${escapeHtml(termId)}">
+        ${escapeHtml(group.label)}
+        <span class="sidebar-term-group__count">${group.subjects.length}</span>
+      </summary>
+      <div class="sidebar-term-group__body">
+        ${subjectsHtml}
+      </div>
+    </details>
+  `;
+}
+
 function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
   const currentSession =
     route.name === "week"
@@ -7657,7 +7839,12 @@ function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
       <div class="sidebar-group sidebar-group--subjects">
         <p class="group-label">과목 공부</p>
         <nav aria-label="과목별 학습 화면">
-          ${notebook.subjects.map((item) => renderSubjectNavItem(item, subject, route)).join("")}
+          ${
+            // sprint-W21-sprint-1/S2 (AC8-AC10): term cache 로드되면 그룹별 렌더,
+            // 아니면 기존 flat 리스트 (fallback).
+            renderSidebarTermGroups(subject, route) ??
+            notebook.subjects.map((item) => renderSubjectNavItem(item, subject, route)).join("")
+          }
         </nav>
       </div>
       <div class="sidebar-group sidebar-group--workspaces">
