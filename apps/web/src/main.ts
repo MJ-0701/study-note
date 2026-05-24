@@ -4829,14 +4829,12 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     // S3 AC12 (codex PR #51 P0 fix): BE 가 classDate ISO 강제 → 업로드 시점에
     // 오늘 날짜를 placeholder 로 전송. 사용자는 이후 updateMaterialMetadata
     // 로 실제 수업일 갱신.
-    // PR #51 R2 P1 fix: BE placeholder 가 FE in-memory 에서 "확정" 으로 보이지
-    // 않게 — intent response 의 material.classDate 를 sentinel 로 덮어쓰기.
-    // sentinel 은 FE-only marker (BE 는 ISO date 저장). updateMaterialMetadata
-    // 호출 시 사용자가 지정한 실제 날짜로 갱신.
-    const todayIso = new Date().toISOString().slice(0, 10);
+    // PR #51 R5+ P1: today ISO 가 silent mislabel — epoch sentinel '1970-01-01'
+    // (PDF_MATERIAL_UNASSIGNED_WIRE_DATE) 로 통일. valid ISO 라 BE Zod 통과 +
+    // FE 의 isUnconfirmedPdfClassDate 가 인식 → 자동 confirmed 회피.
     const intent = await createMaterialUploadIntent(apiBaseUrl, {
       subjectId,
-      classDate: todayIso,
+      classDate: PDF_MATERIAL_UNASSIGNED_WIRE_DATE,
       fileName: file.name,
       fileSize: file.size,
       pageCount,
