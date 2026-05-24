@@ -360,7 +360,7 @@ const mainRenderSink: RenderSink | null = appRoot
     }
   : null;
 
-function renderInto(html: string): void {
+function mountRender(html: string): void {
   if (!mainRenderSink) {
     return;
   }
@@ -6491,13 +6491,13 @@ async function importWeekNoteFile(
 function renderApp(): void {
   if (authBootState === "checking") {
     document.body.removeAttribute("data-route");
-    renderInto(renderAuthSessionCheckPage(authBootNotice));
+    mountRender(renderAuthSessionCheckPage(authBootNotice));
     return;
   }
 
   if (!authSession) {
     document.body.removeAttribute("data-route");
-    renderInto(renderAuthLoginPage(authMode, loginFeedback));
+    mountRender(renderAuthLoginPage(authMode, loginFeedback));
     return;
   }
 
@@ -6527,7 +6527,7 @@ function renderApp(): void {
     route.name !== "pdf-workspaces" &&
     !subject
   ) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, { name: "home" }),
       renderNotFound(),
       "study-note / 찾을 수 없음"
@@ -6536,7 +6536,7 @@ function renderApp(): void {
   }
 
   if ((route.name === "week" || route.name === "subject-summary-detail") && subject && !week) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderNotFound(),
       `${subject.title} / 찾을 수 없음`
@@ -6545,7 +6545,7 @@ function renderApp(): void {
   }
 
   if (route.name === "home") {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, route),
       renderHome(notebook),
       `${notebook.title} / 홈`
@@ -6554,7 +6554,7 @@ function renderApp(): void {
   }
 
   if (route.name === "intake") {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, route),
       renderIntakeGuide(notebook),
       `${notebook.title} / 자료 투입`
@@ -6563,7 +6563,7 @@ function renderApp(): void {
   }
 
   if (route.name === "pdf-workspaces") {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderHomeSidebar(notebook, route),
       renderPdfWorkspaceIndex(notebook),
       `${notebook.title} / PDF 작업공간`
@@ -6572,7 +6572,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-intake" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectIntakeGuide(subject),
       `${subject.title} / 자료 투입`
@@ -6582,7 +6582,7 @@ function renderApp(): void {
 
   if (route.name === "pdf-workspace" && subject) {
     ensurePdfPreviewForWorkspace(subject.id);
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderPdfWorkspacePage(subject),
       `${subject.title} / PDF 작업공간`
@@ -6620,7 +6620,7 @@ function renderApp(): void {
   }
 
   if ((route.name === "subject" || route.name === "subject-class") && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectClassPage(subject),
       `${subject.title} / 수업`
@@ -6629,7 +6629,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-summaries" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectSummariesPage(subject),
       `${subject.title} / 요약본`
@@ -6638,7 +6638,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-summary-detail" && subject && week) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderWeekSummaryPage(subject, week),
       `${subject.title} / ${week.label} 요약본`
@@ -6647,7 +6647,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-mcp" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectMcpPage(subject),
       `${subject.title} / MCP 호출`
@@ -6656,7 +6656,7 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-memorize" && subject) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderSubjectMemorizePage(subject),
       `${subject.title} / 필수 암기노트`
@@ -6665,7 +6665,7 @@ function renderApp(): void {
   }
 
   if (route.name === "week" && subject && week) {
-    renderInto(renderShell(
+    mountRender(composeShell(
       renderSubjectSidebar(subject, route),
       renderWeekPage(subject, week),
       `${subject.title} / ${week.label}`
@@ -7450,7 +7450,7 @@ function getAppShellContext(): AppShellContext {
   };
 }
 
-function renderShell(sidebar: string, mainContent: string, crumb: string): string {
+function composeShell(sidebar: string, mainContent: string, crumb: string): string {
   return renderAppShell(sidebar, mainContent, crumb, getAppShellContext());
 }
 
