@@ -3127,7 +3127,10 @@ body[data-route="pdf-workspace"] .content {
   max-width: none;
 }
 
-@media (max-width: 820px) {
+/* sprint-W21-sprint-1 / iPad media breakpoint fix (sfs-harness-gaps audit
+   evidence #11): 768px iPad portrait 가 mobile compact 로 collapse 되던 문제
+   fix. 820px → 767px (iPad 768px 는 tablet layout 유지, < 768 phone 만 compact). */
+@media (max-width: 767px) {
   :root {
     --ds-space-xl: 44px;
   }
@@ -3487,7 +3490,10 @@ body[data-route="pdf-workspace"] .content {
   }
 }
 
-@media (max-width: 820px) {
+/* sprint-W21-sprint-1 / iPad media breakpoint fix (sfs-harness-gaps audit
+   evidence #11): 768px iPad portrait 가 mobile compact 로 collapse 되던 문제
+   fix. 820px → 767px (iPad 768px 는 tablet layout 유지, < 768 phone 만 compact). */
+@media (max-width: 767px) {
   .topbar {
     align-items: center;
     flex-direction: row;
