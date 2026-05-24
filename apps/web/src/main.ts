@@ -2267,7 +2267,11 @@ function updatePdfWorkspace(
       textBoxes: updated.textBoxes,
       checklists: updated.checklists,
       tables: updated.tables,
-      charts: updated.charts
+      charts: updated.charts,
+      // PR #52 codex Round-1 P1 — starMarks 가 annotation PUT 에 누락되어
+      // reload 후 사라지던 문제. BE Zod whole-reject (starMark.dto.ts) 가
+      // valid payload 만 통과시킴.
+      starMarks: updated.starMarks ?? []
     };
     scheduleAnnotationPut(nextId!, payload);
   }
@@ -5095,7 +5099,10 @@ function isPdfWorkspaceTool(tool: string | undefined): tool is LocalPdfTool {
     tool === "text" ||
     tool === "checklist" ||
     tool === "table" ||
-    tool === "chart"
+    tool === "chart" ||
+    // PR #52 codex Round-1 P1: toolbar 클릭이 set-pdf-tool 분기로 가는데 이
+    // 가드가 "star" 를 reject 해서 touch 사용자가 별표 도구 활성화 불가.
+    tool === "star"
   );
 }
 
@@ -8880,12 +8887,16 @@ function renderStarMark(subjectId: string, mark: PdfStarMark): string {
   const HEX = /^#[0-9a-fA-F]{6}$/;
   const safeColor = HEX.test(mark.color) ? mark.color : "#f59e0b";
   const sizePct = (mark.sizeRatio * 100).toFixed(2);
+  // PR #52 codex Round-1 P2: sizeRatio 가 시각 ★ 크기 결정하도록 font-size 를
+  // viewport 의 sizeRatio*100 vw 단위로 inline 설정. .glyph CSS 의 100% 와
+  // 결합되어 container 와 glyph 가 동일 크기.
+  const fontSizeVw = (mark.sizeRatio * 100).toFixed(2);
   return `
     <div
       class="pdf-star-mark"
       data-star-mark-id="${escapeHtml(mark.id)}"
       data-subject-id="${escapeHtml(subjectId)}"
-      style="left: ${(mark.xRatio * 100).toFixed(2)}%; top: ${(mark.yRatio * 100).toFixed(2)}%; width: ${sizePct}%; height: auto; color: ${escapeHtml(safeColor)};"
+      style="left: ${(mark.xRatio * 100).toFixed(2)}%; top: ${(mark.yRatio * 100).toFixed(2)}%; width: ${sizePct}%; height: auto; color: ${escapeHtml(safeColor)}; font-size: ${fontSizeVw}vw;"
       aria-label="별표 마스킹"
     >
       <span class="pdf-star-mark__glyph" aria-hidden="true">★</span>

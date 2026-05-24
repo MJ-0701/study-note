@@ -3654,7 +3654,10 @@ body[data-route="pdf-workspace"] .content {
   transform: translate(-50%, -50%);
 }
 .pdf-star-mark__glyph {
-  font-size: clamp(20px, 6vw, 96px);
+  /* PR #52 codex Round-1 P2 — sizeRatio 가 container width 만 바꿔서 시각
+     크기 안 바뀌던 문제. font-size 를 container 100% 로 결합해서 sizeRatio
+     변경이 실제 ★ 크기에 반영. */
+  font-size: 100%;
   line-height: 1;
   color: inherit;
   text-shadow: 0 0 2px rgba(0,0,0,0.2);
@@ -3663,12 +3666,21 @@ body[data-route="pdf-workspace"] .content {
   position: absolute;
   top: -8px;
   right: -8px;
-  display: none;
-  gap: 2px;
-}
-.pdf-star-mark:hover .pdf-star-mark__controls,
-.pdf-star-mark:focus-within .pdf-star-mark__controls {
+  /* PR #52 codex Round-1 P1 — touch device 는 hover 없음. 기본 표시 (touch
+     접근성). desktop hover 가 있는 환경에선 hover/focus 으로 fade 처리. */
   display: inline-flex;
+  gap: 2px;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pdf-star-mark__controls {
+    opacity: 0;
+  }
+  .pdf-star-mark:hover .pdf-star-mark__controls,
+  .pdf-star-mark:focus-within .pdf-star-mark__controls {
+    opacity: 1;
+  }
 }
 .pdf-star-mark__btn {
   width: 22px;
