@@ -44,7 +44,12 @@ product-bearing entrypoints are included: UI bootstraps, routers, root
 components, hooks/stores/effects, controllers, jobs, repositories, DTO mappers,
 CLI flags, scripts, migrations, docs wording, observability glue, and external
 adapters are not default homes for product policy without a named boundary,
-evidence, or explicit waiver.
+evidence, or explicit waiver. Natural-language SFS activation is real SFS:
+reconcile current user wording, latest handoff/docs, active sprint plan, and
+wiki/DDD maps; Approved sprint state never overrides a newer handoff or user
+intent, so evidence-backed conflicts are mis-scoped work, not user questions.
+Broad-entrypoint growth that adds product behavior during DDD/TDD work is a
+Gate 6 finding unless boundary extraction or approved deferral is recorded.
 In Solon reports, show gates as `Gate N (Name)`, not naked ids. Use gate
 numbers 1..7 for new CLI examples; legacy ids remain compatibility-only.
 Solon reports should feel like compact console dashboards, not flat bullet
@@ -89,6 +94,26 @@ that stated scope as session-scoped authorization and continue until scope
 changes or a true blocker appears. Shell state is agent-owned: use one-shot
 inline env, mask secrets, and do not ask the user to export variables across
 terminals.
+Monitor checkpoint classification is mandatory for long-running monitor work:
+classify each checkpoint as `progressing`, `slow`, `stalled`, `dead`, or
+`auth_blocked`; record commit delta, PR/head delta, local dirty state,
+test/check delta, review status delta, worker liveness probe result,
+lane-utilization evidence or waiver, and next action `wait`, `probe`, `revive`,
+or `close`. Worker liveness requires a request-response probe, never
+process/auth-status alone. Use a static benign payload only, never
+workspace/user content, and persist only status/category/timestamp/redacted
+error class; do not persist raw stdout/stderr, bearer/auth tokens, env vars,
+prompt bodies, model responses, workspace/user content, or PII. Close only
+after heartbeat/automation cleanup and durable wiki/report evidence.
+Handoff-only scope is a stop contract: if the user asks only for a handoff,
+next-session brief, session report, or `인계문서`, immediately write/update that
+artifact, record current state/blockers/first next command, clean
+heartbeat/automation evidence when relevant, then stop. Do not start or
+continue PR polling, review retriggers, merges, implementation, deploy, or
+monitor loops; interrupt active or queued batches and do not finish current PRs
+first unless the same user request explicitly asks to continue that work. If
+post-request PR/review/merge work already happened, report it as a scope breach,
+not as a justification.
 For Solon commit grouping, guide users to the SFS command surface:
 `sfs commit plan` and `sfs commit apply --group <name>` (Codex may use
 `$sfs commit ...`; Claude slash routing may use `/sfs commit ...`). `sfs commit

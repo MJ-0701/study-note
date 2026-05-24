@@ -102,6 +102,73 @@ SFS command 의 success 가 아니다 — `start`, `brainstorm`, `plan`, `implem
   /workspace 언어 + project 용어 일치. SFS 명령/도메인 용어를 기계 번역 금지.
   `Other` / `Type something` 같은 placeholder 라벨 노출 X.
 
+## SFS 0.6.114 → 0.6.117 추가 정책
+
+- **Executable Action Ownership (ambient)**: auth + runtime + approval 갖춰지면
+  runnable shell/tool step 은 직접 실행한다. user 에게 copy-paste 명령 넘기지
+  않는다 (명시 요청 또는 true blocker 만 예외).
+- **True blockers vs approval gates**: true blocker = missing auth /
+  unavailable tooling/runtime / sandbox or permission denial / 미 capture 된
+  destructive·data-loss·public-contract approval / 넓어진 scope. session-
+  scoped authorization (`알아서 해`) = scope 바뀌거나 새 true blocker 전까지
+  same-scope gated work 계속.
+- **Shell state 는 user 문제 아님**: one-shot command + 명시 working dir + 
+  inline env. secret mask. user 에게 export/터미널 전환/재실행 요구 X.
+- **Monitor checkpoint classification 의무 (long-running watch)**: 매 checkpoint
+  분류 = `progressing` / `slow` / `stalled` / `dead` / `auth_blocked`. 기록 =
+  commit delta + PR/head delta + local dirty state + test/check delta +
+  review status delta + worker liveness probe (request-response, 정적 benign
+  payload) + lane-utilization evidence/waiver + next action `wait`/`probe`/
+  `revive`/`close`. raw stdout/stderr/token/env/prompt body/model response/
+  user content/PII 는 durable evidence 아님.
+- **Handoff-only scope = stop contract**: user 가 handoff / 인계문서 만 요청
+  하면 artifact 작성 + 현재 상태/blocker/first next command 기록 후 즉시
+  stop. PR polling / review retrigger / merge / implement / deploy / monitor
+  loop 시작/지속 X. 진행 중 batch 도 interrupt. 이미 진행된 PR/review/merge
+  는 scope breach 로 보고.
+- **User-facing docs HTML-first**: agent-facing docs/logs/SSoT = Markdown 유지.
+  real-user 용 guide / report / handbook / onboarding / landing = HTML default.
+- **Korean: 문장 끝 colon 금지**.
+- **Korean-first project 의 새 source file**: 첫 줄 (shebang/directive 뒤) =
+  한 줄 한국어 role 주석. config / generated / lock file 제외.
+- **Token/harness hygiene (ambient)**: adapter 메모리 thin 유지, routed
+  context + symbol/semantic search 가 broad read 우선. AI 반복 실수 = review/
+  retro 단계의 guardrail/check 로 변환.
+- **Runtime Token Firewall (ambient)**: worker/review/executor handoff =
+  capsule-only. full conversation history 를 worker/plugin wrapper/rescue
+  subagent/external reviewer 에 전달 X. goal + AC + files_scope + command +
+  expected output path + compact evidence 만.
+- **Context Pollution Guard (ambient)**: core product doc 과 routed context
+  에는 durable conclusion 만. prompt body / 전체 transcript / bridge·run
+  scratch / `.sfs-local/tmp/...` path / 옛 workbench bulk = 임시 파일 / cold
+  archive / compact capture·report pointer 에 둠. 잔류 = release 전 review
+  finding.
+- **Approved sprint state ≠ override**: newer handoff 또는 user intent 가
+  approved sprint state 를 override 한다. mismatch = mis-scoped work 분류 +
+  re-plan 또는 handoff. user 에게 "이미 record 가 보여주는 사실 재진술" 요청 X.
+- **Broad entrypoint = product policy 의 default home 아님**: UI bootstrap /
+  router / hook/store/effect / controller / job / repository / DTO mapper /
+  CLI flag / script / migration / docs wording / observability glue /
+  external adapter 에 product rule 변경 시 named boundary 또는 waiver 필요.
+  broad-entrypoint 성장 = Gate 6 finding (boundary extraction 또는 approved
+  deferral 기록 없으면).
+- **Gate 6 = implementation acceptance ledger 필수**: 모든 planned AC/ADR/
+  decision = implemented / missing / deferred / waived. implemented row =
+  file/evidence pointer. gap = approval 또는 follow-up owner.
+- **Review autopilot rework loop**: deterministic / narrow finding 은 user
+  judgment 안 필요. 직접 patch + 최소 verification + self-CPO/cross 재실행.
+  "진행?" / "proceed?" 묻지 않는다. user escalation = scope / architecture /
+  public API/schema/CLI contract / security/privacy/data-loss / cost/latency/
+  model policy / destructive behavior / AC 의미 변경 / 동일 micro-fix 반복
+  fail 시에만.
+- **User-escalation premise guard**: self/cross finding → user question 전환
+  전 premise 명명. brainstorm + plan + domain SoT + schema + code + decision
+  대조. 잘못 / stale / answered / over-modeled premise = artifact rework +
+  same-gate review (user 호출 X).
+- **Findings label**: `Critical` (security/data-loss/release blocker) /
+  `Required` (must-fix acceptance gap) / `Important` (지금 처리 risk) /
+  `Optional` (non-blocking) / `FYI`. 모든 finding 을 동일 의무처럼 표기 X.
+
 ### Obsidian wiki 경계 (0.6.101 + 0.6.102)
 
 - **Active 감지** (0.6.101): repo 에 `.obsidian/` 또는 `llm-wiki/` 가 있으면 SFS
