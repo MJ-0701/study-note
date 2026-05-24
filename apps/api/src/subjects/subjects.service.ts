@@ -18,6 +18,12 @@ function isForeignKeyViolation(err: unknown): boolean {
   const code = (err as { code?: string }).code;
   return code === "P2003";
 }
+
+function isRecordNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: string }).code;
+  return code === "P2025";
+}
 import type { SubjectCreateInput, SubjectUpdateInput } from "./subjects.dto";
 
 @Injectable()
@@ -156,6 +162,14 @@ export class SubjectsService {
         throw new NotFoundException({
           errorCode: "TERM_NOT_FOUND",
           errorMessage: "target term not found (concurrent delete)"
+        });
+      }
+      // PR #50 codex R2 P2: subject 자체가 findOrThrow 후 update 사이에 삭제되면
+      // P2025 (record to update not found). 다른 404 path 와 일관 SUBJECT_NOT_FOUND.
+      if (isRecordNotFoundError(err)) {
+        throw new NotFoundException({
+          errorCode: "SUBJECT_NOT_FOUND",
+          errorMessage: "subject not found (concurrent delete)"
         });
       }
       throw err;
