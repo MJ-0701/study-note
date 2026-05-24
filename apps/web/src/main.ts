@@ -4620,8 +4620,20 @@ function handleDocumentPointerMove(event: PointerEvent): void {
   }
 
   event.preventDefault();
-  activeInkStroke.points.push(toInkPoint(getSurfacePoint(event, surface), event));
-  updateLiveStroke();
+  // sprint-W21-sprint-1/S4/AC16 — iOS pointermove 가 60Hz 보장 위해 coalesced
+  // events 사용. 단일 PointerMoveEvent 안 여러 sample 을 일괄 push.
+  // desktop pointer 는 coalesced 가 단일 event = 단일 point (AC20 회기).
+  const coalesced =
+    typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+  if (coalesced.length > 0) {
+    for (const c of coalesced) {
+      activeInkStroke.points.push(toInkPoint(getSurfacePoint(c, surface), c));
+    }
+  } else {
+    activeInkStroke.points.push(toInkPoint(getSurfacePoint(event, surface), event));
+  }
+  // sprint-W21-sprint-1/S4/AC17 — RAF batch. setAttribute 는 1 frame = 1 회.
+  scheduleLiveStrokeRender();
 }
 
 function handleDocumentPointerUp(event: PointerEvent): void {
@@ -4685,7 +4697,17 @@ function handleDocumentPointerUp(event: PointerEvent): void {
 
   activeInkStroke.livePolyline.remove();
   activeInkStroke = undefined;
-  renderApp();
+  // sprint-W21-sprint-1/S4/AC18 — renderApp 을 RAF 안으로 defer 해서 다음 stroke
+  // 의 첫 pointermove 가 commit 차단되지 않게 한다 (textbox drag 패턴 동일).
+  // AC19 — performance.mark + RUM action 으로 next-paint 측정.
+  inkStrokeCommitMarkId = `pen-commit-${Date.now()}`;
+  if (typeof performance !== "undefined" && performance.mark) {
+    performance.mark(inkStrokeCommitMarkId);
+  }
+  requestAnimationFrame(() => {
+    renderApp();
+    measurePenStrokeNextPaint();
+  });
 }
 
 async function importPdfMaterialFile(file: File, subjectId: string): Promise<void> {
@@ -4964,6 +4986,42 @@ function updateLiveStroke(): void {
     "points",
     activeInkStroke.points.map(formatSvgPoint).join(" ")
   );
+}
+
+// sprint-W21-sprint-1/S4/AC17 — RAF batch live stroke paint.
+// pointermove 가 같은 frame 안 N회 발사돼도 다음 RAF tick 1회만 paint.
+// id reset 은 pointerup 시점 (clear on stroke commit/cancel).
+let liveStrokeRafId: number | undefined;
+function scheduleLiveStrokeRender(): void {
+  if (liveStrokeRafId !== undefined) return;
+  liveStrokeRafId = requestAnimationFrame(() => {
+    liveStrokeRafId = undefined;
+    updateLiveStroke();
+  });
+}
+
+// sprint-W21-sprint-1/S4/AC19 — next-paint latency 측정.
+// pointerup commit 시 mark, 다음 RAF render 후 measure → Datadog RUM emit.
+let inkStrokeCommitMarkId: string | undefined;
+function measurePenStrokeNextPaint(): void {
+  if (!inkStrokeCommitMarkId) return;
+  if (typeof performance === "undefined" || !performance.mark || !performance.measure) {
+    inkStrokeCommitMarkId = undefined;
+    return;
+  }
+  const id = inkStrokeCommitMarkId;
+  inkStrokeCommitMarkId = undefined;
+  try {
+    const measureName = `pen-stroke-next-paint-${id}`;
+    performance.measure(measureName, id);
+    const entries = performance.getEntriesByName(measureName);
+    const durationMs = entries.length > 0 ? Math.round(entries[entries.length - 1]!.duration) : -1;
+    trackRumAction("pen-stroke.next-paint", { durationMs });
+    performance.clearMarks(id);
+    performance.clearMeasures(measureName);
+  } catch {
+    // performance.measure 에러는 무시 — RUM emit 못 해도 stroke commit 자체는 정상.
+  }
 }
 
 // sprint-12/slice-2: domain PdfWorkspaceTool union now includes "eraser" | "text" | "checklist".
