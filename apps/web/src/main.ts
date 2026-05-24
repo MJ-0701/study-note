@@ -4685,8 +4685,9 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   }
 
   const { subjectId, pageNumber, points } = activeInkStroke;
+  const committed = points.length > 1;
 
-  if (points.length > 1) {
+  if (committed) {
     const stroke = createInkStroke(pageNumber, points);
 
     updatePdfWorkspace(subjectId, (workspace) => ({
@@ -4702,6 +4703,12 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // AC19 — performance.mark + RUM action 으로 next-paint 측정.
   // PR #53 codex R1 P2 fix: per-stroke markId 를 closure 로 격리 → 연속 stroke
   // 의 telemetry 가 서로 덮어쓰지 않게.
+  // PR #53 codex R2 P2: tap / aborted interaction (points <= 1) 은 commit 안
+  // 되므로 metric emit 도 skip — `pen-stroke.next-paint` 가 stroke commit
+  // latency 만 추적하게.
+  if (!committed) {
+    return;
+  }
   const markId = `pen-commit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   if (typeof performance !== "undefined" && performance.mark) {
     performance.mark(markId);
@@ -4710,9 +4717,15 @@ function handleDocumentPointerUp(event: PointerEvent): void {
     // PR #53 codex R1 P1 fix: RAF 가 발사되기 전 새 stroke 가 시작됐다면
     // renderApp 이 live ink layer 를 rebuild 해서 새 stroke 의 livePolyline 이
     // detach 되고 후속 pointermove update 가 off-DOM. defer render 자체를 skip.
-    if (!activeInkStroke) {
-      renderApp();
+    // PR #53 codex R2 P2: render skip 시 measure 도 skip (RAF 가 새 stroke 의
+    // next-paint 를 잘못 기록하지 않게). cleanup mark/measure 로 leak 방지.
+    if (activeInkStroke) {
+      if (typeof performance !== "undefined" && performance.clearMarks) {
+        performance.clearMarks(markId);
+      }
+      return;
     }
+    renderApp();
     measurePenStrokeNextPaintFromMark(markId);
   });
 }

@@ -57,13 +57,24 @@ describe("AC17 — RAF batch live stroke paint", () => {
   });
 });
 
-describe("AC18 — pointerup renderApp RAF defer + race guard (codex R1 P1)", () => {
+describe("AC18 — pointerup renderApp RAF defer + race guard (codex R1 P1 + R2 P2)", () => {
   it("handleDocumentPointerUp ink branch 가 requestAnimationFrame 안에 새 stroke race guard 포함", async () => {
     const src = await read();
     // activeInkStroke clear 후 RAF defer
     assert.match(src, /activeInkStroke = undefined;\s*[\s\S]*?requestAnimationFrame\(/);
-    // race guard: RAF 안에서 새 stroke 시작됐으면 render skip.
-    assert.match(src, /if\s*\(!activeInkStroke\)\s*\{\s*renderApp\(\);/);
+    // R1 P1 + R2 P2: race guard — 새 stroke 시작됐으면 render + measure 둘 다 skip.
+    // 패턴: `if (activeInkStroke) { ...clearMarks... return; } renderApp(); measure...`
+    assert.match(src, /if\s*\(activeInkStroke\)\s*\{[\s\S]*?return;\s*\}\s*renderApp\(\);[\s\S]*?measurePenStrokeNextPaintFromMark/);
+    // measure 호출 site 가 1개만 (RAF 안에서) — render skip 시 measure 도 skip.
+    const measureMatches = src.match(/measurePenStrokeNextPaintFromMark\(/g) ?? [];
+    assert.ok(measureMatches.length >= 2, "expected at least 1 call site + 1 fn signature");
+  });
+
+  it("R2 P2 — tap/aborted stroke (points <= 1) 면 metric emit skip", async () => {
+    const src = await read();
+    // committed flag 보호 + early return.
+    assert.match(src, /const committed = points\.length > 1;/);
+    assert.match(src, /if\s*\(!committed\)\s*\{\s*return;\s*\}/);
   });
 });
 
