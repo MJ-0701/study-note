@@ -4747,8 +4747,11 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     const pageCount = estimatePdfPageCount(await file.arrayBuffer());
     // S3 AC12 (codex PR #51 P0 fix): BE 가 classDate ISO 강제 → 업로드 시점에
     // 오늘 날짜를 placeholder 로 전송. 사용자는 이후 updateMaterialMetadata
-    // 로 실제 수업일 갱신. PDF_MATERIAL_UNASSIGNED_CLASS_DATE 는 in-memory
-    // 표시용으로만 잔존 (legacy local data BC).
+    // 로 실제 수업일 갱신.
+    // PR #51 R2 P1 fix: BE placeholder 가 FE in-memory 에서 "확정" 으로 보이지
+    // 않게 — intent response 의 material.classDate 를 sentinel 로 덮어쓰기.
+    // sentinel 은 FE-only marker (BE 는 ISO date 저장). updateMaterialMetadata
+    // 호출 시 사용자가 지정한 실제 날짜로 갱신.
     const todayIso = new Date().toISOString().slice(0, 10);
     const intent = await createMaterialUploadIntent(apiBaseUrl, {
       subjectId,
@@ -4764,6 +4767,10 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
 
     clearActivePdfObjectUrl(subjectId);
     const pendingMaterial = createPdfMaterialFromBackend(intent.material, undefined);
+    // PR #51 R2 P1: classDate 가 today 라 weekNote.label 매칭 시 자동 confirmed
+    // 됨. FE-local 에선 sentinel 로 유지해서 isUnconfirmedPdfClassDate true
+    // 보장. 사용자가 명시 update 시점에 실제 ISO 로 전환.
+    pendingMaterial.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...upsertPdfWorkspaceMaterial(workspace, {
         ...pendingMaterial,
@@ -4780,6 +4787,9 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     pendingPdfRetry = undefined;
 
     const completedMaterial = createPdfMaterialFromBackend(uploadedMaterial, undefined);
+    // PR #51 R2 P1: 동일 sentinel 유지 — uploadMaterialFile 후 BE 가 다시
+    // ISO classDate 반환하므로 FE 표시는 sentinel 로 유지해서 사용자 미확정 신호.
+    completedMaterial.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
     updatePdfWorkspace(subjectId, (workspace) => ({
       ...upsertPdfWorkspaceMaterial(workspace, {
         ...completedMaterial,
