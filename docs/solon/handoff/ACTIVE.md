@@ -1,67 +1,59 @@
 # 🎯 ACTIVE SPRINT GOAL — FE DDD 리팩토링 (React 적용은 리팩토링 후)
 
-> 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject. layer 진행
-> 시 매 sprint close 후 다음 sprint handoff 로 갱신.
+> 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-25) — **8k 달성 + 7k 인접**
+## 진행 상황 (2026-05-26) — **8k 달성 + 7k 인접**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
-| **A. routing/shell** | 2026-W21-sprint-2 | ✅ merged (PR #57, main=25f3cb9) |
-| **B/slice-1. annotation sync** | 2026-W22-sprint-1 | ✅ merged (PR #58, main=2fd4a0d) |
-| **B/slice-2a. canvas mount + workspace state** | 2026-W22-sprint-1 | ✅ merged (PR #59, main=c84439e) |
-| **B/slice-2b. classDate + touch/swipe + nav** | 2026-W22-sprint-2 | ✅ merged (PR #60, main=e8c1f87) |
-| **B/slice-2c. ink stroke + pen RAF batch** | 2026-W22-sprint-3 | ✅ merged (PR #61, main=f24a20b) |
-| **B/slice-2d. drill highlight** | 2026-W22-sprint-2 | ✅ merged (PR #62, main=d1bba31) |
-| **B/slice-2e. star mark** | 2026-W22-sprint-3 | ✅ merged (PR #63, main=c23dd6c) |
-| **B/slice-2f/i. chart-content leaf** | 2026-W22-sprint-4 | ✅ merged (PR #64, main=45080e8) |
-| **B/slice-2f/ii. markdown-table leaf + wrapper 폐기** | 2026-W22-sprint-2 | ✅ merged (PR #65, main=e1aded1) |
-| **B/slice-2g. chart-widget** | 2026-W22-sprint-3 | ✅ merged (PR #66, main=d56e330) — **8k 달성** |
-| **B/slice-2g-table. table-widget** | 2026-W22-sprint-5 | ✅ merged (PR #67, main=effad39) — **7k 인접** |
-| **B/slice-2f/iii. simple widget** | TBD | ⏳ 다음 sprint 후보 (위험도 낮음, ~220 line) |
-| **B/slice-2f/iv. container/page** | TBD | ⏳ 마지막 큰 segment (~410 line) |
+| **A. routing/shell** | 2026-W21-sprint-2 | ✅ merged (PR #57) |
+| **B/slice-1. annotation sync** | 2026-W22-sprint-1 | ✅ merged (PR #58) |
+| **B/slice-2a. canvas mount** | 2026-W22-sprint-1 | ✅ merged (PR #59) |
+| **B/slice-2b. classDate** | 2026-W22-sprint-2 | ✅ merged (PR #60) |
+| **B/slice-2c. ink stroke** | 2026-W22-sprint-3 | ✅ merged (PR #61) |
+| **B/slice-2d. drill highlight** | 2026-W22-sprint-2 | ✅ merged (PR #62) |
+| **B/slice-2e. star mark** | 2026-W22-sprint-3 | ✅ merged (PR #63) |
+| **B/slice-2f/i. chart-content** | 2026-W22-sprint-4 | ✅ merged (PR #64) |
+| **B/slice-2f/ii. markdown-table** | 2026-W22-sprint-2 | ✅ merged (PR #65) |
+| **B/slice-2g. chart-widget** | 2026-W22-sprint-3 | ✅ merged (PR #66) — **8k 달성** |
+| **B/slice-2g-table. table-widget** | 2026-W22-sprint-5 | ✅ merged (PR #67) |
+| **B/slice-2f/iii. simple-widget** | 2026-W22-sprint-6 | ✅ merged (PR #68, main=cab1a4f) — **7k 인접** |
+| **B/slice-2f/iv. container/page** | TBD | ⏳ 다음 sprint (마지막 layer B big segment, ~410 line) |
 | C. subject views | TBD | ⏳ backlog |
-| D. state/sync residual (user-notes) | TBD | ⏳ backlog |
-| **React migration** | TBD | ⏳ 분해 A~D 완료 후 재검토 ([[project-react-migration-backlog]]) |
+| D. state/sync residual | TBD | ⏳ backlog |
+| **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts line: 11,049 → **7,377** (-3,672, **-33.23%**). 9k + 8k 모두 달성.
-7k 인접 (잔여 -377). slice-2f/iii (~220) 또는 slice-2f/iv (~410) 으로
-7k 달성 가능.
+main.ts: 11,049 → **7,107** (-3,942, **-35.68%**). 9k + 8k 달성, 7k 인접
+(잔여 -107). slice-2f/iv 으로 7k 달성 + layer B 완료.
 
-## 활성 작업 = layer B/slice-2f/iii sprint (simple widget cleanup) **권장**
+## 활성 작업 = layer B/slice-2f/iv (container/page) — 마지막 layer B segment
 
-**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2g-table-table-render-widget/20260525/retro.md`
+**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2f-iii-simple-widget-cleanup-sticky-textbox-checklist-eraser/20260526/retro.md`
 
-### 후보 1: slice-2f/iii — simple widget cleanup (권장)
+### slice-2f/iv scope
 
-- scope = renderStickyNote + renderTextBox + renderChecklist + renderEraser*
-  (eraser cursor / sub-toolbar / shape button) ~220 line scope.
-- 위험도 = 낮음 (단순 render 함수, state mutate 적음).
-- 7k target 달성 가능.
+- renderPdfWorkspacePage (205 line) + renderPdfMaterialStatus (48) +
+  renderPdfToolbar (77) + renderPdfFrameStack (31) + renderToolButton (28) +
+  renderFullscreenToggleButton (17). ~406 line scope.
+- 위험도 = 중 (다른 widget render call site multi-pattern).
+- main.ts -300~-400 estimate → ~6,700~6,800. **7k 달성 + layer B 완료**.
 
-### 후보 2: slice-2f/iv — container/page
+### slice-2f/iii 학습 (다음 sprint 적용)
 
-- scope = renderPdfWorkspacePage + renderPdfMaterialStatus + renderPdfToolbar
-  + renderPdfFrameStack + renderToolButton + renderFullscreenToggleButton.
-  ~410 line. 다른 widget 의존 — 마지막 분리.
+- **R-T 신규 backlog** — brainstorm 단계 AC9 multi-layer defense table 사전
+  정의 (id escape + event attr + double-quote breakout + PII no-log default).
+  slice-2f/iii Gate 3 9 round → 다음 sprint 감소 target.
+- chart-widget + table-widget + simple-widget 모두 Context+Callbacks +
+  단방향 leaf import 일관.
+- DOM-parse parametrized negative test 패턴 5 surface × 2 payload class.
 
-### slice-2g-table 학습
+### slice-2f/iii 결과 (참고)
 
-- chart-widget 패턴 직접 적용 성공 (Context+Callbacks + 단방향 leaf).
-- AC9 4-layer security (chart-widget 의 3-layer + PII no-logging).
-- raw command output capture (G6 evidence packaging 표준).
-- comment-excluded grep evidence pattern.
-- R-R 신규 (Gate 6 evidence packaging 표준화 backlog).
-
-### slice-2g-table 결과 (참고)
-
-- main.ts -334 line (7,711 → 7,377). table-widget.ts 494 line / 16 export +
-  2 private + spec 14 case (7 invariant 1:1). Gate 3 self R3 + cross R2,
-  Gate 6 self R2 + cross R1 PASS. @codex 👍.
-
-### slice-2g 결과 (참고)
-
-- main.ts -975 line. chart-widget.ts 1,181 line / 29 export. **8k 달성**.
+- main.ts -270 line (7,377 → 7,107). simple-widget.ts ~330 line / 9 export +
+  spec 14 case (5 invariant 1:1).
+- AC9 4-layer closure (user content + id/subjectId attribute + EraserShape
+  bounded + PII no-log).
+- Gate 3 = 9 round / Gate 6 = 3 round. @codex 👍.
 
 ## SFS 0.6.121 정책 ambient
 
