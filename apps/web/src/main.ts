@@ -240,7 +240,6 @@ import {
   toggleInspectorDrillState,
   writeInspectorDrill,
   type DrillHighlightContext,
-  type DrillHighlightDomainHelpers,
   type DrillItemClickResult
 } from "./pdf-workspace/drill-highlight";
 import {
@@ -260,6 +259,11 @@ import {
   encodeChartContent,
   normalizeChartInputValue
 } from "./pdf-workspace/chart-content";
+import {
+  type ParsedMarkdownTable,
+  parseMarkdownTable,
+  serializeMarkdownTable
+} from "./pdf-workspace/markdown-table";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -431,15 +435,9 @@ const appRoot = app;
 const drillHighlightContext: DrillHighlightContext = {
   getAppRoot: () => appRoot
 };
-// drill-highlight 의 format/render 가 table content 파싱에 쓰는 deps.
-// chart-content (decodeChartContent + CHART_TYPE_PREFIX) 는 slice-2f/i
-// 에서 leaf module 로 분리되어 drill-highlight 가 직접 import. 본 factory 는
-// table helper 잔여 책임만 유지 — slice-2f/ii (table) 에서 추가 정리 예정.
-function getDrillHighlightHelpers(): DrillHighlightDomainHelpers {
-  return {
-    parseMarkdownTable
-  };
-}
+// slice-2f/i (chart-content) + slice-2f/ii (markdown-table) 분리 완료 후
+// DrillHighlightDomainHelpers wrapper interface + lazy factory 폐기.
+// drill-highlight 가 chart-content / markdown-table 를 직접 import 한다.
 const mainRenderSink: RenderSink | null = appRoot
   ? {
       appRoot,
@@ -5473,109 +5471,6 @@ function buildChartSvg(
   }
 }
 
-interface ParsedMarkdownTable {
-  headers: string[];
-  rows: string[][];
-}
-
-function splitMarkdownTableRow(line: string): string[] {
-  const trimmed = line.trim();
-  const cells: string[] = [];
-  let current = "";
-
-  for (let i = 0; i < trimmed.length; i++) {
-    const char = trimmed[i];
-    const next = trimmed[i + 1];
-
-    if (char === "\\" && next === "|") {
-      current += "|";
-      i += 1;
-      continue;
-    }
-
-    if (char === "|") {
-      cells.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  cells.push(current.trim());
-
-  if (trimmed.startsWith("|")) {
-    cells.shift();
-  }
-
-  if (trimmed.endsWith("|")) {
-    cells.pop();
-  }
-
-  return cells;
-}
-
-function isMarkdownSeparatorCell(cell: string): boolean {
-  return /^:?-{3,}:?$/.test(cell.replace(/\s+/g, ""));
-}
-
-function normalizeMarkdownTableRow(cells: string[], width: number): string[] {
-  return Array.from({ length: width }, (_, index) => cells[index] ?? "");
-}
-
-function parseMarkdownTable(source: string): ParsedMarkdownTable | null {
-  if (source.trim().length === 0) {
-    return null;
-  }
-
-  const lines = source
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  if (lines.length < 2) {
-    return null;
-  }
-
-  const headerLine = lines[0];
-  const separatorLine = lines[1];
-  if (headerLine === undefined || separatorLine === undefined) {
-    return null;
-  }
-  const headers = splitMarkdownTableRow(headerLine);
-  const separator = splitMarkdownTableRow(separatorLine);
-
-  if (
-    headers.length === 0 ||
-    headers.every((cell) => cell.length === 0) ||
-    separator.length !== headers.length ||
-    !separator.every(isMarkdownSeparatorCell)
-  ) {
-    return null;
-  }
-
-  return {
-    headers,
-    rows: lines.slice(2).map((line) =>
-      normalizeMarkdownTableRow(splitMarkdownTableRow(line), headers.length)
-    )
-  };
-}
-
-/**
- * Serializes ParsedMarkdownTable back to markdown string.
- * Pipe chars in cell content are escaped as \|.
- * Output: "| h1 | h2 |\n|---|---|\n| v1 | v2 |"
- * O(rows * cols) pure function.
- */
-function serializeMarkdownTable(parsed: ParsedMarkdownTable): string {
-  const escapeCell = (cell: string): string => cell.replace(/\|/g, "\\|");
-  const headerRow = "| " + parsed.headers.map(escapeCell).join(" | ") + " |";
-  const separator = "|" + parsed.headers.map(() => "---|").join("");
-  const dataRows = parsed.rows.map((row) => "| " + row.map(escapeCell).join(" | ") + " |");
-  return [headerRow, separator, ...dataRows].join("\n");
-}
-
 // sprint-13/slice-5: refreshTableWidgets replaces data-table-mount-id placeholders
 // with full DOM table widgets (mirrors refreshChartWidgets pattern).
 function refreshTableWidgets(): void {
@@ -6532,12 +6427,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           <p class="meta">§4 — 저장 상태</p>
           <h3>로컬 annotation</h3>
           <dl class="pdf-inspector-stats">
-            ${renderInspectorStatRowModule("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id, getDrillHighlightHelpers())}
-            ${renderInspectorStatRowModule("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id, getDrillHighlightHelpers())}
-            ${renderInspectorStatRowModule("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id, getDrillHighlightHelpers())}
-            ${renderInspectorStatRowModule("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id, getDrillHighlightHelpers())}
-            ${renderInspectorStatRowModule("table", "표", workspace.tables.length, workspace, subject.id, getDrillHighlightHelpers())}
-            ${renderInspectorStatRowModule("chart", "그래프", workspace.charts.length, workspace, subject.id, getDrillHighlightHelpers())}
+            ${renderInspectorStatRowModule("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id)}
+            ${renderInspectorStatRowModule("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id)}
+            ${renderInspectorStatRowModule("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id)}
+            ${renderInspectorStatRowModule("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id)}
+            ${renderInspectorStatRowModule("table", "표", workspace.tables.length, workspace, subject.id)}
+            ${renderInspectorStatRowModule("chart", "그래프", workspace.charts.length, workspace, subject.id)}
             <div class="pdf-inspector-stat-row pdf-inspector-stat-row--plain"><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">

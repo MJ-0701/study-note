@@ -46,6 +46,7 @@ import type {
 
 import { escapeHtml } from "../app/escape-html.ts";
 import { CHART_TYPE_PREFIX, decodeChartContent } from "./chart-content.ts";
+import { parseMarkdownTable } from "./markdown-table.ts";
 
 // ─── Public constants ────────────────────────────────────────────────────
 
@@ -98,16 +99,10 @@ export interface InspectorDrillEntry {
 
 // ─── Domain helpers contract (chart/table content 파싱 deps) ─────────────
 
-/**
- * drill format/render 가 read-only 로 쓰는 table content 파서.
- * main.ts 의 parseMarkdownTable 를 주입한다. chart-content (decodeChartContent
- * + CHART_TYPE_PREFIX) 는 slice-2f/i 에서 leaf module 로 분리되어 본 module
- * 이 직접 import — DomainHelpers wrapper 우회. table 도 추후 slice-2f/ii 에서
- * 동일 패턴 적용 예정.
- */
-export interface DrillHighlightDomainHelpers {
-  parseMarkdownTable: (source: string) => { headers: string[]; rows: string[][] } | null;
-}
+// slice-2f/i 에서 chart-content 분리 + slice-2f/ii 에서 markdown-table 분리 후
+// DrillHighlightDomainHelpers wrapper interface 완전 폐기. drill format/render
+// 가 chart-content / markdown-table 를 직접 import 한다. main.ts 의 lazy
+// factory `getDrillHighlightHelpers()` (slice-2d TDZ workaround) 도 동시 폐기.
 
 /**
  * applyTrackedDrillHighlight / refreshActiveDrillHighlights / applyQueuedDrillHighlight
@@ -481,8 +476,8 @@ function getChecklistDrillText(checklist: PdfChecklist): string {
   return items.find((item) => item.label.trim().length > 0)?.label ?? items[0]?.label ?? "";
 }
 
-function getTableDrillText(table: PdfTable, helpers: DrillHighlightDomainHelpers): string {
-  const parsed = helpers.parseMarkdownTable(table.content);
+function getTableDrillText(table: PdfTable): string {
+  const parsed = parseMarkdownTable(table.content);
   const cells = parsed ? [...parsed.headers, ...parsed.rows.flat()] : [];
   return cells.find((cell) => cell.trim().length > 0) ?? "";
 }
@@ -506,8 +501,7 @@ function getChartDrillTypeLabel(content: string): string {
 export function formatDrillLabel(
   type: InspectorDrillType,
   item: unknown,
-  index: number = 0,
-  helpers: DrillHighlightDomainHelpers
+  index: number = 0
 ): string {
   const pageNumber = getDrillPageNumber(type, item);
 
@@ -525,7 +519,7 @@ export function formatDrillLabel(
   }
 
   if (type === "table") {
-    return `페이지 ${pageNumber} · ${formatDrillSnippet(getTableDrillText(item as PdfTable, helpers), "(빈 표)")}`;
+    return `페이지 ${pageNumber} · ${formatDrillSnippet(getTableDrillText(item as PdfTable), "(빈 표)")}`;
   }
 
   if (type === "chart") {
@@ -575,8 +569,7 @@ export function getInspectorDrillEntries(type: InspectorDrillType, workspace: Su
 export function renderDrillList(
   type: InspectorDrillType,
   workspace: SubjectPdfWorkspace,
-  subjectId: string,
-  helpers: DrillHighlightDomainHelpers
+  subjectId: string
 ): string {
   const entries = getInspectorDrillEntries(type, workspace);
   const visible = entries.slice(0, DRILL_LIST_LIMIT);
@@ -592,7 +585,7 @@ export function renderDrillList(
             data-subject-id="${escapeHtml(subjectId)}"
             data-annotation-id="${escapeHtml(entry.id)}"
             data-page-number="${escapeHtml(String(entry.pageNumber))}"
-          >${formatDrillLabel(type, entry.item, entry.index, helpers)}</button>
+          >${formatDrillLabel(type, entry.item, entry.index)}</button>
         </li>
       `).join("")
     : `<li class="pdf-inspector-drill-empty">없음</li>`;
@@ -613,8 +606,7 @@ export function renderInspectorStatRow(
   label: string,
   count: number,
   workspace: SubjectPdfWorkspace,
-  subjectId: string,
-  helpers: DrillHighlightDomainHelpers
+  subjectId: string
 ): string {
   const isExpanded = inspectorDrillState[type] === true;
 
@@ -631,7 +623,7 @@ export function renderInspectorStatRow(
         <span class="pdf-inspector-stat-count">${count}개</span>
         <span class="pdf-inspector-drill-caret" aria-hidden="true">▾</span>
       </button>
-      ${isExpanded ? renderDrillList(type, workspace, subjectId, helpers) : ""}
+      ${isExpanded ? renderDrillList(type, workspace, subjectId) : ""}
     </div>
   `;
 }

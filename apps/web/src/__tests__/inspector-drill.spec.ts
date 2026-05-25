@@ -422,27 +422,16 @@ const {
   writeInspectorDrill
 } = await import("../pdf-workspace/drill-highlight.ts");
 
-// drill-highlight.ts 의 formatDrillLabel / renderDrillList = DomainHelpers
-// (parseMarkdownTable) 를 마지막 인자로 받는다. slice-2f/i 에서 chart-content
-// (decodeChartContent + CHART_TYPE_PREFIX) 가 leaf module 로 분리되어
-// drill-highlight 가 직접 import — 본 spec mock 도 chart prop 제거.
-const helpers = {
-  parseMarkdownTable(source: string): { headers: string[]; rows: string[][] } | null {
-    if (source.trim().length === 0) return null;
-    const lines = source.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
-    if (lines.length < 2) return null;
-    const cells = (line: string) =>
-      line.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
-    return { headers: cells(lines[0]!), rows: lines.slice(2).map(cells) };
-  }
-};
+// slice-2f/ii: DrillHighlightDomainHelpers interface 완전 폐기 —
+// drill-highlight 가 chart-content + markdown-table 를 직접 import.
+// formatDrillLabel / renderDrillList signature 도 helpers 인자 제거.
 
 function formatDrillLabel(type: DrillType, item: unknown, index?: number) {
-  return formatDrillLabelModule(type, item, index ?? 0, helpers);
+  return formatDrillLabelModule(type, item, index ?? 0);
 }
 
 function renderDrillList(type: DrillType, workspace: TestWorkspace, subjectId: string) {
-  return renderDrillListModule(type, workspace as never, subjectId, helpers);
+  return renderDrillListModule(type, workspace as never, subjectId);
 }
 
 const STORAGE_KEY = "studyNote.pdfWorkspace.inspectorDrill";
@@ -729,6 +718,26 @@ describe("renderDrillList security", () => {
       }
     });
   }
+
+  // slice-2f/ii AC11(b): markdown table cell 안 attacker payload 가
+  // parseMarkdownTable 통과 → formatDrillSnippet → escapeHtml chain 으로
+  // 출력 DOM 에 executable script/img 없음 검증 (XSS escape caller 책임).
+  test("table content with markdown XSS payload — drill label is escaped, no executable DOM", () => {
+    const payload = "<script>alert(1)</script>";
+    const workspace = baseWorkspace({ tables: [table("t1", 1, payload)] });
+    const container = renderIntoContainer(renderDrillList("table", workspace as never, "subject-1"));
+
+    assert.equal(container.querySelectorAll("script,img").length, 0);
+
+    const items = container.querySelectorAll("[data-annotation-id]");
+    assert.equal(items.length, 1);
+
+    // payload 가 textContent 로 들어와도 escaped (raw script tag 가 DOM tree
+    // 안에 생성되지 않음). textContent = parser 가 escape decode 한 raw text
+    // (e.g. "<script>...</script>"), DOM 에 별도 script element 는 없음.
+    assert.equal(container.textContent.includes(payload), true);
+    assert.equal(container.querySelectorAll("script").length, 0);
+  });
 
   test("malicious annotation ids stay in one data attribute and dataset lookup works", () => {
     for (const id of ["'><img onerror=alert(1)>", "]),*"]) {
