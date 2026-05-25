@@ -100,13 +100,11 @@ import {
   updateChartContent,
   updateChecklistItemLabel,
   updateTextBoxContent,
-  type PdfChecklist,
   type PdfChart,
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfMaterialDraft,
   type PdfTable,
-  type PdfTextBox,
   type PdfWorkspaceStore,
   type PdfWorkspaceTool,
   type StickyNoteBlockKind,
@@ -284,6 +282,13 @@ import {
   renderChartMount as renderChartMountModule,
   scheduleChartPointUpdate as scheduleChartPointUpdateModule
 } from "./pdf-workspace/chart-widget";
+import {
+  renderChecklist,
+  renderEraserCursorStyle,
+  renderEraserSubToolbar,
+  renderStickyNote,
+  renderTextBox
+} from "./pdf-workspace/simple-widget";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -5748,99 +5753,6 @@ function renderFullscreenToggleButton(): string {
   `;
 }
 
-function renderEraserSubToolbar(
-  subjectId: string,
-  eraserShape: EraserShape,
-  eraserSize: number,
-  disabled: string
-): string {
-  return `
-    <div class="pdf-eraser-subtoolbar" aria-label="지우개 설정">
-      <div class="pdf-eraser-shape-picker" role="group" aria-label="지우개 모양">
-        ${renderEraserShapeButton(subjectId, "circle", eraserShape, "원", "원형 지우개", disabled)}
-        ${renderEraserShapeButton(subjectId, "square", eraserShape, "네모", "네모 지우개", disabled)}
-        ${renderEraserShapeButton(subjectId, "triangle", eraserShape, "세모", "세모 지우개", disabled)}
-        ${renderEraserShapeButton(subjectId, "line", eraserShape, "선", "선 지우개", disabled)}
-      </div>
-      <label class="pdf-eraser-size-control">
-        <span>지우개 크기: ${Math.round(eraserSize)}px</span>
-        <input
-          type="range"
-          min="16"
-          max="64"
-          value="${Math.round(eraserSize)}"
-          data-action="set-eraser-size"
-          data-subject-id="${subjectId}"
-          ${disabled}
-        />
-      </label>
-    </div>
-  `;
-}
-
-function renderEraserShapeButton(
-  subjectId: string,
-  shape: EraserShape,
-  selectedShape: EraserShape,
-  label: string,
-  ariaLabel: string,
-  disabled: string
-): string {
-  return `
-    <button
-      class="eraser-shape-button ${selectedShape === shape ? "active" : ""}"
-      type="button"
-      data-action="set-eraser-shape"
-      data-subject-id="${subjectId}"
-      data-eraser-shape="${shape}"
-      aria-label="${ariaLabel}"
-      aria-pressed="${selectedShape === shape ? "true" : "false"}"
-      ${disabled}
-    >
-      ${label}
-    </button>
-  `;
-}
-
-function renderEraserCursorStyle(shape: EraserShape, size: number): string {
-  const safeSize = Number.isFinite(size) ? Math.min(64, Math.max(16, size)) : 16;
-  const viewBoxSize = safeSize + 2;
-  const center = viewBoxSize / 2;
-  const svg = renderEraserCursorSvg(shape, safeSize, viewBoxSize, center);
-  const dataUrl = encodeURIComponent(svg);
-
-  return `cursor: url('data:image/svg+xml,${dataUrl}') ${center} ${center}, crosshair;`;
-}
-
-function renderEraserCursorSvg(
-  shape: EraserShape,
-  size: number,
-  viewBoxSize: number,
-  center: number
-): string {
-  const half = size / 2;
-  const stroke = 1.5;
-  const common = `fill="none" stroke="black" stroke-width="${stroke}"`;
-
-  if (shape === "circle") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}"><circle cx="${center}" cy="${center}" r="${half}" ${common}/></svg>`;
-  }
-
-  if (shape === "square") {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}"><rect x="${center - half}" y="${center - half}" width="${size}" height="${size}" ${common}/></svg>`;
-  }
-
-  if (shape === "triangle") {
-    const height = size * Math.sqrt(3) / 2;
-    const p1 = `${center},${center - height * 2 / 3}`;
-    const p2 = `${center - half},${center + height / 3}`;
-    const p3 = `${center + half},${center + height / 3}`;
-
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}" overflow="visible"><polygon points="${p1} ${p2} ${p3}" ${common}/></svg>`;
-  }
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${viewBoxSize}" height="${viewBoxSize}" viewBox="0 0 ${viewBoxSize} ${viewBoxSize}"><line x1="${center - half}" y1="${center + half}" x2="${center + half}" y2="${center - half}" ${common} stroke-linecap="round"/><circle cx="${center}" cy="${center}" r="2" fill="black"/></svg>`;
-}
 
 function renderToolButton(
   subjectId: string,
@@ -5870,90 +5782,6 @@ function renderToolButton(
   `;
 }
 
-function renderStickyNote(subjectId: string, note: SubjectPdfWorkspace["stickyNotes"][number]): string {
-  const block = note.blocks[0];
-
-  if (!block) {
-    return "";
-  }
-
-  return `
-    <article
-      class="sticky-note"
-      style="left: ${note.anchor.x * 100}%; top: ${note.anchor.y * 100}%;"
-      data-note-id="${note.id}"
-    >
-      <div
-        class="sticky-note-header"
-        data-action="sticky-drag-handle"
-        data-note-id="${note.id}"
-        role="button"
-        aria-label="포스트잇 이동"
-      >
-        <span>${formatStickyBlockKind(block.kind)}</span>
-        <button
-          type="button"
-          aria-label="포스트잇 삭제"
-          data-action="delete-sticky-note"
-          data-subject-id="${subjectId}"
-          data-note-id="${note.id}"
-        >
-          ×
-        </button>
-      </div>
-      <textarea
-        data-action="update-sticky-note"
-        data-subject-id="${subjectId}"
-        data-note-id="${note.id}"
-      >${escapeHtml(block.content)}</textarea>
-    </article>
-  `;
-}
-
-// sprint-12/slice-2 R3: textbox widget renderer.
-// AC9-e: content rendered via textarea.value (innerHTML 금지).
-// AC9-g: data-textbox-id only; content not exposed in data-*, title, aria-label.
-// Drag: header bar handles pointerdown for drag. Body = textarea for editing.
-// sprint-12/slice-7: textbox redesign — macOS Preview 스타일 인라인 텍스트.
-// 박스 frame 폐기. PDF 본문 위 작은 폰트로 직접 필기. drag = 전체 widget (textarea 외부),
-// edit = textarea focus, delete = hover 시만 노출되는 ✕ 버튼. AC9-e: textarea value
-// attribute escapeHtml, innerHTML 미사용.
-function renderTextBox(subjectId: string, tb: PdfTextBox): string {
-  return `
-    <article
-      class="pdf-textbox is-inline"
-      style="left: ${tb.position.x * 100}%; top: ${tb.position.y * 100}%;"
-      data-textbox-id="${tb.id}"
-      role="group"
-      aria-label="텍스트 박스"
-    >
-      <span
-        class="pdf-textbox-grip"
-        data-action="drag-textbox-handle"
-        data-textbox-id="${tb.id}"
-        aria-label="텍스트 박스 이동"
-        role="button"
-        tabindex="0"
-      >⋮⋮</span>
-      <textarea
-        class="pdf-textbox-inline-input"
-        data-action="update-textbox-content"
-        data-subject-id="${subjectId}"
-        data-textbox-id="${tb.id}"
-        placeholder="텍스트"
-        rows="1"
-      >${escapeHtml(tb.content)}</textarea>
-      <button
-        type="button"
-        class="pdf-textbox-delete"
-        aria-label="텍스트 박스 삭제"
-        data-action="delete-textbox"
-        data-subject-id="${subjectId}"
-        data-textbox-id="${tb.id}"
-      >×</button>
-    </article>
-  `;
-}
 
 // sprint-12/slice-3: checklist widget renderer.
 // AC9-e: label rendered via <input value="..."> DOM attribute (innerHTML 금지).
@@ -5966,94 +5794,6 @@ function renderTextBox(subjectId: string, tb: PdfTextBox): string {
 // R11: collapsed: boolean — 접힘 시 items + add-item 버튼 숨김 (is-collapsed CSS 클래스).
 //   toggle button (▶/▼) = AC9-e: static text, aria-expanded 반전.
 //   header 카운트 표시 (접힘 시): "(체크된 수/전체 수)".
-function renderChecklist(subjectId: string, cl: PdfChecklist): string {
-  const isCollapsed = cl.collapsed !== false; // default true — boolean coercion (누락 시 접힘)
-  const checkedCount = cl.items.filter((item) => item.checked).length;
-  const totalCount = cl.items.length;
-  const countLabel = isCollapsed ? ` (${checkedCount}/${totalCount})` : "";
-  const toggleArrow = isCollapsed ? "▶" : "▼";
-  const itemsContainerId = `pdf-checklist-items-${cl.id}`;
-
-  const itemsHtml = cl.items.map((item) => `
-    <li class="pdf-checklist-item" data-item-id="${item.id}">
-      <input
-        type="checkbox"
-        data-action="toggle-checklist-item"
-        data-subject-id="${subjectId}"
-        data-checklist-id="${cl.id}"
-        data-item-id="${item.id}"
-        ${item.checked ? "checked" : ""}
-      />
-      <input
-        type="text"
-        class="pdf-checklist-item-label"
-        data-action="update-checklist-item-label"
-        data-subject-id="${subjectId}"
-        data-checklist-id="${cl.id}"
-        data-item-id="${item.id}"
-        value="${escapeHtml(item.label)}"
-        placeholder="항목 이름"
-        maxlength="500"
-      />
-      <button
-        type="button"
-        class="pdf-checklist-item-delete"
-        data-action="delete-checklist-item"
-        data-subject-id="${subjectId}"
-        data-checklist-id="${cl.id}"
-        data-item-id="${item.id}"
-        aria-label="항목 삭제"
-      >✕</button>
-    </li>
-  `).join("");
-
-  return `
-    <div
-      class="pdf-checklist${isCollapsed ? " is-collapsed" : ""}"
-      data-checklist-id="${cl.id}"
-      style="left: ${cl.position.x * 100}%; top: ${cl.position.y * 100}%;"
-    >
-      <div
-        class="pdf-checklist-header"
-        data-action="checklist-drag-handle"
-        data-checklist-id="${cl.id}"
-        aria-label="체크리스트 이동"
-        role="button"
-        tabindex="0"
-      >
-        <button
-          type="button"
-          class="pdf-checklist-toggle"
-          data-action="toggle-checklist-collapsed"
-          data-subject-id="${subjectId}"
-          data-checklist-id="${cl.id}"
-          aria-expanded="${isCollapsed ? "false" : "true"}"
-          aria-controls="${itemsContainerId}"
-          aria-label="${isCollapsed ? "체크리스트 펼치기" : "체크리스트 접기"}"
-        >${toggleArrow}</button>
-        <span class="pdf-checklist-title">체크리스트${escapeHtml(countLabel)}</span>
-        <button
-          type="button"
-          class="pdf-checklist-delete"
-          data-action="delete-checklist"
-          data-subject-id="${subjectId}"
-          data-checklist-id="${cl.id}"
-          aria-label="체크리스트 삭제"
-        >✕</button>
-      </div>
-      <ul class="pdf-checklist-items" id="${itemsContainerId}">
-        ${itemsHtml}
-      </ul>
-      <button
-        type="button"
-        class="pdf-checklist-add-item"
-        data-action="add-checklist-item"
-        data-subject-id="${subjectId}"
-        data-checklist-id="${cl.id}"
-      >+ 항목 추가</button>
-    </div>
-  `;
-}
 
 
 // sprint-13/slice-5: table widget mount placeholder (mirrors renderChartMount).
@@ -7352,16 +7092,6 @@ function formatPdfTool(tool: LocalPdfTool): string {
   return labels[tool];
 }
 
-function formatStickyBlockKind(kind: StickyNoteBlockKind): string {
-  const labels: Record<StickyNoteBlockKind, string> = {
-    text: "텍스트",
-    checklist: "체크",
-    table: "표",
-    "chart-note": "그래프"
-  };
-
-  return labels[kind];
-}
 
 function renderWeekColumn(label: string, values: string[]): string {
   return `
