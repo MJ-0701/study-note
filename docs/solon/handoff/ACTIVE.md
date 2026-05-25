@@ -17,22 +17,30 @@
 main.ts line: 11,049 → 10,253 (-796, -7.20%). 9k target (layer A~D 누적)
 까지 -1,253 line 더 필요.
 
-## 활성 작업 = layer B/slice-2 sprint (PDF workspace 나머지)
+## 활성 작업 = layer B/slice-2a sprint (PDF canvas mount + workspace state)
+
+**상세 인계** = `docs/solon/handoff/20260525-layer-b-slice2-pdf-workspace-remaining-handoff.md`
+
+**sub-slice 권장 (handoff §3)**:
+- **slice-2a (canvas mount + workspace state)** = 첫 진입 권장 (위험도 중,
+  invariant 격리 좋음, ~650 line 추정)
+- slice-2b (classDate + touch/swipe + nav/fullscreen) = 위험도 중-낮음
+- slice-2c (ink stroke + pen RAF batch) = **위험도 매우 높음** (iPad pen
+  latency invariant 정점)
+- slice-2d (drill highlight) = 위험도 중
+- slice-2e (star mark + renderer) = 위험도 중-높음 (renderer ~1200 line)
 
 **다음 명령**:
 ```bash
 sfs status                  # 빈 sprint 확인
-sfs start "main.ts layer B/slice-2 — PDF workspace 나머지 (ink/drag/canvas mount/nav/drill/star/fullscreen/classDate) 분리"
-sfs brainstorm "..."        # Q1 = invariant 별 sub-slice multi-sprint vs 한 번에 결정
-sfs plan
-sfs review --gate 3 --stage self     # self → cross → implement → Gate 6 → PR → retro
+sfs start "main.ts layer B/slice-2a — PDF canvas mount + workspace state 분리"
+sfs brainstorm "..."        # Q1 = slice-2 sub-slice 분리 단위 확정
+sfs plan → review → implement → Gate 6 → PR → retro
 ```
 
-**상세 인계** = `docs/solon/handoff/20260525-layer-b-pdf-workspace-handoff.md` §2-B 의 ink stroke / drag / canvas mount / nav / drill / star / fullscreen / classDate 함수 목록.
-
-**위험도 매우 높음**: 좌표 0~1 ratio + RAF batch + getCoalescedEvents +
-morphdom canvas preservation + pdfjs polyfill saga = 5 fragile invariant
-동시 검증. sub-slice multi-sprint 권장.
+**위험도 매우 높음** (slice-2c): 좌표 0~1 ratio + RAF batch +
+getCoalescedEvents + morphdom canvas preservation + pdfjs polyfill saga =
+5 fragile invariant. sub-slice multi-sprint 로 분리 권장.
 
 ## SFS 0.6.117 정책 ambient (CLAUDE.md 참조)
 
