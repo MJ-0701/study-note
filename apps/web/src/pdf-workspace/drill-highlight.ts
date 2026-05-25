@@ -45,6 +45,7 @@ import type {
 } from "@study-note/domain";
 
 import { escapeHtml } from "../app/escape-html.ts";
+import { CHART_TYPE_PREFIX, decodeChartContent } from "./chart-content.ts";
 
 // ─── Public constants ────────────────────────────────────────────────────
 
@@ -98,20 +99,14 @@ export interface InspectorDrillEntry {
 // ─── Domain helpers contract (chart/table content 파싱 deps) ─────────────
 
 /**
- * drill format/render 가 read-only 로 쓰는 chart/table content 파서.
- * main.ts 의 decodeChartContent + parseMarkdownTable + CHART_TYPE_PREFIX 를
- * 주입한다. 본 module 안 inline 하지 않는 이유 = chart/table parser 는
- * drill 외에도 main.ts 의 chart widget / table widget / serialize 경로에서
- * 쓰이는 단일 SoT 라서, 본 모듈로 옮기면 다른 surface 의 import 가 깨진다.
+ * drill format/render 가 read-only 로 쓰는 table content 파서.
+ * main.ts 의 parseMarkdownTable 를 주입한다. chart-content (decodeChartContent
+ * + CHART_TYPE_PREFIX) 는 slice-2f/i 에서 leaf module 로 분리되어 본 module
+ * 이 직접 import — DomainHelpers wrapper 우회. table 도 추후 slice-2f/ii 에서
+ * 동일 패턴 적용 예정.
  */
 export interface DrillHighlightDomainHelpers {
-  decodeChartContent: (content: string) => {
-    chartType: string;
-    points: ReadonlyArray<unknown>;
-    functionType?: unknown;
-  };
   parseMarkdownTable: (source: string) => { headers: string[]; rows: string[][] } | null;
-  CHART_TYPE_PREFIX: string;
 }
 
 /**
@@ -492,20 +487,20 @@ function getTableDrillText(table: PdfTable, helpers: DrillHighlightDomainHelpers
   return cells.find((cell) => cell.trim().length > 0) ?? "";
 }
 
-function getChartDrillTypeLabel(content: string, helpers: DrillHighlightDomainHelpers): string {
+function getChartDrillTypeLabel(content: string): string {
   const trimmed = content.trimStart();
-  if (trimmed.startsWith(helpers.CHART_TYPE_PREFIX)) {
+  if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
     const newline = trimmed.indexOf("\n");
     const rawType = (newline < 0
-      ? trimmed.slice(helpers.CHART_TYPE_PREFIX.length)
-      : trimmed.slice(helpers.CHART_TYPE_PREFIX.length, newline)
+      ? trimmed.slice(CHART_TYPE_PREFIX.length)
+      : trimmed.slice(CHART_TYPE_PREFIX.length, newline)
     ).trim();
     if (rawType === "sin" || rawType === "cos" || rawType === "tan" || rawType === "bar" || rawType === "xy" || rawType === "trig") {
       return rawType;
     }
   }
 
-  return helpers.decodeChartContent(content).chartType;
+  return decodeChartContent(content).chartType;
 }
 
 export function formatDrillLabel(
@@ -536,8 +531,8 @@ export function formatDrillLabel(
   if (type === "chart") {
     const chart = item as Partial<PdfChart>;
     const content = typeof chart.content === "string" ? chart.content : "";
-    const typeLabel = getChartDrillTypeLabel(content, helpers);
-    const pointCount = helpers.decodeChartContent(content).points.length;
+    const typeLabel = getChartDrillTypeLabel(content);
+    const pointCount = decodeChartContent(content).points.length;
     return `페이지 ${pageNumber} · ${escapeHtml(typeLabel)} (${pointCount} points)`;
   }
 

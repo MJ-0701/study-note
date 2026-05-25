@@ -252,6 +252,14 @@ import {
   type StarMarkCallbacks,
   type StarMarkContext
 } from "./pdf-workspace/star-mark";
+import {
+  type CsvSeriesPoint,
+  type LocalChartFunction,
+  type LocalChartType,
+  decodeChartContent,
+  encodeChartContent,
+  normalizeChartInputValue
+} from "./pdf-workspace/chart-content";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -423,17 +431,13 @@ const appRoot = app;
 const drillHighlightContext: DrillHighlightContext = {
   getAppRoot: () => appRoot
 };
-// drill-highlight 의 format/render 가 chart/table content 파싱에 쓰는 deps.
-// main.ts SoT 인 decodeChartContent + parseMarkdownTable + CHART_TYPE_PREFIX 를
-// lazy factory 로 묶는다. eager const object 로 만들면 CHART_TYPE_PREFIX (let/const
-// 은 hoist 안 됨) 가 본 위치 (L~450) 보다 한참 아래 (L~3870) 에 선언되어 TDZ
-// ReferenceError. factory 안에서 runtime 호출 시 lookup 하면 모듈 평가 완료 후
-// 라 안전.
+// drill-highlight 의 format/render 가 table content 파싱에 쓰는 deps.
+// chart-content (decodeChartContent + CHART_TYPE_PREFIX) 는 slice-2f/i
+// 에서 leaf module 로 분리되어 drill-highlight 가 직접 import. 본 factory 는
+// table helper 잔여 책임만 유지 — slice-2f/ii (table) 에서 추가 정리 예정.
 function getDrillHighlightHelpers(): DrillHighlightDomainHelpers {
   return {
-    decodeChartContent,
-    parseMarkdownTable,
-    CHART_TYPE_PREFIX
+    parseMarkdownTable
   };
 }
 const mainRenderSink: RenderSink | null = appRoot
@@ -3598,10 +3602,6 @@ type LocalPdfTool = PdfWorkspaceTool;
 // xy/bar/trig variants. Domain normalizeChartType keeps persisted enum compatibility on hydration,
 // so chart type is persisted as a type: prefix line in chart.content (free-string field).
 // Pattern mirrors LocalPdfTool widening for eraser.
-type LocalChartType = "xy" | "bar" | "trig";
-type LocalChartFunction = "sin" | "cos" | "tan";
-
-const CHART_TYPE_PREFIX = "type:";
 const CHART_PLOT_LEFT = 6;
 const CHART_PLOT_RIGHT = 94;
 const CHART_PLOT_TOP = 4;
@@ -3609,55 +3609,6 @@ const CHART_PLOT_BOTTOM = 22;
 const CHART_PLOT_WIDTH = CHART_PLOT_RIGHT - CHART_PLOT_LEFT;
 const CHART_PLOT_HEIGHT = CHART_PLOT_BOTTOM - CHART_PLOT_TOP;
 const CHART_PLANE_COLOR = "#111111";
-
-/**
- * Encodes LocalChartType + CsvSeriesPoint[] into a single content string.
- * Format: "type:<chartType>\n<x>,<y>\n..."
- * When chartType is "xy", prefix is omitted for backward compat with existing content.
- */
-function encodeChartContent(chartType: LocalChartType | LocalChartFunction, points: CsvSeriesPoint[]): string {
-  const csv = serializeCsv(points);
-  if (chartType === "xy") {
-    return csv;
-  }
-
-  return CHART_TYPE_PREFIX + chartType + "\n" + csv;
-}
-
-/**
- * Decodes a content string into LocalChartType + CsvSeriesPoint[].
- * First line of "type:<chartType>" is consumed as metadata; rest is CSV.
- * Legacy "line"/"sparkline" content is normalized to the user-facing xy chart.
- */
-function inferChartFunctionType(points: CsvSeriesPoint[]): LocalChartFunction {
-  return points.some((point) => Math.abs(point.value) > 1) ? "tan" : "sin";
-}
-
-function decodeChartContent(content: string): { chartType: LocalChartType; points: CsvSeriesPoint[]; functionType?: LocalChartFunction } {
-  const trimmed = content.trimStart();
-
-  if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
-    const newline = trimmed.indexOf("\n");
-    const typeStr = newline < 0
-      ? trimmed.slice(CHART_TYPE_PREFIX.length)
-      : trimmed.slice(CHART_TYPE_PREFIX.length, newline);
-    const csv = newline < 0 ? "" : trimmed.slice(newline + 1);
-    const points = parseCsvSeries(csv);
-
-    if (typeStr === "sin" || typeStr === "cos" || typeStr === "tan") {
-      return { chartType: "trig", points, functionType: typeStr };
-    }
-
-    const chartType: LocalChartType = typeStr === "bar" || typeStr === "trig" ? typeStr : "xy";
-    return {
-      chartType,
-      points,
-      functionType: chartType === "trig" ? inferChartFunctionType(points) : undefined
-    };
-  }
-
-  return { chartType: "xy", points: parseCsvSeries(content) };
-}
 
 type EraserShape = "circle" | "square" | "triangle" | "line";
 type EraserDragPoint = { x: number; y: number };
@@ -5005,75 +4956,7 @@ function renderApp(): void {
 
 }
 
-interface CsvSeriesPoint {
-  label: string;
-  value: number;
-}
-
 const SVG_NS = "http://www.w3.org/2000/svg";
-
-function parseCsvSeries(source: string): CsvSeriesPoint[] {
-  if (source.trim().length === 0) {
-    return [];
-  }
-
-  return source.split(/\r?\n/).reduce<CsvSeriesPoint[]>((points, line) => {
-    const parsedLine = splitCsvSeriesLine(line);
-
-    if (!parsedLine) {
-      return points;
-    }
-
-    const [label, rawValue] = parsedLine;
-    const value = Number(rawValue);
-
-    if (!Number.isFinite(value)) {
-      return points;
-    }
-
-    points.push({ label, value });
-    return points;
-  }, []);
-}
-
-function splitCsvSeriesLine(line: string): [label: string, rawValue: string] | null {
-  let label = "";
-
-  for (let index = 0; index < line.length; index++) {
-    const char = line[index];
-    const next = line[index + 1];
-
-    if (char === "\\" && (next === "," || next === "\\")) {
-      label += next;
-      index += 1;
-      continue;
-    }
-
-    if (char === ",") {
-      return [label.trim(), line.slice(index + 1).trim()];
-    }
-
-    label += char;
-  }
-
-  return null;
-}
-
-/**
- * Serializes CsvSeriesPoint[] to CSV string.
- * Each point becomes "label,value" line. Commas and backslashes in labels are escaped.
- * O(n) where n = number of points.
- */
-function serializeCsv(points: CsvSeriesPoint[]): string {
-  return points
-    .map((point) => point.label.replace(/\\/g, "\\\\").replace(/,/g, "\\,") + "," + String(point.value))
-    .join("\n");
-}
-
-function normalizeChartInputValue(rawValue: string): number {
-  const value = Number(rawValue);
-  return Number.isFinite(value) ? value : 0;
-}
 
 interface CoordinateChartPoint {
   point: CsvSeriesPoint;
