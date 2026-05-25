@@ -103,10 +103,12 @@ feature: "main-ts-layer-b-slice-2c-ink-stroke-pen-raf-batch-0-1-ratio-morphdom-p
 - **lint script 도입**: apps/web/package.json 에 eslint script 추가
   (`eslint . --ext .ts,.tsx`). slice-2b 와 본 sprint 양쪽 AC6 의 lint
   waiver 해소 가능. layer C 진입 전 별도 sprint.
-- **mobile pen smoke retro window manual 자동화 검토**: playwright +
-  pointer event simulation 으로 iPad pen 시나리오 일부 자동화. 단 pressure
-  + getCoalescedEvents 완전 시뮬 한계. retro window manual 1차 + automation
-  2차 hybrid.
+- **DDD refactor AC7 의 의미 정정**: 본 sprint = behavior-preserving
+  refactor. AC7 retro-defer 의 본질 = "행위 등가 가정 + 일상 사용 중
+  회기 보이면 hotfix" sanity. 별도 평가 trip 의무 X. slice-2b 의 codex
+  round 4 거부 회피 위한 capture waiver pattern 을 가져오면서 "user 의무"
+  까지 격상시킨 wording mismatch — 다음 sprint plan §3 AC 작성 시
+  "회기 발견 시 hotfix" 수준으로 약화.
 
 ## 4. 이어갈 것
 
@@ -119,13 +121,15 @@ feature: "main-ts-layer-b-slice-2c-ink-stroke-pen-raf-batch-0-1-ratio-morphdom-p
   renderer 도 함께 옮길 수 있는지).
 - **layer C (subject views)** — 위험도 미정. layer B 마감 후.
 - **layer D (state/sync residual user-notes)** — 위험도 미정.
-- **mobile pen smoke retro window manual** (AC7 retro-defer): user 가
-  retro window 에서 iPad + MacBook Safari 로 인증 후 PDF mount + 6 pen
-  시나리오 (drawing / pressure / multi-stroke / ESC mid-stroke / 새 stroke
-  즉시 시작 / desktop pointer 회기) 실측. 회기 시 별도 hotfix sprint.
-- **performance numeric baseline retro window readout** (capture
-  20260525T074710Z-21895): user 가 Datadog US5 dashboard 의 `pen-stroke.next-paint`
-  p50/p95 직접 읽기 → retro §5 또는 별도 evidence 파일.
+- **mobile pen smoke (AC7 retro-defer, capture 20260525T070319Z-91020)**:
+  본 sprint = DDD refactor (행위 등가). 일상 사용 중 iPad pen / desktop
+  pen 정상 동작이면 충분. 회기 (drawing 안 그려짐 / pressure 없음 /
+  multi-stroke 깨짐 / ESC 안 먹음 / 새 stroke 시작 차단 / desktop pointer
+  freeze 등) 발견 시 별도 hotfix sprint. **별도 평가 trip 의무 X**.
+- **performance numeric baseline (capture 20260525T074710Z-21895)**:
+  RUM emit pipeline 코드 변경 0 = 분포 변경 없음 가정. Datadog `pen-stroke.next-paint`
+  metric 이 일상 사용 후 drop 또는 p95 분포 급변 보이면 그때 발견 → hotfix.
+  retro window 의 dashboard 직접 readout 의무 X.
 - **eslint 도입** (AC6 lint waiver 해소): apps/web/package.json scripts +
   .eslintrc + CI integration. layer C 진입 전 별도 sprint.
 - **React migration backlog** ([[project-react-migration-backlog]]): layer

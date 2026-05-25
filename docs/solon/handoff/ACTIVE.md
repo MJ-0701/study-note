@@ -47,9 +47,14 @@ main.ts line: 11,049 → **9,417** (-1,632, -14.77%). 9k target (layer A~D
 - AC2 / AC3 estimate ±50% / ±100% 범위 wording.
 - advisor() Gate 6 진입 전 1회 표준 step.
 
-**mobile QA 부담**: slice-2c 의 retro-defer (mobile pen smoke 6 시나리오 +
-Datadog `pen-stroke.next-paint` p50/p95 numeric baseline) 가 retro window 의
-user 직접 실측 의무 (capture 20260525T070319Z-91020 + 20260525T074710Z-21895).
+**mobile QA / Datadog readout 정정**: 본 sprint = DDD refactor (행위 등가).
+slice-2c 의 AC7 retro-defer (mobile pen smoke + Datadog `pen-stroke.next-paint`
+p50/p95) capture (20260525T070319Z-91020 + 20260525T074710Z-21895) 는 별도
+평가 trip 의무 아님. 일상 사용 중 회기 발견 시 hotfix sprint. capture =
+"행위 등가 가정 보존" evidence 일 뿐, "user 가 직접 검증" 의무 아님.
+slice-2b 의 codex round 4 거부 회피 wording 을 가져오면서 "의무" 까지
+격상한 mismatch — slice-2d plan §3 AC 작성 시 "회기 시 hotfix" 수준으로
+명시.
 
 **다음 명령**:
 ```bash
