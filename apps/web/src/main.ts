@@ -153,6 +153,37 @@ import {
   type AnnotationSyncCallbacks,
   type AnnotationSyncContext
 } from "./pdf-workspace/annotation-sync";
+import {
+  applyPdfCanvasMounts as applyPdfCanvasMountsModule,
+  clearActivePdfObjectUrl as clearActivePdfObjectUrlModule,
+  clearFailedPdfPreviewLoad,
+  finishPdfPreviewLoad,
+  getActivePdfObjectUrl,
+  getActivePdfObjectUrlMaterialId,
+  hasActivePdfObjectUrl,
+  hasActivePdfPreviewLoad,
+  hasFailedPdfPreviewLoad,
+  markFailedPdfPreviewLoad,
+  markPdfPreviewLoadStarted,
+  revokeAllPdfObjectUrls as revokeAllPdfObjectUrlsModule,
+  setActivePdfObjectUrl as setActivePdfObjectUrlModule,
+  type CanvasMountCallbacks
+} from "./pdf-workspace/canvas-mount";
+import {
+  buildPdfWorkspaceKey as buildPdfWorkspaceKeyModule,
+  getPdfMaterialKey,
+  getPdfWorkspaceMaterials,
+  getSubjectPdfMaterials as getSubjectPdfMaterialsModule,
+  loadPdfWorkspaceStore as loadPdfWorkspaceStoreModule,
+  replacePdfWorkspaceMaterials as replacePdfWorkspaceMaterialsModule,
+  savePdfWorkspaceStore as savePdfWorkspaceStoreModule,
+  selectPdfWorkspaceMaterial as selectPdfWorkspaceMaterialModule,
+  updatePdfWorkspace as updatePdfWorkspaceModule,
+  upsertPdfWorkspaceMaterial,
+  type WorkspaceDomainHelpers,
+  type WorkspaceStoreCallbacks,
+  type WorkspaceStoreContext
+} from "./pdf-workspace/workspace-store";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -263,10 +294,12 @@ let authBootNoticeTimer: ReturnType<typeof setTimeout> | undefined;
 let authBootRetryTimer: ReturnType<typeof setTimeout> | undefined;
 // slice-3 (sign-up UX): current auth form tab ("login" | "signup").
 let authMode: AuthMode = "login";
-const activePdfObjectUrls = new Map<string, string>();
-const activePdfObjectUrlMaterialIds = new Map<string, string>();
-const activePdfPreviewLoads = new Set<string>();
-const failedPdfPreviewLoadKeys = new Set<string>();
+// sprint-W22-sprint-1 layer B/slice-2a: 4 module-state Map/Set
+// (activePdfObjectUrls, activePdfObjectUrlMaterialIds, activePdfPreviewLoads,
+// failedPdfPreviewLoadKeys) → `./pdf-workspace/canvas-mount.ts` 로 이관.
+// 외부 read = getActivePdfObjectUrl* / hasActivePdfPreviewLoad* getter API,
+// mutate = setActivePdfObjectUrl / clearActivePdfObjectUrl /
+// revokeAllPdfObjectUrls / mark*/finish*/clear* helper.
 let activeInkStroke: ActiveInkStroke | undefined;
 // sprint-11/slice-2-refine R10-c: tracks an in-progress eraser drag (pointerdown → pointerup).
 // Analogous to activeInkStroke for pen mode. Cleared on pointerup / pointercancel.
@@ -376,117 +409,14 @@ function mountRender(html: string): void {
   renderIntoSink(html, mainRenderSink);
 }
 
-// sprint-W21-sprint-4/S1: render 후 PDF canvas mount effect.
-// renderPdfFrameStack 가 출력한 `<div data-pdf-mount="true">` 마다 pdfjs-dist
-// 호출 + canvas paint. dynamic import 로 lazy bundle (PDF workspace 진입 전
-// main entry 영향 0).
-//
-// idempotent: 같은 (blobUrl, pageNumber) 면 skip. 다른 page 면 re-mount
-// (viewer 내부에서 in-flight render cancel + 새 render).
+// sprint-W22-sprint-1 layer B/slice-2a: applyPdfCanvasMounts 본체 →
+// `./pdf-workspace/canvas-mount.ts`. main.ts 잔여 = telemetry callback 묶음.
+const canvasMountCallbacks: CanvasMountCallbacks = {
+  trackRumAction,
+  trackRumError
+};
 async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
-  const mounts = Array.from(
-    root.querySelectorAll<HTMLElement>('[data-pdf-mount="true"]')
-  );
-  if (mounts.length === 0) {
-    return;
-  }
-  const { mountPdfCanvas } = await import("./pdf/pdf-canvas-viewer");
-  for (const div of mounts) {
-    const blobUrl = div.dataset.blobUrl;
-    const pageRaw = div.dataset.pageNumber;
-    const pageNumber = pageRaw ? Number(pageRaw) : NaN;
-    if (!blobUrl || !Number.isFinite(pageNumber) || pageNumber < 1) {
-      continue;
-    }
-    const mountedKey = `${blobUrl}:${pageNumber}`;
-    if (div.dataset.pdfMounted === mountedKey) {
-      continue;
-    }
-    div.dataset.pdfMounted = mountedKey;
-    // codex P2 (PR #40 round-2): mountPdfCanvas swallows worker/render errors
-    // via its `onError` callback and resolves cleanly, so the trailing `.catch`
-    // alone would never fire and the marker would remain — leaving the page
-    // permanently blank until a key change/reload. Clear the marker from inside
-    // `onError` so the next render attempt actually remounts. Keep the trailing
-    // `.catch` as a defensive net for unexpected rejections (e.g., if the viewer
-    // ever throws outside its own try/catch).
-    //
-    // RUM observability: Datadog dashboard 에서 mount phase + device 분포
-    // 추적. iPad blank-canvas (PR #44/#45 fix 회귀 감지) 또는 향후 미지원
-    // 브라우저 발견용. user 가 콘솔/Network 직접 접근 못해도 backend-visible.
-    const info = {
-      page: pageNumber,
-      cw: div.clientWidth,
-      ch: div.clientHeight,
-      dpr: window.devicePixelRatio || 1,
-      ua: navigator.userAgent.slice(0, 90)
-    };
-    trackRumAction("pdf-canvas.mount.start", {
-      page: info.page,
-      cw: info.cw,
-      ch: info.ch,
-      dpr: info.dpr,
-      ua: info.ua
-    });
-    const mountStartedAt = performance.now();
-    const watchdog = window.setTimeout(() => {
-      if (div.dataset.pdfMounted === mountedKey) {
-        trackRumAction("pdf-canvas.mount.timeout", {
-          page: info.page,
-          cw: info.cw,
-          ch: info.ch,
-          dpr: info.dpr,
-          ua: info.ua,
-          timeout_ms: 10000
-        });
-      }
-    }, 10000);
-    void mountPdfCanvas(div, blobUrl, pageNumber, {
-      onReady: (vp) => {
-        window.clearTimeout(watchdog);
-        trackRumAction("pdf-canvas.mount.ok", {
-          page: info.page,
-          vp_w: Math.round(vp.width),
-          vp_h: Math.round(vp.height),
-          dpr: info.dpr,
-          cw: info.cw,
-          ch: info.ch,
-          duration_ms: Math.round(performance.now() - mountStartedAt)
-        });
-      },
-      onError: (err) => {
-        window.clearTimeout(watchdog);
-        console.warn("[study-note] pdf canvas mount failed", err);
-        delete div.dataset.pdfMounted;
-        const e = err as { name?: unknown } | null;
-        trackRumError(err, {
-          phase: "pdf-canvas.mount.error",
-          page: info.page,
-          dpr: info.dpr,
-          cw: info.cw,
-          ch: info.ch,
-          ua: info.ua,
-          error_name: String(e?.name ?? ""),
-          duration_ms: Math.round(performance.now() - mountStartedAt)
-        });
-      }
-    }).catch((err) => {
-      window.clearTimeout(watchdog);
-      console.warn("[study-note] pdf canvas mount rejected", err);
-      delete div.dataset.pdfMounted;
-      const e = err as { name?: unknown } | null;
-      trackRumError(err, {
-        phase: "pdf-canvas.mount.reject",
-        page: info.page,
-        dpr: info.dpr,
-        cw: info.cw,
-        ch: info.ch,
-        ua: info.ua,
-        error_name: String(e?.name ?? ""),
-        duration_ms: Math.round(performance.now() - mountStartedAt)
-      });
-    });
-  }
+  await applyPdfCanvasMountsModule(root, canvasMountCallbacks);
 }
 
 function getDrillHighlightSelector(type: InspectorDrillType): string {
@@ -1415,55 +1345,13 @@ function cancelAuthBootRequest(): void {
   authBootNotice = "checking";
 }
 
-function setActivePdfObjectUrl(
-  subjectId: string,
-  materialId: string,
-  objectUrl: string
-): void {
-  clearActivePdfObjectUrl(subjectId);
-
-  activePdfObjectUrls.set(subjectId, objectUrl);
-  activePdfObjectUrlMaterialIds.set(subjectId, materialId);
-  failedPdfPreviewLoadKeys.delete(`${subjectId}:${materialId}`);
-}
-
-function clearActivePdfObjectUrl(subjectId: string): void {
-  const previousUrl = activePdfObjectUrls.get(subjectId);
-
-  if (previousUrl) {
-    URL.revokeObjectURL(previousUrl);
-    // sprint-W21-sprint-4/S1: pdfjs-dist document cache dispose. lazy import
-    // 으로 viewer module 미 load 시 no-op.
-    void disposePdfDocumentCache(previousUrl);
-  }
-
-  activePdfObjectUrls.delete(subjectId);
-  activePdfObjectUrlMaterialIds.delete(subjectId);
-}
-
-function revokeAllPdfObjectUrls(): void {
-  const urls = Array.from(activePdfObjectUrls.values());
-  urls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-  // sprint-W21-sprint-4/S1: bulk dispose pdfjs document cache.
-  if (urls.length > 0) {
-    void disposePdfDocumentCache();
-  }
-  activePdfObjectUrls.clear();
-  activePdfObjectUrlMaterialIds.clear();
-  activePdfPreviewLoads.clear();
-  failedPdfPreviewLoadKeys.clear();
-}
-
-// sprint-W21-sprint-4/S1: pdf-canvas-viewer 의 PDFDocumentProxy cache 를 lazy
-// dispose. viewer module 가 dynamic import 라 module 미 load 시 no-op.
-async function disposePdfDocumentCache(blobUrl?: string): Promise<void> {
-  try {
-    const { clearPdfDocumentCache } = await import("./pdf/pdf-canvas-viewer");
-    clearPdfDocumentCache(blobUrl);
-  } catch {
-    /* viewer module 미 load — no-op. */
-  }
-}
+// sprint-W22-sprint-1 layer B/slice-2a: 4 object-URL lifecycle 함수 본체 →
+// `./pdf-workspace/canvas-mount.ts`. main.ts 잔여 = re-export 만.
+// disposePdfDocumentCache 는 module 내부에서만 호출됨 (revoke* 내부) — main.ts
+// 직접 호출 site 없음.
+const setActivePdfObjectUrl = setActivePdfObjectUrlModule;
+const clearActivePdfObjectUrl = clearActivePdfObjectUrlModule;
+const revokeAllPdfObjectUrls = revokeAllPdfObjectUrlsModule;
 
 async function revalidateStoredSession(
   options: { attempt?: number; blocking?: boolean } = {}
@@ -1586,264 +1474,77 @@ function scheduleAuthBootRetry(attempt: number, options: { blocking: boolean }):
   }, AUTH_SESSION_RETRY_DELAY_MS);
 }
 
-// sprint-3/S2: userId-scoped pdfWorkspaceStore localStorage key. Mirrors the
-// S1 notebook namespacing pattern (`{base}:{userId}`) so A→B account
-// transitions cannot see each other's PDF workspace through localStorage. See
-// plan G1 (2026-W21 userId-namespacing sprint) for the leak class this closes.
+// sprint-W22-sprint-1 layer B/slice-2a: 13 workspace-store 함수 본체 →
+// `./pdf-workspace/workspace-store.ts`. pure 6 = direct import (sortNewestFirst
+// / syncCurrentPdfMaterial / getPdfMaterialKey / getPdfWorkspaceMaterials /
+// upsertPdfWorkspaceMaterial / parsePdfWorkspaceStorePayload). stateful 5 +
+// helper-needing 2 (buildPdfWorkspaceKey + replacePdfWorkspaceMaterials) =
+// ctx + callbacks + domain helper 주입 wrapper. main.ts 50+ 직접 read 사이트
+// 보존. domain helper 는 runtime import 차단 (annotation-sync 패턴 일치).
+const workspaceDomainHelpers: WorkspaceDomainHelpers = {
+  storageKeyPrefix: pdfWorkspaceStorageKey,
+  getSubjectWorkspace: getSubjectPdfWorkspace,
+  hydrateSubjectWorkspace: hydrateSubjectPdfWorkspace,
+  createMaterialFromBackend: createPdfMaterialFromBackend
+};
+function getWorkspaceStoreContext(): WorkspaceStoreContext {
+  return {
+    getStore: () => pdfWorkspaceStore,
+    getActiveUserId: () => authSession?.user.id,
+    domain: workspaceDomainHelpers
+  };
+}
+function getWorkspaceStoreCallbacks(): WorkspaceStoreCallbacks {
+  return {
+    setStore: (next) => {
+      pdfWorkspaceStore = next;
+    },
+    scheduleAnnotationPut: scheduleAnnotationPutSync,
+    getAnnotationSyncContext,
+    getAnnotationSyncCallbacks,
+    clearActivePdfObjectUrl
+  };
+}
 function buildPdfWorkspaceKey(userId: string): string {
-  return `${pdfWorkspaceStorageKey}:${userId}`;
+  return buildPdfWorkspaceKeyModule(userId, pdfWorkspaceStorageKey);
 }
-
-// sprint-3/S2: parse + hydrate a raw localStorage payload into a
-// PdfWorkspaceStore. Shared by the scoped-key load path and the legacy
-// migration path; returns undefined when the payload is missing or
-// structurally invalid so callers can fall back to an empty store.
-function parsePdfWorkspaceStorePayload(raw: string): PdfWorkspaceStore | undefined {
-  try {
-    const parsed = JSON.parse(raw) as Partial<PdfWorkspaceStore>;
-
-    if (parsed.workspaces && typeof parsed.workspaces === "object") {
-      // sprint-12/slice-2: hydrate each workspace through fail-closed helper.
-      // corrupt entries (invalid textBoxes/checklists) are dropped per-item.
-      // sticky/ink BC: pass-through (array保証のみ).
-      const rawEntries = parsed.workspaces as Record<string, unknown>;
-      const workspaces: PdfWorkspaceStore["workspaces"] = {};
-
-      for (const [id, entry] of Object.entries(rawEntries)) {
-        workspaces[id] = hydrateSubjectPdfWorkspace(entry);
-      }
-
-      return { workspaces };
-    }
-  } catch {
-    /* fall through to undefined */
-  }
-  return undefined;
-}
-
-// sprint-4/S1: legacy unscoped-key migration removed (same reasoning as
-// loadStoredNotebook above). Server-side annotation snapshots are SoT;
-// orphaned legacy `study-note.pdf-workspaces.v1` keys in localStorage are
-// not read by anything and can be cleaned up via the reset button.
-
 function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
-  const scopedKey = buildPdfWorkspaceKey(userId);
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(scopedKey);
-  } catch {
-    return { workspaces: {} };
-  }
-
-  if (!stored) {
-    // sprint-4/S1: no scoped data yet — start from an empty store. Server
-    // annotation GET hydrate (sprint-2) restores PDF workspace data.
-    return { workspaces: {} };
-  }
-
-  const parsed = parsePdfWorkspaceStorePayload(stored);
-  if (parsed) {
-    return parsed;
-  }
-  try {
-    window.localStorage.removeItem(scopedKey);
-  } catch {
-    /* ignore */
-  }
-  return { workspaces: {} };
+  return loadPdfWorkspaceStoreModule(userId, workspaceDomainHelpers);
 }
-
-// sprint-3/S2: require an authenticated userId to write. Saving without one
-// would either land on the legacy unscoped key (leak vector) or an empty
-// namespace (data loss). When there is no session yet (boot before
-// /v1/auth/me resolves), drop the write — the next save after session attach
-// will persist the same in-memory state.
 function savePdfWorkspaceStore(userId: string | undefined = authSession?.user.id): void {
-  if (!userId) {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
-      buildPdfWorkspaceKey(userId),
-      JSON.stringify(pdfWorkspaceStore)
-    );
-  } catch {
-    /* localStorage exception (quota / private mode) — silent: server autosave
-       is SoT for pdfWorkspaceStore, and the next mutation retries the write. */
-  }
+  savePdfWorkspaceStoreModule(getWorkspaceStoreContext(), userId);
 }
-
 function updatePdfWorkspace(
   subjectId: string,
   updater: (workspace: SubjectPdfWorkspace) => SubjectPdfWorkspace
 ): void {
-  const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const updated = syncCurrentPdfMaterial({
-    ...updater(current),
-    updatedAt: new Date().toISOString()
-  });
-
-  pdfWorkspaceStore = {
-    workspaces: {
-      ...pdfWorkspaceStore.workspaces,
-      [subjectId]: updated
-    }
-  };
-  savePdfWorkspaceStore();
-  // sprint-2/S2 fix (codex P1): only PUT annotations when the active material
-  // did not change. If the mutator only switched material (current.material →
-  // updated.material is a different id), the workspace's annotation arrays
-  // belong to the *previous* material and a PUT would mis-attribute them to
-  // the new material's BE record.
-  const previousMaterial = current.material;
-  const nextMaterial = updated.material;
-  const previousId = previousMaterial?.backendMaterialId ?? previousMaterial?.id;
-  const nextId = nextMaterial?.backendMaterialId ?? nextMaterial?.id;
-  if (nextMaterial && previousId === nextId) {
-    const payload = {
-      stickyNotes: updated.stickyNotes,
-      inkStrokes: updated.inkStrokes,
-      textBoxes: updated.textBoxes,
-      checklists: updated.checklists,
-      tables: updated.tables,
-      charts: updated.charts,
-      // PR #52 codex Round-1 P1 — starMarks 가 annotation PUT 에 누락되어
-      // reload 후 사라지던 문제. BE Zod whole-reject (starMark.dto.ts) 가
-      // valid payload 만 통과시킴.
-      starMarks: updated.starMarks ?? []
-    };
-    scheduleAnnotationPutSync(
-      nextId!,
-      payload,
-      getAnnotationSyncContext(),
-      getAnnotationSyncCallbacks()
-    );
-  }
+  updatePdfWorkspaceModule(
+    subjectId,
+    updater,
+    getWorkspaceStoreContext(),
+    getWorkspaceStoreCallbacks()
+  );
 }
-
-function syncCurrentPdfMaterial(workspace: SubjectPdfWorkspace): SubjectPdfWorkspace {
-  if (!workspace.material) {
-    return {
-      ...workspace,
-      materials: getPdfWorkspaceMaterials(workspace)
-    };
-  }
-
-  const materialKey = getPdfMaterialKey(workspace.material);
-  const materials = [
-    workspace.material,
-    ...getPdfWorkspaceMaterials(workspace).filter(
-      (item) => getPdfMaterialKey(item) !== materialKey
-    )
-  ];
-
-  return {
-    ...workspace,
-    materials: sortPdfMaterialsNewestFirst(materials)
-  };
-}
-
-function getPdfMaterialKey(material: PdfMaterialDraft): string {
-  return material.backendMaterialId ?? material.id;
-}
-
-function getPdfWorkspaceMaterials(workspace: SubjectPdfWorkspace): PdfMaterialDraft[] {
-  const seen = new Set<string>();
-  const materials: PdfMaterialDraft[] = [];
-  const candidates = [
-    ...(workspace.material ? [workspace.material] : []),
-    ...((workspace.materials ?? []) as PdfMaterialDraft[])
-  ];
-
-  for (const material of candidates) {
-    const key = getPdfMaterialKey(material);
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    materials.push(material);
-  }
-
-  return sortPdfMaterialsNewestFirst(materials);
-}
-
-function sortPdfMaterialsNewestFirst(materials: PdfMaterialDraft[]): PdfMaterialDraft[] {
-  return [...materials].sort((a, b) => {
-    const aTime = Date.parse(a.updatedAt ?? a.uploadedAt);
-    const bTime = Date.parse(b.updatedAt ?? b.uploadedAt);
-    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
-  });
-}
-
-function upsertPdfWorkspaceMaterial(
-  workspace: SubjectPdfWorkspace,
-  material: PdfMaterialDraft
-): SubjectPdfWorkspace {
-  const key = getPdfMaterialKey(material);
-  const materials = [
-    material,
-    ...getPdfWorkspaceMaterials(workspace).filter(
-      (item) => getPdfMaterialKey(item) !== key
-    )
-  ];
-
-  return {
-    ...workspace,
-    material,
-    materials: sortPdfMaterialsNewestFirst(materials)
-  };
-}
-
 function replacePdfWorkspaceMaterials(
   workspace: SubjectPdfWorkspace,
   backendMaterials: PdfMaterialRecord[]
 ): SubjectPdfWorkspace {
-  const existingMaterials = getPdfWorkspaceMaterials(workspace);
-  const existingByKey = new Map(
-    existingMaterials.map((material) => [getPdfMaterialKey(material), material])
+  return replacePdfWorkspaceMaterialsModule(
+    workspace,
+    backendMaterials,
+    workspaceDomainHelpers
   );
-  const drafts = backendMaterials.map((material) => {
-    const key = material.id;
-    const previous =
-      existingByKey.get(key) ??
-      (workspace.material && getPdfMaterialKey(workspace.material) === key
-        ? workspace.material
-        : undefined);
-
-    return createPdfMaterialFromBackend(material, previous);
-  });
-  const currentKey = workspace.material ? getPdfMaterialKey(workspace.material) : undefined;
-  const selected = currentKey
-    ? drafts.find((material) => getPdfMaterialKey(material) === currentKey)
-    : undefined;
-
-  return {
-    ...workspace,
-    material: selected ?? drafts[0] ?? workspace.material,
-    materials: sortPdfMaterialsNewestFirst(drafts)
-  };
 }
-
 function selectPdfWorkspaceMaterial(subjectId: string, materialId: string): boolean {
-  const current = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const target = getPdfWorkspaceMaterials(current).find(
-    (material) => getPdfMaterialKey(material) === materialId
+  return selectPdfWorkspaceMaterialModule(
+    subjectId,
+    materialId,
+    getWorkspaceStoreContext(),
+    getWorkspaceStoreCallbacks()
   );
-
-  if (!target) {
-    return false;
-  }
-
-  if (current.material && getPdfMaterialKey(current.material) !== materialId) {
-    clearActivePdfObjectUrl(subjectId);
-  }
-
-  updatePdfWorkspace(subjectId, (workspace) => upsertPdfWorkspaceMaterial(workspace, target));
-  return true;
 }
-
 function getSubjectPdfMaterials(subjectId: string): PdfMaterialDraft[] {
-  return getPdfWorkspaceMaterials(getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId));
+  return getSubjectPdfMaterialsModule(subjectId, getWorkspaceStoreContext());
 }
 
 // S3 AC11/AC12 — canonical YYYY-MM-DD validator (calendar overflow 차단).
@@ -4491,26 +4192,26 @@ async function loadPdfPreviewFromBackend(
   const loadKey = `${subjectId}:${materialId}`;
 
   if (options.force) {
-    failedPdfPreviewLoadKeys.delete(loadKey);
+    clearFailedPdfPreviewLoad(loadKey);
   }
 
   if (
     !options.force &&
-    activePdfObjectUrlMaterialIds.get(subjectId) === materialId &&
-    activePdfObjectUrls.has(subjectId)
+    getActivePdfObjectUrlMaterialId(subjectId) === materialId &&
+    hasActivePdfObjectUrl(subjectId)
   ) {
     return;
   }
 
-  if (!options.force && failedPdfPreviewLoadKeys.has(loadKey)) {
+  if (!options.force && hasFailedPdfPreviewLoad(loadKey)) {
     return;
   }
 
-  if (activePdfPreviewLoads.has(loadKey)) {
+  if (hasActivePdfPreviewLoad(loadKey)) {
     return;
   }
 
-  activePdfPreviewLoads.add(loadKey);
+  markPdfPreviewLoadStarted(loadKey);
 
   try {
     const blob = await fetchPdfMaterialFile(apiBaseUrl, materialId);
@@ -4520,7 +4221,7 @@ async function loadPdfPreviewFromBackend(
       return;
     }
 
-    failedPdfPreviewLoadKeys.add(loadKey);
+    markFailedPdfPreviewLoad(loadKey);
 
     if (!options.silent) {
       intakeFeedback = {
@@ -4530,7 +4231,7 @@ async function loadPdfPreviewFromBackend(
       };
     }
   } finally {
-    activePdfPreviewLoads.delete(loadKey);
+    finishPdfPreviewLoad(loadKey);
     renderApp();
   }
 }
@@ -7797,14 +7498,14 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   const selectedTool = (material?.selectedTool ?? "read") as LocalPdfTool;
   const objectUrl =
     material?.backendMaterialId &&
-    activePdfObjectUrlMaterialIds.get(subject.id) === material.backendMaterialId
-      ? activePdfObjectUrls.get(subject.id)
+    getActivePdfObjectUrlMaterialId(subject.id) === material.backendMaterialId
+      ? getActivePdfObjectUrl(subject.id)
       : undefined;
   const previewLoadKey = material?.backendMaterialId
     ? `${subject.id}:${material.backendMaterialId}`
     : undefined;
   const isPreviewLoading = previewLoadKey
-    ? activePdfPreviewLoads.has(previewLoadKey)
+    ? hasActivePdfPreviewLoad(previewLoadKey)
     : false;
   const pageNotes = workspace.stickyNotes.filter(
     (note) => note.pageNumber === selectedPage
