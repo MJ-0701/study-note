@@ -12,57 +12,91 @@
 | **B/slice-2a. canvas mount + workspace state** | 2026-W22-sprint-1 (this) | ✅ merged (PR #59, main=c84439e) |
 | **B/slice-2b. classDate + touch/swipe + nav** | 2026-W22-sprint-2 | ✅ merged (PR #60, main=e8c1f87) |
 | **B/slice-2c. ink stroke + pen RAF batch** | 2026-W22-sprint-3 | ✅ merged (PR #61, main=f24a20b) |
-| **B/slice-2d. drill highlight** | TBD | ⏳ 다음 sprint 후보 (위험도 중) |
-| B/slice-2e. star mark + renderer | TBD | ⏳ backlog (위험도 중-높음, renderer ~1200 line) |
+| **B/slice-2d. drill highlight** | 2026-W22-sprint-2 | ✅ merged (PR #62, main=d1bba31) |
+| **B/slice-2e. star mark only** | TBD | ⏳ 다음 sprint 후보 (위험도 낮음, ~150 line) |
+| B/slice-2f. renderer big | TBD | ⏳ backlog (위험도 중-높음, ~1,369 line) |
 | C. subject views | TBD | ⏳ backlog |
 | D. state/sync residual (user-notes) | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 재검토 ([[project-react-migration-backlog]]) |
 
-main.ts line: 11,049 → **9,417** (-1,632, -14.77%). 9k target (layer A~D
-누적) 까지 -417 line 더 필요.
+main.ts line: 11,049 → **9,000** (-2,049, -18.55%). 9k target **달성**.
+다음 호기심 target = 8k (slice-2f renderer big 분리 시 가능).
 
-## 활성 작업 = layer B/slice-2d sprint (drill highlight — **단독 sprint, 위험도 중**)
+## 활성 작업 = layer B/slice-2e sprint (star mark only — **단독 sprint, 위험도 낮음**)
 
-**전 sprint retro** = `docs/solon/document/pdf/main-ts-layer-b-slice-2c-ink-stroke-pen-raf-batch-0-1-ratio-morphdom-pdfjs-polyfill/20260525/retro.md`
+**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2d-drill-highlight/20260525/retro.md`
 
-**slice-2d 후보 함수** (~?00 line, 실측 필요):
-- drill highlight state (drillHighlightStartedAt 등 main.ts 잔류)
-- inspector drill renderer 결합부 (drill type normalize + 페이지 이동 + 1.5s pulse)
-- highlight UI 분기 (sprint-14 의 tan 검사기 / 페이지 이동 / 1.5s pulse 동작)
+**slice-2e 측정치 (실측)**:
+- `renderStarMark` (main.ts L7201-7232, 31 line) + add/remove/resizeStarMark
+  (~L4501-4550, ~50 line) + dispatch (L1660-1690, ~30 line) + Y key bind +
+  tool integration ≈ **150 line scope**.
+- 7 grep hit (`star|Star|starMark|StarMark`): L1660, L1671, L2516-2545
+  (Y key bind), L3046-3047 (tool dispatch), L4501-4541 (state), L7201-7232
+  (render), L8972 (tool label).
+- 위험도 낮음 = 단일 UI widget + simple state + iPad tap binding 명확.
 
-**invariant 추정 (fragile)**:
-1. drill type normalize (sprint-14 R1 R2 fix 의 discontinuous gating + sin/cos blank 회기).
-2. 1.5s pulse timing (renderApp 호출 + setTimeout 정합).
-3. page nav timing (drill 후 페이지 이동 + 잔류 highlight clear).
-4. inspector-drill.spec.ts 의 source-text characterization (8 → 10 case, AC 정합).
+**slice-2e 후보 invariant**:
+1. Y key bind (KeyY → "star" tool activation, L2516+2530+2545).
+2. add/remove/resize state mutate (immutable workspace update via
+   workspace-store patch).
+3. star mark render (data-star-mark-id + ★ glyph + controls = resize + delete).
+4. tool integration (selectedTool === "star" → addStarMark dispatch).
 
-**slice-2c 학습 우선 적용**:
-- handoff 의 invariant 수와 실측 mismatch 가 다시 발생할 가능성 → brainstorm 단계
-  orient + measurement-first 필수. silent narrow 금지.
-- review.md §2 manual update routine 의 **SFS 0.6.121 events.jsonl compaction 한계**:
-  review_stage 가 compaction key 미포함 → self+cross 동시 보존 불가. 다음 sprint
-  부터 cross 직후 self 재실행 (events 마지막이 self 가 되도록) OR commit apply
-  `--no-push` + git push manual + `gh api -X PUT ...pulls/N/merge` (gh pr merge
-  의 JSON parse error 우회).
-- AC2 / AC3 estimate ±50% / ±100% 범위 wording.
-- advisor() Gate 6 진입 전 1회 표준 step.
+**slice-2c+2d 학습 우선 적용**:
+- measurement-first orient brainstorm §1 의무 (handoff 추정 vs 실측 mismatch
+  사전 차단).
+- scope boundary 결정 brainstorm 단계 (option A=state only / B=state+render
+  / C=state+render+key-bind+tool — default 추천).
+- SFS 0.6.121/0.6.122 events.jsonl compaction workaround = capture
+  `--kind evidence` + `--kind waiver` 패턴 미리 준비 (slice-2c R-D2 backlog).
+- AC2/AC3 estimate ±100 wording.
+- advisor() Gate 6 진입 전 1회 step.
+- module init order self-check (slice-2d Gate 6 lesson — eager const 가
+  후방 const 참조 시 TDZ ReferenceError).
 
-**mobile QA / Datadog readout 정정**: 본 sprint = DDD refactor (행위 등가).
-slice-2c 의 AC7 retro-defer (mobile pen smoke + Datadog `pen-stroke.next-paint`
-p50/p95) capture (20260525T070319Z-91020 + 20260525T074710Z-21895) 는 별도
-평가 trip 의무 아님. 일상 사용 중 회기 발견 시 hotfix sprint. capture =
-"행위 등가 가정 보존" evidence 일 뿐, "user 가 직접 검증" 의무 아님.
-slice-2b 의 codex round 4 거부 회피 wording 을 가져오면서 "의무" 까지
-격상한 mismatch — slice-2d plan §3 AC 작성 시 "회기 시 hotfix" 수준으로
-명시.
+**mobile QA / Datadog readout**: slice-2c/2d 동일 — DDD refactor (행위 등가).
+slice-2c 의 capture (20260525T070319Z-91020 + 20260525T074710Z-21895) 는
+"행위 등가 가정 보존" evidence. user 직접 검증 의무 아님. 회기 시 hotfix.
 
 **다음 명령**:
 ```bash
 sfs status                  # 빈 sprint 확인
-sfs start "main.ts layer B/slice-2d — drill highlight 분리"
-sfs brainstorm "..."        # orient = drill highlight 잔여 line 측정 우선
+sfs start "main.ts layer B/slice-2e — star mark 분리"
+sfs brainstorm "..."        # orient = star mark 잔여 line 측정 우선 (이미 ~150 line 실측)
 sfs plan → review --gate 3 self → cross → implement → Gate 6 self → cross → PR → @codex → merge → retro
 ```
+
+## Layer B/slice-2d 결과 (참고)
+
+- main.ts -417 line (9,417 → 9,000). 누적 layer A~B/slice-2d = -2,049 / -18.55%.
+  9k target 달성.
+- 신규 1 module + spec 이관: `pdf-workspace/drill-highlight.ts` 669 line / 36
+  export (types 7 + const 7 + interface 4 + function 16 + test helper 2).
+- spec = `apps/web/src/__tests__/inspector-drill.spec.ts` 795 line / 14 case
+  (handoff 추정 8→10 vs 실측 13 + 1 dynamic security loop = 14). SRC = drill-highlight.ts.
+- web 전체 spec 회귀 = 0 (오히려 -1 fail 개선 — inspector-drill 이 main.ts shim
+  mismatch 우회로 PASS 전환). pre 408/5 → post 422/4.
+- Gate 3 self+cross PASS (각각 round 3 — events.jsonl compaction workaround
+  capture + waiver 2건).
+- Gate 6 self R3 + cross R1 PASS — self R1 partial = TDZ bug (drillHighlightHelpers
+  eager const 가 후방 CHART_TYPE_PREFIX 참조 ReferenceError) → lazy factory
+  `getDrillHighlightHelpers()` fix. self R2 partial = untracked file + .gitignore
+  미설명 + 4 fail 명세 누락 → git add staged + diff 명시 + 4 fail 명세.
+- @codex bot = "Didn't find any major issues. :+1:" (autopilot merge).
+- Waiver 2건 + Evidence 1건 (capture):
+  - Gate 3 evidence (capture 20260525T084637Z-47536) = self R3 PASS 보존.
+  - Gate 3 waiver (capture 20260525T084646Z-47665) = SFS 0.6.121/0.6.122
+    events.jsonl compaction key 미포함 known bug.
+  - Gate 6 evidence (capture 20260525T091344Z-1532) = self R3 PASS 보존.
+- Backlog (slice-2c retro 의 R-A2/R-C/R-D2/R-D3 외 신규):
+  - R-D2 escalate: SFS 0.6.122 events.jsonl compaction key 에 review_stage 추가
+    issue/PR 제안 (slice-2c+2d 연속 재발).
+  - R-H: implement 단계 module init order self-check 추가 (Gate 6 가 발견한
+    TDZ lesson — eager const 가 후방 const 참조 시 lazy factory).
+  - R-I: pre-existing 4 fail (`updatePdfMaterialMetadata` shim missing,
+    chart-tool + pdf-material-library) — 별도 sprint backlog.
+- 패턴 = layer A/B-slice-1/2a/2b/2c/2d Context + Callbacks + DomainHelpers
+  + named export + module-private state + characterization spec 일관.
 
 ## Layer B/slice-2c 결과 (참고)
 
