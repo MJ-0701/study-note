@@ -114,7 +114,6 @@ import {
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfMaterialDraft,
-  type PdfStarMark,
   type PdfTable,
   type PdfTextBox,
   type PdfWorkspaceStore,
@@ -244,6 +243,15 @@ import {
   type DrillHighlightDomainHelpers,
   type DrillItemClickResult
 } from "./pdf-workspace/drill-highlight";
+import {
+  addStarMark as addStarMarkModule,
+  cycleStarMarkSize,
+  removeStarMark as removeStarMarkModule,
+  renderStarMark as renderStarMarkModule,
+  resizeStarMark as resizeStarMarkModule,
+  type StarMarkCallbacks,
+  type StarMarkContext
+} from "./pdf-workspace/star-mark";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -277,11 +285,6 @@ interface QuickNote {
   primaryLabel?: string;
 }
 
-// InspectorDrillType / InspectorDrillState / PendingDrillHighlight /
-// ActiveDrillHighlight / inspectorDrillStorageKey / DRILL_HIGHLIGHT_DURATION_MS /
-// DRILL_HIGHLIGHT_RETRY_DELAY_MS / DRILL_HIGHLIGHT_MAX_ATTEMPTS /
-// DRILL_HIGHLIGHT_EXPIRES_MS = sprint-W22-sprint-2 layer B/slice-2d 에서
-// `./pdf-workspace/drill-highlight.ts` 로 이관. import 는 main.ts 상단 block.
 const notebookStorageKey = "study-note.notebook.v2";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
@@ -310,9 +313,6 @@ let lastSessionUserId: string | undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
-// inspectorDrill state + pendingDrillHighlight + activeDrillHighlights Map +
-// activeDrillHighlightTimers Map = sprint-W22-sprint-2 layer B/slice-2d 에서
-// `./pdf-workspace/drill-highlight.ts` 로 이관. module 내부 보관 + getter/setter.
 if (isBrowserRuntime) {
   setInspectorDrill(readInspectorDrill());
 }
@@ -466,12 +466,6 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
   await applyPdfCanvasMountsModule(root, canvasMountCallbacks);
 }
 
-// getDrillHighlightSelector / getDrillHighlightDatasetKey / getElementDataset /
-// findDrillHighlightElement / applyPendingDrillHighlight / findPdfAnnotationSurface /
-// getDrillHighlightKey / applyTrackedDrillHighlight / refreshActiveDrillHighlights /
-// scheduleDrillHighlightRetry / applyQueuedDrillHighlight =
-// sprint-W22-sprint-2 layer B/slice-2d 에서 `./pdf-workspace/drill-highlight.ts`
-// 로 이관. main.ts 의 mainRenderSink postMountEffects 가 module fn 을 직접 호출.
 
 if (isBrowserRuntime) {
   document.addEventListener("change", handleDocumentChange);
@@ -542,10 +536,6 @@ function writeInspectorOpen(value: boolean): void {
   } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
 }
 
-// getDefaultInspectorDrill / normalizeInspectorDrillType / readInspectorDrill /
-// writeInspectorDrill / toggleInspectorDrillState = sprint-W22-sprint-2 layer
-// B/slice-2d 에서 `./pdf-workspace/drill-highlight.ts` 로 이관 + module
-// import 로 재배선.
 
 // sprint-3/S1 (codex P1 backlog): userId-scoped notebook storage key. The
 // previous global key allowed cross-user data leak vectors on shared browsers;
@@ -1548,10 +1538,6 @@ function handleDocumentChange(event: Event) {
   handleDocumentChangeModule(event, getDocumentChangeContext(), getDocumentChangeCallbacks());
 }
 
-// DrillItemClickResult + handleDrillItemClick = sprint-W22-sprint-2 layer
-// B/slice-2d 에서 `./pdf-workspace/drill-highlight.ts` 로 이관. main.ts 는
-// dispatch site 에서 module fn 을 직접 호출하면서 default callback
-// (requestPdfPage / setPdfPage / renderApp) 만 inject.
 function handleDrillItemClick(target: Element): DrillItemClickResult {
   return handleDrillItemClickModule(target, {
     requestPage: requestPdfPage,
@@ -1668,6 +1654,7 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   // sprint-W21-sprint-1 / S6 / AC29 — 별표 크기 cycle.
+  // cycle logic = pdf-workspace/star-mark.ts 의 cycleStarMarkSize (slice-2e).
   if (quickNoteButton?.dataset.action === "resize-star-mark") {
     const subjectId = quickNoteButton.dataset.subjectId;
     const markId = quickNoteButton.dataset.starMarkId;
@@ -1675,11 +1662,7 @@ function handleDocumentClick(event: MouseEvent): void {
       const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
       const mark = (workspace.starMarks ?? []).find((m) => m.id === markId);
       if (mark) {
-        // PR #52 R2 P2 fix: 0.06 (initial default) 포함 cycle.
-        const cycles = [0.04, 0.06, 0.08, 0.16];
-        const currentIdx = cycles.findIndex((c) => Math.abs(c - mark.sizeRatio) < 0.005);
-        const nextSize = cycles[(currentIdx + 1) % cycles.length] ?? 0.08;
-        resizeStarMark(subjectId, markId, nextSize);
+        resizeStarMark(subjectId, markId, cycleStarMarkSize(mark.sizeRatio));
         renderApp();
       }
     }
@@ -4487,61 +4470,20 @@ function addChart(
 
 // sprint-W21-sprint-1 / S6 / AC27+AC29+AC30 — 별표 add / delete.
 // Default size 0.06 (page width 의 6%). cuid-ish id (browser crypto.randomUUID
-// 가 hyphen 포함이라 hex만 컴팩트). createdAt/updatedAt ISO.
-function makeStarMarkId(): string {
-  const bytes = new Uint8Array(16);
-  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
-  return "sm" + Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+const starMarkContext: StarMarkContext = {
+  getWorkspace: (subjectId) => getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId)
+};
+const starMarkCallbacks: StarMarkCallbacks = {
+  updateWorkspace: (subjectId, updater) => updatePdfWorkspace(subjectId, updater)
+};
+function addStarMark(subjectId: string, position: { x: number; y: number }): void {
+  addStarMarkModule(starMarkContext, starMarkCallbacks, subjectId, position);
 }
-
-function addStarMark(
-  subjectId: string,
-  position: { x: number; y: number }
-): void {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const page = workspace.material?.selectedPage ?? 1;
-  const now = new Date().toISOString();
-  const mark: PdfStarMark = {
-    id: makeStarMarkId(),
-    pageNumber: page,
-    xRatio: Math.min(1, Math.max(0, position.x)),
-    yRatio: Math.min(1, Math.max(0, position.y)),
-    sizeRatio: 0.06,
-    color: "#f59e0b",
-    createdAt: now,
-    updatedAt: now
-  };
-
-  updatePdfWorkspace(subjectId, (current) => ({
-    ...current,
-    starMarks: [...(current.starMarks ?? []), mark]
-  }));
-}
-
 function removeStarMark(subjectId: string, markId: string): void {
-  updatePdfWorkspace(subjectId, (workspace) => ({
-    ...workspace,
-    starMarks: (workspace.starMarks ?? []).filter((m) => m.id !== markId)
-  }));
+  removeStarMarkModule(starMarkCallbacks, subjectId, markId);
 }
-
-function resizeStarMark(
-  subjectId: string,
-  markId: string,
-  sizeRatio: number
-): void {
-  const clamped = Math.min(0.3, Math.max(0.02, sizeRatio));
-  const now = new Date().toISOString();
-  updatePdfWorkspace(subjectId, (workspace) => ({
-    ...workspace,
-    starMarks: (workspace.starMarks ?? []).map((m) =>
-      m.id === markId ? { ...m, sizeRatio: clamped, updatedAt: now } : m
-    )
-  }));
+function resizeStarMark(subjectId: string, markId: string, sizeRatio: number): void {
+  resizeStarMarkModule(starMarkCallbacks, subjectId, markId, sizeRatio);
 }
 
 function removeChart(subjectId: string, chartId: string): void {
@@ -6473,14 +6415,6 @@ function renderIntakeFeedback(
   `;
 }
 
-// DRILL_LABEL_LIMIT / DRILL_LIST_LIMIT + formatDrillSnippet / getDrillPageNumber /
-// getStickyDrillText / getChecklistDrillText / getTableDrillText /
-// getChartDrillTypeLabel / formatDrillLabel + InspectorDrillEntry /
-// getDrillItemId / getInspectorDrillEntries + renderDrillList /
-// renderInspectorStatRow = sprint-W22-sprint-2 layer B/slice-2d 에서
-// `./pdf-workspace/drill-highlight.ts` 로 이관. main.ts 는 dispatch site 에서
-// module fn 호출 + drillHighlightHelpers (decodeChartContent +
-// parseMarkdownTable + CHART_TYPE_PREFIX) 1회 inject.
 
 function getPdfFrameKey(materialId: string, pageNumber: number): string {
   return `pdf-frame:${materialId}:${pageNumber}`;
@@ -7198,33 +7132,7 @@ function renderChartMount(subjectId: string, chart: PdfChart): string {
 // SVG injection hardening (ADR-9 Round 5 P1-C): color 가 hex regex 통과해야 함.
 // raw innerHTML / template string interp 직접 삽입 X. JSX/HTML escape 가 모든
 // user-controllable value 에 적용.
-function renderStarMark(subjectId: string, mark: PdfStarMark): string {
-  // Color 는 hydration validateStarMark 가 hex regex 통과해야만 도착. 추가 방어:
-  // 잘못된 color 면 default. (defense in depth)
-  const HEX = /^#[0-9a-fA-F]{6}$/;
-  const safeColor = HEX.test(mark.color) ? mark.color : "#f59e0b";
-  const sizePct = (mark.sizeRatio * 100).toFixed(2);
-  // PR #52 codex Round-2 P1: viewport (vw) 단위가 PDF surface 폭 무관해서
-  // split pane / 다른 zoom 에서 시각 크기 불일치. container query (cqw) 로
-  // 변경 — glyph font-size 가 container 폭에 정확히 따라감 (= sizeRatio *
-  // pageWidth). .pdf-star-mark { container-type: inline-size } +
-  // .glyph { font-size: 100cqw } 조합.
-  return `
-    <div
-      class="pdf-star-mark"
-      data-star-mark-id="${escapeHtml(mark.id)}"
-      data-subject-id="${escapeHtml(subjectId)}"
-      style="left: ${(mark.xRatio * 100).toFixed(2)}%; top: ${(mark.yRatio * 100).toFixed(2)}%; width: ${sizePct}%; aspect-ratio: 1; color: ${escapeHtml(safeColor)};"
-      aria-label="별표 마스킹"
-    >
-      <span class="pdf-star-mark__glyph" aria-hidden="true">★</span>
-      <div class="pdf-star-mark__controls" aria-hidden="true">
-        <button type="button" class="pdf-star-mark__btn" data-action="resize-star-mark" data-subject-id="${escapeHtml(subjectId)}" data-star-mark-id="${escapeHtml(mark.id)}" title="크기 변경">⤢</button>
-        <button type="button" class="pdf-star-mark__btn pdf-star-mark__btn--danger" data-action="remove-star-mark" data-subject-id="${escapeHtml(subjectId)}" data-star-mark-id="${escapeHtml(mark.id)}" title="삭제">×</button>
-      </div>
-    </div>
-  `;
-}
+const renderStarMark = renderStarMarkModule;
 
 // sprint-13/slice-5+: renderChart rewritten — CSV textarea폐기, x/y coordinate UI + trig mode.
 // Content encoding: "type:<chartType>\n<csv>" — persisted in free-string chart.content field.
