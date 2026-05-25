@@ -229,6 +229,21 @@ import {
   type InkStrokeContext,
   type InkStrokeDomainHelpers
 } from "./pdf-workspace/ink-stroke";
+import {
+  applyQueuedDrillHighlight as applyQueuedDrillHighlightModule,
+  getInspectorDrill,
+  handleDrillItemClick as handleDrillItemClickModule,
+  normalizeInspectorDrillType,
+  readInspectorDrill,
+  refreshActiveDrillHighlights as refreshActiveDrillHighlightsModule,
+  renderInspectorStatRow as renderInspectorStatRowModule,
+  setInspectorDrill,
+  toggleInspectorDrillState,
+  writeInspectorDrill,
+  type DrillHighlightContext,
+  type DrillHighlightDomainHelpers,
+  type DrillItemClickResult
+} from "./pdf-workspace/drill-highlight";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -262,32 +277,13 @@ interface QuickNote {
   primaryLabel?: string;
 }
 
-export type InspectorDrillType = "sticky" | "ink" | "textbox" | "checklist" | "table" | "chart";
-
-export type InspectorDrillState = Record<InspectorDrillType, boolean>;
-
-interface PendingDrillHighlight {
-  subjectId: string;
-  drillType: InspectorDrillType;
-  annotationId: string;
-  remainingAttempts: number;
-  expiresAt: number;
-}
-
-interface ActiveDrillHighlight {
-  subjectId: string;
-  drillType: InspectorDrillType;
-  annotationId: string;
-  expiresAt: number;
-}
-
+// InspectorDrillType / InspectorDrillState / PendingDrillHighlight /
+// ActiveDrillHighlight / inspectorDrillStorageKey / DRILL_HIGHLIGHT_DURATION_MS /
+// DRILL_HIGHLIGHT_RETRY_DELAY_MS / DRILL_HIGHLIGHT_MAX_ATTEMPTS /
+// DRILL_HIGHLIGHT_EXPIRES_MS = sprint-W22-sprint-2 layer B/slice-2d 에서
+// `./pdf-workspace/drill-highlight.ts` 로 이관. import 는 main.ts 상단 block.
 const notebookStorageKey = "study-note.notebook.v2";
-const inspectorDrillStorageKey = "studyNote.pdfWorkspace.inspectorDrill";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
-const DRILL_HIGHLIGHT_DURATION_MS = 1500;
-const DRILL_HIGHLIGHT_RETRY_DELAY_MS = 50;
-const DRILL_HIGHLIGHT_MAX_ATTEMPTS = 3;
-const DRILL_HIGHLIGHT_EXPIRES_MS = 4000;
 const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
 // ACA scale-to-zero cold start can take ~30s on first hit. Keep the per-request
 // timeout above that so /v1/auth/me does not abort prematurely; the "waking"
@@ -314,10 +310,12 @@ let lastSessionUserId: string | undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
 let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
-let inspectorDrill: InspectorDrillState = readInspectorDrill();
-let pendingDrillHighlight: PendingDrillHighlight | null = null;
-const activeDrillHighlights = new Map<string, ActiveDrillHighlight>();
-const activeDrillHighlightTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// inspectorDrill state + pendingDrillHighlight + activeDrillHighlights Map +
+// activeDrillHighlightTimers Map = sprint-W22-sprint-2 layer B/slice-2d 에서
+// `./pdf-workspace/drill-highlight.ts` 로 이관. module 내부 보관 + getter/setter.
+if (isBrowserRuntime) {
+  setInspectorDrill(readInspectorDrill());
+}
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
@@ -422,14 +420,30 @@ const appRoot = app;
 // sprint-2026-W21-sprint-2 / layer A: module state 의존 (appRoot + widget
 // post-mount effect 5종) 은 main.ts 가 1회 구성한 RenderSink 로 주입.
 // renderInto sink helper = main.ts 가 호출하는 thin wrapper.
+const drillHighlightContext: DrillHighlightContext = {
+  getAppRoot: () => appRoot
+};
+// drill-highlight 의 format/render 가 chart/table content 파싱에 쓰는 deps.
+// main.ts SoT 인 decodeChartContent + parseMarkdownTable + CHART_TYPE_PREFIX 를
+// lazy factory 로 묶는다. eager const object 로 만들면 CHART_TYPE_PREFIX (let/const
+// 은 hoist 안 됨) 가 본 위치 (L~450) 보다 한참 아래 (L~3870) 에 선언되어 TDZ
+// ReferenceError. factory 안에서 runtime 호출 시 lookup 하면 모듈 평가 완료 후
+// 라 안전.
+function getDrillHighlightHelpers(): DrillHighlightDomainHelpers {
+  return {
+    decodeChartContent,
+    parseMarkdownTable,
+    CHART_TYPE_PREFIX
+  };
+}
 const mainRenderSink: RenderSink | null = appRoot
   ? {
       appRoot,
       postMountEffects: [
         () => refreshTableWidgets(),
         () => refreshChartWidgets(),
-        () => applyQueuedDrillHighlight(),
-        () => refreshActiveDrillHighlights(),
+        () => applyQueuedDrillHighlightModule(drillHighlightContext),
+        () => refreshActiveDrillHighlightsModule(drillHighlightContext),
         (root) => applyPdfCanvasMounts(root)
       ]
     }
@@ -452,170 +466,12 @@ async function applyPdfCanvasMounts(root: HTMLElement): Promise<void> {
   await applyPdfCanvasMountsModule(root, canvasMountCallbacks);
 }
 
-function getDrillHighlightSelector(type: InspectorDrillType): string {
-  if (type === "sticky") return "[data-note-id]";
-  if (type === "ink") return "[data-stroke-id]";
-  if (type === "textbox") return "[data-textbox-id]";
-  if (type === "checklist") return "[data-checklist-id]";
-  if (type === "table") return "[data-table-id]";
-  return "[data-chart-id]";
-}
-
-function getDrillHighlightDatasetKey(type: InspectorDrillType): string {
-  if (type === "sticky") return "noteId";
-  if (type === "ink") return "strokeId";
-  if (type === "textbox") return "textboxId";
-  if (type === "checklist") return "checklistId";
-  if (type === "table") return "tableId";
-  return "chartId";
-}
-
-function getElementDataset(element: Element): Record<string, string | undefined> {
-  return (element as HTMLElement | SVGElement).dataset as Record<string, string | undefined>;
-}
-
-function findDrillHighlightElement(
-  container: ParentNode,
-  drillType: InspectorDrillType,
-  annotationId: string
-): Element | null {
-  const selector = getDrillHighlightSelector(drillType);
-  const datasetKey = getDrillHighlightDatasetKey(drillType);
-  return Array.from(container.querySelectorAll(selector))
-    .find((element) => getElementDataset(element)[datasetKey] === annotationId) ?? null;
-}
-
-export function applyPendingDrillHighlight(
-  container: ParentNode,
-  drillType: InspectorDrillType,
-  annotationId: string
-): boolean {
-  const element = findDrillHighlightElement(container, drillType, annotationId);
-
-  if (!element) {
-    return false;
-  }
-
-  if (typeof element.scrollIntoView === "function") {
-    element.scrollIntoView({ block: "center", behavior: "smooth" });
-  }
-
-  element.classList.add("is-highlight-pulse");
-  setTimeout(() => {
-    element.classList.remove("is-highlight-pulse");
-  }, DRILL_HIGHLIGHT_DURATION_MS);
-  return true;
-}
-
-function findPdfAnnotationSurface(container: ParentNode, subjectId: string): ParentNode | null {
-  return Array.from(container.querySelectorAll("[data-pdf-annotation-surface]"))
-    .find((element) => getElementDataset(element).subjectId === subjectId) ?? null;
-}
-
-function getDrillHighlightKey(target: Pick<ActiveDrillHighlight, "subjectId" | "drillType" | "annotationId">): string {
-  return `${target.subjectId}:${target.drillType}:${target.annotationId}`;
-}
-
-function applyTrackedDrillHighlight(target: ActiveDrillHighlight, shouldScroll: boolean): boolean {
-  if (!appRoot) {
-    return false;
-  }
-
-  const remainingMs = target.expiresAt - Date.now();
-  const key = getDrillHighlightKey(target);
-
-  if (remainingMs <= 0) {
-    activeDrillHighlights.delete(key);
-    activeDrillHighlightTimers.delete(key);
-    return false;
-  }
-
-  const surface = findPdfAnnotationSurface(appRoot, target.subjectId);
-  const element = surface
-    ? findDrillHighlightElement(surface, target.drillType, target.annotationId)
-    : null;
-
-  if (!element) {
-    return false;
-  }
-
-  if (shouldScroll && typeof element.scrollIntoView === "function") {
-    element.scrollIntoView({ block: "center", behavior: "smooth" });
-  }
-
-  element.classList.add("is-highlight-pulse");
-  activeDrillHighlights.set(key, target);
-
-  const previousTimer = activeDrillHighlightTimers.get(key);
-  if (previousTimer) {
-    clearTimeout(previousTimer);
-  }
-
-  const timer = setTimeout(() => {
-    const currentSurface = appRoot ? findPdfAnnotationSurface(appRoot, target.subjectId) : null;
-    const currentElement = currentSurface
-      ? findDrillHighlightElement(currentSurface, target.drillType, target.annotationId)
-      : null;
-    currentElement?.classList.remove("is-highlight-pulse");
-    activeDrillHighlights.delete(key);
-    activeDrillHighlightTimers.delete(key);
-  }, Math.max(0, remainingMs));
-
-  activeDrillHighlightTimers.set(key, timer);
-  return true;
-}
-
-function refreshActiveDrillHighlights(): void {
-  for (const target of activeDrillHighlights.values()) {
-    applyTrackedDrillHighlight(target, false);
-  }
-}
-
-function scheduleDrillHighlightRetry(target: PendingDrillHighlight): void {
-  queueMicrotask(() => {
-    setTimeout(() => {
-      if (pendingDrillHighlight === target) {
-        applyQueuedDrillHighlight();
-      }
-    }, DRILL_HIGHLIGHT_RETRY_DELAY_MS);
-  });
-}
-
-function applyQueuedDrillHighlight(): void {
-  if (!pendingDrillHighlight || !appRoot) {
-    return;
-  }
-
-  const target = pendingDrillHighlight;
-
-  if (Date.now() > target.expiresAt) {
-    pendingDrillHighlight = null;
-    return;
-  }
-
-  const surface = findPdfAnnotationSurface(appRoot, target.subjectId);
-  const applied = surface
-    ? applyTrackedDrillHighlight({
-        subjectId: target.subjectId,
-        drillType: target.drillType,
-        annotationId: target.annotationId,
-        expiresAt: Date.now() + DRILL_HIGHLIGHT_DURATION_MS
-      }, true)
-    : false;
-
-  if (applied) {
-    pendingDrillHighlight = null;
-    return;
-  }
-
-  target.remainingAttempts -= 1;
-  if (target.remainingAttempts <= 0) {
-    pendingDrillHighlight = null;
-    return;
-  }
-
-  scheduleDrillHighlightRetry(target);
-}
+// getDrillHighlightSelector / getDrillHighlightDatasetKey / getElementDataset /
+// findDrillHighlightElement / applyPendingDrillHighlight / findPdfAnnotationSurface /
+// getDrillHighlightKey / applyTrackedDrillHighlight / refreshActiveDrillHighlights /
+// scheduleDrillHighlightRetry / applyQueuedDrillHighlight =
+// sprint-W22-sprint-2 layer B/slice-2d 에서 `./pdf-workspace/drill-highlight.ts`
+// 로 이관. main.ts 의 mainRenderSink postMountEffects 가 module fn 을 직접 호출.
 
 if (isBrowserRuntime) {
   document.addEventListener("change", handleDocumentChange);
@@ -686,64 +542,10 @@ function writeInspectorOpen(value: boolean): void {
   } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
 }
 
-function getDefaultInspectorDrill(): InspectorDrillState {
-  return {
-    sticky: false,
-    ink: false,
-    textbox: false,
-    checklist: false,
-    table: false,
-    chart: false
-  };
-}
-
-function normalizeInspectorDrillType(value: string | undefined): InspectorDrillType | null {
-  return value === "sticky" ||
-    value === "ink" ||
-    value === "textbox" ||
-    value === "checklist" ||
-    value === "table" ||
-    value === "chart"
-    ? value
-    : null;
-}
-
-export function readInspectorDrill(): InspectorDrillState {
-  const base = getDefaultInspectorDrill();
-
-  try {
-    const raw = localStorage.getItem(inspectorDrillStorageKey);
-    if (raw === null) return base;
-    const parsed = JSON.parse(raw) as Partial<Record<InspectorDrillType, unknown>>;
-
-    return {
-      sticky: parsed.sticky === true,
-      ink: parsed.ink === true,
-      textbox: parsed.textbox === true,
-      checklist: parsed.checklist === true,
-      table: parsed.table === true,
-      chart: parsed.chart === true
-    };
-  } catch {
-    return base;
-  }
-}
-
-export function writeInspectorDrill(value: InspectorDrillState): void {
-  try {
-    localStorage.setItem(inspectorDrillStorageKey, JSON.stringify(value));
-  } catch { /* QuotaExceededError 등 → UI 만 영향 */ }
-}
-
-export function toggleInspectorDrillState(
-  value: InspectorDrillState,
-  type: InspectorDrillType
-): InspectorDrillState {
-  return {
-    ...value,
-    [type]: !value[type]
-  };
-}
+// getDefaultInspectorDrill / normalizeInspectorDrillType / readInspectorDrill /
+// writeInspectorDrill / toggleInspectorDrillState = sprint-W22-sprint-2 layer
+// B/slice-2d 에서 `./pdf-workspace/drill-highlight.ts` 로 이관 + module
+// import 로 재배선.
 
 // sprint-3/S1 (codex P1 backlog): userId-scoped notebook storage key. The
 // previous global key allowed cross-user data leak vectors on shared browsers;
@@ -1746,69 +1548,16 @@ function handleDocumentChange(event: Event) {
   handleDocumentChangeModule(event, getDocumentChangeContext(), getDocumentChangeCallbacks());
 }
 
-export type DrillItemClickResult =
-  | {
-      ok: true;
-      subjectId: string;
-      annotationId: string;
-      drillType: InspectorDrillType;
-      pageNumber: number;
-      queued: true;
-    }
-  | { ok: false; reason: "missing-button" | "missing-dataset" | "invalid-type" | "invalid-page" };
-
-export function handleDrillItemClick(
-  target: Element,
-  options: {
-    now?: () => number;
-    requestPage?: (subjectId: string, pageNumber: number) => void;
-    commitPage?: (subjectId: string, pageNumber: number) => void;
-    render?: () => void;
-  } = {}
-): DrillItemClickResult {
-  const closest = (target as { closest?: (selector: string) => Element | null }).closest;
-  const button = typeof closest === "function"
-    ? closest.call(target, '[data-action="select-drill-item"]')
-    : target;
-
-  if (!button || getElementDataset(button).action !== "select-drill-item") {
-    return { ok: false, reason: "missing-button" };
-  }
-
-  const dataset = getElementDataset(button);
-  const subjectId = dataset.subjectId;
-  const annotationId = dataset.annotationId;
-  const drillType = normalizeInspectorDrillType(dataset.drillType);
-  const rawPageNumber = Number(dataset.pageNumber);
-
-  if (!subjectId || !annotationId) {
-    return { ok: false, reason: "missing-dataset" };
-  }
-
-  if (!drillType) {
-    return { ok: false, reason: "invalid-type" };
-  }
-
-  if (!Number.isFinite(rawPageNumber) || rawPageNumber <= 0) {
-    return { ok: false, reason: "invalid-page" };
-  }
-
-  const pageNumber = Math.floor(rawPageNumber);
-  pendingDrillHighlight = {
-    subjectId,
-    drillType,
-    annotationId,
-    remainingAttempts: DRILL_HIGHLIGHT_MAX_ATTEMPTS,
-    expiresAt: (options.now ?? Date.now)() + DRILL_HIGHLIGHT_EXPIRES_MS
-  };
-
-  (options.requestPage ?? requestPdfPage)(subjectId, pageNumber);
-  // Drill navigation must change selectedPage immediately; requestPdfPage may wait
-  // for native PDF iframe readiness before committing normal toolbar transitions.
-  (options.commitPage ?? setPdfPage)(subjectId, pageNumber);
-  (options.render ?? renderApp)();
-
-  return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
+// DrillItemClickResult + handleDrillItemClick = sprint-W22-sprint-2 layer
+// B/slice-2d 에서 `./pdf-workspace/drill-highlight.ts` 로 이관. main.ts 는
+// dispatch site 에서 module fn 을 직접 호출하면서 default callback
+// (requestPdfPage / setPdfPage / renderApp) 만 inject.
+function handleDrillItemClick(target: Element): DrillItemClickResult {
+  return handleDrillItemClickModule(target, {
+    requestPage: requestPdfPage,
+    commitPage: setPdfPage,
+    render: renderApp
+  });
 }
 
 // sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture.
@@ -2052,8 +1801,9 @@ function handleDocumentClick(event: MouseEvent): void {
     const type = normalizeInspectorDrillType(quickNoteButton.dataset.drillType);
 
     if (type) {
-      inspectorDrill = toggleInspectorDrillState(inspectorDrill, type);
-      writeInspectorDrill(inspectorDrill);
+      const next = toggleInspectorDrillState(getInspectorDrill(), type);
+      setInspectorDrill(next);
+      writeInspectorDrill(next);
       renderApp();
     }
 
@@ -6723,181 +6473,14 @@ function renderIntakeFeedback(
   `;
 }
 
-const DRILL_LABEL_LIMIT = 30;
-const DRILL_LIST_LIMIT = 50;
-
-function formatDrillSnippet(value: string | undefined, emptyLabel: string): string {
-  const trimmed = (value ?? "").trim();
-  const text = trimmed.length > 0 ? trimmed.slice(0, DRILL_LABEL_LIMIT) : emptyLabel;
-  return escapeHtml(text);
-}
-
-function getDrillPageNumber(type: InspectorDrillType, item: unknown): number {
-  const candidate = item as { page?: unknown; pageNumber?: unknown };
-  const rawPage = type === "sticky" || type === "ink" ? candidate.pageNumber : candidate.page;
-  const page = Number(rawPage);
-  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-}
-
-function getStickyDrillText(note: SubjectPdfWorkspace["stickyNotes"][number]): string {
-  const blocks = Array.isArray(note.blocks) ? note.blocks : [];
-  return blocks.find((block) => block.content.trim().length > 0)?.content ?? blocks[0]?.content ?? "";
-}
-
-function getChecklistDrillText(checklist: PdfChecklist): string {
-  const items = Array.isArray(checklist.items) ? checklist.items : [];
-  return items.find((item) => item.label.trim().length > 0)?.label ?? items[0]?.label ?? "";
-}
-
-function getTableDrillText(table: PdfTable): string {
-  const parsed = parseMarkdownTable(table.content);
-  const cells = parsed ? [...parsed.headers, ...parsed.rows.flat()] : [];
-  return cells.find((cell) => cell.trim().length > 0) ?? "";
-}
-
-function getChartDrillTypeLabel(content: string): string {
-  const trimmed = content.trimStart();
-  if (trimmed.startsWith(CHART_TYPE_PREFIX)) {
-    const newline = trimmed.indexOf("\n");
-    const rawType = (newline < 0 ? trimmed.slice(CHART_TYPE_PREFIX.length) : trimmed.slice(CHART_TYPE_PREFIX.length, newline)).trim();
-    if (rawType === "sin" || rawType === "cos" || rawType === "tan" || rawType === "bar" || rawType === "xy" || rawType === "trig") {
-      return rawType;
-    }
-  }
-
-  return decodeChartContent(content).chartType;
-}
-
-export function formatDrillLabel(type: InspectorDrillType, item: unknown, index: number = 0): string {
-  const pageNumber = getDrillPageNumber(type, item);
-
-  if (type === "sticky") {
-    return `페이지 ${pageNumber} · ${formatDrillSnippet(getStickyDrillText(item as SubjectPdfWorkspace["stickyNotes"][number]), "(빈 메모)")}`;
-  }
-
-  if (type === "textbox") {
-    const textBox = item as Partial<PdfTextBox>;
-    return `페이지 ${pageNumber} · ${formatDrillSnippet(typeof textBox.content === "string" ? textBox.content : "", "(빈 텍스트)")}`;
-  }
-
-  if (type === "checklist") {
-    return `페이지 ${pageNumber} · ${formatDrillSnippet(getChecklistDrillText(item as PdfChecklist), "(빈 체크리스트)")}`;
-  }
-
-  if (type === "table") {
-    return `페이지 ${pageNumber} · ${formatDrillSnippet(getTableDrillText(item as PdfTable), "(빈 표)")}`;
-  }
-
-  if (type === "chart") {
-    const chart = item as Partial<PdfChart>;
-    const content = typeof chart.content === "string" ? chart.content : "";
-    const typeLabel = getChartDrillTypeLabel(content);
-    const pointCount = decodeChartContent(content).points.length;
-    return `페이지 ${pageNumber} · ${escapeHtml(typeLabel)} (${pointCount} points)`;
-  }
-
-  const stroke = item as Partial<PdfInkStroke>;
-  const pointCount = Array.isArray(stroke.points) ? stroke.points.length : 0;
-  return `페이지 ${pageNumber} · stroke #${index + 1} (점 ${pointCount}개)`;
-}
-
-interface InspectorDrillEntry {
-  id: string;
-  index: number;
-  item: unknown;
-  pageNumber: number;
-}
-
-function getDrillItemId(type: InspectorDrillType, item: unknown, index: number): string {
-  const candidate = item as { id?: unknown; strokeId?: unknown };
-  const id = typeof candidate.id === "string"
-    ? candidate.id
-    : typeof candidate.strokeId === "string"
-      ? candidate.strokeId
-      : "";
-  return id.length > 0 ? id : `${type}-${index}`;
-}
-
-function getInspectorDrillEntries(type: InspectorDrillType, workspace: SubjectPdfWorkspace): InspectorDrillEntry[] {
-  const items: unknown[] =
-    type === "sticky" ? workspace.stickyNotes :
-    type === "ink" ? workspace.inkStrokes :
-    type === "textbox" ? workspace.textBoxes :
-    type === "checklist" ? workspace.checklists :
-    type === "table" ? workspace.tables :
-    workspace.charts;
-
-  return items
-    .map((item, index) => ({
-      id: getDrillItemId(type, item, index),
-      index,
-      item,
-      pageNumber: getDrillPageNumber(type, item)
-    }))
-    .sort((a, b) => a.pageNumber - b.pageNumber || a.index - b.index);
-}
-
-export function renderDrillList(
-  type: InspectorDrillType,
-  workspace: SubjectPdfWorkspace,
-  subjectId: string
-): string {
-  const entries = getInspectorDrillEntries(type, workspace);
-  const visible = entries.slice(0, DRILL_LIST_LIMIT);
-  const hiddenCount = entries.length - visible.length;
-  const itemsHtml = visible.length > 0
-    ? visible.map((entry) => `
-        <li>
-          <button
-            type="button"
-            class="pdf-inspector-drill-item"
-            data-action="select-drill-item"
-            data-drill-type="${escapeHtml(type)}"
-            data-subject-id="${escapeHtml(subjectId)}"
-            data-annotation-id="${escapeHtml(entry.id)}"
-            data-page-number="${escapeHtml(String(entry.pageNumber))}"
-          >${formatDrillLabel(type, entry.item, entry.index)}</button>
-        </li>
-      `).join("")
-    : `<li class="pdf-inspector-drill-empty">없음</li>`;
-  const moreHtml = hiddenCount > 0
-    ? `<li class="pdf-inspector-drill-more">+ ${hiddenCount}개 더 있음</li>`
-    : "";
-
-  return `
-    <ul class="pdf-inspector-drill-list" data-drill-type="${escapeHtml(type)}">
-      ${itemsHtml}
-      ${moreHtml}
-    </ul>
-  `;
-}
-
-function renderInspectorStatRow(
-  type: InspectorDrillType,
-  label: string,
-  count: number,
-  workspace: SubjectPdfWorkspace,
-  subjectId: string
-): string {
-  const isExpanded = inspectorDrill[type] === true;
-
-  return `
-    <div class="pdf-inspector-stat-row">
-      <button
-        type="button"
-        class="pdf-inspector-drill-toggle"
-        data-action="toggle-inspector-drill"
-        data-drill-type="${escapeHtml(type)}"
-        aria-expanded="${isExpanded ? "true" : "false"}"
-      >
-        <span class="pdf-inspector-stat-label">${escapeHtml(label)}</span>
-        <span class="pdf-inspector-stat-count">${count}개</span>
-        <span class="pdf-inspector-drill-caret" aria-hidden="true">▾</span>
-      </button>
-      ${isExpanded ? renderDrillList(type, workspace, subjectId) : ""}
-    </div>
-  `;
-}
+// DRILL_LABEL_LIMIT / DRILL_LIST_LIMIT + formatDrillSnippet / getDrillPageNumber /
+// getStickyDrillText / getChecklistDrillText / getTableDrillText /
+// getChartDrillTypeLabel / formatDrillLabel + InspectorDrillEntry /
+// getDrillItemId / getInspectorDrillEntries + renderDrillList /
+// renderInspectorStatRow = sprint-W22-sprint-2 layer B/slice-2d 에서
+// `./pdf-workspace/drill-highlight.ts` 로 이관. main.ts 는 dispatch site 에서
+// module fn 호출 + drillHighlightHelpers (decodeChartContent +
+// parseMarkdownTable + CHART_TYPE_PREFIX) 1회 inject.
 
 function getPdfFrameKey(materialId: string, pageNumber: number): string {
   return `pdf-frame:${materialId}:${pageNumber}`;
@@ -7132,12 +6715,12 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
           <p class="meta">§4 — 저장 상태</p>
           <h3>로컬 annotation</h3>
           <dl class="pdf-inspector-stats">
-            ${renderInspectorStatRow("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id)}
-            ${renderInspectorStatRow("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id)}
-            ${renderInspectorStatRow("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id)}
-            ${renderInspectorStatRow("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id)}
-            ${renderInspectorStatRow("table", "표", workspace.tables.length, workspace, subject.id)}
-            ${renderInspectorStatRow("chart", "그래프", workspace.charts.length, workspace, subject.id)}
+            ${renderInspectorStatRowModule("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id, getDrillHighlightHelpers())}
+            ${renderInspectorStatRowModule("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id, getDrillHighlightHelpers())}
+            ${renderInspectorStatRowModule("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id, getDrillHighlightHelpers())}
+            ${renderInspectorStatRowModule("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id, getDrillHighlightHelpers())}
+            ${renderInspectorStatRowModule("table", "표", workspace.tables.length, workspace, subject.id, getDrillHighlightHelpers())}
+            ${renderInspectorStatRowModule("chart", "그래프", workspace.charts.length, workspace, subject.id, getDrillHighlightHelpers())}
             <div class="pdf-inspector-stat-row pdf-inspector-stat-row--plain"><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
           </dl>
           <div class="policy-block is-standalone">

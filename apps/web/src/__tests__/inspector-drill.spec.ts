@@ -414,13 +414,59 @@ const testDocument = {
 
 const {
   applyPendingDrillHighlight,
-  formatDrillLabel,
+  formatDrillLabel: formatDrillLabelModule,
   handleDrillItemClick,
   readInspectorDrill,
-  renderDrillList,
+  renderDrillList: renderDrillListModule,
   toggleInspectorDrillState,
   writeInspectorDrill
-} = await import("../main.ts");
+} = await import("../pdf-workspace/drill-highlight.ts");
+
+// drill-highlight.ts 의 formatDrillLabel / renderDrillList = DomainHelpers
+// (decodeChartContent + parseMarkdownTable + CHART_TYPE_PREFIX) 를 마지막
+// 인자로 받는다. 본 spec 은 main.ts 의 chart/table content 파서를 호출하지 않고,
+// drill format/render 가 실제 호출하는 동작만 최소로 mock 한다.
+const helpers = {
+  decodeChartContent(content: string): {
+    chartType: string;
+    points: ReadonlyArray<unknown>;
+    functionType?: unknown;
+  } {
+    const trimmed = content.trimStart();
+    if (!trimmed.startsWith("type:")) {
+      return { chartType: "xy", points: [] };
+    }
+    const newline = trimmed.indexOf("\n");
+    const typeStr = (newline < 0 ? trimmed.slice(5) : trimmed.slice(5, newline)).trim();
+    const csv = newline < 0 ? "" : trimmed.slice(newline + 1);
+    const points = csv
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [x, y] = line.split(",").map((cell) => Number(cell.trim()));
+        return { x, y };
+      });
+    return { chartType: typeStr || "xy", points };
+  },
+  parseMarkdownTable(source: string): { headers: string[]; rows: string[][] } | null {
+    if (source.trim().length === 0) return null;
+    const lines = source.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+    if (lines.length < 2) return null;
+    const cells = (line: string) =>
+      line.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+    return { headers: cells(lines[0]!), rows: lines.slice(2).map(cells) };
+  },
+  CHART_TYPE_PREFIX: "type:"
+};
+
+function formatDrillLabel(type: DrillType, item: unknown, index?: number) {
+  return formatDrillLabelModule(type, item, index ?? 0, helpers);
+}
+
+function renderDrillList(type: DrillType, workspace: TestWorkspace, subjectId: string) {
+  return renderDrillListModule(type, workspace as never, subjectId, helpers);
+}
 
 const STORAGE_KEY = "studyNote.pdfWorkspace.inspectorDrill";
 const NOW = "2026-05-19T00:00:00.000Z";
