@@ -13,58 +13,88 @@
 | **B/slice-2b. classDate + touch/swipe + nav** | 2026-W22-sprint-2 | ✅ merged (PR #60, main=e8c1f87) |
 | **B/slice-2c. ink stroke + pen RAF batch** | 2026-W22-sprint-3 | ✅ merged (PR #61, main=f24a20b) |
 | **B/slice-2d. drill highlight** | 2026-W22-sprint-2 | ✅ merged (PR #62, main=d1bba31) |
-| **B/slice-2e. star mark only** | TBD | ⏳ 다음 sprint 후보 (위험도 낮음, ~150 line) |
-| B/slice-2f. renderer big | TBD | ⏳ backlog (위험도 중-높음, ~1,369 line) |
+| **B/slice-2e. star mark** | 2026-W22-sprint-3 | ✅ merged (PR #63, main=c23dd6c) |
+| **B/slice-2f. renderer big** | TBD | ⏳ 다음 sprint 후보 (위험도 중-높음, ~1,369 line, 분해 권장) |
 | C. subject views | TBD | ⏳ backlog |
 | D. state/sync residual (user-notes) | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 재검토 ([[project-react-migration-backlog]]) |
 
-main.ts line: 11,049 → **9,000** (-2,049, -18.55%). 9k target **달성**.
-다음 호기심 target = 8k (slice-2f renderer big 분리 시 가능).
+main.ts line: 11,049 → **8,908** (-2,141, -19.37%). 9k target 달성 보존.
+다음 호기심 target = 8k (slice-2f renderer big 분리 시 가능, -908 line 필요).
 
-## 활성 작업 = layer B/slice-2e sprint (star mark only — **단독 sprint, 위험도 낮음**)
+## 활성 작업 = layer B/slice-2f sprint (renderer big — **분해 권장, 위험도 중-높음**)
 
-**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2d-drill-highlight/20260525/retro.md`
+**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2e-star-mark/20260525/retro.md`
 
-**slice-2e 측정치 (실측)**:
-- `renderStarMark` (main.ts L7201-7232, 31 line) + add/remove/resizeStarMark
-  (~L4501-4550, ~50 line) + dispatch (L1660-1690, ~30 line) + Y key bind +
-  tool integration ≈ **150 line scope**.
-- 7 grep hit (`star|Star|starMark|StarMark`): L1660, L1671, L2516-2545
-  (Y key bind), L3046-3047 (tool dispatch), L4501-4541 (state), L7201-7232
-  (render), L8972 (tool label).
-- 위험도 낮음 = 단일 UI widget + simple state + iPad tap binding 명확.
+**slice-2f 측정치 (실측, 2026-05-25 slice-2e brainstorm 단계)**:
+- main.ts L6503-7872 renderer block = **1,369 line scope**.
+- 17 render function:
+  - renderPdfFrameStack 31 + renderPdfWorkspacePage 205 + renderPdfMaterialStatus 48
+  - renderPdfToolbar 77 + renderFullscreenToggleButton 17
+  - renderEraserSubToolbar 30 + renderEraserShapeButton 24 + renderEraserCursorStyle 10 + renderEraserCursorSvg 30
+  - renderToolButton 28 + renderStickyNote 48 + renderTextBox 48 + renderChecklist 89
+  - renderChartMount 13 + renderChart 274 + renderTableMount 8 + renderTable 358
+- 위험도 중-높음 = renderChart (274) + renderTable (358) 가 큰 단위 + 다수 의존 (decodeChartContent / parseMarkdownTable / serializeMarkdownTable / chart-content debounce / table content debounce / morphdom).
 
-**slice-2e 후보 invariant**:
-1. Y key bind (KeyY → "star" tool activation, L2516+2530+2545).
-2. add/remove/resize state mutate (immutable workspace update via
-   workspace-store patch).
-3. star mark render (data-star-mark-id + ★ glyph + controls = resize + delete).
-4. tool integration (selectedTool === "star" → addStarMark dispatch).
+**slice-2f 분해 후보** (retro §3 권장):
+1. **slice-2f/i**: chart widget (renderChart + renderChartMount + chartContentDebounceMap + chartPointDebounceMap + chart helpers + decodeChartContent + parseCsvSeries + encodeChartContent + chart constant) ≈ 350 line. 위험도 중. **단독 sprint 우선**.
+2. **slice-2f/ii**: table widget (renderTable + renderTableMount + parseMarkdownTable + serializeMarkdownTable + table content debounce + splitMarkdownTableRow + table constant) ≈ 400 line. 위험도 중. 단독 sprint.
+3. **slice-2f/iii**: simple widget (renderStickyNote + renderTextBox + renderChecklist + renderEraser*) ≈ 220 line. 위험도 낮음.
+4. **slice-2f/iv**: container/page (renderPdfWorkspacePage + renderPdfMaterialStatus + renderPdfToolbar + renderPdfFrameStack + renderToolButton + renderFullscreenToggleButton) ≈ 410 line. 위험도 중 (다른 widget 의존).
 
-**slice-2c+2d 학습 우선 적용**:
-- measurement-first orient brainstorm §1 의무 (handoff 추정 vs 실측 mismatch
-  사전 차단).
-- scope boundary 결정 brainstorm 단계 (option A=state only / B=state+render
-  / C=state+render+key-bind+tool — default 추천).
-- SFS 0.6.121/0.6.122 events.jsonl compaction workaround = capture
-  `--kind evidence` + `--kind waiver` 패턴 미리 준비 (slice-2c R-D2 backlog).
-- AC2/AC3 estimate ±100 wording.
-- advisor() Gate 6 진입 전 1회 step.
-- module init order self-check (slice-2d Gate 6 lesson — eager const 가
-  후방 const 참조 시 TDZ ReferenceError).
+**slice-2f 후보 invariant** (chart sprint 진입 시 brainstorm 정밀화):
+1. decodeChartContent format = "type:<chartType>\n<csv>" (sprint-13 lineage).
+2. chart type 6 known = sin/cos/tan/bar/xy/trig (drill-highlight CHART_TYPE_PREFIX 일관).
+3. morphdom DOM diff 유지 (renderApp 호출 후 chart widget refresh + post-mount).
+4. debounce map (chartContentDebounceMap + chartPointDebounceMap) state mutate.
+5. HTML escape — 모든 user content (chart.content / table.content / cell 본문).
 
-**mobile QA / Datadog readout**: slice-2c/2d 동일 — DDD refactor (행위 등가).
-slice-2c 의 capture (20260525T070319Z-91020 + 20260525T074710Z-21895) 는
-"행위 등가 가정 보존" evidence. user 직접 검증 의무 아님. 회기 시 hotfix.
+**slice-2c~2e 학습 우선 적용**:
+- **measurement-first orient brainstorm §1 의무**.
+- **scope boundary 결정 brainstorm 단계** = 분해 vs 단일 결정 = Q1.
+- **Plan §9 security model + invariant brainstorm 단계 작성** (R-J 신규 backlog, slice-2e Gate 3 R1 partial lesson).
+- **comment placeholder 작성 즉시 trim** (slice-2e Gate 6 R1 lesson — breadcrumb 누적 vs AC2 미달).
+- **AC drift waiver pattern**: Gate 6 self R1 partial 시 plan 미반영 정상 inflation/under-shoot 은 waiver row 로 ledger.
+- **events.jsonl compaction workaround**: capture `--kind evidence` 자동 적용 (Gate 3 cross 진입 직전).
+- **module init order self-check** (R-H backlog): implement 단계 자체 grep audit — export const 가 main.ts 후방 const/let 참조 X 확인.
+- **AC range estimate**: line/case 추정 폭 ±50%/±100% (slice-2c/2d/2e 누적 lesson).
+
+**mobile QA / Datadog readout**: slice-2c/2d/2e 동일 — DDD refactor (행위 등가).
+slice-2c capture 가 evidence. user 의무 X. 회기 시 hotfix.
 
 **다음 명령**:
 ```bash
 sfs status                  # 빈 sprint 확인
-sfs start "main.ts layer B/slice-2e — star mark 분리"
-sfs brainstorm "..."        # orient = star mark 잔여 line 측정 우선 (이미 ~150 line 실측)
+sfs start "main.ts layer B/slice-2f — chart widget 분리"   # 분해 권장 시 chart sprint 우선
+sfs brainstorm "..."        # orient = chart 잔여 line 측정 우선 + §9 security model 동시 작성
 sfs plan → review --gate 3 self → cross → implement → Gate 6 self → cross → PR → @codex → merge → retro
 ```
+
+## Layer B/slice-2e 결과 (참고)
+
+- main.ts -92 line (9,000 → 8,908). 누적 layer A~B/slice-2e = -2,141 / -19.37%.
+  9k target 보존. 8k target 까지 -908 line (slice-2f 책임).
+- 신규 1 module + 1 spec: `pdf-workspace/star-mark.ts` 209 line / 14 export (6
+  function + 6 const + 2 type) + `pdf-workspace/__tests__/star-mark.spec.ts`
+  250 line / 18 case.
+- web 전체 spec 회귀 = 0 (pre 418 pass / 4 fail → post 440 / 4, +22 pass +22
+  test). tsc --noEmit clean.
+- Gate 3 self R2 + cross R1 PASS — R1 partial = Plan §9 security model 비어있음
+  + AC4(h) numeric finite/clamp guard 누락 → §9 채움 + AC4(h) clampStyleRatio
+  추가 + bounded source excerpt. R2 PASS.
+- Gate 6 self R2 + cross R1 PASS — R1 partial = AC1/AC3 drift (Gate 3 §9 추가
+  로 인한 정상 inflation) + AC2 미달 (comment placeholder 30+ line 잔존)
+  + AC5 +18 vs +22 arithmetic + AC7 .gitignore 미명세 → comment trim (line
+  -55→-92) + AC drift waiver + arithmetic 정정 + .gitignore waiver. R2 PASS.
+- @codex bot = "Didn't find any major issues. :rocket:" (autopilot merge).
+- 신규 invariant **(h) render-time numeric finite/clamp guard** (OWASP A03+A04
+  defense in depth). hydration 우회 / persistence 손상 시 style context 깨짐
+  방지. `clampStyleRatio(value, min, max, fallback)`.
+- Backlog 신규:
+  - R-J Plan §9 brainstorm 단계 작성 (security model + invariant 동시).
+  - R-H module init order self-check 표준화 (slice-2d lesson 본 sprint 안전 확인).
+- 패턴 = layer A/B-slice-1/2a/2b/2c/2d/2e Context + Callbacks + named export +
+  characterization spec 일관 (drill-highlight slice-2d 와 가장 유사 구조).
 
 ## Layer B/slice-2d 결과 (참고)
 
