@@ -184,16 +184,46 @@ import {
   type WorkspaceStoreCallbacks,
   type WorkspaceStoreContext
 } from "./pdf-workspace/workspace-store";
+import {
+  PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
+  PDF_MATERIAL_UNASSIGNED_WIRE_DATE,
+  PDF_WORKSPACE_ROOT_ID
+} from "./pdf-workspace/constants";
+import {
+  assignPdfMaterialClassDate as assignPdfMaterialClassDateModule,
+  createClassDateWeekId as createClassDateWeekIdModule,
+  type ClassDateCallbacks,
+  type ClassDateContext,
+  type ClassDateDomainHelpers
+} from "./pdf-workspace/class-date";
+import {
+  getActivePdfWorkspaceSubjectId as getActivePdfWorkspaceSubjectIdModule,
+  movePdfPage as movePdfPageModule,
+  requestPdfPage as requestPdfPageModule,
+  setPdfPage as setPdfPageModule,
+  setPdfTool as setPdfToolModule,
+  togglePdfFullscreen as togglePdfFullscreenModule,
+  type FullscreenPort,
+  type ViewStateCallbacks,
+  type ViewStateContext
+} from "./pdf-workspace/view-state";
+import {
+  createTouchSwipe,
+  TOUCH_SWIPE_LISTENER_OPTIONS,
+  type TouchSwipeCallbacks,
+  type TouchSwipeContext,
+  type TouchSwipeInstance
+} from "./pdf-workspace/touch-swipe";
+import {
+  handleDocumentChange as handleDocumentChangeModule,
+  type DocumentChangeCallbacks,
+  type DocumentChangeContext
+} from "./pdf-workspace/document-change";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
 const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
 initializeDatadogRum();
-// S3 codex R4 P1: BE 가 ISO date 강제 + UI "수업일 미지정" 옵션 보존 위해
-// '1970-01-01' (Unix epoch start) 을 sentinel DATE 로 통일. valid ISO 라 BE
-// Zod 통과 + FE 가 sentinel 로 인식 (실 수업일과 충돌 없음).
-const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending"; // FE-local legacy marker
-const PDF_MATERIAL_UNASSIGNED_WIRE_DATE = "1970-01-01"; // BE wire sentinel
 
 type IntakeFeedback =
   | {
@@ -600,10 +630,11 @@ if (isBrowserRuntime) {
   // touchend 미발사 → click handler 가 정상 처리).
   // sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture — read tool
   // 인 빈 영역 single-touch 만 candidate. touchstart/move/end/cancel 사이클.
-  document.addEventListener("touchstart", handleDocumentTouchStart, { passive: true });
-  document.addEventListener("touchmove", handleDocumentTouchMove, { passive: true });
-  document.addEventListener("touchend", handleDocumentTouchEnd, { passive: false });
-  document.addEventListener("touchcancel", handleDocumentTouchCancel, { passive: true });
+  // listener option metadata = TOUCH_SWIPE_LISTENER_OPTIONS SSoT (sprint-W22-sprint-2/S3).
+  document.addEventListener("touchstart", handleDocumentTouchStart, TOUCH_SWIPE_LISTENER_OPTIONS.touchstart);
+  document.addEventListener("touchmove", handleDocumentTouchMove, TOUCH_SWIPE_LISTENER_OPTIONS.touchmove);
+  document.addEventListener("touchend", handleDocumentTouchEnd, TOUCH_SWIPE_LISTENER_OPTIONS.touchend);
+  document.addEventListener("touchcancel", handleDocumentTouchCancel, TOUCH_SWIPE_LISTENER_OPTIONS.touchcancel);
   document.addEventListener("fullscreenchange", () => {
     // sprint-1/S3: re-render so the toolbar button label reflects current
     // fullscreen state ("전체화면" → "전체화면 종료").
@@ -1641,286 +1672,75 @@ function addSubjectClassDate(formData: FormData): void {
   renderApp();
 }
 
-function createClassDateWeekId(subjectId: string, classDate: string): string {
-  const slug = classDate
-    .trim()
-    .toLowerCase()
-    .replace(/[^0-9a-z가-힣]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return `week-${subjectId}-${slug || Date.now().toString(36)}-${Date.now().toString(36)}`;
-}
-
-async function assignPdfMaterialClassDate(
-  subjectId: string,
-  materialId: string,
-  classDate: string
-): Promise<void> {
-  const subject = notebook.subjects.find((item) => item.id === subjectId);
-  const material = getSubjectPdfMaterials(subjectId).find(
-    (item) => getPdfMaterialKey(item) === materialId
-  );
-  const nextClassDate = normalizePdfMaterialClassDateValue(classDate);
-
-  if (!subject || !material) {
-    intakeFeedback = {
-      kind: "error",
-      title: "PDF 자료를 찾을 수 없습니다.",
-      detail: "자료 목록을 새로고침한 뒤 다시 시도하세요."
-    };
-    renderApp();
-    return;
-  }
-
-  if (
-    nextClassDate !== PDF_MATERIAL_UNASSIGNED_CLASS_DATE &&
-    !subject.weekNotes.some((week) => week.label === nextClassDate)
-  ) {
-    intakeFeedback = {
-      kind: "error",
-      title: "없는 수업일입니다.",
-      detail: "먼저 수업일을 추가한 뒤 PDF를 연결하세요."
-    };
-    renderApp();
-    return;
-  }
-
-  const previousClassDate = material.classDate;
-  patchPdfWorkspaceMaterial(subjectId, materialId, {
-    classDate: nextClassDate,
-    updatedAt: new Date().toISOString()
-  });
-  intakeFeedback = {
-    kind: "success",
-    title: "PDF 수업일을 저장하는 중입니다.",
-    detail: nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE
-      ? `${material.fileName}의 수업일을 미지정으로 바꿉니다.`
-      : `${material.fileName}을 ${nextClassDate} 수업에 연결합니다.`
+// sprint-2026-W22-sprint-2/S1: classDate group 은 pdf-workspace/class-date.ts
+// 로 분리. main.ts 는 ctx + callbacks + helpers 주입 wrapper 만 유지.
+const classDateDomainHelpers: ClassDateDomainHelpers = {
+  getPdfMaterialKey,
+  getPdfWorkspaceMaterials,
+  createPdfMaterialFromBackend,
+  formatMaterialError
+};
+function getClassDateContext(): ClassDateContext {
+  return {
+    apiBaseUrl,
+    getSubject: (subjectId) => notebook.subjects.find((item) => item.id === subjectId),
+    getSubjectMaterials: getSubjectPdfMaterials
   };
-  renderApp();
-
-  if (!material.backendMaterialId) {
-    intakeFeedback = {
-      kind: "success",
-      title: "로컬 PDF 수업일을 변경했습니다.",
-      detail: "backend에 저장되지 않은 로컬 자료라 현재 브라우저에만 반영됩니다."
-    };
-    renderApp();
-    return;
-  }
-
-  // PR #51 codex R5+ P1×2 — BE 가 strict ISO 강제. UI 가 sentinel 또는
-  // legacy week.label (예: "5월 14일(목)") 보낼 수 있음.
-  // - sentinel "metadata-pending" → wire sentinel '1970-01-01' (FE-local 은
-  //   sentinel 유지).
-  // - 비-ISO legacy label → wire sentinel '1970-01-01' (BE strict reject 회피
-  //   + FE 가 unconfirmed 로 표시).
-  // - 정상 ISO → 그대로.
-  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-  const isSentinel = nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
-  const isWireSentinel = nextClassDate === PDF_MATERIAL_UNASSIGNED_WIRE_DATE;
-  const isIso = ISO_DATE.test(nextClassDate);
-  const wireClassDate =
-    isSentinel || isWireSentinel || !isIso
-      ? PDF_MATERIAL_UNASSIGNED_WIRE_DATE
-      : nextClassDate;
-
-  try {
-    const updated = await updatePdfMaterialMetadata(apiBaseUrl, material.backendMaterialId, {
-      classDate: wireClassDate
-    });
-    const updatedDraft = createPdfMaterialFromBackend(updated, {
-      selectedPage: material.selectedPage,
-      selectedTool: material.selectedTool
-    });
-    // PR #51 codex R3/R5 P2 — UI sentinel 선택 OR legacy non-ISO label 이면
-    // BE 가 epoch sentinel 저장하더라도 FE-local 표시는 sentinel 유지.
-    if (
-      isSentinel ||
-      isWireSentinel ||
-      !isIso ||
-      updated.classDate === PDF_MATERIAL_UNASSIGNED_WIRE_DATE
-    ) {
-      updatedDraft.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
-    }
-    replacePdfWorkspaceMaterial(subjectId, materialId, updatedDraft);
-    intakeFeedback = {
-      kind: "success",
-      title: "PDF 수업일을 저장했습니다.",
-      detail: nextClassDate === PDF_MATERIAL_UNASSIGNED_CLASS_DATE
-        ? `${updated.fileName}은 아직 수업일 미지정 상태입니다.`
-        : `${updated.fileName} → ${nextClassDate} 수업으로 연결했습니다.`
-    };
-  } catch (error) {
-    patchPdfWorkspaceMaterial(subjectId, materialId, {
-      classDate: previousClassDate,
-      updatedAt: material.updatedAt
-    });
-    intakeFeedback = {
-      kind: "error",
-      title: "PDF 수업일을 저장하지 못했습니다.",
-      detail: formatMaterialError(error)
-    };
-  }
-
-  renderApp();
 }
-
-function normalizePdfMaterialClassDateValue(value: string): string {
-  const trimmed = value.trim();
-
-  return trimmed || PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
+function getClassDateCallbacks(): ClassDateCallbacks {
+  return {
+    setFeedback: (feedback) => {
+      intakeFeedback = feedback;
+    },
+    renderApp,
+    updatePdfWorkspace,
+    updatePdfMaterialMetadata
+  };
 }
+const createClassDateWeekId = createClassDateWeekIdModule;
+const assignPdfMaterialClassDate = (subjectId: string, materialId: string, classDate: string) =>
+  assignPdfMaterialClassDateModule(subjectId, materialId, classDate, getClassDateContext(), getClassDateCallbacks(), classDateDomainHelpers);
 
-function patchPdfWorkspaceMaterial(
-  subjectId: string,
-  materialId: string,
-  patch: Partial<PdfMaterialDraft>
-): void {
-  updatePdfWorkspace(subjectId, (workspace) => ({
-    ...workspace,
-    material: workspace.material && getPdfMaterialKey(workspace.material) === materialId
-      ? { ...workspace.material, ...patch }
-      : workspace.material,
-    materials: getPdfWorkspaceMaterials(workspace).map((item) =>
-      getPdfMaterialKey(item) === materialId ? { ...item, ...patch } : item
-    )
-  }));
+// sprint-2026-W22-sprint-2/S4: handleDocumentChange 7 분기 dispatcher 는
+// pdf-workspace/document-change.ts 로 분리. main.ts 는 ctx + callbacks +
+// chart helper bundle wrapper 만 유지.
+function getDocumentChangeContext(): DocumentChangeContext {
+  return {
+    getSubjectWorkspace: (subjectId) =>
+      getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId)
+  };
 }
-
-function replacePdfWorkspaceMaterial(
-  subjectId: string,
-  materialId: string,
-  nextMaterial: PdfMaterialDraft
-): void {
-  updatePdfWorkspace(subjectId, (workspace) => ({
-    ...workspace,
-    material: workspace.material && getPdfMaterialKey(workspace.material) === materialId
-      ? { ...workspace.material, ...nextMaterial }
-      : workspace.material,
-    materials: getPdfWorkspaceMaterials(workspace).map((item) =>
-      getPdfMaterialKey(item) === materialId ? { ...item, ...nextMaterial } : item
-    )
-  }));
+function getDocumentChangeCallbacks(): DocumentChangeCallbacks {
+  return {
+    chart: {
+      readChartDataFromDom: (chartId) => {
+        const data = readChartDataFromDom(chartId);
+        return data ? { points: data.points } : undefined;
+      },
+      decodeChartContent: (content) => ({
+        points: decodeChartContent(content).points
+      }),
+      encodeChartContent: (type, points) =>
+        encodeChartContent(type as LocalChartType, points as CsvSeriesPoint[]),
+      updateChartContent: (chart, content) => updateChartContent(chart, content),
+      clearChartPointDebounce: (chartId) => {
+        const prev = chartPointDebounceMap.get(chartId);
+        if (prev) clearTimeout(prev);
+        chartPointDebounceMap.delete(chartId);
+      }
+    },
+    updatePdfWorkspace,
+    renderApp,
+    assignPdfMaterialClassDate,
+    importPdfMaterialFile,
+    requestPdfPage,
+    applySetEraserSize,
+    applyToggleChecklistItem,
+    importWeekNoteFile
+  };
 }
-
-function handleDocumentChange(event: Event): void {
-  const target = event.target;
-
-  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) {
-    return;
-  }
-
-  // sprint-13/slice-5/6: chart input mode select — re-encode content with new type + current points.
-  if (target instanceof HTMLSelectElement && target.dataset.action === "update-chart-type") {
-    const subjectId = target.dataset.subjectId;
-    const chartId = target.dataset.chartId;
-
-    if (subjectId && chartId) {
-      const rawType = target.value;
-      const chartType: LocalChartType = rawType === "bar" || rawType === "trig" ? rawType : "xy";
-      const article = target.closest<HTMLElement>("[data-chart-id]");
-      const hasPointEditor = Boolean(article?.querySelector("[data-chart-point-count]"));
-      const current = readChartDataFromDom(chartId);
-      const storedChart = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId).charts.find(
-        (chart) => chart.id === chartId
-      );
-      const storedPoints = storedChart ? decodeChartContent(storedChart.content).points : [];
-      const points = hasPointEditor ? (current?.points ?? storedPoints) : storedPoints;
-      const content = encodeChartContent(chartType, points);
-      const prev = chartPointDebounceMap.get(chartId);
-      if (prev) clearTimeout(prev);
-      chartPointDebounceMap.delete(chartId);
-      updatePdfWorkspace(subjectId, (workspace) => ({
-        ...workspace,
-        charts: workspace.charts.map((chart) =>
-          chart.id === chartId ? updateChartContent(chart, content) : chart
-        )
-      }));
-      renderApp();
-    }
-
-    return;
-  }
-
-  if (target instanceof HTMLSelectElement && target.dataset.action === "assign-pdf-class-date") {
-    const subjectId = target.dataset.subjectId;
-    const materialId = target.dataset.materialId;
-
-    if (subjectId && materialId) {
-      void assignPdfMaterialClassDate(subjectId, materialId, target.value);
-    }
-
-    return;
-  }
-
-  if (!(target instanceof HTMLInputElement)) {
-    return;
-  }
-
-  if (target.dataset.action === "import-pdf-material") {
-    const file = target.files?.[0];
-    const subjectId = target.dataset.subjectId;
-
-    if (file && subjectId) {
-      void importPdfMaterialFile(file, subjectId);
-    }
-
-    target.value = "";
-    return;
-  }
-
-  if (target.dataset.action === "select-pdf-page") {
-    const subjectId = target.dataset.subjectId;
-    const pageNumber = Number(target.value);
-
-    if (subjectId && Number.isInteger(pageNumber)) {
-      requestPdfPage(subjectId, pageNumber);
-      renderApp();
-    }
-
-    return;
-  }
-
-  if (target.dataset.action === "set-eraser-size") {
-    const subjectId = target.dataset.subjectId;
-
-    if (subjectId) {
-      applySetEraserSize(subjectId, Number(target.value));
-      renderApp();
-    }
-
-    return;
-  }
-
-  // sprint-12/slice-3: checklist item checkbox toggle
-  if (target.dataset.action === "toggle-checklist-item") {
-    const subjectId = target.dataset.subjectId;
-    const checklistId = target.dataset.checklistId;
-    const itemId = target.dataset.itemId;
-
-    if (subjectId && checklistId && itemId) {
-      applyToggleChecklistItem(subjectId, checklistId, itemId);
-      // renderApp safe here: discrete toggle, no in-flight input focus to lose.
-      renderApp();
-    }
-
-    return;
-  }
-
-  if (target.dataset.action !== "import-week-note") {
-    return;
-  }
-
-  const file = target.files?.[0];
-  const expectedSubjectId = target.dataset.subjectId;
-
-  if (!file || !expectedSubjectId) {
-    return;
-  }
-
-  void importWeekNoteFile(file, expectedSubjectId);
-  target.value = "";
+function handleDocumentChange(event: Event) {
+  handleDocumentChangeModule(event, getDocumentChangeContext(), getDocumentChangeCallbacks());
 }
 
 export type DrillItemClickResult =
@@ -1988,157 +1808,26 @@ export function handleDrillItemClick(
   return { ok: true, subjectId, annotationId, drillType, pageNumber, queued: true };
 }
 
-// sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture state.
-// single-touch only. multi-touch (pinch zoom 후보 — 다음 sprint v2) 시 무시.
-// threshold = max(surface 폭 × SWIPE_THRESHOLD_RATIO, SWIPE_THRESHOLD_MIN_PX).
-// 좌→우 dx>0 = 이전 page, 우→좌 dx<0 = 다음 page.
-const SWIPE_THRESHOLD_RATIO = 0.2;
-const SWIPE_THRESHOLD_MIN_PX = 60;
-let activeSwipeGesture: {
-  subjectId: string;
-  pointerId: number;
-  startX: number;
-  startY: number;
-} | null = null;
-
-// sprint-W21-sprint-4/S1: iOS Safari fast-tap dual handler for page nav
-// buttons. touchend 가 click 보다 먼저 발사되거나 click 이 누락되는 mobile
-// edge case 보완. preventDefault 로 ghost click 중복 차단.
-function handleDocumentTouchEnd(event: TouchEvent): void {
-  const target = event.target;
-  if (!(target instanceof Element)) {
-    activeSwipeGesture = null;
-    return;
-  }
-  const navButton = target.closest<HTMLButtonElement>(
-    'button[data-action="pdf-prev-page"], button[data-action="pdf-next-page"]'
-  );
-  if (navButton && !navButton.disabled) {
-    const action = navButton.dataset.action;
-    const subjectId = navButton.dataset.subjectId;
-    if (subjectId && (action === "pdf-prev-page" || action === "pdf-next-page")) {
-      // click 중복 발사 차단. desktop 은 touchend 발사 X → 영향 없음.
-      event.preventDefault();
-      movePdfPage(subjectId, action === "pdf-prev-page" ? -1 : 1);
-      renderApp();
-      activeSwipeGesture = null;
-      return;
-    }
-  }
-
-  // sprint-W21-sprint-4/S4: PDF 영역 swipe gesture commit.
-  commitPdfSwipeGesture(event);
-}
-
-// sprint-W21-sprint-4/S4: PDF 빈 영역 touchstart — read tool + single-touch +
-// annotation element 미터치 시에만 swipe 후보 기록.
-function handleDocumentTouchStart(event: TouchEvent): void {
-  if (event.touches.length !== 1) {
-    // multi-touch 시작 = pinch zoom 등 — 진행 중 swipe 도 취소.
-    activeSwipeGesture = null;
-    return;
-  }
-  const touch = event.touches[0]!;
-  const target = touch.target instanceof Element ? touch.target : null;
-  if (!target) {
-    activeSwipeGesture = null;
-    return;
-  }
-
-  const surface = target.closest<HTMLElement>("[data-pdf-annotation-surface]");
-  if (!surface) {
-    activeSwipeGesture = null;
-    return;
-  }
-
-  // read tool 외 (pen / eraser / sticky / textbox / checklist / table / chart)
-  // 에서는 swipe 무시 — tool 우선.
-  if (!surface.classList.contains("is-read-mode")) {
-    activeSwipeGesture = null;
-    return;
-  }
-
-  // annotation element (sticky / textBox / checklist / table / chart / ink stroke)
-  // 위 touch 시 swipe 무시 — drag/click 우선.
-  if (
-    target.closest(
-      "[data-note-id], [data-textbox-id], [data-checklist-id], [data-table-mount-id], [data-chart-mount-id], [data-stroke-id], button, a, input, textarea"
-    )
-  ) {
-    activeSwipeGesture = null;
-    return;
-  }
-
-  const subjectId = surface.dataset.subjectId;
-  if (!subjectId) {
-    activeSwipeGesture = null;
-    return;
-  }
-
-  activeSwipeGesture = {
-    subjectId,
-    pointerId: touch.identifier,
-    startX: touch.clientX,
-    startY: touch.clientY
-  };
-}
-
-// sprint-W21-sprint-4/S4: touchmove — multi-touch 진입 시 swipe 후보 취소.
-function handleDocumentTouchMove(event: TouchEvent): void {
-  if (!activeSwipeGesture) {
-    return;
-  }
-  if (event.touches.length !== 1) {
-    activeSwipeGesture = null;
-  }
-}
-
-// sprint-W21-sprint-4/S4: touchend / touchcancel 에서 swipe threshold 평가 후
-// page nav 또는 무시.
-function commitPdfSwipeGesture(event: TouchEvent): void {
-  const gesture = activeSwipeGesture;
-  activeSwipeGesture = null;
-  if (!gesture) {
-    return;
-  }
-  const touch = Array.from(event.changedTouches).find(
-    (t) => t.identifier === gesture.pointerId
-  );
-  if (!touch) {
-    return;
-  }
-  const dx = touch.clientX - gesture.startX;
-  const dy = touch.clientY - gesture.startY;
-  // vertical 우선: |dy| > |dx| = vertical scroll. swipe 아님.
-  if (Math.abs(dy) > Math.abs(dx)) {
-    return;
-  }
-  const surface = document.querySelector<HTMLElement>(
-    `[data-pdf-annotation-surface][data-subject-id="${gesture.subjectId}"]`
-  );
-  if (!surface) {
-    return;
-  }
-  const surfaceWidth = surface.getBoundingClientRect().width;
-  const threshold = Math.max(
-    SWIPE_THRESHOLD_MIN_PX,
-    surfaceWidth * SWIPE_THRESHOLD_RATIO
-  );
-  if (Math.abs(dx) < threshold) {
-    return;
-  }
-  // 좌→우 dx>0 = 이전 page, 우→좌 dx<0 = 다음 page.
-  movePdfPage(gesture.subjectId, dx > 0 ? -1 : 1);
-  renderApp();
-}
-
-function handleDocumentTouchCancel(event: TouchEvent): void {
-  if (activeSwipeGesture) {
-    // touchcancel = OS / scroll engine 이 gesture 가로챔. commit 없이 cleanup.
-    activeSwipeGesture = null;
-  }
-  void event;
-}
+// sprint-W21-sprint-4/S4: PDF 영역 horizontal swipe gesture.
+// 본체는 pdf-workspace/touch-swipe.ts (sprint-W22-sprint-2/S3) 로 이전.
+// main.ts 는 factory + listener registration wrapper 만 유지.
+const touchSwipeInstance: TouchSwipeInstance = createTouchSwipe(
+  {
+    querySurface: (subjectId) =>
+      document.querySelector<HTMLElement>(
+        `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+      ),
+    getSurfaceWidth: (surface) => surface.getBoundingClientRect().width
+  } as TouchSwipeContext,
+  {
+    movePdfPage,
+    renderApp
+  } as TouchSwipeCallbacks
+);
+function handleDocumentTouchStart(event: TouchEvent) { touchSwipeInstance.handleTouchStart(event); }
+function handleDocumentTouchMove(event: TouchEvent) { touchSwipeInstance.handleTouchMove(event); }
+function handleDocumentTouchEnd(event: TouchEvent) { touchSwipeInstance.handleTouchEnd(event); }
+function handleDocumentTouchCancel(event: TouchEvent) { touchSwipeInstance.handleTouchCancel(event); }
 
 function handleDocumentClick(event: MouseEvent): void {
   const target = event.target;
@@ -3084,50 +2773,34 @@ const PDF_TOOL_KEY_LABEL_LOOKUP: Record<string, LocalPdfTool> = {
 let hotkeyHelpModalOpen = false;
 
 // sprint-1/S3: Browser Fullscreen API wrapper for the PDF workspace container.
-const PDF_WORKSPACE_ROOT_ID = "pdf-workspace-root";
+// `PDF_WORKSPACE_ROOT_ID` 는 pdf-workspace/constants.ts 로 이전 (sprint-W22-sprint-2/S0).
+// togglePdfFullscreen / isPdfWorkspaceFullscreen 본체는 pdf-workspace/view-state.ts
+// 로 이전 (sprint-W22-sprint-2/S2). main.ts 는 FullscreenPort adapter wrapper.
 
 function isPdfWorkspaceFullscreen(): boolean {
   const el = document.fullscreenElement;
   return !!el && el.id === PDF_WORKSPACE_ROOT_ID;
 }
 
-function togglePdfFullscreen(): void {
-  const target = document.getElementById(PDF_WORKSPACE_ROOT_ID);
-  if (!target) {
-    return;
-  }
-
-  // sprint-1/S3 fix (codex P2): the unprefixed Fullscreen API is not universal
-  // (notably iOS Safari and older WebKit). Probe the methods before invoking
-  // them so a missing API does not throw synchronously from the click/keydown
-  // handler.
-  if (isPdfWorkspaceFullscreen()) {
-    if (typeof document.exitFullscreen !== "function") {
-      console.warn("[study-note] document.exitFullscreen unavailable");
-      return;
+function getFullscreenPort(): FullscreenPort {
+  return {
+    isWorkspaceFullscreen: isPdfWorkspaceFullscreen,
+    getWorkspaceTarget: () => document.getElementById(PDF_WORKSPACE_ROOT_ID),
+    exitFullscreen: () =>
+      typeof document.exitFullscreen === "function" ? document.exitFullscreen() : null,
+    requestFullscreen: (target) =>
+      typeof target.requestFullscreen === "function" ? target.requestFullscreen() : null,
+    warn: (message, payload) => {
+      if (payload === undefined) {
+        console.warn(message);
+      } else {
+        console.warn(message, payload);
+      }
     }
-    try {
-      void document.exitFullscreen().catch((error) => {
-        console.warn("[study-note] exitFullscreen failed:", error);
-      });
-    } catch (error) {
-      console.warn("[study-note] exitFullscreen threw:", error);
-    }
-    return;
-  }
-
-  if (typeof target.requestFullscreen !== "function") {
-    console.warn("[study-note] Element.requestFullscreen unavailable");
-    return;
-  }
-  try {
-    void target.requestFullscreen().catch((error) => {
-      console.warn("[study-note] requestFullscreen failed:", error);
-    });
-  } catch (error) {
-    console.warn("[study-note] requestFullscreen threw:", error);
-  }
+  };
 }
+
+const togglePdfFullscreen = () => togglePdfFullscreenModule(getFullscreenPort());
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -3142,10 +2815,17 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.isContentEditable;
 }
 
-function getActivePdfWorkspaceSubjectId(): string | undefined {
-  const route = parseRoute(window.location.hash);
-  return route.name === "pdf-workspace" ? route.subjectId : undefined;
+function getViewStateContext(): ViewStateContext {
+  return {
+    getStore: () => pdfWorkspaceStore,
+    getRoute: () => parseRoute(window.location.hash),
+    domain: { getSubjectWorkspace: getSubjectPdfWorkspace }
+  };
 }
+function getViewStateCallbacks(): ViewStateCallbacks {
+  return { updatePdfWorkspace };
+}
+const getActivePdfWorkspaceSubjectId = () => getActivePdfWorkspaceSubjectIdModule(getViewStateContext());
 
 function handleDocumentKeyDown(event: KeyboardEvent): void {
   if (event.defaultPrevented || event.isComposing) {
@@ -4856,70 +4536,17 @@ function scheduleEraserRender(): void {
   });
 }
 
-function movePdfPage(subjectId: string, delta: number): void {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const material = workspace.material;
-
-  if (!material) {
-    return;
-  }
-
-  requestPdfPage(subjectId, material.selectedPage + delta);
+function movePdfPage(subjectId: string, delta: number) {
+  movePdfPageModule(subjectId, delta, getViewStateContext(), getViewStateCallbacks());
 }
-
-function requestPdfPage(subjectId: string, pageNumber: number): void {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-  const material = workspace.material;
-
-  if (!material) {
-    return;
-  }
-
-  // sprint-W21-sprint-4/S1 P0 fix: pdfjs canvas mount path replaces the iframe
-  // load-event gating. `applyPdfCanvasMounts` paints `selectedPage ± 1` on every
-  // render, so the next-page canvas is already mounted by the time the user
-  // navigates. Commit the new page synchronously — waiting for an iframe `load`
-  // signal that never fires would leave the navigation stuck.
-  const nextPage = Math.min(material.pageCount, Math.max(1, pageNumber));
-  setPdfPage(subjectId, nextPage);
+function requestPdfPage(subjectId: string, pageNumber: number) {
+  requestPdfPageModule(subjectId, pageNumber, getViewStateContext(), getViewStateCallbacks());
 }
-
-function setPdfPage(subjectId: string, pageNumber: number): void {
-  updatePdfWorkspace(subjectId, (workspace) => {
-    const material = workspace.material;
-
-    if (!material) {
-      return workspace;
-    }
-
-    return {
-      ...workspace,
-      material: {
-        ...material,
-        selectedPage: Math.min(material.pageCount, Math.max(1, pageNumber))
-      }
-    };
-  });
+function setPdfPage(subjectId: string, pageNumber: number) {
+  setPdfPageModule(subjectId, pageNumber, getViewStateCallbacks());
 }
-
-function setPdfTool(subjectId: string, tool: LocalPdfTool): void {
-  updatePdfWorkspace(subjectId, (workspace) => {
-    const material = workspace.material;
-
-    if (!material) {
-      return workspace;
-    }
-
-    return {
-      ...workspace,
-      material: {
-        ...material,
-        // Cast: "eraser" is a local extension; the domain store accepts PdfWorkspaceTool.
-        // The store treats unknown tool values as opaque strings at runtime (JSON.stringify).
-        selectedTool: tool as PdfWorkspaceTool
-      }
-    };
-  });
+function setPdfTool(subjectId: string, tool: LocalPdfTool) {
+  setPdfToolModule(subjectId, tool, getViewStateCallbacks());
 }
 
 function applySetEraserShape(subjectId: string, shape: EraserShape): void {
