@@ -93,6 +93,7 @@ import {
   estimatePdfPageCount,
   formatPdfFileSize,
   getSubjectPdfWorkspace,
+  hydrateSubjectPdfWorkspace,
   moveChart,
   moveChecklist,
   moveTable,
@@ -169,16 +170,17 @@ import {
   type CanvasMountCallbacks
 } from "./pdf-workspace/canvas-mount";
 import {
-  buildPdfWorkspaceKey,
+  buildPdfWorkspaceKey as buildPdfWorkspaceKeyModule,
   getPdfMaterialKey,
   getPdfWorkspaceMaterials,
   getSubjectPdfMaterials as getSubjectPdfMaterialsModule,
   loadPdfWorkspaceStore as loadPdfWorkspaceStoreModule,
-  replacePdfWorkspaceMaterials,
+  replacePdfWorkspaceMaterials as replacePdfWorkspaceMaterialsModule,
   savePdfWorkspaceStore as savePdfWorkspaceStoreModule,
   selectPdfWorkspaceMaterial as selectPdfWorkspaceMaterialModule,
   updatePdfWorkspace as updatePdfWorkspaceModule,
   upsertPdfWorkspaceMaterial,
+  type WorkspaceDomainHelpers,
   type WorkspaceStoreCallbacks,
   type WorkspaceStoreContext
 } from "./pdf-workspace/workspace-store";
@@ -1473,14 +1475,23 @@ function scheduleAuthBootRetry(attempt: number, options: { blocking: boolean }):
 }
 
 // sprint-W22-sprint-1 layer B/slice-2a: 13 workspace-store 함수 본체 →
-// `./pdf-workspace/workspace-store.ts`. pure 8 = direct import (위 import
-// 블록). stateful 5 (loadPdfWorkspaceStore / savePdfWorkspaceStore /
-// updatePdfWorkspace / selectPdfWorkspaceMaterial / getSubjectPdfMaterials)
-// = ctx + callbacks 주입 wrapper. main.ts 50+ 직접 read 사이트 보존.
+// `./pdf-workspace/workspace-store.ts`. pure 6 = direct import (sortNewestFirst
+// / syncCurrentPdfMaterial / getPdfMaterialKey / getPdfWorkspaceMaterials /
+// upsertPdfWorkspaceMaterial / parsePdfWorkspaceStorePayload). stateful 5 +
+// helper-needing 2 (buildPdfWorkspaceKey + replacePdfWorkspaceMaterials) =
+// ctx + callbacks + domain helper 주입 wrapper. main.ts 50+ 직접 read 사이트
+// 보존. domain helper 는 runtime import 차단 (annotation-sync 패턴 일치).
+const workspaceDomainHelpers: WorkspaceDomainHelpers = {
+  storageKeyPrefix: pdfWorkspaceStorageKey,
+  getSubjectWorkspace: getSubjectPdfWorkspace,
+  hydrateSubjectWorkspace: hydrateSubjectPdfWorkspace,
+  createMaterialFromBackend: createPdfMaterialFromBackend
+};
 function getWorkspaceStoreContext(): WorkspaceStoreContext {
   return {
     getStore: () => pdfWorkspaceStore,
-    getActiveUserId: () => authSession?.user.id
+    getActiveUserId: () => authSession?.user.id,
+    domain: workspaceDomainHelpers
   };
 }
 function getWorkspaceStoreCallbacks(): WorkspaceStoreCallbacks {
@@ -1494,8 +1505,11 @@ function getWorkspaceStoreCallbacks(): WorkspaceStoreCallbacks {
     clearActivePdfObjectUrl
   };
 }
+function buildPdfWorkspaceKey(userId: string): string {
+  return buildPdfWorkspaceKeyModule(userId, pdfWorkspaceStorageKey);
+}
 function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
-  return loadPdfWorkspaceStoreModule(userId);
+  return loadPdfWorkspaceStoreModule(userId, workspaceDomainHelpers);
 }
 function savePdfWorkspaceStore(userId: string | undefined = authSession?.user.id): void {
   savePdfWorkspaceStoreModule(getWorkspaceStoreContext(), userId);
@@ -1509,6 +1523,16 @@ function updatePdfWorkspace(
     updater,
     getWorkspaceStoreContext(),
     getWorkspaceStoreCallbacks()
+  );
+}
+function replacePdfWorkspaceMaterials(
+  workspace: SubjectPdfWorkspace,
+  backendMaterials: PdfMaterialRecord[]
+): SubjectPdfWorkspace {
+  return replacePdfWorkspaceMaterialsModule(
+    workspace,
+    backendMaterials,
+    workspaceDomainHelpers
   );
 }
 function selectPdfWorkspaceMaterial(subjectId: string, materialId: string): boolean {

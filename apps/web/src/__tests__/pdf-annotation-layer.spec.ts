@@ -13,10 +13,17 @@ const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
 // shell view 가 app/appShell.ts 로 이동. main.ts-bound regression grep 은
 // 두 source 합쳐서 본다. layer A 분해가 회귀 ID (예: loadedPdfFrameKeys)
 // 를 새 모듈로 옮기지 않았는지 verify 도 합본 기준.
+//
+// sprint-2026-W22-sprint-1 / layer B/slice-2a: applyPdfCanvasMounts +
+// setActive/clearActive/revokeAll/disposePdfDocumentCache + 4 state Map →
+// pdf-workspace/canvas-mount.ts. canvas mount lifecycle invariant grep 도
+// 그 모듈을 합본 대상에 포함.
 const mainTs =
   readFileSync(new URL("../main.ts", import.meta.url), "utf8") +
   "\n" +
-  readFileSync(new URL("../app/appShell.ts", import.meta.url), "utf8");
+  readFileSync(new URL("../app/appShell.ts", import.meta.url), "utf8") +
+  "\n" +
+  readFileSync(new URL("../pdf-workspace/canvas-mount.ts", import.meta.url), "utf8");
 
 function getCssRuleBlock(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -89,7 +96,9 @@ describe("PDF annotation layer page stickiness", () => {
     // clearPdfDocumentCache 를 lazy dispose. memory leak / AC6 resource cap.
     assert.match(mainTs, /async function disposePdfDocumentCache/);
     assert.match(mainTs, /disposePdfDocumentCache\(previousUrl\)/);
-    assert.match(mainTs, /import\(["']\.\/pdf\/pdf-canvas-viewer["']\)/);
+    // sprint-W22-sprint-1 layer B/slice-2a: canvas-mount.ts (pdf-workspace/)
+    // 에서 한 단계 위 경로 = `../pdf/pdf-canvas-viewer`.
+    assert.match(mainTs, /import\(["'](?:\.\.|\.)\/pdf\/pdf-canvas-viewer["']\)/);
     // sprint-W21-sprint-4/S3: annotation overlay 5종 (sticky/textBox/checklist/
     // table/chart) 의 좌표 mapping 이 모두 norm × 100% surface-relative 패턴 →
     // canvas CSS stretch (S2) 와 정합. canvas migration 회귀 0.

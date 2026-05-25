@@ -17,20 +17,36 @@
 //   - selectPdfWorkspaceMaterial 가 material 전환 시 clearActivePdfObjectUrl
 //     호출 (object URL lifecycle 일관성).
 
-import {
-  createPdfMaterialFromBackend,
-  getSubjectPdfWorkspace,
-  hydrateSubjectPdfWorkspace,
-  pdfWorkspaceStorageKey,
-  type PdfMaterialDraft,
-  type PdfMaterialRecord,
-  type PdfWorkspaceStore,
-  type SubjectPdfWorkspace
+import type {
+  PdfMaterialDraft,
+  PdfMaterialRecord,
+  PdfWorkspaceStore,
+  SubjectPdfWorkspace
 } from "@study-note/domain";
 import type {
   AnnotationSyncCallbacks,
   AnnotationSyncContext
 } from "./annotation-sync";
+
+// ─── Domain helper injection (annotation-sync 패턴 일치 — runtime import 차단) ─
+
+/**
+ * domain runtime helper 를 main.ts 가 주입. workspace-store 가 `@study-note/
+ * domain` 을 runtime import 하면 node:test --experimental-strip-types 가
+ * `export * from "./lecture-note"` extension-less import 를 해결 못 함.
+ */
+export interface WorkspaceDomainHelpers {
+  storageKeyPrefix: string;
+  getSubjectWorkspace: (
+    store: PdfWorkspaceStore,
+    subjectId: string
+  ) => SubjectPdfWorkspace;
+  hydrateSubjectWorkspace: (entry: unknown) => SubjectPdfWorkspace;
+  createMaterialFromBackend: (
+    record: PdfMaterialRecord,
+    previous?: PdfMaterialDraft
+  ) => PdfMaterialDraft;
+}
 
 // ─── Public types ────────────────────────────────────────────────────────
 
@@ -41,6 +57,7 @@ import type {
 export interface WorkspaceStoreContext {
   getStore: () => PdfWorkspaceStore;
   getActiveUserId: () => string | undefined;
+  domain: WorkspaceDomainHelpers;
 }
 
 /**
@@ -79,15 +96,18 @@ export interface WorkspaceStoreCallbacks {
 // sprint-3/S2: userId-scoped pdfWorkspaceStore localStorage key. Mirrors the
 // S1 notebook namespacing pattern (`{base}:{userId}`) so A→B account
 // transitions cannot see each other's PDF workspace through localStorage.
-export function buildPdfWorkspaceKey(userId: string): string {
-  return `${pdfWorkspaceStorageKey}:${userId}`;
+export function buildPdfWorkspaceKey(userId: string, prefix: string): string {
+  return `${prefix}:${userId}`;
 }
 
 // sprint-3/S2: parse + hydrate a raw localStorage payload into a
 // PdfWorkspaceStore. Shared by the scoped-key load path and the legacy
 // migration path; returns undefined when the payload is missing or
 // structurally invalid so callers can fall back to an empty store.
-export function parsePdfWorkspaceStorePayload(raw: string): PdfWorkspaceStore | undefined {
+export function parsePdfWorkspaceStorePayload(
+  raw: string,
+  domain: WorkspaceDomainHelpers
+): PdfWorkspaceStore | undefined {
   try {
     const parsed = JSON.parse(raw) as Partial<PdfWorkspaceStore>;
 
@@ -99,7 +119,7 @@ export function parsePdfWorkspaceStorePayload(raw: string): PdfWorkspaceStore | 
       const workspaces: PdfWorkspaceStore["workspaces"] = {};
 
       for (const [id, entry] of Object.entries(rawEntries)) {
-        workspaces[id] = hydrateSubjectPdfWorkspace(entry);
+        workspaces[id] = domain.hydrateSubjectWorkspace(entry);
       }
 
       return { workspaces };
@@ -191,7 +211,8 @@ export function upsertPdfWorkspaceMaterial(
 
 export function replacePdfWorkspaceMaterials(
   workspace: SubjectPdfWorkspace,
-  backendMaterials: PdfMaterialRecord[]
+  backendMaterials: PdfMaterialRecord[],
+  domain: WorkspaceDomainHelpers
 ): SubjectPdfWorkspace {
   const existingMaterials = getPdfWorkspaceMaterials(workspace);
   const existingByKey = new Map(
@@ -205,7 +226,7 @@ export function replacePdfWorkspaceMaterials(
         ? workspace.material
         : undefined);
 
-    return createPdfMaterialFromBackend(material, previous);
+    return domain.createMaterialFromBackend(material, previous);
   });
   const currentKey = workspace.material ? getPdfMaterialKey(workspace.material) : undefined;
   const selected = currentKey
@@ -221,8 +242,11 @@ export function replacePdfWorkspaceMaterials(
 
 // ─── 2) Stateful (ctx + callbacks 받음) ───────────────────────────────────
 
-export function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
-  const scopedKey = buildPdfWorkspaceKey(userId);
+export function loadPdfWorkspaceStore(
+  userId: string,
+  domain: WorkspaceDomainHelpers
+): PdfWorkspaceStore {
+  const scopedKey = buildPdfWorkspaceKey(userId, domain.storageKeyPrefix);
   let stored: string | null = null;
   try {
     stored = window.localStorage.getItem(scopedKey);
@@ -236,7 +260,7 @@ export function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
     return { workspaces: {} };
   }
 
-  const parsed = parsePdfWorkspaceStorePayload(stored);
+  const parsed = parsePdfWorkspaceStorePayload(stored, domain);
   if (parsed) {
     return parsed;
   }
@@ -263,7 +287,7 @@ export function savePdfWorkspaceStore(
   }
   try {
     window.localStorage.setItem(
-      buildPdfWorkspaceKey(userId),
+      buildPdfWorkspaceKey(userId, context.domain.storageKeyPrefix),
       JSON.stringify(context.getStore())
     );
   } catch {
@@ -279,7 +303,7 @@ export function updatePdfWorkspace(
   callbacks: WorkspaceStoreCallbacks
 ): void {
   const store = context.getStore();
-  const current = getSubjectPdfWorkspace(store, subjectId);
+  const current = context.domain.getSubjectWorkspace(store, subjectId);
   const updated = syncCurrentPdfMaterial({
     ...updater(current),
     updatedAt: new Date().toISOString()
@@ -330,7 +354,7 @@ export function selectPdfWorkspaceMaterial(
   context: WorkspaceStoreContext,
   callbacks: WorkspaceStoreCallbacks
 ): boolean {
-  const current = getSubjectPdfWorkspace(context.getStore(), subjectId);
+  const current = context.domain.getSubjectWorkspace(context.getStore(), subjectId);
   const target = getPdfWorkspaceMaterials(current).find(
     (material) => getPdfMaterialKey(material) === materialId
   );
@@ -357,6 +381,6 @@ export function getSubjectPdfMaterials(
   context: WorkspaceStoreContext
 ): PdfMaterialDraft[] {
   return getPdfWorkspaceMaterials(
-    getSubjectPdfWorkspace(context.getStore(), subjectId)
+    context.domain.getSubjectWorkspace(context.getStore(), subjectId)
   );
 }
