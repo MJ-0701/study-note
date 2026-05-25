@@ -62,11 +62,26 @@ main.ts line: 11,049 → **8,908** (-2,141, -19.37%). 9k target 달성 보존.
 **mobile QA / Datadog readout**: slice-2c/2d/2e 동일 — DDD refactor (행위 등가).
 slice-2c capture 가 evidence. user 의무 X. 회기 시 hotfix.
 
+**Sprint 2026-W22-sprint-4 = `slice-2f/i` (chart widget) 이미 start 됨** (2026-05-25 session end). brainstorm 부터 재개.
+
+**slice-2f/i 측정치 (실측, 2026-05-25 slice-2e session 말미)**:
+- chart content encoder/decoder scope = 3 const + 2 type + 1 interface + 5 function:
+  - L3601 LocalChartType type / L3602 LocalChartFunction type / L3604 CHART_TYPE_PREFIX.
+  - L3618-3631 encodeChartContent (14 line).
+  - L3632-3635 inferChartFunctionType (4 line).
+  - L3636-3660 decodeChartContent (25 line).
+  - L5008-5014 CsvSeriesPoint interface (7 line).
+  - L5015-5072 parseCsvSeries (58 line).
+  - L5073-5077 normalizeChartInputValue (5 line).
+- 잔류 합계 ≈ 150 line scope. main.ts -100~-150 estimated.
+- 41 grep hit (chart-content symbol usage). caller = chart widget (renderChart/state/SVG), drill-highlight.ts (DomainHelpers), 외부 spec.
+
+**slice-2f/i 의 보너스**: drill-highlight.ts 의 `getDrillHighlightHelpers()` lazy factory 폐기 가능 — chart-content.ts module → drill-highlight 가 직접 import (circular dep 없음, chart-content 가 단방향 leaf). 결과 = main.ts 의 helpers wrapper line 추가 절감.
+
 **다음 명령**:
 ```bash
-sfs status                  # 빈 sprint 확인
-sfs start "main.ts layer B/slice-2f — chart widget 분리"   # 분해 권장 시 chart sprint 우선
-sfs brainstorm "..."        # orient = chart 잔여 line 측정 우선 + §9 security model 동시 작성
+sfs status                              # sprint-4 confirm
+sfs brainstorm "..."                    # orient = §1 measurement + §9 security model 동시
 sfs plan → review --gate 3 self → cross → implement → Gate 6 self → cross → PR → @codex → merge → retro
 ```
 
