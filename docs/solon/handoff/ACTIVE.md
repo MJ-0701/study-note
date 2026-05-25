@@ -15,112 +15,102 @@
 | **B/slice-2d. drill highlight** | 2026-W22-sprint-2 | ✅ merged (PR #62, main=d1bba31) |
 | **B/slice-2e. star mark** | 2026-W22-sprint-3 | ✅ merged (PR #63, main=c23dd6c) |
 | **B/slice-2f/i. chart-content leaf** | 2026-W22-sprint-4 | ✅ merged (PR #64, main=45080e8) |
-| **B/slice-2f/ii. table widget** | TBD | ⏳ 다음 sprint 후보 (위험도 중, ~400 line) |
-| **B/slice-2g. chart render widget** | TBD | ⏳ 후보 (위험도 중, renderChart 274 + debounce + morphdom) |
+| **B/slice-2f/ii. markdown-table leaf + wrapper 폐기** | 2026-W22-sprint-2 | ✅ merged (PR #65, main=e1aded1) |
+| **B/slice-2g. chart render widget** | TBD | ⏳ 다음 sprint 후보 (위험도 중, ~290 line) |
+| **B/slice-2g-table. table render widget** | TBD | ⏳ 후보 (위험도 중-높음, ~500 line) |
 | **B/slice-2f/iii. simple widget** | TBD | ⏳ backlog (sticky/textbox/checklist/eraser ~220 line) |
 | **B/slice-2f/iv. container/page** | TBD | ⏳ backlog (renderPdfWorkspacePage ~410 line) |
 | C. subject views | TBD | ⏳ backlog |
 | D. state/sync residual (user-notes) | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 재검토 ([[project-react-migration-backlog]]) |
 
-main.ts line: 11,049 → **8,791** (-2,258, -20.44%). 9k target 보존.
-다음 호기심 target = 8k (잔여 -791 line, slice-2f/ii + slice-2g 분리 시 가능).
+main.ts line: 11,049 → **8,686** (-2,363, -21.39%). 9k target 보존.
+다음 호기심 target = 8k (잔여 -686 line). slice-2g 또는 slice-2f/iii 으로
+달성 가능.
 
-## 활성 작업 = layer B/slice-2f/ii sprint (table widget) **또는** slice-2g (chart render)
+## 활성 작업 = layer B/slice-2g sprint (chart render widget) **권장**
 
-**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2f-i-chart-widget/20260525/retro.md`
+**전 sprint retro** = `docs/solon/main-ts-layer-b-slice-2f-ii-table-widget/20260525/retro.md`
 
-### 후보 1: slice-2f/ii — table widget (권장)
+### 후보 1: slice-2g — chart render widget (권장)
 
-**slice-2f/ii 측정치 (handoff slice-2e + slice-2f/i 누적 lineage)**:
-- main.ts table 관련 scope = `renderTable` (358) + `renderTableMount` (8) +
-  `parseMarkdownTable` + `serializeMarkdownTable` + `splitMarkdownTableRow` +
-  `tableContentDebounceMap` + table constant ≈ **400 line scope** 추정.
-- chart-content 패턴 대칭 — 본 분리는 markdown-table content parser leaf
-  분리. drill-highlight 의 잔여 `parseMarkdownTable` DomainHelpers prop
-  동시 폐기 (chart-content 와 동일 패턴) → wrapper 자체 폐기 가능.
-- main.ts -300~-400 line estimate (range ±50% = -200~-600).
-- 위험도 = 중 (chart-content 와 비교 시 더 큰 scope, render/state/morphdom
-  은 slice-2g 로 미루기).
-- spec 회귀 risk = pdf-material-library.spec / table-tool.spec / inspector-drill.spec
-  의 table-related mock 정리.
-
-### 후보 2: slice-2g — chart render widget
-
-- renderChart (274) + renderChartMount (13) + chartContentDebounceMap +
-  chartPointDebounceMap + post-mount lifecycle + morphdom + SVG svg
-  ≈ **290~330 line scope**.
+- scope = renderChart (274) + renderChartMount (13) + chartContentDebounceMap
+  + chartPointDebounceMap + readChartDataFromDom + post-mount lifecycle +
+  morphdom + SVG svg. ~290~330 line.
+- chart-content leaf (slice-2f/i) 가 이미 분리되어 render 추출 안전.
 - 위험도 = 중 (state mutate + morphdom + debounce + lifecycle 동시 — slice-2b
-  의 touch-swipe 수준).
+  touch-swipe 수준).
 - main.ts -200~-300 line estimate.
 
-### slice-2f/i 학습 (다음 sprint 우선 적용)
+### 후보 2: slice-2g-table — table render widget
 
-- **R-K backlog 우선**: brainstorm/plan 작성 시 review capsule line budget
-  (~250 line per file) 인지. plan §1-§8 합계 ~150 line 목표.
-- **R-M backlog**: brainstorm `## 3. 용어` 항목 옆에 source 인용 (file:line)
-  의무화. slice-2f/i 의 `CsvSeriesPoint` 오기 (`{x,y,label?}` 초안 vs 실측
-  `{label,value}`) 재발 방지.
-- **R-N backlog**: plan template compaction default — §3 AC = table 형식,
-  §11.1 source excerpt = evidence/ subdir 으로 자동 이관.
-- **R-L backlog**: `sfs review --gate <id> --stage cross` 가 self verdict
-  부재 시 self 자동 재실행 → cross. slice-2f/i 에서 Gate 3 cross R1 +
-  Gate 6 cross R1 동일 procedural fail 재발.
-- **pre-existing fail baseline stash test waiver pattern** — Gate 6 self
-  R1 의 chart-tool fail 정당화 (`git stash push` 으로 슬라이스 임시 제거 +
-  baseline 동일 fail 재현 → waiver capture). 향후 R-I lineage 재사용.
+- scope = renderTable (358) + renderTableMount (8) + readTableDataFromDom (39+) +
+  tableContentDebounceMap + refreshTableWidgets. ~500 line.
+- markdown-table leaf (slice-2f/ii) 이미 분리.
+- 위험도 = 중-높음 (input cell DOM 조작 + debounce + table column add/delete).
 
-### slice-2f/i 결과 (참고)
+### 후보 3: slice-2f/iii — simple widget cleanup
 
-- main.ts -117 line (8,908 → 8,791). 누적 layer A~B/slice-2f/i = -2,258
-  / -20.44%. 9k target 보존. 8k target 까지 -791 line.
-- 신규 1 module + 1 spec: `pdf-workspace/chart-content.ts` 182 line / 9
-  named export + 2 private helper (splitCsvSeriesLine + serializeCsv NOT
-  exported) + `pdf-workspace/__tests__/chart-content.spec.ts` 18 case
-  (6 invariant 1:1 매핑).
-- 18 case = (a) round-trip non-xy 5 + (a') xy envelope omit 2 + (b)
-  envelope token bounded 2 + (c) LocalChartType/Function bounded 2 + (d)
-  finite guard OWASP A03+A04 4 + (e) escape+injection block 2 + (f) leaf
-  무측효과 1.
-- drill-highlight.ts DomainHelpers chart prop (`decodeChartContent` +
-  `CHART_TYPE_PREFIX`) 폐기 + 직접 import. table 잔여 책임 wrapper 유지
-  (slice-2f/ii).
-- main.ts `getDrillHighlightHelpers()` lazy factory chart prop 주입 제거.
-- inspector-drill.spec mock cleanup (14/14 PASS 회귀 없음).
-- audit-only 3 file (chart-tool.spec / document-change.spec /
-  document-change.ts) source diff 0.
-- Gate 3 self R9 PASS + cross R2 PASS (9 round — capsule line budget +
-  외부 spec ownership + 3-layer taxonomy + source excerpt 반복 patch).
-- Gate 6 self R3 PASS + cross R2 PASS.
-- @codex bot = "Didn't find any major issues" (👍 verdict, autopilot merge).
-- 신규 backlog R-K (capsule budget) / R-L (self+cross 보존) / R-M
-  (brainstorm source 인용) / R-N (plan compaction default).
-- 패턴 = layer A/B-slice-1/2a/2b/2c/2d/2e/2f-i Context + Callbacks +
-  named export + characterization spec + leaf 단방향 import 일관.
+- scope = renderStickyNote + renderTextBox + renderChecklist + renderEraser*.
+  ~220 line. 위험도 낮음.
 
-## Layer B/slice-2e 결과 (참고)
+### slice-2f/ii 학습 (다음 sprint 적용)
 
-- main.ts -92 line (9,000 → 8,908). 누적 -2,141 / -19.37%. 9k target 보존.
-- 신규 1 module + 1 spec: `pdf-workspace/star-mark.ts` 209 line / 14 export
-  + `pdf-workspace/__tests__/star-mark.spec.ts` 250 line / 18 case.
-- Gate 3 self R2 + cross R1 PASS. Gate 6 self R2 + cross R1 PASS.
-- @codex bot = "Didn't find any major issues." :rocket: (autopilot merge).
-- 신규 invariant **(h) render-time numeric finite/clamp guard** (OWASP
-  A03+A04 defense in depth) — `clampStyleRatio(value, min, max, fallback)`.
+- **R-K (capsule budget) 효과 검증** — plan 327 line + brainstorm 191 +
+  source excerpts inline. Gate 3 = 4 round (slice-2f/i 9 round 대비 절반).
+- **R-M (brainstorm source 인용)** — 모든 용어 main.ts L<line> 표기.
+  contract drift 0 round.
+- **R-N (plan compaction default)** — AC = table-first, source excerpt
+  inline §9.4. **slice-2f/ii 가 R-N 의 최종 검증**.
+- **R-L (review.md self+cross 보존)** — capture pattern workaround 으로
+  충분. SFS adapter 변경 backlog 유지.
+- **R-O 신규 (test DOM matcher 호환성)** — linkedom class selector 일부
+  매치 X. `[data-*]` / element name selector / textContent / querySelectorAll
+  element-name 권장.
+- **bounded source excerpt pattern** — `renderTable` body inline excerpt 이
+  security lens reviewer blocker 해소. render path AC 마다 bounded inline
+  default.
+- **wrapper/factory 완전 폐기 cascading cleanup** — chart-content + markdown
+  -table 후 wrapper 의 0-prop 잔존 → 완전 폐기. 다음 slice 도 비슷한
+  cascade 기회 점검.
 
-## Layer B/slice-2d 결과 (참고)
+### slice-2f/ii 결과 (참고)
 
-- main.ts -417 line (9,417 → 9,000). 누적 layer A~B/slice-2d = -2,049 /
-  -18.55%. 9k target 달성.
-- 신규 1 module + spec 이관: `pdf-workspace/drill-highlight.ts` 669 line /
-  36 export. spec = `apps/web/src/__tests__/inspector-drill.spec.ts` 795
-  line / 14 case.
-- Gate 3 self+cross PASS (round 3 each). Gate 6 self R3 + cross R1 PASS —
-  self R1 partial = TDZ bug → lazy factory fix.
-- 신규 backlog: R-D2 (events.jsonl compaction key 에 review_stage 추가),
-  R-H (module init order self-check), R-I (pre-existing 4 fail = chart-tool
-  + pdf-material-library `updatePdfMaterialMetadata` shim missing — 별도
-  sprint).
+- main.ts -105 line (8,791 → 8,686). 누적 -2,363 / -21.39%.
+- 신규 1 module + 1 spec: `pdf-workspace/markdown-table.ts` 138 line /
+  4 export (`parseMarkdownTable` + `serializeMarkdownTable` +
+  `splitMarkdownTableRow` + `ParsedMarkdownTable`) + 2 private
+  (`isMarkdownSeparatorCell` + `normalizeMarkdownTableRow`).
+- spec 12 case (5 invariant 1:1) — (a) round-trip / (b) null fallback / (c)
+  width normalize / (d) pipe escape / (e) XSS escape caller 책임 (OWASP
+  A07 leaf passthrough) / (f) leaf 무측효과.
+- drill-highlight `DrillHighlightDomainHelpers` interface 완전 폐기 +
+  4 함수 signature 단순화 + markdown-table 직접 import.
+- main.ts `getDrillHighlightHelpers()` factory 완전 폐기 (slice-2d TDZ
+  workaround 해소).
+- inspector-drill.spec mock helpers 폐기 + AC11(b) XSS payload case 신규
+  (15/15 PASS).
+- audit-only 3 file diff 0.
+- Gate 3 self R4 + cross R1 PASS (총 4 round, slice-2f/i 9 대비). security
+  lens 자동 선택 (OWASP 명시 trigger).
+- Gate 6 self R1 + cross R1 PASS (총 2 round, slice-2f/i 5 대비).
+- @codex bot = "Didn't find any major issues. Keep them coming!" 👍.
+- 신규 backlog R-O (test DOM matcher 호환성).
+- 패턴 = layer A/B-slice-1/2a/2b/2c/2d/2e/2f-i/2f-ii Context + Callbacks +
+  named export + characterization spec + leaf 단방향 import + wrapper
+  cascading cleanup 일관.
+
+## Layer B/slice-2f/i 결과 (참고)
+
+- main.ts -117 line (8,908 → 8,791). 누적 -2,258 / -20.44%.
+- chart-content.ts 182 line / 9 export + 2 private + spec 18 case (6 invariant
+  1:1 매핑). drill-highlight chart prop 폐기 + 직접 import. main.ts
+  `getDrillHighlightHelpers()` 의 chart prop 주입 제거 (table 잔여).
+- Gate 3 self R9 PASS + cross R2 PASS (9 round — capsule budget + ownership
+  + 3-layer taxonomy + source excerpt 반복 patch).
+- Gate 6 self R3 PASS + cross R2 PASS. @codex bot 👍.
+- 신규 backlog R-K (capsule budget) / R-L (self+cross 보존) / R-M (brainstorm
+  source 인용) / R-N (plan compaction default).
 
 ## SFS 0.6.121 정책 ambient (CLAUDE.md 참조)
 
