@@ -17,6 +17,7 @@ import {
   weekPath
 } from "../app/routes";
 import { escapeHtml } from "../app/escape-html";
+import { sanitizeExternalUrl } from "../app/safe-url";
 import { scheduleRangeLabel } from "../data/classSchedule";
 import { localIntakeGuide } from "../data/intakeGuide";
 import {
@@ -30,29 +31,6 @@ import {
   renderSubjectCard,
   renderSubjectImportCard
 } from "./subject-cards";
-
-// ─── Private helpers ─────────────────────────────────────────────────────
-
-/**
- * Protocol allowlist for external anchor href (sourceWorkspaceUrl).
- * Allows: `http://`, `https://`, relative `#/...`, relative `/...`.
- * Blocks: `javascript:`, `data:`, `mailto:`, `file:`, 기타 scheme.
- * Empty/blocked input → "" (caller 가 link 미렌더).
- */
-function sanitizeExternalUrl(url: string | undefined): string {
-  if (!url) return "";
-  const trimmed = url.trim();
-  if (!trimmed) return "";
-  // Protocol-relative `//host/...` 차단 (sprint-11 Gate 6 R1 finding) —
-  // 같은 origin 의 https page 에서는 attacker host 로 navigation 됨.
-  if (trimmed.startsWith("//")) return "";
-  // Hash route (`#/...`) + 같은 origin absolute path (`/...`, not `//`) — safe.
-  if (trimmed.startsWith("#") || trimmed.startsWith("/")) return trimmed;
-  // Absolute http/https only.
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  // Block everything else (javascript:, data:, mailto:, file:, vbscript:, etc.).
-  return "";
-}
 
 // ─── Public renderers ────────────────────────────────────────────────────
 

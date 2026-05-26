@@ -57,7 +57,6 @@ import {
   getKeywordById,
   getQuestionById,
   getSourceById,
-  getSubjectCoverage,
   type Concept,
   type ExampleQuestion,
   type RequiredKeyword,
@@ -109,13 +108,12 @@ import {
   subjectClassPath,
   subjectIntakePath,
   subjectMcpPath,
-  subjectMemorizePath,
   subjectPdfWorkspacePath,
   subjectSummaryPath,
-  weekPath,
-  weekSummaryPath
+  weekPath
 } from "./app/routes";
 import { escapeHtml } from "./app/escape-html";
+import { sanitizeExternalUrl } from "./app/safe-url";
 import {
   renderInto as renderIntoSink,
   renderShell as renderAppShell,
@@ -282,8 +280,6 @@ import {
 import {
   formatQuickNoteStatus,
   formatReviewStatus,
-  formatSourceKind,
-  formatSourceVisibility,
   renderConcept,
   renderKeyword,
   renderMetric,
@@ -305,6 +301,11 @@ import {
   renderSubjectClassPage,
   type SubjectClassContext
 } from "./subject-views/subject-class";
+import {
+  renderSubjectSummariesPage,
+  renderWeekSummaryPage,
+  type SummariesContext
+} from "./subject-views/summaries";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -4662,7 +4663,7 @@ function renderApp(): void {
   if (route.name === "subject-summaries" && subject) {
     mountRender(composeShell(
       renderSubjectSidebar(sidebarContext, subject, route),
-      renderSubjectSummariesPage(subject),
+      renderSubjectSummariesPage(summariesContext, subject),
       `${subject.title} / 요약본`
     ));
     return;
@@ -4671,7 +4672,7 @@ function renderApp(): void {
   if (route.name === "subject-summary-detail" && subject && week) {
     mountRender(composeShell(
       renderSubjectSidebar(sidebarContext, subject, route),
-      renderWeekSummaryPage(subject, week),
+      renderWeekSummaryPage(summariesContext, subject, week),
       `${subject.title} / ${week.label} 요약본`
     ));
     return;
@@ -4731,6 +4732,12 @@ const sidebarContext: SidebarContext = {
   getSidebarTermsCache: () => sidebarTermsCache,
   getSidebarSubjectsCache: () => sidebarSubjectsCache,
   getSidebarOpenTermIds: () => sidebarOpenTermIds
+};
+
+// Summaries context (slice-5 — summaries.ts). 2 field (fn ref + callback).
+const summariesContext: SummariesContext = {
+  formatWeekLabel,
+  renderQuickNotePanel
 };
 
 // Subject-class context (slice-4 — subject-class.ts). 2 lazy + 3 fn ref + 3 callback.
@@ -4923,145 +4930,6 @@ const workspacePageContext: WorkspacePageContext = {
 
 
 
-function renderSubjectSummariesPage(subject: SubjectNote): string {
-  const coverage = getSubjectCoverage(subject);
-
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h1>${subject.title} 요약본</h1>
-      <p class="lede">요약본은 수업일별로 들어가서 확인합니다. 시험 직전에는 필수 암기노트만 따로 봅니다.</p>
-      <div class="hero-actions">
-        <button class="action-button" type="button" data-action="generate-subject-note" data-subject-id="${subject.id}">
-          전체 정리노트 만들기
-        </button>
-        <a class="secondary-link" href="${subjectClassPath(subject)}">수업 자료 보기</a>
-        <a class="secondary-link" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
-      </div>
-    </section>
-
-    <section class="metric-grid" aria-label="${subject.title} 현황">
-      ${renderMetric("키워드 반영률", `${coverage.coverageRate}%`, `${coverage.covered}/${coverage.total}개 반영`)}
-      ${renderMetric("수업일", `${subject.weekNotes.length}개 노트`, "날짜별 노트")}
-      ${renderMetric("시험 범위", subject.summary.weekRange, subject.examLabel)}
-    </section>
-
-    <section aria-labelledby="summary-list-title">
-      <p class="meta">날짜별 요약</p>
-      <h2 id="summary-list-title">수업일별 요약 목록</h2>
-      <div class="class-day-grid">
-        ${subject.weekNotes.map((week) => renderSummaryDayCard(subject, week)).join("")}
-      </div>
-    </section>
-
-    <section aria-labelledby="summary-course-title">
-      <p class="meta">과목 단위 메모</p>
-      <h2 id="summary-course-title">전체 요약 방향</h2>
-      <div class="summary-grid">
-        ${renderSummaryBlock("시험 범위", subject.summary.examScope)}
-        ${renderSummaryBlock("복습 전략", subject.summary.strategy)}
-        ${renderSummaryBlock("취약 포인트", subject.summary.weakSpots.join(", "))}
-      </div>
-    </section>
-  `;
-}
-
-function renderSummaryDayCard(subject: SubjectNote, week: WeekNote): string {
-  return `
-    <article class="class-day-card">
-      <div>
-        <p class="meta">${escapeHtml(formatWeekLabel(week.label))} · ${formatReviewStatus(week.reviewStatus)}</p>
-        <h3>${week.title}</h3>
-        <p>${week.focus}</p>
-      </div>
-      <div class="class-day-card__stats">
-        <span>${week.conceptIds.length}개 개념</span>
-        <span>${week.exampleQuestionIds.length}개 문제</span>
-      </div>
-      <div class="week-card-actions">
-        <a class="action-button" href="${weekSummaryPath(subject, week)}">요약 상세 보기</a>
-        <a class="secondary-link" href="${weekPath(subject, week)}">수업 상세</a>
-      </div>
-    </article>
-  `;
-}
-
-function renderWeekSummaryPage(subject: SubjectNote, week: WeekNote): string {
-  const keywords = week.requiredKeywordIds
-    .map((keywordId) => getKeywordById(subject, keywordId))
-    .filter((keyword): keyword is RequiredKeyword => Boolean(keyword));
-  const concepts = week.conceptIds
-    .map((conceptId) => getConceptById(subject, conceptId))
-    .filter((concept): concept is Concept => Boolean(concept));
-  const questions = week.exampleQuestionIds
-    .map((questionId) => getQuestionById(subject, questionId))
-    .filter((question): question is ExampleQuestion => Boolean(question));
-  const sources = week.sourceMaterialIds
-    .map((sourceId) => getSourceById(subject, sourceId))
-    .filter((source): source is SourceMaterial => Boolean(source));
-
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">${subject.title} · ${week.label} · 요약본</p>
-      <h1>${week.title} 요약</h1>
-      <p class="lede">${week.focus}</p>
-      <div class="hero-actions">
-        <button class="action-button" type="button" data-action="generate-week-note" data-subject-id="${subject.id}" data-week-id="${week.id}">
-          이 날짜 요약 만들기
-        </button>
-        <a class="secondary-link" href="${weekPath(subject, week)}">수업 상세</a>
-        <a class="secondary-link" href="${subjectSummaryPath(subject)}">요약 목록</a>
-      </div>
-    </section>
-
-    <section class="summary-grid" aria-label="${week.label} 요약 상태">
-      ${renderSummaryBlock("키워드", keywords.map((keyword) => keyword.label).join(", ") || "아직 연결된 키워드가 없습니다.")}
-      ${renderSummaryBlock("개념", concepts.map((concept) => concept.title).join(", ") || "아직 연결된 개념이 없습니다.")}
-      ${renderSummaryBlock("자료", sources.map((source) => source.title).join(", ") || "아직 연결된 자료가 없습니다.")}
-    </section>
-
-    ${renderQuickNotePanel(subject, ["week"])}
-
-    <section aria-labelledby="week-summary-keywords-title">
-      <p class="meta">교수님 키워드</p>
-      <h2 id="week-summary-keywords-title">이 날짜에 반영할 키워드</h2>
-      <div class="keyword-grid">
-        ${keywords.map((keyword) => renderKeyword(keyword, subject)).join("") || '<p class="empty-note">아직 연결된 키워드가 없습니다.</p>'}
-      </div>
-    </section>
-
-    <section aria-labelledby="week-summary-concepts-title">
-      <p class="meta">요약 상세</p>
-      <h2 id="week-summary-concepts-title">개념 설명</h2>
-      <div class="concept-list">
-        ${concepts.map((concept) => renderConcept(concept, subject)).join("") || '<p class="empty-note">아직 연결된 개념이 없습니다.</p>'}
-      </div>
-    </section>
-
-    <section aria-labelledby="week-summary-practice-title">
-      <p class="meta">문제화</p>
-      <h2 id="week-summary-practice-title">시험 전에 바꿔볼 질문</h2>
-      <div class="question-list">
-        ${questions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
-      </div>
-    </section>
-
-    <section aria-labelledby="week-summary-sources-title">
-      <p class="meta">근거 자료</p>
-      <h2 id="week-summary-sources-title">요약 근거</h2>
-      <div class="source-grid">
-        ${sources.map((source) => `
-          <article class="source-row">
-            <p class="meta">${formatSourceKind(source.kind)} · ${formatSourceVisibility(source.visibility)}</p>
-            <h3>${source.title}</h3>
-            <p>${source.note}</p>
-            ${source.pages ? `<p class="source-pages">${source.pages}</p>` : ""}
-          </article>
-        `).join("") || '<p class="empty-note">아직 연결된 자료가 없습니다.</p>'}
-      </div>
-    </section>
-  `;
-}
 
 // sprint-2/S3: render an exam-phase group on the memorize page.
 function renderMemorizeExamGroup(
@@ -5640,13 +5508,17 @@ function renderQuickNotePanel(
     return "";
   }
 
+  // sprint-W22-sprint-13 / slice-5 Gate 3 R3 finding lineage —
+  // renderQuickNotePanel 은 summaries.ts 의 callback trust boundary 의 caller.
+  // user content (quickNote.title / subtitle / sections.heading / body[] /
+  // primaryLabel / primaryHref) escape 적용으로 callback boundary 보장.
   return `
     <section id="quick-note" class="quick-note-panel" aria-labelledby="quick-note-title">
       <div class="quick-note-header">
         <div>
           <p class="meta">정리노트 · ${formatQuickNoteStatus(quickNote.status)}</p>
-          <h2 id="quick-note-title">${quickNote.title}</h2>
-          <p>${quickNote.subtitle}</p>
+          <h2 id="quick-note-title">${escapeHtml(quickNote.title)}</h2>
+          <p>${escapeHtml(quickNote.subtitle)}</p>
         </div>
         <button class="secondary-action" type="button" data-action="clear-quick-note">
           닫기
@@ -5655,18 +5527,20 @@ function renderQuickNotePanel(
       <div class="quick-note-body">
         ${quickNote.sections.map((section) => `
           <article class="quick-note-section">
-            <h3>${section.heading}</h3>
+            <h3>${escapeHtml(section.heading)}</h3>
             <ul>
-              ${section.body.map((item) => `<li>${item}</li>`).join("")}
+              ${section.body.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
             </ul>
           </article>
         `).join("")}
       </div>
-      ${
-        quickNote.primaryHref && quickNote.primaryLabel
-          ? `<a class="action-link" href="${quickNote.primaryHref}">${quickNote.primaryLabel}</a>`
-          : ""
-      }
+      ${(() => {
+        // primaryHref protocol allowlist (sprint-13 Gate 3 R4 finding).
+        const safeHref = sanitizeExternalUrl(quickNote.primaryHref);
+        return safeHref && quickNote.primaryLabel
+          ? `<a class="action-link" href="${escapeHtml(safeHref)}">${escapeHtml(quickNote.primaryLabel)}</a>`
+          : "";
+      })()}
     </section>
   `;
 }
