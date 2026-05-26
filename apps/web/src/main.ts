@@ -289,6 +289,14 @@ import {
   renderStickyNote,
   renderTextBox
 } from "./pdf-workspace/simple-widget";
+import {
+  type PdfToolbarContext,
+  getPdfPreviewPlaceholderDetail,
+  getPdfPreviewPlaceholderTitle,
+  renderPdfFrameStack,
+  renderPdfMaterialStatus,
+  renderPdfToolbar
+} from "./pdf-workspace/page-render";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -5357,54 +5365,14 @@ function renderIntakeFeedback(
 }
 
 
-function getPdfFrameKey(materialId: string, pageNumber: number): string {
-  return `pdf-frame:${materialId}:${pageNumber}`;
-}
 
-function getPdfFramePages(selectedPage: number, pageCount: number): number[] {
-  const pages = [selectedPage];
 
-  if (selectedPage > 1) {
-    pages.push(selectedPage - 1);
-  }
-
-  if (selectedPage < pageCount) {
-    pages.push(selectedPage + 1);
-  }
-
-  return [...new Set(pages)].filter((page) => page >= 1 && page <= pageCount);
-}
-
-function renderPdfFrameStack(
-  subject: SubjectNote,
-  material: NonNullable<SubjectPdfWorkspace["material"]>,
-  objectUrl: string,
-  selectedPage: number
-): string {
-  const materialId = material.backendMaterialId ?? "";
-
-  return getPdfFramePages(selectedPage, material.pageCount).map((pageNumber) => {
-    const isActive = pageNumber === selectedPage;
-    const frameKey = getPdfFrameKey(materialId, pageNumber);
-    const preloadAttrs = isActive ? "" : ' aria-hidden="true"';
-
-    // sprint-W21-sprint-4/S1: native browser PDF viewer (iframe + `#page=N`) 는
-    // iOS Safari 가 fragment 무시 / Android Chrome 가 native viewer 부재 →
-    // cross-mobile 동작 X. pdfjs-dist canvas mount placeholder 로 교체.
-    // applyPdfCanvasMounts (renderInto 후 effect) 가 data-pdf-mount 발견 시
-    // dynamic import 로 viewer 호출 + canvas paint.
-    return `<div
-      class="pdf-frame ${isActive ? "is-active" : "is-preload"}"
-      role="img"
-      aria-label="${escapeHtml(subject.title)} PDF page ${pageNumber}"
-      data-pdf-mount="true"
-      data-pdf-frame-key="${escapeHtml(frameKey)}"
-      data-material-id="${escapeHtml(materialId)}"
-      data-page-number="${pageNumber}"
-      data-blob-url="${escapeHtml(objectUrl)}"${preloadAttrs}
-    ></div>`;
-  }).join("");
-}
+// pdf-toolbar context (slice-2f/iv — page-render.ts).
+const pdfToolbarContext: PdfToolbarContext = {
+  isPdfWorkspaceFullscreen,
+  pdfToolHotkeyLabels: PDF_TOOL_HOTKEY_LABELS as Record<string, string>,
+  renderEraserSubToolbar
+};
 
 function renderPdfWorkspacePage(subject: SubjectNote): string {
   const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
@@ -5527,6 +5495,7 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
         </div>
         <div class="pdf-toolbar-row">
           ${renderPdfToolbar(
+            pdfToolbarContext,
             subject.id,
             selectedTool,
             material?.pageCount ?? 1,
@@ -5611,176 +5580,9 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
   `;
 }
 
-function renderPdfMaterialStatus(
-  material: NonNullable<SubjectPdfWorkspace["material"]>,
-  hasPreview: boolean,
-  isPreviewLoading: boolean
-): string {
-  const uploadStatus = material.uploadStatus ?? "local";
-  const statusLabel =
-    uploadStatus === "uploaded"
-      ? hasPreview
-        ? "backend 저장 완료 · 미리보기 연결됨"
-        : isPreviewLoading
-          ? "backend 저장 완료 · 미리보기 불러오는 중"
-          : "backend 저장 완료 · 미리보기 대기"
-      : uploadStatus === "pending"
-        ? "backend 업로드 대기/진행 중"
-        : "이전 로컬 material";
-
-  return `
-    <div class="import-feedback ${uploadStatus === "pending" ? "" : "is-success"}">
-      <strong>${escapeHtml(material.fileName)}</strong>
-      <p>${formatPdfFileSize(material.fileSize)} · ${material.pageCount}페이지 추정 · ${statusLabel}</p>
-      ${material.backendMaterialId ? `<p>material id: <code>${material.backendMaterialId}</code></p>` : ""}
-    </div>
-  `;
-}
-
-function getPdfPreviewPlaceholderTitle(
-  hasMaterial: boolean,
-  isPreviewLoading: boolean
-): string {
-  if (isPreviewLoading) {
-    return "저장된 PDF 미리보기를 불러오는 중입니다.";
-  }
-
-  return hasMaterial
-    ? "backend에서 PDF 미리보기를 아직 받지 못했습니다."
-    : "PDF를 업로드하면 여기에 미리보기가 열립니다.";
-}
-
-function getPdfPreviewPlaceholderDetail(
-  hasMaterial: boolean,
-  selectedPage: number
-): string {
-  return hasMaterial
-    ? `포스트잇과 펜 stroke는 페이지 ${selectedPage} 기준으로 계속 편집할 수 있습니다.`
-    : "업로드 후 backend에서 다시 내려받은 Blob preview를 사용합니다.";
-}
-
-function renderPdfToolbar(
-  subjectId: string,
-  selectedTool: LocalPdfTool,
-  pageCount: number,
-  selectedPage: number,
-  hasMaterial: boolean,
-  eraserShape: EraserShape,
-  eraserSize: number
-): string {
-  const disabled = hasMaterial ? "" : "disabled";
-
-  // sprint-1/S4: surface page-nav hotkeys on the buttons themselves so users do
-  // not have to consult the help modal. Cmd/Ctrl + [ / ] mirrors the dispatcher.
-  const isMacLike =
-    typeof navigator !== "undefined" &&
-    /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "");
-  const modifierLabel = isMacLike ? "⌘" : "Ctrl";
-
-  return `
-    <div class="pdf-toolbar" aria-label="PDF 작업 도구">
-      <div class="pdf-page-controls">
-        <button
-          class="secondary-action"
-          type="button"
-          data-action="pdf-prev-page"
-          data-subject-id="${subjectId}"
-          aria-keyshortcuts="${isMacLike ? "Meta" : "Control"}+["
-          ${disabled}
-        >
-          <span class="tool-button__label">이전</span>
-          <kbd class="tool-button__key" aria-hidden="true">${modifierLabel}+[</kbd>
-        </button>
-        <label>
-          <span>페이지</span>
-          <input
-            type="number"
-            min="1"
-            max="${pageCount}"
-            value="${selectedPage}"
-            data-action="select-pdf-page"
-            data-subject-id="${subjectId}"
-            ${disabled}
-          />
-        </label>
-        <button
-          class="secondary-action"
-          type="button"
-          data-action="pdf-next-page"
-          data-subject-id="${subjectId}"
-          aria-keyshortcuts="${isMacLike ? "Meta" : "Control"}+]"
-          ${disabled}
-        >
-          <span class="tool-button__label">다음</span>
-          <kbd class="tool-button__key" aria-hidden="true">${modifierLabel}+]</kbd>
-        </button>
-      </div>
-      <div class="pdf-tool-group" role="group" aria-label="입력 도구">
-        ${renderToolButton(subjectId, "read", selectedTool, "읽기")}
-        ${renderToolButton(subjectId, "sticky", selectedTool, "포스트잇")}
-        ${renderToolButton(subjectId, "pen", selectedTool, "펜")}
-        ${renderToolButton(subjectId, "eraser", selectedTool, "지우개")}
-      </div>
-      <div class="pdf-tool-group" role="group" aria-label="annotation 도구">
-        ${renderToolButton(subjectId, "text", selectedTool, "텍스트 박스")}
-        ${renderToolButton(subjectId, "checklist", selectedTool, "체크리스트")}
-        ${renderToolButton(subjectId, "table", selectedTool, "표")}
-        ${renderToolButton(subjectId, "chart", selectedTool, "그래프")}
-        ${renderToolButton(subjectId, "star", selectedTool, "별표")}
-      </div>
-      <div class="pdf-tool-group" role="group" aria-label="화면 전환">
-        ${renderFullscreenToggleButton()}
-      </div>
-      ${selectedTool === "eraser" ? renderEraserSubToolbar(subjectId, eraserShape, eraserSize, disabled) : ""}
-    </div>
-  `;
-}
-
-function renderFullscreenToggleButton(): string {
-  const active = isPdfWorkspaceFullscreen();
-  const label = active ? "전체화면 종료" : "전체화면";
-  return `
-    <button
-      class="tool-button"
-      type="button"
-      data-action="toggle-pdf-fullscreen"
-      aria-pressed="${active ? "true" : "false"}"
-      aria-keyshortcuts="F"
-    >
-      <span class="tool-button__label">${label}</span>
-      <kbd class="tool-button__key" aria-hidden="true">F</kbd>
-    </button>
-  `;
-}
 
 
-function renderToolButton(
-  subjectId: string,
-  tool: LocalPdfTool,
-  selectedTool: LocalPdfTool,
-  label: string
-): string {
-  // sprint-1/S2: append <kbd> badge if the tool has a single-key hotkey.
-  // Visible label and aria-keyshortcuts both expose the hotkey to users and AT.
-  const hotkey = PDF_TOOL_HOTKEY_LABELS[tool];
-  const badgeHtml = hotkey
-    ? ` <kbd class="tool-button__key" aria-hidden="true">${hotkey}</kbd>`
-    : "";
-  const ariaShortcut = hotkey ? ` aria-keyshortcuts="${hotkey}"` : "";
 
-  return `
-    <button
-      class="tool-button ${selectedTool === tool ? "active" : ""}"
-      type="button"
-      data-action="set-pdf-tool"
-      data-subject-id="${subjectId}"
-      data-tool="${tool}"
-      aria-pressed="${selectedTool === tool ? "true" : "false"}"${ariaShortcut}
-    >
-      <span class="tool-button__label">${label}</span>${badgeHtml}
-    </button>
-  `;
-}
 
 
 // sprint-12/slice-3: checklist widget renderer.
