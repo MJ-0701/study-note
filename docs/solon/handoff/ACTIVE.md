@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-26) — **Layer C/slice-5 closed. 9k+8k+7k+6.7k+6.5k+6.3k+6k+5.8k+5.7k 달성**
+## 진행 상황 (2026-05-26) — **Layer C/slice-6 closed. 9k+8k+7k+6.7k+6.5k+6.3k+6k+5.8k+5.7k+5.6k 달성**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -24,8 +24,9 @@
 | **C/slice-2. sidebar** | 2026-W22-sprint-10 | ✅ merged (PR #71, main=2c6ca94) — **6.3k 달성** |
 | **C/slice-3. home + intake** | 2026-W22-sprint-11 | ✅ merged (PR #72, main=ee6f492) — **6k 달성** |
 | **C/slice-4. subject-class** | 2026-W22-sprint-12 | ✅ merged (PR #73, main=9e51fe5) — **5.8k 달성** |
-| **C/slice-5. subject-summaries** | 2026-W22-sprint-13 | ✅ implemented (Gate 6 PASS, PR pending) — **5.7k 달성** + safe-url 신규 |
-| **C/slice-6. subject-memorize** | next sprint | ⏳ 다음 진입 (~110 line) |
+| **C/slice-5. subject-summaries** | 2026-W22-sprint-13 | ✅ merged (PR #74, main=a034a00) — **5.7k 달성** + safe-url 신규 |
+| **C/slice-6. subject-memorize** | 2026-W22-sprint-14 | ✅ implemented (Gate 6 PASS, PR pending) — **5.6k 달성** |
+| **C/slice-7. subject-mcp** | next sprint | ⏳ 다음 진입 (~65 line, **5.5k 달성 후보**) |
 | C/slice-6. subject-memorize | TBD | ⏳ backlog (~110 line) |
 | C/slice-7. subject-mcp | TBD | ⏳ backlog (~65 line) |
 | C/slice-8. subject-week | TBD | ⏳ backlog (~88 line) |
@@ -34,10 +35,10 @@
 | D. state/sync residual | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **5,712** (-5,337, **-48.30%**). **9k+8k+7k+6.7k+6.5k+6.3k+6k+
-5.8k+5.7k 9 target 달성**. Layer C 진행 중. 5.5k = slice-6 (~110 line) 후 달성.
+main.ts: 11,049 → **5,577** (-5,472, **-49.53%**). **9k+8k+7k+6.7k+6.5k+6.3k+6k+
+5.8k+5.7k+5.6k 10 target 달성**. Layer C 진행 중. 5.5k = slice-7 (~65 line) 후 달성.
 
-## 활성 작업 = Layer C/slice-6 (subject-memorize)
+## 활성 작업 = Layer C/slice-7 (subject-mcp, **5.5k 달성 후보**)
 
 **전 sprint (C/slice-1) retro** = `docs/solon/layer-c-entry-subject-view-hierarchy-decision-first-slice-scope/20260526/retro.md`
 
