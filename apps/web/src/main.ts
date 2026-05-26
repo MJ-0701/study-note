@@ -285,6 +285,20 @@ import {
   renderPdfWorkspacePage,
   type WorkspacePageContext
 } from "./pdf-workspace/workspace-page";
+import {
+  formatQuickNoteStatus,
+  formatReviewStatus,
+  formatSourceKind,
+  formatSourceVisibility,
+  renderConcept,
+  renderKeyword,
+  renderMetric,
+  renderQuestion,
+  renderSubjectCard,
+  renderSubjectImportCard,
+  renderSummaryBlock,
+  renderWeekColumn
+} from "./subject-views/subject-cards";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -6303,87 +6317,6 @@ function canManagePdfMaterials(): boolean {
   return role === "master" || role === "admin";
 }
 
-function renderMetric(label: string, value: string, description: string): string {
-  return `
-    <article class="metric-card">
-      <p class="meta">${label}</p>
-      <strong>${value}</strong>
-      <span>${description}</span>
-    </article>
-  `;
-}
-
-function renderSubjectCard(subject: SubjectNote): string {
-  const coverage = getSubjectCoverage(subject);
-
-  return `
-    <article class="subject-card">
-      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h3>${subject.title}</h3>
-      <p>${subject.summary.goal}</p>
-      <div class="subject-card-footer">
-        <span>${coverage.coverageRate}% 키워드 반영</span>
-        <a href="${subjectClassPath(subject)}">과목 들어가기</a>
-      </div>
-    </article>
-  `;
-}
-
-function renderSubjectImportCard(subject: SubjectNote): string {
-  const coverage = getSubjectCoverage(subject);
-
-  return `
-    <article class="subject-card">
-      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h3>${subject.title}</h3>
-      <p>이 과목의 수업일별 Claude JSON만 가져옵니다.</p>
-      <div class="subject-card-footer">
-        <span>${coverage.coverageRate}% 키워드 반영</span>
-        <a href="${subjectIntakePath(subject)}">자료 넣기</a>
-      </div>
-    </article>
-  `;
-}
-
-function renderSummaryBlock(label: string, value: string): string {
-  return `
-    <article class="summary-block">
-      <p class="meta">${label}</p>
-      <p>${value}</p>
-    </article>
-  `;
-}
-
-function renderKeyword(keyword: RequiredKeyword, subject: SubjectNote): string {
-  const linkedConcepts = keyword.conceptIds
-    .map((conceptId) => getConceptById(subject, conceptId))
-    .filter((concept): concept is Concept => Boolean(concept));
-  const buttonLabel =
-    keyword.status === "covered" ? "정리노트 만들기" : "보강 템플릿 만들기";
-
-  return `
-    <article class="keyword-card ${keyword.status === "covered" ? "is-covered" : "is-missing"}">
-      <div class="keyword-card-header">
-        <h3>${keyword.label}</h3>
-        <span>${formatKeywordStatus(keyword.status)}</span>
-      </div>
-      <p>${keyword.professorSignal}</p>
-      <div class="linked-concepts">
-        ${
-          linkedConcepts.length > 0
-            ? linkedConcepts.map((concept) => `<span>${concept.title}</span>`).join("")
-            : "<span>추가 개념 정리 필요</span>"
-        }
-      </div>
-      <div class="keyword-actions">
-        <button class="inline-action" type="button" data-action="generate-keyword-note" data-subject-id="${subject.id}" data-keyword-id="${keyword.id}">
-          ${buttonLabel}
-        </button>
-      </div>
-    </article>
-  `;
-}
-
 function renderQuickNotePanel(
   subject: SubjectNote,
   origins: QuickNote["origin"][]
@@ -6571,93 +6504,6 @@ function buildWeekQuickNote(subject: SubjectNote, week: WeekNote): QuickNote {
   };
 }
 
-function renderConcept(concept: Concept, subject: SubjectNote): string {
-  const questions = concept.exampleQuestionIds
-    .map((questionId) => getQuestionById(subject, questionId))
-    .filter((question): question is ExampleQuestion => Boolean(question));
-
-  return `
-    <article class="concept-row" id="${concept.id}">
-      <div class="concept-main">
-        <p class="meta">${formatConceptPriority(concept.priority)}</p>
-        <h3>${concept.title}</h3>
-        <p>${concept.summary}</p>
-        <p class="plain-explanation">${concept.easyExplanation}</p>
-      </div>
-      <aside class="concept-side">
-        <strong>출처 힌트</strong>
-        <ul>
-          ${concept.sourceHints.map((hint) => `<li>${hint}</li>`).join("")}
-        </ul>
-        <strong>연결 문제</strong>
-        <p>${questions.length}개</p>
-      </aside>
-    </article>
-  `;
-}
-
-function renderQuestion(question: ExampleQuestion): string {
-  return `
-    <details class="question-row">
-      <summary>
-        <span class="question-difficulty">${formatQuestionDifficulty(question.difficulty)}</span>
-        <span>${question.prompt}</span>
-      </summary>
-      <div class="answer-panel">
-        <strong>정답</strong>
-        <p>${question.answer}</p>
-        <strong>해설</strong>
-        <p>${question.explanation}</p>
-      </div>
-    </details>
-  `;
-}
-
-function formatQuickNoteStatus(status: QuickNote["status"]): string {
-  return status === "ready" ? "바로 읽기" : "보강 필요";
-}
-
-function formatKeywordStatus(status: RequiredKeyword["status"]): string {
-  return status === "covered" ? "반영됨" : "보강 필요";
-}
-
-function formatConceptPriority(priority: Concept["priority"]): string {
-  const labels: Record<Concept["priority"], string> = {
-    "must-know": "필수 개념",
-    high: "중요 개념",
-    review: "복습 개념"
-  };
-
-  return labels[priority];
-}
-
-function formatReviewStatus(status: WeekNote["reviewStatus"]): string {
-  return status === "ready" ? "읽기 가능" : "보강 필요";
-}
-
-function formatQuestionDifficulty(difficulty: ExampleQuestion["difficulty"]): string {
-  return difficulty === "basic" ? "기본" : "응용";
-}
-
-function formatSourceKind(kind: SourceMaterial["kind"]): string {
-  const labels: Record<SourceMaterial["kind"], string> = {
-    "professor-pdf": "교수님 PDF",
-    "claude-summary": "Claude 요약",
-    "manual-keyword": "수동 키워드"
-  };
-
-  return labels[kind];
-}
-
-function formatSourceVisibility(visibility: SourceMaterial["visibility"]): string {
-  const labels: Record<SourceMaterial["visibility"], string> = {
-    "private-source": "원문 비공개",
-    "derived-note-only": "생성 노트만 공유"
-  };
-
-  return labels[visibility];
-}
-
 function formatPdfTool(tool: LocalPdfTool): string {
   const labels: Record<LocalPdfTool, string> = {
     read: "읽기",
@@ -6675,15 +6521,3 @@ function formatPdfTool(tool: LocalPdfTool): string {
 }
 
 
-function renderWeekColumn(label: string, values: string[]): string {
-  return `
-    <div class="week-column">
-      <p class="meta">${label}</p>
-      ${
-        values.length > 0
-          ? `<ul>${values.map((value) => `<li>${value}</li>`).join("")}</ul>`
-          : '<p class="empty-note">추가 정리 필요</p>'
-      }
-    </div>
-  `;
-}
