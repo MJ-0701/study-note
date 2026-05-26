@@ -12,7 +12,7 @@ import {
 } from "./observability/datadogRum";
 import { sampleLectureNote } from "./data/sampleLectureNote";
 import { localIntakeGuide } from "./data/intakeGuide";
-import { classSchedule, scheduleRangeLabel } from "./data/classSchedule";
+import { scheduleRangeLabel } from "./data/classSchedule";
 import {
   MaterialApiError,
   createMaterialUploadIntent,
@@ -31,7 +31,6 @@ import {
   parseStoredOpenState,
   resolveOpenTermIds,
   sidebarTermOpenStorageKey,
-  type SidebarGroup,
   type SidebarSubject,
   type SidebarTerm
 } from "./sidebar/term-grouping";
@@ -118,8 +117,7 @@ import {
   subjectMemorizePath,
   subjectPdfWorkspacePath,
   subjectSummaryPath,
-  weekSummaryPath,
-  type Route
+  weekSummaryPath
 } from "./app/routes";
 import { escapeHtml } from "./app/escape-html";
 import {
@@ -299,6 +297,11 @@ import {
   renderSummaryBlock,
   renderWeekColumn
 } from "./subject-views/subject-cards";
+import {
+  renderHomeSidebar,
+  renderSubjectSidebar,
+  type SidebarContext
+} from "./subject-views/sidebar";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -4560,7 +4563,7 @@ function renderApp(): void {
     !subject
   ) {
     mountRender(composeShell(
-      renderHomeSidebar(notebook, { name: "home" }),
+      renderHomeSidebar(sidebarContext, notebook, { name: "home" }),
       renderNotFound(),
       "study-note / 찾을 수 없음"
     ));
@@ -4569,7 +4572,7 @@ function renderApp(): void {
 
   if ((route.name === "week" || route.name === "subject-summary-detail") && subject && !week) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderNotFound(),
       `${subject.title} / 찾을 수 없음`
     ));
@@ -4578,7 +4581,7 @@ function renderApp(): void {
 
   if (route.name === "home") {
     mountRender(composeShell(
-      renderHomeSidebar(notebook, route),
+      renderHomeSidebar(sidebarContext, notebook, route),
       renderHome(notebook),
       `${notebook.title} / 홈`
     ));
@@ -4587,7 +4590,7 @@ function renderApp(): void {
 
   if (route.name === "intake") {
     mountRender(composeShell(
-      renderHomeSidebar(notebook, route),
+      renderHomeSidebar(sidebarContext, notebook, route),
       renderIntakeGuide(notebook),
       `${notebook.title} / 자료 투입`
     ));
@@ -4596,7 +4599,7 @@ function renderApp(): void {
 
   if (route.name === "pdf-workspaces") {
     mountRender(composeShell(
-      renderHomeSidebar(notebook, route),
+      renderHomeSidebar(sidebarContext, notebook, route),
       renderPdfWorkspaceIndex(notebook),
       `${notebook.title} / PDF 작업공간`
     ));
@@ -4605,7 +4608,7 @@ function renderApp(): void {
 
   if (route.name === "subject-intake" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderSubjectIntakeGuide(subject),
       `${subject.title} / 자료 투입`
     ));
@@ -4615,7 +4618,7 @@ function renderApp(): void {
   if (route.name === "pdf-workspace" && subject) {
     ensurePdfPreviewForWorkspace(subject.id);
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderPdfWorkspacePage(workspacePageContext, subject),
       `${subject.title} / PDF 작업공간`
     ));
@@ -4646,7 +4649,7 @@ function renderApp(): void {
 
   if ((route.name === "subject" || route.name === "subject-class") && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderSubjectClassPage(subject),
       `${subject.title} / 수업`
     ));
@@ -4655,7 +4658,7 @@ function renderApp(): void {
 
   if (route.name === "subject-summaries" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderSubjectSummariesPage(subject),
       `${subject.title} / 요약본`
     ));
@@ -4664,7 +4667,7 @@ function renderApp(): void {
 
   if (route.name === "subject-summary-detail" && subject && week) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderWeekSummaryPage(subject, week),
       `${subject.title} / ${week.label} 요약본`
     ));
@@ -4673,7 +4676,7 @@ function renderApp(): void {
 
   if (route.name === "subject-mcp" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderSubjectMcpPage(subject),
       `${subject.title} / MCP 호출`
     ));
@@ -4682,7 +4685,7 @@ function renderApp(): void {
 
   if (route.name === "subject-memorize" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderSubjectMemorizePage(subject),
       `${subject.title} / 필수 암기노트`
     ));
@@ -4691,7 +4694,7 @@ function renderApp(): void {
 
   if (route.name === "week" && subject && week) {
     mountRender(composeShell(
-      renderSubjectSidebar(subject, route),
+      renderSubjectSidebar(sidebarContext, subject, route),
       renderWeekPage(subject, week),
       `${subject.title} / ${week.label}`
     ));
@@ -4721,58 +4724,17 @@ function getAppShellContext(): AppShellContext {
   };
 }
 
+// Sidebar context (slice-2 — sidebar.ts). lazy getter only.
+const sidebarContext: SidebarContext = {
+  getNotebook: () => notebook,
+  getAdminRole: () => authSession?.user.role,
+  getSidebarTermsCache: () => sidebarTermsCache,
+  getSidebarSubjectsCache: () => sidebarSubjectsCache,
+  getSidebarOpenTermIds: () => sidebarOpenTermIds
+};
+
 function composeShell(sidebar: string, mainContent: string, crumb: string): string {
   return renderAppShell(sidebar, mainContent, crumb, getAppShellContext());
-}
-
-function renderHomeSidebar(studyNotebook: StudyNotebook, route: Route): string {
-  return `
-    <aside class="sidebar" aria-label="학습 내비게이션">
-      <a class="wordmark" href="#/">study-note</a>
-      <div class="sidebar-group sidebar-group--home">
-        <p class="group-label">홈</p>
-        <nav>
-          <a class="${route.name === "home" ? "active" : ""}" href="#/">전체 현황</a>
-        </nav>
-      </div>
-      <div class="sidebar-group sidebar-group--subjects">
-        <p class="group-label">과목 공부</p>
-        <nav>
-          ${studyNotebook.subjects.map((subject) => `
-            <a href="${subjectClassPath(subject)}">${subject.title}</a>
-          `).join("")}
-        </nav>
-      </div>
-      <div class="sidebar-group sidebar-group--workspaces">
-        <p class="group-label">PDF 작업공간</p>
-        <nav>
-          <a class="${route.name === "pdf-workspaces" || route.name === "pdf-workspace" ? "active" : ""}" href="#/pdf-workspaces">작업공간 목록</a>
-        </nav>
-      </div>
-      ${renderClassSchedule()}
-      <details class="sidebar-details" ${route.name === "intake" ? "open" : ""}>
-        <summary>자료 관리</summary>
-        <nav>
-          <a class="${route.name === "intake" ? "active" : ""}" href="${intakePath()}">자료 투입 가이드</a>
-          ${studyNotebook.subjects.map((subject) => `<a href="${subjectIntakePath(subject)}">${subject.title} 자료 넣기</a>`).join("")}
-        </nav>
-      </details>
-      ${renderAdminLink()}
-    </aside>
-  `;
-}
-
-function renderAdminLink(): string {
-  const role = authSession?.user.role;
-  if (role !== "master" && role !== "admin") return "";
-  return `
-    <div class="sidebar-group sidebar-group--admin">
-      <p class="group-label">🛡️ 관리자</p>
-      <nav>
-        <a href="/admin.html" aria-label="관리자 대시보드">사용자 관리</a>
-      </nav>
-    </div>
-  `;
 }
 
 const PERSONA_BY_SUBJECT: Record<string, { nick: string; active: boolean }> = {
@@ -4874,159 +4836,6 @@ function toggleSidebarTermOpen(termId: string): void {
     // localStorage unavailable / quota — silent skip (in-memory state survives 세션).
   }
   renderApp();
-}
-
-function renderSidebarTermGroups(currentSubject: SubjectNote, route: Route): string | null {
-  if (!sidebarTermsCache || !sidebarSubjectsCache) return null;
-  // Merge BE subjects with FE notebook subjects (subject.id matching).
-  // FE notebook holds rich SubjectNote shape; BE subjects 가 source-of-truth 인
-  // termId 만 가져온다.
-  const notebookIds = new Set(notebook.subjects.map((s) => s.id));
-  const enrichedSubjects: SidebarSubject[] = notebook.subjects.map((s) => {
-    const beSubject = sidebarSubjectsCache!.find((bs) => bs.id === s.id);
-    return { id: s.id, title: s.title, termId: beSubject?.termId ?? null };
-  });
-  // BE subjects 가 FE notebook 에 없는 경우 (admin 신규 추가) — 미표시 (route 미정).
-  void notebookIds;
-  const groups = groupSubjectsByTerm(enrichedSubjects, sidebarTermsCache);
-  if (groups.length === 0) return null;
-  return groups
-    .map((group) => renderSidebarTermGroup(group, currentSubject, route))
-    .join("");
-}
-
-function renderSidebarTermGroup(group: SidebarGroup, currentSubject: SubjectNote, route: Route): string {
-  const termId = group.term?.id ?? "__orphan__";
-  const isOpen = group.term ? sidebarOpenTermIds.has(group.term.id) : true;
-  const subjectsHtml = group.subjects
-    .map((s) => {
-      const notebookEntry = notebook.subjects.find((n) => n.id === s.id);
-      if (!notebookEntry) return "";
-      return renderSubjectNavItem(notebookEntry, currentSubject, route);
-    })
-    .join("");
-  return `
-    <details class="sidebar-term-group" ${isOpen ? "open" : ""} data-term-id="${escapeHtml(termId)}">
-      <summary class="sidebar-term-group__summary" data-action="sidebar-term-toggle" data-term-id="${escapeHtml(termId)}">
-        ${escapeHtml(group.label)}
-        <span class="sidebar-term-group__count">${group.subjects.length}</span>
-      </summary>
-      <div class="sidebar-term-group__body">
-        ${subjectsHtml}
-      </div>
-    </details>
-  `;
-}
-
-function renderSubjectSidebar(subject: SubjectNote, route: Route): string {
-  const currentSession =
-    route.name === "week"
-      ? subject.weekNotes.find((week) => week.id === route.weekId)
-      : undefined;
-
-  return `
-    <aside class="sidebar" aria-label="${subject.title} 학습 내비게이션">
-      <a class="wordmark" href="#/">study-note</a>
-      <div class="sidebar-group sidebar-group--subjects">
-        <p class="group-label">과목 공부</p>
-        <nav aria-label="과목별 학습 화면">
-          ${
-            // sprint-W21-sprint-1/S2 (AC8-AC10): term cache 로드되면 그룹별 렌더,
-            // 아니면 기존 flat 리스트 (fallback).
-            renderSidebarTermGroups(subject, route) ??
-            notebook.subjects.map((item) => renderSubjectNavItem(item, subject, route)).join("")
-          }
-        </nav>
-      </div>
-      <div class="sidebar-group sidebar-group--workspaces">
-        <p class="group-label">PDF 작업공간</p>
-        <nav>
-          <a class="${route.name === "pdf-workspace" ? "active" : ""}" href="${subjectPdfWorkspacePath(subject)}">${subject.title} 작업공간</a>
-          <a class="${route.name === "pdf-workspaces" ? "active" : ""}" href="#/pdf-workspaces">전체 작업공간</a>
-        </nav>
-      </div>
-      ${renderClassSchedule(currentSession?.label)}
-      <details class="sidebar-details" ${route.name === "subject-intake" ? "open" : ""}>
-        <summary>자료 관리</summary>
-        <nav>
-          <a href="${intakePath()}">자료 투입 가이드</a>
-          <a class="${route.name === "subject-intake" ? "active" : ""}" href="${subjectIntakePath(subject)}">${subject.title} 자료 넣기</a>
-          <a class="${route.name === "pdf-workspace" ? "active" : ""}" href="${subjectPdfWorkspacePath(subject)}">${subject.title} PDF 작업공간</a>
-          ${notebook.subjects
-            .filter((item) => item.id !== subject.id)
-            .map((item) => `<a href="${subjectIntakePath(item)}">${item.title} 자료 넣기</a>`)
-            .join("")}
-        </nav>
-      </details>
-      ${renderAdminLink()}
-    </aside>
-  `;
-}
-
-function renderSubjectNavItem(
-  item: SubjectNote,
-  currentSubject: SubjectNote,
-  route: Route
-): string {
-  const isCurrent = item.id === currentSubject.id;
-
-  return `
-    <div class="subject-sidebar-item ${isCurrent ? "is-current" : ""}">
-      <a class="subject-sidebar-parent ${isCurrent ? "is-current" : ""}" href="${subjectClassPath(item)}">${item.title}</a>
-      ${isCurrent ? renderCurrentSubjectDepthNav(item, route) : ""}
-    </div>
-  `;
-}
-
-function renderCurrentSubjectDepthNav(subject: SubjectNote, route: Route): string {
-  return `
-    <div class="subject-sidebar-depth" aria-label="${subject.title} 하위 화면">
-      <a class="subject-sidebar-depth__link ${isSubjectClassRoute(subject, route) ? "active" : ""}" href="${subjectClassPath(subject)}">수업</a>
-      <a class="subject-sidebar-depth__link ${isSubjectSummaryRoute(subject, route) ? "active" : ""}" href="${subjectSummaryPath(subject)}">요약본</a>
-      <a class="subject-sidebar-depth__link ${isSubjectMcpRoute(subject, route) ? "active" : ""}" href="${subjectMcpPath(subject)}">MCP 호출</a>
-      <a class="subject-sidebar-depth__link ${isSubjectMemorizeRoute(subject, route) ? "active" : ""}" href="${subjectMemorizePath(subject)}">필수 암기노트</a>
-    </div>
-  `;
-}
-
-function isSubjectClassRoute(subject: SubjectNote, route: Route): boolean {
-  return (
-    (route.name === "subject" ||
-      route.name === "subject-class" ||
-      route.name === "week") &&
-    route.subjectId === subject.id
-  );
-}
-
-function isSubjectSummaryRoute(subject: SubjectNote, route: Route): boolean {
-  return (
-    (route.name === "subject-summaries" || route.name === "subject-summary-detail") &&
-    route.subjectId === subject.id
-  );
-}
-
-function isSubjectMcpRoute(subject: SubjectNote, route: Route): boolean {
-  return route.name === "subject-mcp" && route.subjectId === subject.id;
-}
-
-function isSubjectMemorizeRoute(subject: SubjectNote, route: Route): boolean {
-  return route.name === "subject-memorize" && route.subjectId === subject.id;
-}
-
-function renderClassSchedule(activeLabel?: string): string {
-  return `
-    <details class="sidebar-details schedule-details">
-      <summary>수업 일정</summary>
-      <div class="schedule-list" aria-label="중간 이후 수업 일정">
-        ${classSchedule.map((entry) => `
-          <span class="schedule-pill ${entry.kind === "final" ? "is-final" : ""} ${activeLabel === entry.label ? "active" : ""}">
-            <strong>${entry.label}</strong>
-            <span>${entry.note}</span>
-          </span>
-        `).join("")}
-      </div>
-    </details>
-  `;
 }
 
 function renderHome(studyNotebook: StudyNotebook): string {
