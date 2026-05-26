@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **Layer C/slice-7 closed. 50% 감축 돌파 (5,506 / -50.17%)**
+## 진행 상황 (2026-05-27) — **Layer C/slice-8 closed. 5.5k 충분 달성 (5,403 / -51.10%)**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -26,17 +26,18 @@
 | **C/slice-4. subject-class** | 2026-W22-sprint-12 | ✅ merged (PR #73, main=9e51fe5) — **5.8k 달성** |
 | **C/slice-5. subject-summaries** | 2026-W22-sprint-13 | ✅ merged (PR #74, main=a034a00) — **5.7k 달성** + safe-url 신규 |
 | **C/slice-6. subject-memorize** | 2026-W22-sprint-14 | ✅ merged (PR #75, main=e7e894c) — **5.6k 달성** |
-| **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ implemented (Gate 6 PASS, PR #76 pending merge) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
-| **C/slice-8. subject-week** | next sprint | ⏳ 다음 진입 (~88 line) |
+| **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ merged (PR #76, main=930eba4) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
+| **C/slice-8. subject-week** | 2026-W22-sprint-16 | ✅ implemented (Gate 6 PASS, PR pending) — **5.5k 충분 달성 (5,403)** |
+| **C/slice-9. pdf-library-index** | next sprint | ⏳ 다음 진입 (~188 line) |
 | C/slice-9. pdf-library-index | TBD | ⏳ backlog (~188 line) |
 | C/slice-10. quick-note builders | TBD | ⏳ backlog (~150 line) |
 | D. state/sync residual | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **5,506** (-5,543, **-50.17%, 50% 감축 돌파**). Layer C 진행
-중. 5.5k milestone = 5,506 (-6 line). 5k = slice-8~10 후.
+main.ts: 11,049 → **5,403** (-5,646, **-51.10%**). Layer C 진행 중.
+5.5k 충분 달성. 5k = slice-9~10 (~338 line) 후.
 
-## 활성 작업 = Layer C/slice-8 (subject-week)
+## 활성 작업 = Layer C/slice-9 (pdf-library-index)
 
 ## SFS 0.6.121 정책 ambient
 
