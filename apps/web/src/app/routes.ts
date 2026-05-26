@@ -96,6 +96,10 @@ export function weekSummaryPath(subject: SubjectNote, week: WeekNote): string {
   return `#/subjects/${subject.id}/summaries/${week.id}`;
 }
 
+export function weekPath(subject: SubjectNote, week: WeekNote): string {
+  return `#/subjects/${subject.id}/weeks/${week.id}`;
+}
+
 export function subjectMcpPath(subject: SubjectNote): string {
   return `#/subjects/${subject.id}/mcp`;
 }
