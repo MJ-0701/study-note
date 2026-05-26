@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-26) — **9k + 8k + 7k 달성**
+## 진행 상황 (2026-05-26) — **Layer B closed. 9k+8k+7k+6.7k 달성**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -19,48 +19,56 @@
 | **B/slice-2g-table. table-widget** | 2026-W22-sprint-5 | ✅ merged (PR #67) |
 | **B/slice-2f/iii. simple-widget** | 2026-W22-sprint-6 | ✅ merged (PR #68) |
 | **B/slice-2f/iv. page-render helper** | 2026-W22-sprint-7 | ✅ merged (PR #69, main=942d81a) — **7k 달성** |
-| **B/slice-2f/iv-bis. renderPdfWorkspacePage** | TBD | ⏳ 후보 (마지막 big container, heavy Context) |
-| C. subject views | TBD | ⏳ backlog |
+| **B/slice-2f/iv-bis. renderPdfWorkspacePage** | 2026-W22-sprint-8 | ✅ implemented (Gate 6 in progress) — **Layer B closed, 6.7k 인접** |
+| **C. subject views** | next sprint | ⏳ 다음 진입 |
 | D. state/sync residual | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **6,909** (-4,140, **-37.47%**). **9k + 8k + 7k 3 target
-달성**. 6k 호기심 = 잔여 -909, slice-2f/iv-bis (~200 estimate) + layer C
-초기 정리 시 가능.
+main.ts: 11,049 → **6,689** (-4,360, **-39.46%**). **9k+8k+7k+6.7k 4 target
+달성**. Layer B = 완료. 6k 호기심 잔여 -689 = Layer C 초기 정리 시 가능.
 
-## 활성 작업 = layer B/slice-2f/iv-bis (renderPdfWorkspacePage) **또는** layer C 진입
+## 활성 작업 = layer C 진입 (subject views)
 
-**전 sprint retro** = `docs/solon/document/pdf/main-ts-layer-b-slice-2f-iv-container-page-renderpdfworkspacepage-7k/20260526/retro.md`
+**전 sprint (slice-2f/iv-bis) implement** = `.sfs-local/sprints/2026-W22-sprint-8/`
 
-### 후보 1: slice-2f/iv-bis — renderPdfWorkspacePage extraction
+### layer C 진입 후보 (다음 sprint brainstorm)
 
-- scope = renderPdfWorkspacePage 본체 (204 line) + heavy Context (25+ module
-  state getter — pdfWorkspaceStore + getActivePdfObjectUrl +
-  hasActivePdfPreviewLoad + getSubjectPdfMaterials + canManagePdfMaterials +
-  isPdfWorkspaceFullscreen + 다수 widget render callback).
-- AC9(e) permission denylist 동반 verification (waiver lineage closure).
-- 위험도 = 중-높음 (heavy Context 설계 + spec 재구성).
+main.ts 6,689 line 의 잔존 = 비-PDF 영역. subject view (~1,200 line):
+- `renderSubjectClassPage` (5,400~5,450)
+- `renderSubjectSummariesPage` (~5,600)
+- `renderSubjectMemorizePage` (~5,800)
+- `renderSubjectMcpPage` (~5,870)
+- `renderWeekPage` (~5,940)
 
-### 후보 2: layer C 진입 (subject views)
+brainstorm 단계에서 hierarchy + 우선순위 결정. layer B 패턴 (Context+Direct
+imports) 재사용 가능 — risk 중-낮음.
 
-- main.ts 6,909 line 의 잔존 = 비-PDF 영역 (subject/admin/auth/route
-  dispatch). 분해 효과 큰 영역 식별 후 진입.
-- 7k 보존 + layer B 의 잔여 정리 후 자연스러운 단계.
+### slice-2f/iv-bis 학습 (sprint-W22-sprint-8)
 
-### slice-2f/iv 학습
+- **3-bucket dependency split** (advisor 가이드) — 1-bucket monolithic
+  Context (25+ field) 거부, Direct imports (12) + Context (12 field) +
+  Callbacks (없음).
+- **AC9 5-layer closure** — slice-2f/iv 의 (a/b/c/d) + 본 sprint AC7 의 (e)
+  (permission denylist). 6 user-content surface (S1~S6) + 1 helper trust
+  boundary (TB1) + 1 negative UI assertion (PD1).
+- **2 defensive escape 추가** — href escape (subjectClassPath 결과) + formatPdfTool
+  output escape. 기존 코드의 latent XSS 경로 closure.
+- **자동 routing**: Gate 6 cross 가 Context size cap (8~12) 보다 17 field 발견
+  → autopilot patch (4 widget renderer + 2 helper → Direct imports) → 12 field
+  → 재 review.
 
-- **R-U 신규** — review capsule 의 untracked file 자동 inclusion 제안.
-- **R-V 신규** — Gate 6 self/cross 순서 자동 재실행 (R-L lineage).
-- scope adjustment user-approval pattern — heavy coupling 발견 시 capture
-  + waiver + plan revision.
+### slice-2f/iv-bis 결과
 
-### slice-2f/iv 결과 (참고)
-
-- main.ts -197 line (7,107 → 6,910). page-render.ts 239 line / 9 export +
-  spec 13 case (5 invariant 1:1). chart-widget 패턴 직접 적용.
-- AC9 4-layer (a/b/c/d) closure + (e) permission boundary deferred (waiver
-  with renderPdfWorkspacePage).
-- Gate 3 = 5 round / Gate 6 = 8+5 round. @codex 👍 :tada:.
+- main.ts -220 line (6,909 → 6,689). 누적 -4,360 / -39.46%.
+- workspace-page.ts 300 line / 1 export + 1 type export + 1 private helper.
+- WorkspacePageContext 12 field (8 lazy module-state + 1 sub-context + 3
+  main.ts render hooks). Callbacks 없음 (pure render).
+- workspace-page.spec.ts 19 case (a~l 군) PASS — branch combinatorics +
+  AC9(e) security 1 통합 case (6 surface + TB1 + PD1) + characterization.
+- Direct imports = 12 module (escapeHtml/subjectClassPath/5 page-render/
+  formatSvgPoint/4 simple-widget/getSubjectPdfWorkspace/getPdfMaterialKey/
+  renderInspectorStatRow/renderChartMount/renderTableMount/renderStarMark).
+- Gate 3 = 4 round self / 3 round cross / 1 capture event. Gate 6 = 1+ round.
 
 ## SFS 0.6.121 정책 ambient
 
