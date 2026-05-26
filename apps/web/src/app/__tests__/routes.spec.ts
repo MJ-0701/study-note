@@ -17,6 +17,7 @@ import {
   subjectMemorizePath,
   subjectPdfWorkspacePath,
   subjectSummaryPath,
+  weekPath,
   weekSummaryPath
 } from "../routes.ts";
 
@@ -147,6 +148,10 @@ describe("path helpers — AC2 round-trip", () => {
 
   it("(k) weekSummaryPath", () => {
     assert.equal(weekSummaryPath(subject("s"), week("w")), "#/subjects/s/summaries/w");
+  });
+
+  it("(l) weekPath (sprint-W22-sprint-11 moved from main.ts)", () => {
+    assert.equal(weekPath(subject("s"), week("w")), "#/subjects/s/weeks/w");
   });
 
   it("intakePath", () => {
