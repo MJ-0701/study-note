@@ -26,11 +26,8 @@
 | **C/slice-4. subject-class** | 2026-W22-sprint-12 | ✅ merged (PR #73, main=9e51fe5) — **5.8k 달성** |
 | **C/slice-5. subject-summaries** | 2026-W22-sprint-13 | ✅ merged (PR #74, main=a034a00) — **5.7k 달성** + safe-url 신규 |
 | **C/slice-6. subject-memorize** | 2026-W22-sprint-14 | ✅ merged (PR #75, main=e7e894c) — **5.6k 달성** |
-| **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ implemented (Gate 6 PASS, PR pending) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
+| **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ implemented (Gate 6 PASS, PR #76 pending merge) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
 | **C/slice-8. subject-week** | next sprint | ⏳ 다음 진입 (~88 line) |
-| C/slice-6. subject-memorize | TBD | ⏳ backlog (~110 line) |
-| C/slice-7. subject-mcp | TBD | ⏳ backlog (~65 line) |
-| C/slice-8. subject-week | TBD | ⏳ backlog (~88 line) |
 | C/slice-9. pdf-library-index | TBD | ⏳ backlog (~188 line) |
 | C/slice-10. quick-note builders | TBD | ⏳ backlog (~150 line) |
 | D. state/sync residual | TBD | ⏳ backlog |
@@ -40,46 +37,6 @@ main.ts: 11,049 → **5,506** (-5,543, **-50.17%, 50% 감축 돌파**). Layer C 
 중. 5.5k milestone = 5,506 (-6 line). 5k = slice-8~10 후.
 
 ## 활성 작업 = Layer C/slice-8 (subject-week)
-
-**전 sprint (C/slice-1) retro** = `docs/solon/layer-c-entry-subject-view-hierarchy-decision-first-slice-scope/20260526/retro.md`
-
-### Layer C/slice-2 후보 = sidebar (다음 sprint)
-
-- `renderHomeSidebar` (37 line)
-- `renderSubjectSidebar` (45 line)
-- `renderSubjectNavItem` (15 line)
-- `renderClassSchedule` (16 line)
-
-총 ~113 line. leaf 순수성 검증 필요 (sidebar 가 module state 접근 여부). subject-cards
-패턴 직접 적용 가능 — risk 낮음.
-
-### C/slice-1 학습 (sprint-W22-sprint-9)
-
-- **advisor pre-empt 4 가이드 효과 확인**:
-  - numeric AC ±20% — sprint-8 의 17→12 friction 회피. 실측 6,523 (target 6,490~
-    6,530) + 15 export (target 13~17) 모두 첫 try 에서 일치.
-  - source-excerpt Day 1 — Gate 3 cross PASS 부터 가용. sprint-8 의 R3 늦은
-    추가 회피.
-  - `--executor codex` R1 부터 — review_run event 자동 기록. self-CPO PASS
-    bundle 가시성 보장.
-  - feature branch + PR — sprint-8 의 main 직 push 회피 (Codex bot 패턴 복원).
-- **bottom-up extraction 검증**: leaf 순수성 (module state 접근 0) 사전 검증 →
-  Context 0, Direct imports 6. Sprint 8 의 17→12 rework 회피. 패턴 7회 검증.
-- **defensive escape 2 추가** — href escape (subjectClassPath/subjectIntakePath
-  결과) + value array per-item escape. sprint-8 의 href lineage 일관.
-
-### C/slice-1 결과
-
-- main.ts -166 line (6,689 → 6,523). 누적 -4,526 / -40.96%.
-- subject-cards.ts 225 line / 15 export (8 renderer + 7 format helper).
-- subject-cards.spec.ts 310 line / 22 case PASS (a~j 군).
-- Direct imports = 6 (escapeHtml/subjectClassPath/subjectIntakePath/
-  getSubjectCoverage/getConceptById/getQuestionById). Context = 0. Callbacks = 0.
-- AC9 5-layer + 22 surface (16 text escape + 2 defensive href + 3 caller-trust +
-  1 attribute escape). 통합 case 22 = characterization.
-- Gate 3 self R1 PASS + cross R2 PASS by Codex gpt-5.5 xhigh.
-- Gate 6 self 4 round + cross pending (evidence packaging 반복 — bundle scanner
-  의 untracked file truncation 회피 = git stage 후 visible).
 
 ## SFS 0.6.121 정책 ambient
 
