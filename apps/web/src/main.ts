@@ -301,6 +301,10 @@ import {
   renderIntakeGuide,
   renderSubjectIntakeGuide
 } from "./subject-views/home-intake";
+import {
+  renderSubjectClassPage,
+  type SubjectClassContext
+} from "./subject-views/subject-class";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -4649,7 +4653,7 @@ function renderApp(): void {
   if ((route.name === "subject" || route.name === "subject-class") && subject) {
     mountRender(composeShell(
       renderSubjectSidebar(sidebarContext, subject, route),
-      renderSubjectClassPage(subject),
+      renderSubjectClassPage(subjectClassContext, subject),
       `${subject.title} / 수업`
     ));
     return;
@@ -4727,6 +4731,18 @@ const sidebarContext: SidebarContext = {
   getSidebarTermsCache: () => sidebarTermsCache,
   getSidebarSubjectsCache: () => sidebarSubjectsCache,
   getSidebarOpenTermIds: () => sidebarOpenTermIds
+};
+
+// Subject-class context (slice-4 — subject-class.ts). 2 lazy + 3 fn ref + 3 callback.
+const subjectClassContext: SubjectClassContext = {
+  getSubjectPdfMaterials,
+  canManagePdfMaterials,
+  isUnconfirmedPdfClassDate,
+  formatWeekLabel,
+  getPdfMaterialsForWeek,
+  renderIntakeFeedback,
+  renderPdfLibraryUploadCard,
+  renderPdfMaterialCard
 };
 
 function composeShell(sidebar: string, mainContent: string, crumb: string): string {
@@ -4906,207 +4922,6 @@ const workspacePageContext: WorkspacePageContext = {
 // Table DOM element is built by renderTable() and injected by refreshTableWidgets().
 
 
-function renderSubjectClassPage(subject: SubjectNote): string {
-  const subjectMaterials = getSubjectPdfMaterials(subject.id);
-
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-      <h1>${subject.title}</h1>
-      <p class="lede">이 진입 화면에서 유닛 카드를 골라 상세로 진입합니다. 카드 click 또는 사이드바의 명시적 메뉴 click 만 상세 라우트를 엽니다.</p>
-    </section>
-
-    <!-- sprint-2/S4: 진입화면 우선 IA — 4 개 유닛 카드 (요약본 / 암기노트 / PDF 작업공간 / 자료 매핑) 가 디폴트 진입 패턴. -->
-    <section class="subject-unit-grid" aria-label="${subject.title} 유닛">
-      <a class="subject-unit-card" href="${subjectClassPath(subject)}">
-        <span class="subject-unit-card__meta">수업</span>
-        <strong>수업일 카드</strong>
-        <span class="subject-unit-card__hint">날짜별 자료 + 메모. ${subject.weekNotes.length}회.</span>
-      </a>
-      <a class="subject-unit-card" href="${subjectSummaryPath(subject)}">
-        <span class="subject-unit-card__meta">요약</span>
-        <strong>요약본</strong>
-        <span class="subject-unit-card__hint">수업일별 요약 + 키워드 정리.</span>
-      </a>
-      <a class="subject-unit-card" href="${subjectMemorizePath(subject)}">
-        <span class="subject-unit-card__meta">암기</span>
-        <strong>필수 암기노트</strong>
-        <span class="subject-unit-card__hint">중간/기말 구간별 + 필수 개념.</span>
-      </a>
-      <a class="subject-unit-card" href="${subjectPdfWorkspacePath(subject)}">
-        <span class="subject-unit-card__meta">PDF</span>
-        <strong>PDF 작업공간</strong>
-        <span class="subject-unit-card__hint">필기 + 단축키. ${subjectMaterials.length}개 자료.</span>
-      </a>
-    </section>
-
-    ${renderClassDateAddSection(subject)}
-
-    <section aria-labelledby="weekly-title">
-      <p class="meta">수업일 overview</p>
-      <h2 id="weekly-title">수업일별 자료</h2>
-      <p class="lede">날짜별 카드에서 수업 상세, 요약 상세, 연결된 PDF 수를 확인합니다.</p>
-      <div class="class-day-grid">
-        ${subject.weekNotes.map((week) =>
-          renderClassDayCard(subject, week, subjectMaterials)
-        ).join("")}
-      </div>
-    </section>
-
-    ${renderPdfMaterialAssignmentSection(subject, subjectMaterials)}
-  `;
-}
-
-function renderClassDateAddSection(subject: SubjectNote): string {
-  return `
-    <section class="class-date-add-section" aria-labelledby="class-date-add-title">
-      <div>
-        <p class="meta">수업일 추가</p>
-        <h2 id="class-date-add-title">새 수업일 만들기</h2>
-        <p class="lede">선업로드한 PDF를 나중에 정확한 날짜와 연결할 수 있도록 수업일 카드를 먼저 추가합니다.</p>
-      </div>
-      <form class="class-date-form" data-action="add-class-date">
-        <input type="hidden" name="subjectId" value="${escapeHtml(subject.id)}" />
-        <label>
-          <span>수업일</span>
-          <!-- S3 AC11/AC15: text → date input. ISO YYYY-MM-DD 만 허용. -->
-          <input name="classDate" type="date" required autocomplete="off" />
-        </label>
-        <label>
-          <span>수업 제목</span>
-          <input name="title" type="text" placeholder="예: 메모리 구조" autocomplete="off" />
-        </label>
-        <button class="action-button" type="submit">수업일 추가</button>
-      </form>
-      ${renderIntakeFeedback("수업일 추가와 PDF 매핑 상태가 여기에 표시됩니다.")}
-    </section>
-  `;
-}
-
-function renderClassDayCard(
-  subject: SubjectNote,
-  week: WeekNote,
-  materials: PdfMaterialDraft[]
-): string {
-  const linkedMaterials = getPdfMaterialsForWeek(subject, week, materials);
-
-  return `
-    <article class="class-day-card">
-      <div>
-        <p class="meta">${escapeHtml(formatWeekLabel(week.label))} · ${formatReviewStatus(week.reviewStatus)}</p>
-        <h3>${week.title}</h3>
-        <p>${week.focus}</p>
-      </div>
-      <div class="class-day-card__stats">
-        <span>${linkedMaterials.length}개 PDF</span>
-        <span>${week.requiredKeywordIds.length}개 키워드</span>
-      </div>
-      ${renderClassDayPdfLinks(subject, linkedMaterials)}
-      ${renderClassDayPdfAttachControl(subject, materials, week.label)}
-      <div class="week-card-actions">
-        <a class="action-button" href="${weekPath(subject, week)}">수업 상세</a>
-        <a class="secondary-link" href="${weekSummaryPath(subject, week)}">요약 상세</a>
-      </div>
-    </article>
-  `;
-}
-
-function renderClassDayPdfAttachControl(
-  subject: SubjectNote,
-  materials: PdfMaterialDraft[],
-  weekLabel: string
-): string {
-  const unassigned = materials.filter((material) =>
-    isUnconfirmedPdfClassDate(subject, material.classDate)
-  );
-  const options = unassigned.map((material) =>
-    `<option value="${escapeHtml(getPdfMaterialKey(material))}">${escapeHtml(material.fileName)}</option>`
-  ).join("");
-
-  if (!canManagePdfMaterials()) {
-    return `
-      <form class="class-day-card__attach" data-action="attach-pdf-to-week" data-subject-id="${escapeHtml(subject.id)}" data-week-label="${escapeHtml(weekLabel)}">
-        <label>
-          <span>${escapeHtml("PDF 연결")}</span>
-          <select name="materialId" disabled>
-            ${options || `<option value="">${escapeHtml("연결 가능한 PDF 없음")}</option>`}
-          </select>
-        </label>
-        <button class="secondary-action" type="submit" disabled>${escapeHtml("연결")}</button>
-        <p class="class-day-card__empty">${escapeHtml("PDF 연결은 운영자 권한이 필요합니다.")}</p>
-      </form>
-    `;
-  }
-
-  if (unassigned.length === 0) {
-    return `<p class="class-day-card__empty">${escapeHtml("연결 가능한 미지정 PDF가 없습니다. 먼저 PDF 작업공간에서 업로드하세요.")}</p>`;
-  }
-
-  return `
-    <form class="class-day-card__attach" data-action="attach-pdf-to-week" data-subject-id="${escapeHtml(subject.id)}" data-week-label="${escapeHtml(weekLabel)}">
-      <label>
-        <span>${escapeHtml("PDF 연결")}</span>
-        <select name="materialId">
-          ${options}
-        </select>
-      </label>
-      <button class="secondary-action" type="submit">${escapeHtml("연결")}</button>
-    </form>
-  `;
-}
-
-function renderClassDayPdfLinks(
-  subject: SubjectNote,
-  materials: PdfMaterialDraft[]
-): string {
-  if (materials.length === 0) {
-    return '<p class="class-day-card__empty">아직 연결된 PDF가 없습니다.</p>';
-  }
-
-  return `
-    <div class="class-day-card__pdfs" aria-label="연결된 PDF">
-      <p class="meta">연결 PDF</p>
-      ${materials.slice(0, 2).map((material) => `
-        <button
-          class="class-day-card__pdf"
-          type="button"
-          data-action="open-pdf-material"
-          data-subject-id="${escapeHtml(subject.id)}"
-          data-material-id="${escapeHtml(getPdfMaterialKey(material))}"
-        >
-          ${escapeHtml(material.fileName)}
-        </button>
-      `).join("")}
-      ${materials.length > 2 ? `<span class="class-day-card__more">외 ${materials.length - 2}개</span>` : ""}
-    </div>
-  `;
-}
-
-function renderPdfMaterialAssignmentSection(
-  subject: SubjectNote,
-  materials: PdfMaterialDraft[]
-): string {
-  return `
-    <section class="pdf-material-browser" aria-labelledby="pdf-assignment-title">
-      <div class="pdf-material-browser__header">
-        <div>
-          <p class="meta">PDF 수업일 매핑</p>
-          <h2 id="pdf-assignment-title">업로드한 PDF 연결</h2>
-          <p class="lede">PDF는 먼저 올리고, 수업일이 확정되면 여기서 날짜를 지정합니다.</p>
-        </div>
-        <span class="pdf-count-pill">${materials.length}개 자료</span>
-      </div>
-      <div class="pdf-material-slider" aria-label="${subject.title} PDF 수업일 매핑">
-        ${renderPdfLibraryUploadCard(subject, materials.length)}
-        ${materials.map((material) => renderPdfMaterialCard(subject, material, {
-          isCurrent: false,
-          compact: false,
-          showClassDateControl: true
-        })).join("")}
-      </div>
-    </section>
-  `;
-}
 
 function renderSubjectSummariesPage(subject: SubjectNote): string {
   const coverage = getSubjectCoverage(subject);
