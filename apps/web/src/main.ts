@@ -272,10 +272,7 @@ import {
   renderPdfWorkspacePage,
   type WorkspacePageContext
 } from "./pdf-workspace/workspace-page";
-import {
-  formatQuickNoteStatus,
-  renderMetric
-} from "./subject-views/subject-cards";
+import { formatQuickNoteStatus } from "./subject-views/subject-cards";
 import {
   renderHomeSidebar,
   renderSubjectSidebar,
@@ -301,6 +298,16 @@ import {
   renderWeekPage,
   type WeekPageContext
 } from "./subject-views/week";
+import {
+  canManagePdfMaterials,
+  getPdfMaterialsForWeek,
+  isUnconfirmedPdfClassDate,
+  renderPdfLibraryUploadCard,
+  renderPdfMaterialCard,
+  renderPdfWorkspaceIndex,
+  renderSubjectPdfMaterialBrowser,
+  type PdfLibraryContext
+} from "./subject-views/pdf-library";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -4599,7 +4606,7 @@ function renderApp(): void {
   if (route.name === "pdf-workspaces") {
     mountRender(composeShell(
       renderHomeSidebar(sidebarContext, notebook, route),
-      renderPdfWorkspaceIndex(notebook),
+      renderPdfWorkspaceIndex(pdfLibraryContext, notebook, getSubjectPdfMaterials),
       `${notebook.title} / PDF 작업공간`
     ));
     return;
@@ -4720,6 +4727,11 @@ function getAppShellContext(): AppShellContext {
   };
 }
 
+// Pdf-library context (slice-9 — pdf-library.ts). 1 field (auth lazy).
+const pdfLibraryContext: PdfLibraryContext = {
+  getAuthSession: () => authSession
+};
+
 // Sidebar context (slice-2 — sidebar.ts). lazy getter only.
 const sidebarContext: SidebarContext = {
   getNotebook: () => notebook,
@@ -4738,13 +4750,15 @@ const summariesContext: SummariesContext = {
 // Subject-class context (slice-4 — subject-class.ts). 2 lazy + 3 fn ref + 3 callback.
 const subjectClassContext: SubjectClassContext = {
   getSubjectPdfMaterials,
-  canManagePdfMaterials,
+  canManagePdfMaterials: () => canManagePdfMaterials(pdfLibraryContext),
   isUnconfirmedPdfClassDate,
   formatWeekLabel,
   getPdfMaterialsForWeek,
   renderIntakeFeedback,
-  renderPdfLibraryUploadCard,
-  renderPdfMaterialCard
+  renderPdfLibraryUploadCard: (subject, materialCount) =>
+    renderPdfLibraryUploadCard(pdfLibraryContext, subject, materialCount),
+  renderPdfMaterialCard: (subject, material, opts) =>
+    renderPdfMaterialCard(pdfLibraryContext, subject, material, opts)
 };
 
 // Week page context (slice-8 — week.ts). 1 lazy + 1 fn ref + 2 callback.
@@ -4752,7 +4766,8 @@ const weekPageContext: WeekPageContext = {
   getSubjectPdfMaterials,
   getPdfMaterialsForWeek,
   renderQuickNotePanel,
-  renderPdfMaterialCard
+  renderPdfMaterialCard: (subject, material, opts) =>
+    renderPdfMaterialCard(pdfLibraryContext, subject, material, opts)
 };
 
 function composeShell(sidebar: string, mainContent: string, crumb: string): string {
@@ -4900,10 +4915,11 @@ const workspacePageContext: WorkspacePageContext = {
   getActivePdfObjectUrlMaterialId,
   hasActivePdfPreviewLoad,
   getSubjectPdfMaterials,
-  canManagePdfMaterials,
+  canManagePdfMaterials: () => canManagePdfMaterials(pdfLibraryContext),
   pdfToolbarContext,
   renderIntakeFeedback,
-  renderSubjectPdfMaterialBrowser,
+  renderSubjectPdfMaterialBrowser: (subject, materials, currentKey) =>
+    renderSubjectPdfMaterialBrowser(pdfLibraryContext, subject, materials, currentKey),
   formatPdfTool
 };
 
@@ -4932,264 +4948,6 @@ const workspacePageContext: WorkspacePageContext = {
 
 
 
-function renderPdfWorkspaceIndex(studyNotebook: StudyNotebook): string {
-  const subjectSummaries = studyNotebook.subjects.map((subject) => ({
-    subject,
-    materials: getSubjectPdfMaterials(subject.id)
-  }));
-  const totalMaterials = subjectSummaries.reduce(
-    (total, item) => total + item.materials.length,
-    0
-  );
-  const activeSubjects = subjectSummaries.filter((item) => item.materials.length > 0).length;
-
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">PDF 자료실</p>
-      <h1>수업자료 찾기</h1>
-      <p class="lede">관리자가 올린 PDF를 과목별로 골라 열고, 같은 원문 위에 내 필기만 따로 저장합니다.</p>
-      <div class="pdf-library-summary" aria-label="PDF 자료 현황">
-        ${renderMetric("등록 자료", `${totalMaterials}개`, "업로드된 PDF")}
-        ${renderMetric("과목", `${activeSubjects}/${studyNotebook.subjects.length}`, "자료가 있는 과목")}
-        ${renderMetric("필기", "개인별", "PDF 원문과 분리 저장")}
-      </div>
-    </section>
-    <section aria-labelledby="pdf-workspaces-title">
-      <p class="meta">자료 목록</p>
-      <h2 id="pdf-workspaces-title">과목별 PDF</h2>
-      <div class="pdf-library">
-        ${subjectSummaries.map(({ subject, materials }) =>
-          renderPdfSubjectLibrarySection(subject, materials)
-        ).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderPdfSubjectLibrarySection(
-  subject: SubjectNote,
-  materials: PdfMaterialDraft[]
-): string {
-  return `
-    <section class="pdf-subject-section" aria-labelledby="pdf-subject-${subject.id}">
-      <div class="pdf-subject-section__header">
-        <div>
-          <p class="meta">${subject.examLabel} · ${subject.summary.weekRange}</p>
-          <h3 id="pdf-subject-${subject.id}">${subject.title}</h3>
-        </div>
-        <span class="pdf-count-pill">${materials.length}개 자료</span>
-      </div>
-      <div class="pdf-material-slider" aria-label="${subject.title} PDF 자료 슬라이더">
-        ${renderPdfLibraryUploadCard(subject, materials.length)}
-        ${materials.map((material) => renderPdfMaterialCard(subject, material, {
-          isCurrent: false,
-          compact: false
-        })).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderSubjectPdfMaterialBrowser(
-  subject: SubjectNote,
-  materials: PdfMaterialDraft[],
-  currentMaterialKey: string | undefined
-): string {
-  if (materials.length === 0) {
-    return "";
-  }
-
-  return `
-    <section class="pdf-material-browser" aria-labelledby="subject-pdf-materials-title">
-      <div class="pdf-material-browser__header">
-        <div>
-          <p class="meta">§2 — 자료 선택</p>
-          <h2 id="subject-pdf-materials-title">이 과목의 PDF 자료</h2>
-        </div>
-        <a class="secondary-link" href="#/pdf-workspaces">전체 자료실</a>
-      </div>
-      <div class="pdf-material-slider is-compact" aria-label="${subject.title} PDF 자료 슬라이더">
-        ${materials.map((material) => renderPdfMaterialCard(subject, material, {
-          isCurrent: currentMaterialKey === getPdfMaterialKey(material),
-          compact: true
-        })).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderPdfLibraryUploadCard(subject: SubjectNote, materialCount: number): string {
-  if (!canManagePdfMaterials()) {
-    return `
-      <article class="pdf-upload-card is-readonly">
-        <p class="meta">${escapeHtml(subject.title)}</p>
-        <h4>새 자료 요청</h4>
-        <p>PDF 업로드는 관리자만 가능합니다. 필요한 강의자료가 없으면 관리자에게 요청하세요.</p>
-        <a class="secondary-link" href="${subjectPdfWorkspacePath(subject)}">${materialCount > 0 ? "공유 자료 보기" : "작업공간 열기"}</a>
-      </article>
-    `;
-  }
-
-  const inputId = `pdf-library-upload-${subject.id}`;
-
-  return `
-    <article class="pdf-upload-card">
-      <input
-        id="${inputId}"
-        class="file-input"
-        type="file"
-        accept="application/pdf,.pdf"
-        data-action="import-pdf-material"
-        data-subject-id="${escapeHtml(subject.id)}"
-      />
-      <label class="pdf-upload-card__label" for="${inputId}">
-        <span>새 PDF 업로드</span>
-        <strong>${escapeHtml(subject.title)} 수업 자료 추가</strong>
-        <small>${materialCount > 0 ? `${materialCount}개 자료에 이어 추가합니다.` : "첫 강의 PDF를 바로 올립니다."}</small>
-      </label>
-    </article>
-  `;
-}
-
-function renderPdfMaterialCard(
-  subject: SubjectNote,
-  material: PdfMaterialDraft,
-  options: { isCurrent: boolean; compact: boolean; showClassDateControl?: boolean }
-): string {
-  const materialKey = getPdfMaterialKey(material);
-  const ownerLabel = getPdfMaterialOwnerLabel(material);
-  const statusLabel = getPdfMaterialStatusLabel(material);
-  const classDateLabel = getPdfMaterialClassDateLabel(subject, material);
-  const classDateIsUnconfirmed = isUnconfirmedPdfClassDate(subject, material.classDate);
-
-  return `
-    <article class="pdf-material-card${options.isCurrent ? " is-current" : ""}${options.compact ? " is-compact" : ""}">
-      <div class="pdf-material-card__body">
-        <p class="meta">${escapeHtml(subject.title)} · ${escapeHtml(classDateLabel)}</p>
-        <h4>${escapeHtml(material.fileName)}</h4>
-        <p>${formatPdfFileSize(material.fileSize)} · ${material.pageCount}페이지 · ${statusLabel}</p>
-        <div class="pdf-material-card__badges">
-          <span>${ownerLabel}</span>
-          ${classDateIsUnconfirmed ? "<span>나중에 수정</span>" : ""}
-          ${options.isCurrent ? "<span>현재 열림</span>" : ""}
-        </div>
-        ${options.showClassDateControl ? renderPdfMaterialClassDateControl(subject, material, materialKey) : ""}
-      </div>
-      <div class="pdf-material-card__actions">
-        <button
-          class="action-button"
-          type="button"
-          data-action="open-pdf-material"
-          data-subject-id="${escapeHtml(subject.id)}"
-          data-material-id="${escapeHtml(materialKey)}"
-        >${options.isCurrent ? "다시 열기" : "열기"}</button>
-      </div>
-    </article>
-  `;
-}
-
-function renderPdfMaterialClassDateControl(
-  subject: SubjectNote,
-  material: PdfMaterialDraft,
-  materialKey: string
-): string {
-  const selectedValue = getPdfMaterialClassDateValue(material);
-
-  return `
-    <label class="pdf-material-card__field">
-      <span>수업일</span>
-      <select
-        data-action="assign-pdf-class-date"
-        data-subject-id="${escapeHtml(subject.id)}"
-        data-material-id="${escapeHtml(materialKey)}"
-        ${canManagePdfMaterials() ? "" : "disabled"}
-      >
-        <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
-        ${subject.weekNotes.map((week) => {
-          // PR #51 codex R7 P1: 비-ISO legacy week.label (예: "5월 14일(목)")
-          // 은 BE 가 reject. 사용자가 선택해도 sentinel 로 unassign 되어
-          // silent regression. disabled + "[migrate 필요]" hint 표시.
-          const ISO = /^\d{4}-\d{2}-\d{2}$/;
-          const isIso = ISO.test(week.label);
-          const sel = selectedValue === week.label ? "selected" : "";
-          const label = isIso ? week.label : `${week.label} (사용 불가 — 이전 형식)`;
-          return `<option value="${escapeHtml(week.label)}" ${sel} ${isIso ? "" : "disabled"}>${escapeHtml(label)}</option>`;
-        }).join("")}
-      </select>
-    </label>
-  `;
-}
-
-function getPdfMaterialClassDateLabel(subject: SubjectNote, material: PdfMaterialDraft): string {
-  return isUnconfirmedPdfClassDate(subject, material.classDate)
-    ? "수업일 미지정"
-    : material.classDate?.trim() ?? "수업일 미지정";
-}
-
-function getPdfMaterialClassDateValue(material: PdfMaterialDraft): string {
-  const trimmed = material.classDate?.trim();
-
-  return trimmed || PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
-}
-
-function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | undefined): boolean {
-  const trimmed = classDate?.trim();
-
-  // PR #51 codex R4: epoch sentinel '1970-01-01' = unassigned (BE wire 표준).
-  if (
-    !trimmed ||
-    trimmed === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ||
-    trimmed === PDF_MATERIAL_UNASSIGNED_WIRE_DATE ||
-    trimmed === "수업일 미지정"
-  ) {
-    return true;
-  }
-
-  return !subject.weekNotes.some((week) => week.label === trimmed);
-}
-
-function getPdfMaterialsForWeek(
-  subject: SubjectNote,
-  week: WeekNote,
-  materials: PdfMaterialDraft[]
-): PdfMaterialDraft[] {
-  return materials.filter((material) => {
-    const trimmed = material.classDate?.trim();
-
-    return Boolean(trimmed) &&
-      trimmed === week.label &&
-      !isUnconfirmedPdfClassDate(subject, trimmed);
-  });
-}
-
-function getPdfMaterialStatusLabel(material: PdfMaterialDraft): string {
-  if (material.uploadStatus === "pending") {
-    return "업로드 중";
-  }
-
-  if (material.uploadStatus === "uploaded") {
-    return "공유 가능";
-  }
-
-  return "로컬";
-}
-
-function getPdfMaterialOwnerLabel(material: PdfMaterialDraft): string {
-  if (material.uploaderId && material.uploaderId === authSession?.user.id) {
-    return "내가 올림";
-  }
-
-  if (material.uploaderId) {
-    return "공유 자료";
-  }
-
-  return material.uploadStatus === "local" ? "로컬 자료" : "업로드 자료";
-}
-
-function canManagePdfMaterials(): boolean {
-  const role = authSession?.user.role.toLowerCase();
-  return role === "master" || role === "admin";
-}
 
 function renderQuickNotePanel(
   subject: SubjectNote,

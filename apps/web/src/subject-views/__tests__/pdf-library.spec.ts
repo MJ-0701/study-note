@@ -1,0 +1,365 @@
+// sprint-2026-W22-sprint-17 / layer C/slice-9 — pdf-library characterization spec.
+
+import { strict as assert } from "node:assert";
+import { register } from "node:module";
+import { describe, test } from "node:test";
+
+register(
+  "data:text/javascript," + encodeURIComponent(`
+    export async function resolve(specifier, context, nextResolve) {
+      if (specifier === "@study-note/domain") return { url: "study-note-test:domain", shortCircuit: true };
+      try { return await nextResolve(specifier, context); }
+      catch (error) {
+        const withoutQuery = specifier.split(/[?#]/, 1)[0] ?? specifier;
+        if ((specifier.startsWith("./") || specifier.startsWith("../")) && !/\\.[A-Za-z0-9]+$/.test(withoutQuery)) {
+          return nextResolve(specifier + ".ts", context);
+        }
+        throw error;
+      }
+    }
+    export async function load(url, context, nextLoad) {
+      if (url === "study-note-test:domain") {
+        return { format: "module", shortCircuit: true, source: \`
+          export function formatPdfFileSize(size) { return (size / 1024).toFixed(0) + "KB"; }
+          export function getConceptById() { return undefined; }
+          export function getQuestionById() { return undefined; }
+          export function getSubjectCoverage() { return { coverageRate: 0 }; }
+        \` };
+      }
+      return nextLoad(url, context);
+    }
+  `),
+  import.meta.url
+);
+
+import { parseHTML } from "linkedom";
+const { document: testDocument } = parseHTML("<!doctype html><html><body></body></html>");
+(globalThis as Record<string, unknown>).document = testDocument;
+
+const pl = await import("../pdf-library.ts");
+
+interface QC {
+  querySelectorAll: (sel: string) => Array<{
+    hasAttribute: (n: string) => boolean;
+    getAttribute: (n: string) => string | null;
+    textContent: string;
+  }>;
+  querySelector: (sel: string) => {
+    hasAttribute: (n: string) => boolean;
+    getAttribute: (n: string) => string | null;
+    textContent: string;
+  } | null;
+}
+
+function parseC(html: string): QC {
+  testDocument.body.innerHTML = html;
+  return testDocument.body as unknown as QC;
+}
+
+function makeSubject(overrides: Partial<{ id: string; title: string; weekLabels: string[] }> = {}): never {
+  const weekLabels = overrides.weekLabels ?? ["2026-05-14", "2026-05-21"];
+  return {
+    id: overrides.id ?? "s1",
+    title: overrides.title ?? "수학",
+    examLabel: "기말",
+    summary: { weekRange: "1~7주차" },
+    weekNotes: weekLabels.map((label, i) => ({
+      id: `w${i + 1}`,
+      label,
+      title: `wk${i + 1}`,
+      focus: "f",
+      reviewStatus: "ready"
+    }))
+  } as never;
+}
+
+function makeMaterial(overrides: Partial<{
+  id: string;
+  fileName: string;
+  classDate: string;
+  uploadStatus: string;
+  uploaderId: string;
+  backendMaterialId: string;
+}> = {}): never {
+  return {
+    id: overrides.id ?? "m1",
+    backendMaterialId: overrides.backendMaterialId ?? overrides.id ?? "m1",
+    fileName: overrides.fileName ?? "syllabus.pdf",
+    fileSize: 1024,
+    pageCount: 10,
+    classDate: overrides.classDate,
+    uploadStatus: overrides.uploadStatus ?? "uploaded",
+    uploaderId: overrides.uploaderId
+  } as never;
+}
+
+function makeCtx(session?: { id: string; role: string }): import("../pdf-library.ts").PdfLibraryContext {
+  return {
+    getAuthSession: () => (session ? { user: session } : undefined)
+  };
+}
+
+function makeNotebook(subjects: unknown[]): never {
+  return { subjects } as never;
+}
+
+// ─── (a) canManagePdfMaterials — fail-closed deny-by-default ──────────────
+
+describe("pdf-library — (a) canManagePdfMaterials fail-closed", () => {
+  test("case 1: authSession=undefined → false", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx()), false);
+  });
+
+  test("case 2: role=undefined → false", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: undefined as never })), false);
+  });
+
+  test("case 3: role=\"\" → false", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: "" })), false);
+  });
+
+  test("case 4: role=\"student\" → false", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: "student" })), false);
+  });
+
+  test("case 5: role=\"MASTER\" (case-insensitive) → true", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: "MASTER" })), true);
+  });
+
+  test("case 6: role=\"master\" → true", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: "master" })), true);
+  });
+
+  test("case 7: role=\"admin\" → true", () => {
+    assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: "admin" })), true);
+  });
+});
+
+// ─── (b) getPdfMaterialOwnerLabel — ownership boundary ────────────────────
+
+describe("pdf-library — (b) getPdfMaterialOwnerLabel ownership", () => {
+  test("case 8: uploaderId === session.user.id → \"내가 올림\"", () => {
+    const ctx = makeCtx({ id: "u1", role: "student" });
+    const mat = makeMaterial({ uploaderId: "u1" });
+    assert.equal(pl.getPdfMaterialOwnerLabel(ctx, mat), "내가 올림");
+  });
+
+  test("case 9: uploaderId mismatch → \"공유 자료\"", () => {
+    const ctx = makeCtx({ id: "u1", role: "student" });
+    const mat = makeMaterial({ uploaderId: "u2" });
+    assert.equal(pl.getPdfMaterialOwnerLabel(ctx, mat), "공유 자료");
+  });
+
+  test("case 10: uploaderId undefined + uploadStatus=local → \"로컬 자료\"", () => {
+    const ctx = makeCtx({ id: "u1", role: "student" });
+    const mat = makeMaterial({ uploadStatus: "local" });
+    assert.equal(pl.getPdfMaterialOwnerLabel(ctx, mat), "로컬 자료");
+  });
+
+  test("case 11: uploaderId undefined + uploadStatus=uploaded → \"업로드 자료\"", () => {
+    const ctx = makeCtx({ id: "u1", role: "student" });
+    const mat = makeMaterial({ uploadStatus: "uploaded" });
+    assert.equal(pl.getPdfMaterialOwnerLabel(ctx, mat), "업로드 자료");
+  });
+});
+
+// ─── (c) renderPdfWorkspaceIndex + Subject section XSS ────────────────────
+
+describe("pdf-library — (c) renderPdfWorkspaceIndex XSS", () => {
+  test("case 12: characterization hero + summary metric + subject section", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial({ classDate: "2026-05-14" });
+    const html = pl.renderPdfWorkspaceIndex(makeCtx(), makeNotebook([subject]), () => [mat]);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll(".subject-page-hero").length, 1);
+    assert.equal(c.querySelectorAll(".pdf-subject-section").length, 1);
+    assert.equal(c.querySelectorAll(".pdf-count-pill").length, 1);
+  });
+
+  test("case 13: hostile subject.title in index/section/upload escape", () => {
+    const subject = makeSubject({ title: "<script>alert(1)</script>" });
+    const html = pl.renderPdfWorkspaceIndex(makeCtx(), makeNotebook([subject]), () => []);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("script").length, 0);
+  });
+
+  test("case 14: hostile subject.id in data-subject-id + section id attribute", () => {
+    const subject = makeSubject({ id: '"><img src=x onerror=alert(1)>' });
+    const html = pl.renderPdfWorkspaceIndex(makeCtx({ id: "u1", role: "admin" }), makeNotebook([subject]), () => []);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("script,img").length, 0);
+    assert.equal(c.querySelectorAll("[onerror]").length, 0);
+  });
+});
+
+// ─── (d) renderPdfLibraryUploadCard — denylist UI ────────────────────────
+
+describe("pdf-library — (d) renderPdfLibraryUploadCard denylist", () => {
+  test("case 15: canManage=false → is-readonly + no file input", () => {
+    const html = pl.renderPdfLibraryUploadCard(makeCtx(), makeSubject(), 3);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll(".pdf-upload-card.is-readonly").length, 1);
+    assert.equal(c.querySelectorAll('input[type="file"]').length, 0);
+  });
+
+  test("case 16: canManage=true → editable + file input present", () => {
+    const html = pl.renderPdfLibraryUploadCard(makeCtx({ id: "u1", role: "admin" }), makeSubject(), 0);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll(".pdf-upload-card.is-readonly").length, 0);
+    assert.equal(c.querySelectorAll('input[type="file"]').length, 1);
+  });
+
+  test("case 17: hostile subject.id in input id + data-subject-id escape", () => {
+    const subject = makeSubject({ id: '"><script>x</script>' });
+    const html = pl.renderPdfLibraryUploadCard(makeCtx({ id: "u1", role: "admin" }), subject, 0);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("script").length, 0);
+  });
+
+  test("case 18: canManage=false hostile subjectPdfWorkspacePath javascript: blocked (3-layer)", () => {
+    // sanitizeExternalUrl strips javascript: / data: / mailto: protocols.
+    // subjectPdfWorkspacePath returns #/subjects/<id>/pdf form — safe by construction.
+    // Verify defense in depth: even if subject.id manipulated, output has no script sink.
+    const subject = makeSubject({ id: 'javascript:alert(1)' });
+    const html = pl.renderPdfLibraryUploadCard(makeCtx(), subject, 1);
+    const c = parseC(html);
+    const link = c.querySelector(".secondary-link");
+    assert.notEqual(link, null);
+    const href = link!.getAttribute("href") ?? "";
+    assert.ok(!href.toLowerCase().startsWith("javascript:"), `href must not start with javascript: got=${href}`);
+  });
+});
+
+// ─── (e) renderPdfMaterialCard XSS ────────────────────────────────────────
+
+describe("pdf-library — (e) renderPdfMaterialCard XSS", () => {
+  test("case 19: hostile material.fileName in h4 escape", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial({ fileName: "<script>alert(1)</script>.pdf" });
+    const html = pl.renderPdfMaterialCard(makeCtx(), subject, mat, { isCurrent: false, compact: false });
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("script").length, 0);
+  });
+
+  test("case 20: hostile material.id in data-material-id escape", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial({ id: '"><img src=x onerror=alert(1)>' });
+    const html = pl.renderPdfMaterialCard(makeCtx(), subject, mat, { isCurrent: false, compact: false });
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("img,script").length, 0);
+    assert.equal(c.querySelectorAll("[onerror]").length, 0);
+  });
+
+  test("case 21: isCurrent=true + compact=true → is-current + is-compact classes", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial();
+    const html = pl.renderPdfMaterialCard(makeCtx(), subject, mat, { isCurrent: true, compact: true });
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll(".pdf-material-card.is-current.is-compact").length, 1);
+  });
+});
+
+// ─── (f) renderPdfMaterialClassDateControl + denylist + week label ────────
+
+describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
+  test("case 22: canManage=false → select.disabled", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial();
+    const html = pl.renderPdfMaterialClassDateControl(makeCtx(), subject, mat, "m1");
+    const c = parseC(html);
+    const sel = c.querySelector("select");
+    assert.notEqual(sel, null);
+    assert.equal(sel!.hasAttribute("disabled"), true);
+  });
+
+  test("case 23: canManage=true → select editable", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial();
+    const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
+    const c = parseC(html);
+    const sel = c.querySelector("select");
+    assert.equal(sel!.hasAttribute("disabled"), false);
+  });
+
+  test("case 24: non-ISO week.label → disabled + \"사용 불가\" hint", () => {
+    const subject = makeSubject({ weekLabels: ["legacy-label-9999", "2026-05-21"] });
+    const mat = makeMaterial();
+    const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
+    const c = parseC(html);
+    const opts = c.querySelectorAll("option[disabled]");
+    assert.ok(opts.length >= 1, `expected ≥1 disabled option, got ${opts.length}`);
+    const text = opts.map((o) => o.textContent).join("");
+    assert.ok(text.includes("사용 불가"), `expected 사용 불가 hint, got=${text}`);
+  });
+
+  test("case 25: hostile week.label escape in option value + text", () => {
+    const subject = makeSubject({ weekLabels: ['<script>x</script>', "2026-05-14"] });
+    const mat = makeMaterial();
+    const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("script").length, 0);
+  });
+});
+
+// ─── (g) renderSubjectPdfMaterialBrowser ─────────────────────────────────
+
+describe("pdf-library — (g) renderSubjectPdfMaterialBrowser", () => {
+  test("case 26: 0 materials → empty string", () => {
+    const html = pl.renderSubjectPdfMaterialBrowser(makeCtx(), makeSubject(), [], undefined);
+    assert.equal(html, "");
+  });
+
+  test("case 27: hostile subject.title in browser aria-label escape", () => {
+    const subject = makeSubject({ title: '<script>alert(1)</script>' });
+    const mat = makeMaterial();
+    const html = pl.renderSubjectPdfMaterialBrowser(makeCtx(), subject, [mat], undefined);
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll("script").length, 0);
+  });
+});
+
+// ─── (h) export shape + helpers ──────────────────────────────────────────
+
+describe("pdf-library — (h) export shape + helpers", () => {
+  test("case 28: 13 fn export + isUnconfirmedPdfClassDate + getPdfMaterialsForWeek", () => {
+    assert.equal(typeof pl.renderPdfWorkspaceIndex, "function");
+    assert.equal(typeof pl.renderPdfSubjectLibrarySection, "function");
+    assert.equal(typeof pl.renderSubjectPdfMaterialBrowser, "function");
+    assert.equal(typeof pl.renderPdfLibraryUploadCard, "function");
+    assert.equal(typeof pl.renderPdfMaterialCard, "function");
+    assert.equal(typeof pl.renderPdfMaterialClassDateControl, "function");
+    assert.equal(typeof pl.getPdfMaterialClassDateLabel, "function");
+    assert.equal(typeof pl.getPdfMaterialClassDateValue, "function");
+    assert.equal(typeof pl.isUnconfirmedPdfClassDate, "function");
+    assert.equal(typeof pl.getPdfMaterialsForWeek, "function");
+    assert.equal(typeof pl.getPdfMaterialStatusLabel, "function");
+    assert.equal(typeof pl.getPdfMaterialOwnerLabel, "function");
+    assert.equal(typeof pl.canManagePdfMaterials, "function");
+
+    const subject = makeSubject({ weekLabels: ["2026-05-14"] });
+    assert.equal(pl.isUnconfirmedPdfClassDate(subject, undefined), true);
+    assert.equal(pl.isUnconfirmedPdfClassDate(subject, "metadata-pending"), true);
+    assert.equal(pl.isUnconfirmedPdfClassDate(subject, "1970-01-01"), true);
+    assert.equal(pl.isUnconfirmedPdfClassDate(subject, "2026-05-14"), false);
+    assert.equal(pl.isUnconfirmedPdfClassDate(subject, "2026-99-99"), true);
+
+    const mats = [
+      makeMaterial({ id: "a", classDate: "2026-05-14" }),
+      makeMaterial({ id: "b", classDate: "2026-05-21" }),
+      makeMaterial({ id: "c", classDate: undefined })
+    ];
+    const week = { id: "w1", label: "2026-05-14" } as never;
+    const filtered = pl.getPdfMaterialsForWeek(subject, week, mats);
+    assert.equal(filtered.length, 1);
+    assert.equal((filtered[0] as { id: string }).id, "a");
+
+    assert.equal(pl.getPdfMaterialStatusLabel(makeMaterial({ uploadStatus: "pending" })), "업로드 중");
+    assert.equal(pl.getPdfMaterialStatusLabel(makeMaterial({ uploadStatus: "uploaded" })), "공유 가능");
+    assert.equal(pl.getPdfMaterialStatusLabel(makeMaterial({ uploadStatus: "local" })), "로컬");
+
+    assert.equal(pl.getPdfMaterialClassDateValue(makeMaterial({ classDate: "  " })), "metadata-pending");
+    assert.equal(pl.getPdfMaterialClassDateValue(makeMaterial({ classDate: "2026-05-14" })), "2026-05-14");
+    assert.equal(pl.getPdfMaterialClassDateLabel(subject, makeMaterial({ classDate: undefined })), "수업일 미지정");
+    assert.equal(pl.getPdfMaterialClassDateLabel(subject, makeMaterial({ classDate: "2026-05-14" })), "2026-05-14");
+  });
+});
