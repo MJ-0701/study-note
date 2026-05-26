@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-26) — **Layer C/slice-3 closed. 9k+8k+7k+6.7k+6.5k+6.3k+6k 달성**
+## 진행 상황 (2026-05-26) — **Layer C/slice-4 closed. 9k+8k+7k+6.7k+6.5k+6.3k+6k+5.8k 달성**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -22,9 +22,9 @@
 | **B/slice-2f/iv-bis. renderPdfWorkspacePage** | 2026-W22-sprint-8 | ✅ main 직 push (main=7b5f3cb) — Layer B closed, 6.7k 달성 |
 | **C/slice-1. subject-cards leaves** | 2026-W22-sprint-9 | ✅ merged (PR #70, main=d634ac8) — **6.5k 달성** |
 | **C/slice-2. sidebar** | 2026-W22-sprint-10 | ✅ merged (PR #71, main=2c6ca94) — **6.3k 달성** |
-| **C/slice-3. home + intake** | 2026-W22-sprint-11 | ✅ implemented (Gate 6 PASS, PR pending) — **6k 달성** |
-| **C/slice-4. subject-class** | next sprint | ⏳ 다음 진입 (~202 line) |
-| C/slice-5. subject-summaries | TBD | ⏳ backlog (~141 line) |
+| **C/slice-3. home + intake** | 2026-W22-sprint-11 | ✅ merged (PR #72, main=ee6f492) — **6k 달성** |
+| **C/slice-4. subject-class** | 2026-W22-sprint-12 | ✅ implemented (Gate 6 PASS, PR pending) — **5.8k 달성** |
+| **C/slice-5. subject-summaries** | next sprint | ⏳ 다음 진입 (~141 line) |
 | C/slice-6. subject-memorize | TBD | ⏳ backlog (~110 line) |
 | C/slice-7. subject-mcp | TBD | ⏳ backlog (~65 line) |
 | C/slice-8. subject-week | TBD | ⏳ backlog (~88 line) |
@@ -33,10 +33,10 @@
 | D. state/sync residual | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **6,023** (-5,026, **-45.49%**). **9k+8k+7k+6.7k+6.5k+6.3k+6k
-7 target 달성**. Layer C 진행 중. 5.5k = slice-4~5 (~340 line) 후 달성.
+main.ts: 11,049 → **5,838** (-5,211, **-47.16%**). **9k+8k+7k+6.7k+6.5k+6.3k+6k+
+5.8k 8 target 달성**. Layer C 진행 중. 5.5k = slice-5 (~141 line) 후 달성.
 
-## 활성 작업 = Layer C/slice-4 (subject-class)
+## 활성 작업 = Layer C/slice-5 (subject-summaries)
 
 **전 sprint (C/slice-1) retro** = `docs/solon/layer-c-entry-subject-view-hierarchy-decision-first-slice-scope/20260526/retro.md`
 
