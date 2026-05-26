@@ -1,0 +1,52 @@
+---
+phase: retro
+gate_number: 7
+gate_label: "Gate 7 (Retro)"
+gate_id: G5
+sprint_id: "2026-W22-sprint-7"
+workspace: "main-ts-layer-b-slice-2f-iv-container-page-renderpdfworkspacepage-7k"
+handoff_dir: "docs/solon/document/pdf/main-ts-layer-b-slice-2f-iv-container-page-renderpdfworkspacepage-7k/20260526"
+goal: "main.ts layer B/slice-2f/iv — container/page 분리 (renderPdfWorkspacePage 등 7k 달성)"
+created_at: ""
+last_touched_at: "2026-05-26T11:10:56+09:00"
+closed_at: 2026-05-26T11:10:56+09:00
+domain: "document"
+subdomain: "pdf"
+feature: "main-ts-layer-b-slice-2f-iv-container-page-renderpdfworkspacepage-7k"
+---
+
+# 회고
+
+> 이 문서는 사용자의 native/workspace 언어로 작성한다.
+
+## 1. 계속할 것
+
+-
+
+## 2. 문제
+
+-
+
+## 3. 시도할 것
+
+-
+
+## 4. 이어갈 것
+
+-
+
+## 5. 종료 체크
+
+- [ ] report 가 최신이다
+- [ ] review 조치가 완료 또는 이월됐다
+- [ ] workbench 가 접혔다
+
+## §6. 다음 cycle 본부 활성 추천 (auto)
+
+<!-- solon:division-recommendations:start -->
+- detected: project_size=medium (478 tracked files), domains=0, last_review=pass, infra_signals=8, ui_signals=12
+- recommended action format: update `.sfs-local/divisions.yaml` + record why in `.sfs-local/decisions/<NNNN>-activate-<division>.md`
+- recommend: `qa` activate (light) — regression smoke + AC checks; triggers: review!=pass or medium+ codebase
+- consider: `infra` activate (light) — deploy/observability/rollback checklist; triggers: infra files present or large codebase
+- generated_at: 2026-05-26T11:10:56+09:00 (auto) — edit outside the marker block to preserve manual notes
+<!-- solon:division-recommendations:end -->
