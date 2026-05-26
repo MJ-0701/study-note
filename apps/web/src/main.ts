@@ -100,11 +100,9 @@ import {
   updateChartContent,
   updateChecklistItemLabel,
   updateTextBoxContent,
-  type PdfChart,
   type PdfInkPoint,
   type PdfInkStroke,
   type PdfMaterialDraft,
-  type PdfTable,
   type PdfWorkspaceStore,
   type PdfWorkspaceTool,
   type StickyNoteBlockKind,
@@ -211,7 +209,6 @@ import {
   commitActiveInkStrokeOnEsc as commitActiveInkStrokeOnEscModule,
   commitInkStroke,
   extendInkStroke,
-  formatSvgPoint,
   getSurfacePoint as getSurfacePointModule,
   type InkStrokeCallbacks,
   type InkStrokeContext,
@@ -224,7 +221,6 @@ import {
   normalizeInspectorDrillType,
   readInspectorDrill,
   refreshActiveDrillHighlights as refreshActiveDrillHighlightsModule,
-  renderInspectorStatRow as renderInspectorStatRowModule,
   setInspectorDrill,
   toggleInspectorDrillState,
   writeInspectorDrill,
@@ -235,7 +231,6 @@ import {
   addStarMark as addStarMarkModule,
   cycleStarMarkSize,
   removeStarMark as removeStarMarkModule,
-  renderStarMark as renderStarMarkModule,
   resizeStarMark as resizeStarMarkModule,
   type StarMarkCallbacks,
   type StarMarkContext
@@ -261,7 +256,6 @@ import {
   readTableDataFromDom,
   refreshTableWidgets as refreshTableWidgetsModule,
   removeTable as removeTableModule,
-  renderTableMount as renderTableMountModule,
   scheduleTableCellUpdate as scheduleTableCellUpdateModule
 } from "./pdf-workspace/table-widget";
 import {
@@ -279,24 +273,18 @@ import {
   refreshChartPreview,
   refreshChartWidgets as refreshChartWidgetsModule,
   removeChart as removeChartModule,
-  renderChartMount as renderChartMountModule,
   scheduleChartPointUpdate as scheduleChartPointUpdateModule
 } from "./pdf-workspace/chart-widget";
 import {
-  renderChecklist,
-  renderEraserCursorStyle,
-  renderEraserSubToolbar,
-  renderStickyNote,
-  renderTextBox
+  renderEraserSubToolbar
 } from "./pdf-workspace/simple-widget";
 import {
-  type PdfToolbarContext,
-  getPdfPreviewPlaceholderDetail,
-  getPdfPreviewPlaceholderTitle,
-  renderPdfFrameStack,
-  renderPdfMaterialStatus,
-  renderPdfToolbar
+  type PdfToolbarContext
 } from "./pdf-workspace/page-render";
+import {
+  renderPdfWorkspacePage,
+  type WorkspacePageContext
+} from "./pdf-workspace/workspace-page";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -4288,10 +4276,6 @@ function addChart(subjectId: string, position: { x: number; y: number }): void {
 function refreshChartWidgets(): void {
   refreshChartWidgetsModule(chartWidgetContext);
 }
-function renderChartMount(subjectId: string, chart: PdfChart): string {
-  return renderChartMountModule(subjectId, chart);
-}
-
 // sprint-W21-sprint-1 / S6 / AC27+AC29+AC30 — 별표 add / delete.
 // Default size 0.06 (page width 의 6%). cuid-ish id (browser crypto.randomUUID
 const starMarkContext: StarMarkContext = {
@@ -4309,13 +4293,8 @@ function removeStarMark(subjectId: string, markId: string): void {
 function resizeStarMark(subjectId: string, markId: string, sizeRatio: number): void {
   resizeStarMarkModule(starMarkCallbacks, subjectId, markId, sizeRatio);
 }
-const renderStarMark = renderStarMarkModule;
-
 function refreshTableWidgets(): void {
   refreshTableWidgetsModule(tableWidgetContext);
-}
-function renderTableMount(subjectId: string, table: PdfTable): string {
-  return renderTableMountModule(subjectId, table);
 }
 
 // chart handlers (slice-2g — chart-widget.ts) thin wrappers.
@@ -4623,7 +4602,7 @@ function renderApp(): void {
     ensurePdfPreviewForWorkspace(subject.id);
     mountRender(composeShell(
       renderSubjectSidebar(subject, route),
-      renderPdfWorkspacePage(subject),
+      renderPdfWorkspacePage(workspacePageContext, subject),
       `${subject.title} / PDF 작업공간`
     ));
     // sprint-W21-sprint-2/S2 (plan §R3): subject 진입 시 batch hydrate.
@@ -5374,214 +5353,25 @@ const pdfToolbarContext: PdfToolbarContext = {
   renderEraserSubToolbar
 };
 
-function renderPdfWorkspacePage(subject: SubjectNote): string {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
-  const material = workspace.material;
-  const subjectMaterials = getSubjectPdfMaterials(subject.id);
-  const materialCount = subjectMaterials.length;
-  const currentMaterialKey = material ? getPdfMaterialKey(material) : undefined;
-  const canManageMaterials = canManagePdfMaterials();
-  const uploadTitle = canManageMaterials
-    ? materialCount > 0
-      ? "강의 PDF 추가 업로드"
-      : "강의 PDF 업로드"
-    : "공유 자료";
-  const selectedPage = material?.selectedPage ?? 1;
-  // Cast: "eraser" is stored via LocalPdfTool cast in setPdfTool; recover the wider type here.
-  const selectedTool = (material?.selectedTool ?? "read") as LocalPdfTool;
-  const objectUrl =
-    material?.backendMaterialId &&
-    getActivePdfObjectUrlMaterialId(subject.id) === material.backendMaterialId
-      ? getActivePdfObjectUrl(subject.id)
-      : undefined;
-  const previewLoadKey = material?.backendMaterialId
-    ? `${subject.id}:${material.backendMaterialId}`
-    : undefined;
-  const isPreviewLoading = previewLoadKey
-    ? hasActivePdfPreviewLoad(previewLoadKey)
-    : false;
-  const pageNotes = workspace.stickyNotes.filter(
-    (note) => note.pageNumber === selectedPage
-  );
-  const pageStrokes = workspace.inkStrokes.filter(
-    (stroke) => stroke.pageNumber === selectedPage
-  );
-  // sprint-12/slice-2: filter textboxes for current page
-  const pageTextBoxes = workspace.textBoxes.filter(
-    (tb) => tb.page === selectedPage
-  );
-  // sprint-12/slice-3: filter checklists for current page
-  const pageChecklists = workspace.checklists.filter(
-    (cl) => cl.page === selectedPage
-  );
-  // sprint-13/slice-2: filter tables for current page
-  const pageTables = workspace.tables.filter(
-    (table) => table.page === selectedPage
-  );
-  // sprint-13/slice-3: filter charts for current page
-  const pageCharts = workspace.charts.filter(
-    (chart) => chart.page === selectedPage
-  );
-  // sprint-W21-sprint-1 / S6 / AC28 — filter starMarks for current page.
-  const pageStarMarks = (workspace.starMarks ?? []).filter(
-    (mark) => mark.pageNumber === selectedPage
-  );
-  const inputId = `pdf-file-${subject.id}`;
-  const selectedPageLabel = escapeHtml(String(selectedPage));
-
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">${subject.title} · backend PDF 작업공간</p>
-      <h1>${subject.title} PDF 필기</h1>
-      <p class="lede">
-        관리자가 올린 공유 PDF를 열고, 내 필기와 메모는 사용자별 작업공간에 따로 저장합니다.
-      </p>
-      <p><a href="${subjectClassPath(subject)}">← ${subject.title} 수업으로 돌아가기</a></p>
-    </section>
-
-    <section class="upload-section pdf-upload-section" aria-labelledby="pdf-upload-title">
-      <div>
-        <p class="meta">§1 — 자료 관리</p>
-        <h2 id="pdf-upload-title">${uploadTitle}</h2>
-        <p class="lede">
-          ${canManageMaterials
-            ? "이미 등록된 자료가 있어도 PDF를 계속 추가할 수 있습니다. 수업일은 자동 배정하지 않고 업로드 후 수정 단계에서 지정합니다."
-            : "PDF 업로드는 관리자에게 맡기고, 학생은 등록된 자료를 열어 개인 필기만 저장합니다."}
-        </p>
-      </div>
-      <div class="upload-panel">
-        ${canManageMaterials
-          ? `<input
-              id="${inputId}"
-              class="file-input"
-              type="file"
-              accept="application/pdf,.pdf"
-              data-action="import-pdf-material"
-              data-subject-id="${subject.id}"
-            />
-            <label class="file-drop" for="${inputId}">
-              <strong>${subject.title} PDF ${materialCount > 0 ? "추가 업로드" : "선택 및 업로드"}</strong>
-              <span>날짜와 수업일은 자동으로 정하지 않습니다. 먼저 올리고 나중에 자료 정보에서 수정하세요.</span>
-            </label>`
-          : `<div class="policy-block is-standalone">
-              <strong>업로드는 관리자만 가능합니다.</strong>
-              <p>필요한 수업자료가 없으면 관리자에게 업로드를 요청하세요. 등록된 자료는 아래 목록에서 바로 열 수 있습니다.</p>
-            </div>`}
-        ${canManageMaterials
-          ? `<div class="pdf-upload-hint">${materialCount > 0
-              ? `현재 ${materialCount}개 자료가 등록되어 있습니다. 새 파일을 선택하면 같은 과목 자료에 추가됩니다.`
-              : "첫 PDF를 올린 뒤에도 이 영역에서 계속 추가 업로드할 수 있습니다."}</div>`
-          : ""}
-        ${material ? renderPdfMaterialStatus(material, Boolean(objectUrl), isPreviewLoading) : ""}
-        ${intakeFeedback
-          ? renderIntakeFeedback("PDF 업로드 상태가 여기에 표시됩니다.")
-          : `<div class="import-feedback">${materialCount > 0 ? "새 PDF를 선택하면 이 과목 자료 목록에 추가됩니다." : "아직 업로드한 PDF 파일이 없습니다."}</div>`}
-      </div>
-    </section>
-
-    ${renderSubjectPdfMaterialBrowser(subject, subjectMaterials, currentMaterialKey)}
-
-    <section class="pdf-workspace" id="pdf-workspace-root" aria-labelledby="pdf-workspace-title">
-      ${objectUrl ? `
-        <div class="pdf-page-binding-notice" role="note" aria-live="polite">
-          <strong class="pdf-page-binding-notice__title">현재 페이지 ${selectedPageLabel}</strong>
-          <span class="pdf-page-binding-notice__body">보이는 화면에 다른 페이지가 함께 나와도 메모/필기는 현재 페이지에만 저장됩니다. 다른 페이지에 메모하려면 페이지를 먼저 이동하세요.</span>
-        </div>
-      ` : ""}
-      <div class="pdf-workspace-header">
-        <div>
-          <p class="meta">§3 — PDF viewer + annotation layer</p>
-          <h2 id="pdf-workspace-title">페이지 ${selectedPage}${material ? ` / ${material.pageCount}` : ""}</h2>
-        </div>
-        <div class="pdf-toolbar-row">
-          ${renderPdfToolbar(
-            pdfToolbarContext,
-            subject.id,
-            selectedTool,
-            material?.pageCount ?? 1,
-            selectedPage,
-            Boolean(material),
-            workspace.eraserShape,
-            workspace.eraserSize
-          )}
-          <button
-            class="pdf-inspector-toggle secondary-action"
-            type="button"
-            data-action="toggle-pdf-inspector"
-            aria-expanded="${inspectorOpen ? "true" : "false"}"
-            aria-controls="pdf-inspector-aside"
-          >${inspectorOpen ? "검사기 닫기" : "검사기 열기"}</button>
-        </div>
-      </div>
-
-      <div class="pdf-workspace-layout${inspectorOpen ? " is-inspector-open" : ""}">
-        <div class="pdf-stage" aria-label="${subject.title} PDF page annotation surface">
-          ${
-            objectUrl && material
-              ? renderPdfFrameStack(subject, material, objectUrl, selectedPage)
-              : `<div class="pdf-placeholder">
-                  <strong>${getPdfPreviewPlaceholderTitle(Boolean(material), isPreviewLoading)}</strong>
-                  <span>${getPdfPreviewPlaceholderDetail(Boolean(material), selectedPage)}</span>
-                </div>`
-          }
-          <div
-            class="pdf-annotation-surface is-${selectedTool}-mode"
-            ${selectedTool === "eraser" ? `style="${renderEraserCursorStyle(workspace.eraserShape, workspace.eraserSize)}"` : ""}
-            data-pdf-annotation-surface="true"
-            data-subject-id="${subject.id}"
-            data-page-number="${selectedPage}"
-          >
-            ${objectUrl ? `
-              <div class="pdf-surface-page-badge" aria-hidden="true" data-current-page-badge="true">페이지 ${selectedPageLabel}</div>
-              <div class="pdf-surface-page-end" aria-hidden="true">
-                <span class="pdf-surface-page-end__label">↑ 페이지 ${selectedPageLabel} 영역 끝 — 그 아래는 다음 페이지 미리보기</span>
-              </div>
-            ` : ""}
-            <svg class="ink-layer" viewBox="0 0 1000 1414" preserveAspectRatio="none" aria-hidden="true">
-              ${pageStrokes.map(renderInkStroke).join("")}
-            </svg>
-            <svg class="ink-layer is-live-layer" viewBox="0 0 1000 1414" preserveAspectRatio="none" aria-hidden="true" data-live-ink-layer="true"></svg>
-            ${pageNotes.map((note) => renderStickyNote(subject.id, note)).join("")}
-            ${pageTextBoxes.map((tb) => renderTextBox(subject.id, tb)).join("")}
-            ${pageChecklists.map((cl) => renderChecklist(subject.id, cl)).join("")}
-            ${pageTables.map((table) => renderTableMount(subject.id, table)).join("")}
-            ${pageCharts.map((chart) => renderChartMount(subject.id, chart)).join("")}
-            ${pageStarMarks.map((mark) => renderStarMark(subject.id, mark)).join("")}
-          </div>
-        </div>
-
-        <aside
-          class="pdf-inspector${inspectorOpen ? "" : " pdf-inspector--collapsed"}"
-          id="pdf-inspector-aside"
-          aria-label="PDF annotation state"
-          aria-hidden="${inspectorOpen ? "false" : "true"}"
-        >
-          <p class="meta">§4 — 저장 상태</p>
-          <h3>로컬 annotation</h3>
-          <dl class="pdf-inspector-stats">
-            ${renderInspectorStatRowModule("sticky", "포스트잇", workspace.stickyNotes.length, workspace, subject.id)}
-            ${renderInspectorStatRowModule("ink", "펜 stroke", workspace.inkStrokes.length, workspace, subject.id)}
-            ${renderInspectorStatRowModule("textbox", "텍스트 박스", workspace.textBoxes.length, workspace, subject.id)}
-            ${renderInspectorStatRowModule("checklist", "체크리스트", workspace.checklists.length, workspace, subject.id)}
-            ${renderInspectorStatRowModule("table", "표", workspace.tables.length, workspace, subject.id)}
-            ${renderInspectorStatRowModule("chart", "그래프", workspace.charts.length, workspace, subject.id)}
-            <div class="pdf-inspector-stat-row pdf-inspector-stat-row--plain"><dt>현재 도구</dt><dd>${formatPdfTool(selectedTool)}</dd></div>
-          </dl>
-          <div class="policy-block is-standalone">
-            <strong>PDF 원문은 backend material storage가 기준입니다.</strong>
-            <p>이 화면은 직접 S3에 올리지 않고 backend proxy API로 업로드/다운로드합니다. 필기 데이터의 backend 동기화는 다음 sprint 후보입니다.</p>
-          </div>
-          <button class="secondary-action" type="button" data-action="clear-pdf-annotations" data-subject-id="${subject.id}">
-            메모/필기 전체 지우기
-          </button>
-        </aside>
-      </div>
-    </section>
-  `;
-}
-
-
-
+// workspace-page context (slice-2f/iv-bis — workspace-page.ts).
+// 12 field = 8 lazy module-state getter + 1 sub-context + 3 main.ts render hooks.
+// 추가 surface (getSubjectPdfWorkspace / getPdfMaterialKey / renderChartMount /
+// renderTableMount / renderStarMark / renderInspectorStatRow) 는 workspace-page.ts
+// 가 자체 module 에서 직접 import (bucket-1 Direct imports).
+const workspacePageContext: WorkspacePageContext = {
+  getWorkspaceStore: () => pdfWorkspaceStore,
+  getInspectorOpen: () => inspectorOpen,
+  hasIntakeFeedback: () => Boolean(intakeFeedback),
+  getActivePdfObjectUrl,
+  getActivePdfObjectUrlMaterialId,
+  hasActivePdfPreviewLoad,
+  getSubjectPdfMaterials,
+  canManagePdfMaterials,
+  pdfToolbarContext,
+  renderIntakeFeedback,
+  renderSubjectPdfMaterialBrowser,
+  formatPdfTool
+};
 
 
 
@@ -5601,16 +5391,6 @@ function renderPdfWorkspacePage(subject: SubjectNote): string {
 // sprint-13/slice-5: table widget mount placeholder (mirrors renderChartMount).
 // Table DOM element is built by renderTable() and injected by refreshTableWidgets().
 
-function renderInkStroke(stroke: PdfInkStroke): string {
-  return `
-    <polyline
-      class="ink-stroke"
-      data-stroke-id="${escapeHtml(stroke.id)}"
-      points="${stroke.points.map(formatSvgPoint).join(" ")}"
-      style="stroke: ${stroke.color}; stroke-width: ${stroke.width};"
-    />
-  `;
-}
 
 function renderSubjectClassPage(subject: SubjectNote): string {
   const subjectMaterials = getSubjectPdfMaterials(subject.id);
