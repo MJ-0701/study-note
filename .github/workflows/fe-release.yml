@@ -78,7 +78,6 @@ jobs:
           echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
           echo "::notice title=FE Production Deploy::$DEPLOY_URL"
           vercel inspect "$DEPLOY_URL" --wait --timeout=5m --scope=${{ env.VERCEL_SCOPE }} --token=${{ secrets.VERCEL_TOKEN }}
-          vercel promote "$DEPLOY_URL" --yes --timeout=5m --scope=${{ env.VERCEL_SCOPE }} --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Write GitHub Actions summary
         if: always()
