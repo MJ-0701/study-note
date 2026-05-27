@@ -1,56 +1,72 @@
 # study-note
 
-회사일로 수업을 제대로 듣지 못하는 컴공 학부생이, 학기·과목별 강의 PDF + 과목 전용 AI 튜터 페르소나로 최소 시간·최대 효율로 학습하기 위한 개인 study workspace입니다.
+**한 줄 요약** — 강의 PDF 를 학기·과목 단위로 정리하고, PDF 위에 직접 필기하면서 학습할 수 있는 개인 study workspace.
 
-저는 본업이 백엔드 개발자라 학교 수업을 모두 출석할 수 없습니다. 그러나 컴공 전공기초는 한 학기에 한 번 듣고 넘기기엔 너무 중요한 토대입니다. 그래서 이 프로젝트는 단순한 lecture-note reader가 아니라, **교수님 강의 PDF를 흡수해서 사용자에게 적극적으로 질문을 던지고 핵심을 가리켜주는 AI 튜터 페르소나**를 만드는 쪽으로 방향을 잡습니다. 기말고사 대비는 이 흐름의 자연스러운 부분집합이지, 본질이 아닙니다.
+**왜 만들었나** — 본업이 백엔드 개발자라 학교 수업 출석이 어려운데, 컴공 전공기초는 한 번 놓치면 토대가 무너짐. 그래서 **교수님 강의 PDF 를 흡수해서 사용자에게 적극적으로 질문을 던지고 핵심을 가리켜주는 AI 튜터 페르소나** 를 만드는 쪽으로 방향을 잡았다. 시험 대비는 자연스러운 부분집합 일 뿐, 본질이 아니다.
 
-## Product Direction
+**누가 쓰나** — 본인 (운영자 mj). 향후 같은 학습 흐름이 필요한 다른 학생도 본인의 PDF·필기는 따로 관리.
 
-학기/과목 hierarchy 기반으로 운영합니다.
+**지금 어디까지 됐나** — 학기·과목 트리 + PDF 업로드/다운로드 + PDF 위 필기 (포스트잇·펜·별표·체크리스트·표·그래프) + 자동저장 + 다중 기기 동기화 + 관리자 대시보드 + 운영 지표 모니터링 까지 운영. AI 페르소나 = backlog (다음 phase).
 
-- 사용자가 **학기 (Term)** 를 자유롭게 추가합니다 (예: 학년 1·학기 1, 학년 2·학기 2…). 한 학기는 학년·학기 번호·제목으로 식별합니다.
-- 각 학기 아래 **과목 (Subject)** 을 자유롭게 추가합니다. 컴공 전공기초 4과목 (디지털공학개론·정보통신개론·C언어·컴퓨터개론) 이 첫 학기 seed 였고, 학기가 늘어남에 따라 다른 과목이 같은 구조로 들어옵니다.
-- 각 과목마다 강의 PDF, 주차별 노트, 자유 노트, 향후 **전용 AI 튜터 페르소나** 가 붙습니다.
+> **비개발자도 알아볼 수 있게** — 줄임말 / 도메인 용어는 [docs/glossary.md](docs/glossary.md) 한 곳에 정리해뒀다. 화면 안 한국어 단어 (학기 / 과목 / 수업 / PDF / 필기) 가 그대로 코드 의 이름이라 면접관도 매칭 가능.
 
-**핵심 invariant — 페르소나의 가치는 LLM provider와 독립적으로 정의됩니다.** 즉, 페르소나가 사용자에게 제공하는 학습 가치 (PDF 출처 명시·사용자 수준 추정 후 질문·시험 핵심 우선순위 표시 등) 는 Bedrock·Claude·Codex·Gemini 어느 LLM이 뒷단에 있든 동일해야 합니다. 모델은 교체 가능한 means이고, 페르소나의 행동 기준이 본질입니다.
+## 어떻게 구성되는지 (데이터 위계)
 
-주요 사용 환경은 데스크톱보다 iPad·태블릿·모바일에 가깝습니다. 좁은 화면에서도 PDF 보기·페르소나와 대화·핵심 메모 남기기가 끊기지 않는 쪽을 우선합니다.
+```
+학기 (Term)
+└─ 과목 (Subject)
+   ├─ PDF 자료 (PdfMaterial)
+   │  └─ 학생 별 필기 (AnnotationSnapshot)
+   └─ 주차 노트 (WeekNote)
+      └─ 자유 메모 (userNotes)
+```
+
+- 사용자가 **학기** 를 자유롭게 추가 (예: 1학년 1학기, 2학년 2학기...).
+- 각 학기 아래 **과목** 을 자유 추가. 첫 학기 seed = 컴공 전공기초 4 과목 (디지털공학개론·정보통신개론·C언어·컴퓨터개론). 학기 추가 시 다른 과목이 같은 구조로 들어옴.
+- 각 과목마다 **강의 PDF**, **주차별 노트**, **자유 메모**, 향후 **전용 AI 튜터 페르소나** 가 붙음.
+
+도메인 단어 (Term / Subject / WeekNote 등) 의 자세한 의미 = [docs/glossary.md](docs/glossary.md).
+
+## 핵심 원칙
+
+- **페르소나의 가치 = LLM provider 독립** — Bedrock·Claude·Codex·Gemini 어느 LLM 뒷단이든 동일한 학습 가치 (PDF 출처 명시·사용자 수준 추정 후 질문·시험 핵심 우선순위 표시) 제공. 모델은 교체 가능한 means, 페르소나의 행동 기준이 본질.
+- **모바일 우선** — 데스크톱보다 iPad·태블릿·모바일 환경 우선. 좁은 화면에서도 PDF 보기 + 페르소나 대화 + 메모가 끊기지 않게.
+- **데이터 사용자 격리** — 학생 본인의 PDF·필기·메모는 본인만. 운영자 (MASTER/ADMIN) 가 업로드한 PDF 만 모든 학생에게 공유. 필기는 같은 PDF 위라도 학생마다 본인 row.
 
 ## 코드리뷰 · 시연 안내 (live)
 
-운영 서버가 실제로 떠 있어서 로컬 셋업 없이 흐름을 확인할 수 있습니다.
+운영 서버가 실제로 떠 있어서 로컬 셋업 없이 흐름을 확인할 수 있습니다. **모든 단어 정의 = [docs/glossary.md](docs/glossary.md) 참고**.
 
 - 홈페이지 URL: <https://study-note.910701.xyz>
-- 관리자 대시보드: <https://study-note.910701.xyz/admin.html> (master / admin 권한 로그인 후 표시)
-- 리뷰어 시연 계정 (DB seed 완료):
+- 관리자 대시보드 (사용자 / 학기·과목 관리 + 운영 지표): <https://study-note.910701.xyz/admin.html>
+- 리뷰어 시연 계정 (DB 에 미리 등록):
   - 이름: `리뷰어`
   - 학번: `20260000`
-  - role: `MASTER`
-- backend = Azure Container Apps `study-note-api`, min-replicas=0 → 첫 요청 시 cold-start 약 5~35 초 발생 가능. session_hint cookie 또는 UptimeRobot keep-alive 가 warm 상태일 땐 50~150ms.
+  - 권한 (role): `MASTER` (전체 관리자 — 다른 사람을 등급 변경 가능)
+- 서버 = Azure Container Apps. 잠시 사용 안 했으면 첫 요청 시 5~35 초 콜드 스타트 가능. 5분 이내 다시 쓰면 50~150ms.
 
 권장 시연 흐름:
 
 1. `https://study-note.910701.xyz` 접속 → 이름 `리뷰어` + 학번 `20260000` 으로 로그인.
-2. 좌측 사이드바에서 **학기 → 과목 → 주차** 트리 확인. 학기/과목 추가·이동·삭제 시도 (master 권한이라 제한 없음).
-3. 과목 카드에서 **PDF 작업공간** 진입 → PDF 업로드 → 펜·포스트잇·별표·표·그래프 widget 사용. 다른 디바이스 (또는 새 창) 에서 같은 계정 로그인 → cross-device sync 확인.
-4. 주차 페이지의 자유 노트 입력 → 새 탭에서 같은 페이지 열면 디바운스 PUT 으로 저장된 노트 보임.
-5. `/admin.html` 접속 → 사용자 목록 + role / dev-user-flag / review 액션 확인. PR #84 머지 후에는 같은 화면 상단에 **운영 지표 panel** (APM × 3 / log × 3 / RUM × 3 카드) 이 추가됩니다 — Datadog 응답 기준.
-6. 페르소나 turn UI 는 `https://study-note.910701.xyz/persona-turn.html` — 단, 운영 환경은 fixture mode 기본이라 실제 LLM 호출 없음 (안내 banner 노출).
+2. 좌측 메뉴에서 **학기 → 과목** 트리 확인. 학기/과목 추가·이동·삭제 시도 (관리자 권한이라 제한 없음).
+3. 과목 카드에서 **PDF 작업공간** 진입 → PDF 업로드 → 펜·포스트잇·별표·체크리스트·표·그래프 도구로 직접 필기. 다른 디바이스 (또는 새 창) 에서 같은 계정 로그인 → 필기 자동 동기화 확인.
+4. 주차 페이지의 자유 메모 입력 → 새 탭에서 같은 페이지 열면 저장된 메모 보임.
+5. `/admin.html` 접속 → 사용자 목록 + 권한 변경 + 학기/과목 관리 + **운영 지표** 탭 (서버 안정성·사용자 활동 한눈 보기).
 
-운영/리뷰 관련 cross-reference:
+운영 대시보드 (로그인 불필요, 비개발자도 직접 접속 가능):
 
-- 현재 sprint 진행 상태 = `docs/solon/handoff/ACTIVE.md` (Layer A~D 분해 완료, sprint-W22-sprint-22).
-- **운영 대시보드 (Grafana / Datadog) 안내 + screenshot** = [docs/monitoring/dashboards.md](docs/monitoring/dashboards.md).
-- 운영 지표 dashboard 코드 = [PR #84](https://github.com/MJ-0701/study-note/pull/84).
-- React migration audit (다음 phase 진입 자료) = `.sfs-local/sprints/react-migration-audit.md` (private workbench).
-- Agent 문서 변경 규율 = `llm-wiki/references/standards.md`.
+- **Grafana (자체 호스팅, 1차 모니터링)**: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops>
+- **Datadog (외부 SaaS, 보조)**: <https://p.us5.datadoghq.com/sb/1ecde5d4-55e8-11f1-87bf-2a7c9f601ff0-55f020425896437e5ede2e233c536c25>
 
-운영 대시보드 (anonymous viewer, 비개발자 면접관용 직접 접속):
+자세한 docs:
 
-- **Grafana (self-host, 1차 SoT)**: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops>
-- **Datadog (public share)**: <https://p.us5.datadoghq.com/sb/1ecde5d4-55e8-11f1-87bf-2a7c9f601ff0-55f020425896437e5ede2e233c536c25>
+- 용어 정의 = [docs/glossary.md](docs/glossary.md) (비개발자 + 개발자 둘 다용)
+- 운영 대시보드 안내 = [docs/monitoring/dashboards.md](docs/monitoring/dashboards.md)
+- 현재 sprint 진행 = [docs/solon/handoff/ACTIVE.md](docs/solon/handoff/ACTIVE.md)
+- React 전환 사전 분석 = `.sfs-local/sprints/react-migration-audit.md` (private)
+- 운영 지표 backend 코드 = [PR #84](https://github.com/MJ-0701/study-note/pull/84)
 
-리뷰어 시연 계정은 데모용 master 권한입니다. 운영 master 계정과 분리되어 있으며 시연 후 권한 회수/계정 정리 여부는 별도 운영 결정입니다.
+리뷰어 계정은 데모용 권한입니다. 운영 master 계정과 분리되어 있으며 시연 후 권한 회수 / 계정 정리는 별도 운영 결정입니다.
 
 ## Core Experience
 
