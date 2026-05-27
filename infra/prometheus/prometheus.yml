@@ -1,0 +1,28 @@
+# sprint-W22-be-sync/B-3 — Prometheus scrape config for study-note self-host stack.
+# study-note-api 의 /api/metrics 를 15s 마다 pull. retention = 7d (storage tier 작음).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  external_labels:
+    monitor: "study-note"
+    env: "production"
+
+scrape_configs:
+  - job_name: "study-note-api"
+    metrics_path: /api/metrics
+    static_configs:
+      - targets:
+          # ACA 같은 Container App Environment 안의 internal FQDN.
+          # study-note-api.<env-default-domain>:<port>. 외부 FQDN (910701.xyz) 사용 시
+          # 인증/네트워크 hop 비용. 같은 env 내 internal 권장.
+          # 운영 적용 시 az containerapp show 로 정확한 internal FQDN 확인 후 갱신.
+          - "study-note-api:3000"
+    relabel_configs:
+      - target_label: service
+        replacement: "study-note-api"
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets:
+          - "localhost:9090"
