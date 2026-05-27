@@ -318,7 +318,16 @@
   background: var(--ds-bg-soft);
 }
 
-/* Datadog operations snapshot */
+.admin-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.admin-refresh-btn:disabled:hover {
+  background: var(--ds-bg);
+}
+
+/* Grafana operations entry */
 .ops-panel {
   border: 1px solid var(--ds-rule);
   border-radius: 8px;
@@ -512,7 +521,7 @@
   margin-bottom: var(--ds-space-sm);
 }
 
-/* 운영 지표 탭 외부 link (Datadog public dashboard / Grafana 등) */
+/* 운영 지표 탭 Grafana link */
 .ops-external-link {
   align-items: center;
   background: var(--ds-bg-soft);

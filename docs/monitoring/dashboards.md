@@ -1,5 +1,5 @@
 ---
-title: 운영 대시보드 안내 (Grafana / Datadog)
+title: 운영 대시보드 안내 (Grafana)
 owner: infra
 status: live
 created_at: 2026-05-28
@@ -8,16 +8,17 @@ last_reviewed_at: 2026-05-28
 
 # 운영 대시보드 안내
 
-study-note 의 운영 지표는 두 channel 로 관찰합니다.
+study-note 의 공개 운영 지표는 Grafana 를 기준으로 안내합니다.
 
 | Channel | 역할 | 접속 |
 |---|---|---|
-| **Grafana (self-host)** | Prometheus scrape 기반 1차 운영 SoT | <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops> |
-| Datadog (RUM/APM/Logs) | 외부 SaaS 운영 보조 | <https://p.us5.datadoghq.com/sb/1ecde5d4-55e8-11f1-87bf-2a7c9f601ff0-55f020425896437e5ede2e233c536c25> |
+| **Grafana (self-host)** | Prometheus scrape 기반 운영 SoT | <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops> |
 
-Grafana = anonymous viewer (read-only). 누구나 link 로 접속 가능. Datadog = public share dashboard URL.
+Grafana = anonymous viewer (read-only). 누구나 link 로 접속 가능.
 
-비개발자 면접관용 1줄 status + 대시보드 CTA = admin SPA `https://study-note.910701.xyz/admin.html#ops` (master/admin 로그인 후).
+비개발자 면접관용 CTA = admin SPA `https://study-note.910701.xyz/admin.html#ops`
+(master/admin 로그인 후). 이 화면은 Grafana link 만 활성화하고 Datadog 조회 버튼은
+비활성 상태로 표시한다.
 
 ## Grafana — `study-note Live Ops (Self-host, Prometheus)`
 
@@ -45,26 +46,20 @@ Prometheus 가 study-note-api 의 `/api/metrics` 를 15s 마다 scrape. self-hos
 
 (screenshot 미 commit 상태이면 위 placeholder 이미지는 없는 link. screenshot 캡쳐 후 위 path 로 add.)
 
-## Datadog — `study-note Live Ops - Metrics, Logs, Traces`
+## Datadog 상태
 
-us5 region 에서 운영. **현재 상태 (2026-05-28)**:
-
-- **Logs**: 부분 동작 (`Annotation Sync Writes` panel 데이터 있음). pdf-annotations.service 의
-  log scrape OK.
-- **APM trace.web.request.***: 미동작 — ACA serverless-init 의 workloadmeta init fail.
-  별 spike 로 fix 예정.
-- **RUM (sessions / errors / actions)**: 활성화 진행 중 — Vercel env
-  `VITE_DD_APPLICATION_ID` + `VITE_DD_CLIENT_TOKEN` 등록 후 신 build 부터 emit.
-
-Datadog = backlog 로 점진 활성. 1차 SoT 는 Grafana.
+Datadog dashboard / `/api/v1/admin/ops-dashboard` 는 개발자 참고용 legacy snapshot 으로만
+보존한다. 2026-05-28 기준 ACA `serverless-init` workloadmeta init fail 로 backend APM
+metric 이 안정적으로 들어오지 않아 공개 안내/시연 경로에서 제외한다.
 
 ## 면접관 시연 path
 
 1. <https://study-note.910701.xyz> 접속, 리뷰어 / 20260000 로그인 (master).
 2. 좌측 sidebar `🛡️ 관리자` → `운영 지표`.
 3. `/admin.html#ops` 에서:
-   - 1줄 status (예: "최근 15분 — 모든 지표 정상 (9 항목)").
-   - **자체 Grafana 대시보드 열기 ↗** click → 위 Grafana URL 직접 접속.
+   - `Grafana + Prometheus 기준` 문구 확인.
+   - `Datadog 조회 비활성화` 버튼은 눌리지 않는 상태.
+   - **Grafana 운영 대시보드 열기 ↗** click → 위 Grafana URL 직접 접속.
 4. Grafana = 1h window, 15s refresh. 실시간 API 호출량 / 응답 지연 / 필기 저장 outcome 등.
 
 ## Screenshots 추가 절차

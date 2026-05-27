@@ -9,30 +9,23 @@ import { TermsPanel } from "./terms-panel";
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
+const DEFAULT_GRAFANA_DASHBOARD_URL =
+  "https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops";
+
 // 운영 지표 탭의 외부 원본 대시보드 link.
-// VITE_PUBLIC_DASHBOARD_URL — primary (Datadog Public Dashboard 권장).
-// VITE_GRAFANA_URL — secondary (self-host Grafana, 선택). 미설정 시 link 숨김.
+// Grafana + Prometheus 를 공개 안내/시연용 SoT 로 사용한다.
 interface ExternalDashboardLink {
   url: string;
   label: string;
 }
 function readExternalLinks(): ExternalDashboardLink[] {
-  const links: ExternalDashboardLink[] = [];
-  const ddUrl = (import.meta.env.VITE_PUBLIC_DASHBOARD_URL as string | undefined)?.trim();
-  if (ddUrl) {
-    const label =
-      (import.meta.env.VITE_PUBLIC_DASHBOARD_LABEL as string | undefined)?.trim() ||
-      "Datadog 원본 대시보드 (전문가용)";
-    links.push({ url: ddUrl, label });
-  }
-  const grafanaUrl = (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim();
-  if (grafanaUrl) {
-    const label =
-      (import.meta.env.VITE_GRAFANA_LABEL as string | undefined)?.trim() ||
-      "자체 Grafana 대시보드";
-    links.push({ url: grafanaUrl, label });
-  }
-  return links;
+  const grafanaUrl =
+    (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim() ||
+    DEFAULT_GRAFANA_DASHBOARD_URL;
+  const label =
+    (import.meta.env.VITE_GRAFANA_LABEL as string | undefined)?.trim() ||
+    "Grafana 운영 대시보드";
+  return [{ url: grafanaUrl, label }];
 }
 const EXTERNAL_DASHBOARD_LINKS: ExternalDashboardLink[] = readExternalLinks();
 
@@ -81,41 +74,6 @@ interface AdminUser {
   createdAt: string;
 }
 
-type OpsDashboardStatus = "ready" | "partial" | "not_configured" | "error";
-type OpsCardStatus = "ok" | "warn" | "error" | "unknown";
-type OpsCardSource = "apm" | "logs" | "rum";
-type OpsCardUnit = "count" | "ms" | "percent";
-
-interface OpsDashboardCard {
-  id: string;
-  label: string;
-  value: number | null;
-  unit: OpsCardUnit;
-  status: OpsCardStatus;
-  source: OpsCardSource;
-  query: string;
-  errorMessage?: string;
-}
-
-interface OpsDashboardResponse {
-  source: "datadog";
-  status: OpsDashboardStatus;
-  message?: string;
-  generatedAt: string;
-  window: {
-    from: string;
-    to: string;
-    minutes: number;
-  };
-  services: {
-    api: string;
-    web: string;
-    env: string;
-    site: string;
-  };
-  cards: OpsDashboardCard[];
-}
-
 type BootState = "checking" | "unauth" | "forbidden" | "ready" | "error";
 
 function isUserRole(r: string): r is UserRole {
@@ -135,94 +93,6 @@ function formatDate(iso: string | null): string {
   } catch {
     return iso;
   }
-}
-
-function formatOpsValue(card: OpsDashboardCard): string {
-  if (card.value === null) return "-";
-
-  if (card.unit === "count") {
-    return card.value.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
-  }
-
-  if (card.unit === "ms") {
-    return `${card.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })} ms`;
-  }
-
-  return `${card.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`;
-}
-
-function opsStatusLabel(status: OpsCardStatus | OpsDashboardStatus): string {
-  switch (status) {
-    case "ready":
-    case "ok":
-      return "정상";
-    case "partial":
-    case "warn":
-      return "주의";
-    case "error":
-      return "오류";
-    case "not_configured":
-    case "unknown":
-      return "미설정";
-    default:
-      return status;
-  }
-}
-
-function sourceLabel(source: OpsCardSource): string {
-  if (source === "apm") return "백엔드";
-  if (source === "logs") return "로그";
-  return "사용자";
-}
-
-// 비개발자 친화 카드 설명. card.id 별 매핑. status 색상은 그대로 전달.
-interface OpsCardCopy {
-  title: string;
-  description: string;
-  emptyValue?: string;
-}
-const OPS_CARD_COPY: Record<string, OpsCardCopy> = {
-  api_requests: {
-    title: "백엔드 호출량",
-    description: "최근 15분 동안 서버로 들어온 요청 수입니다. 0 = 트래픽 없음."
-  },
-  api_errors: {
-    title: "백엔드 오류",
-    description: "서버 5xx 응답 건수. 0 = 정상."
-  },
-  api_p95_latency: {
-    title: "응답 지연 (상위 5%)",
-    description: "응답 속도 하위 5% 사례 기준. 800ms 이하 정상, 2초 이상 오류.",
-    emptyValue: "응답 즉시"
-  },
-  sync_put_success: {
-    title: "필기 자동저장 성공",
-    description: "PDF 위 필기·메모가 서버에 자동저장된 횟수."
-  },
-  sync_put_failure: {
-    title: "필기 자동저장 실패",
-    description: "자동저장 실패 횟수. 0 = 안정. 양수면 BE 5xx 또는 네트워크 문제."
-  },
-  sync_conflicts: {
-    title: "동시 편집 충돌",
-    description: "여러 기기에서 같은 PDF 를 편집해서 발생한 충돌 수. 0 = 정상."
-  },
-  rum_sessions: {
-    title: "방문 세션",
-    description: "최근 15분 동안 학생 브라우저에서 발생한 학습 세션 수."
-  },
-  rum_errors: {
-    title: "프론트엔드 오류",
-    description: "사용자 브라우저에서 발생한 JS 오류 수. 0 = 정상."
-  },
-  rum_actions: {
-    title: "사용자 동작",
-    description: "클릭·입력·페이지 이동 등 사용자 인터랙션 카운트."
-  }
-};
-
-function getOpsCardCopy(card: OpsDashboardCard): OpsCardCopy {
-  return OPS_CARD_COPY[card.id] ?? { title: card.label, description: "" };
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -276,9 +146,6 @@ function AdminApp() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
-  const [opsDashboard, setOpsDashboard] = useState<OpsDashboardResponse | null>(null);
-  const [opsLoading, setOpsLoading] = useState(false);
-  const [opsError, setOpsError] = useState<string | null>(null);
 
   // Tab routing — sidebar 의 '관리자' 메뉴 하위로 사용자 관리 / 운영 지표 두 별도 페이지.
   // URL hash 로 라우팅 (#users / #ops). default = users.
@@ -364,34 +231,13 @@ function AdminApp() {
       .finally(() => setListLoading(false));
   }, []);
 
-  const fetchOpsDashboard = useCallback(() => {
-    setOpsLoading(true);
-    setOpsError(null);
-    fetch(`${BACKEND_BASE}/api/v1/admin/ops-dashboard`, { credentials: "include" })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { errorMessage?: string };
-          setOpsError(body.errorMessage ?? `운영 지표 조회 실패 (${res.status})`);
-          return;
-        }
-        const snapshot = await res.json() as OpsDashboardResponse;
-        setOpsDashboard(snapshot);
-      })
-      .catch(() => {
-        setOpsError("Datadog 운영 지표 네트워크 오류");
-      })
-      .finally(() => setOpsLoading(false));
-  }, []);
-
   useEffect(() => {
     if (bootState !== "ready") return;
-    // tab 별 lazy fetch — users / ops 진입할 때만 해당 API 호출.
+    // 운영 지표는 Grafana 외부 대시보드로 안내한다. admin SPA 는 users API 만 직접 조회한다.
     if (activeTab === "users") {
       fetchUsers();
-    } else {
-      fetchOpsDashboard();
     }
-  }, [bootState, activeTab, fetchUsers, fetchOpsDashboard]);
+  }, [bootState, activeTab, fetchUsers]);
 
   // Reset currentPage to 1 when filters/search/pageSize change
   useEffect(() => {
@@ -560,12 +406,7 @@ function AdminApp() {
         </nav>
 
         {activeTab === "ops" && (
-          <OpsDashboardPanel
-            dashboard={opsDashboard}
-            loading={opsLoading}
-            error={opsError}
-            onRefresh={fetchOpsDashboard}
-          />
+          <OpsDashboardPanel />
         )}
 
         {activeTab === "users" && unreviewedCount > 0 && (
@@ -697,152 +538,54 @@ function AdminApp() {
   );
 }
 
-interface OpsDashboardPanelProps {
-  dashboard: OpsDashboardResponse | null;
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-}
-
-function summarizeOpsStatus(dashboard: OpsDashboardResponse | null): {
-  label: string;
-  detail: string;
-  tone: OpsCardStatus | OpsDashboardStatus;
-} {
-  if (!dashboard) {
-    return { label: "불러오는 중", detail: "Datadog 응답을 기다리는 중입니다.", tone: "unknown" };
-  }
-  const okCount = dashboard.cards.filter((c) => c.status === "ok").length;
-  const warnCount = dashboard.cards.filter((c) => c.status === "warn").length;
-  const errCount = dashboard.cards.filter((c) => c.status === "error").length;
-  const total = dashboard.cards.length;
-
-  if (dashboard.status === "not_configured") {
-    return {
-      label: "미설정",
-      detail: "Datadog API 키가 설정되지 않았습니다. 외부 대시보드로 확인하세요.",
-      tone: "not_configured" as OpsDashboardStatus
-    };
-  }
-  if (errCount > 0 && errCount === total) {
-    return { label: "오류", detail: "지표 조회에 모두 실패했습니다.", tone: "error" };
-  }
-  if (warnCount > 0 || errCount > 0) {
-    return {
-      label: "주의",
-      detail: `${total} 지표 중 정상 ${okCount} · 주의 ${warnCount} · 오류 ${errCount}.`,
-      tone: "warn"
-    };
-  }
-  return {
-    label: "정상",
-    detail: `최근 ${dashboard.window.minutes}분 — 모든 지표 정상 (${total} 항목).`,
-    tone: "ok"
-  };
-}
-
-function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboardPanelProps) {
-  const summary = summarizeOpsStatus(dashboard);
+function OpsDashboardPanel() {
   return (
     <section className="ops-panel" aria-labelledby="ops-dashboard-title">
       <div className="ops-panel-header">
         <div>
           <h2 id="ops-dashboard-title">운영 지표</h2>
           <p className="ops-panel-meta">
-            {dashboard
-              ? `${formatDate(dashboard.generatedAt)} 기준 · 환경 ${dashboard.services.env}`
-              : "운영 지표 불러오는 중..."}
+            Grafana + Prometheus 기준 · Datadog 조회는 비활성화
           </p>
         </div>
         <div className="ops-panel-actions">
-          <span className={`ops-status ${summary.tone}`}>{summary.label}</span>
+          <span className="ops-status ready">Grafana</span>
           <button
             type="button"
             className="admin-refresh-btn"
-            onClick={onRefresh}
-            disabled={loading}
+            disabled
+            aria-disabled="true"
+            title="Datadog 운영 지표 API 조회는 공개 안내에서 제외했습니다."
           >
-            {loading ? "조회 중..." : "지표 새로고침"}
+            Datadog 조회 비활성화
           </button>
         </div>
       </div>
 
       <p className="ops-panel-summary">
-        {summary.detail}
+        운영 지표는 Grafana 대시보드에서 확인합니다. Prometheus 가 API 의 /api/metrics 를
+        15초마다 수집하고, Datadog snapshot 은 개발자 참고용으로만 남깁니다.
       </p>
 
-      {error && (
-        <div className="admin-error-banner" role="alert">
-          {error}
-        </div>
-      )}
-
-      {dashboard?.message && (
-        <div className={`ops-message ${dashboard.status}`}>
-          {dashboard.message}
-        </div>
-      )}
-
-      {EXTERNAL_DASHBOARD_LINKS.length > 0 && (
-        <div className="ops-external-link" role="note">
-          <p>
-            <strong>상세 그래프는 외부 운영 대시보드에서 확인하세요.</strong>{" "}
-            그래프·필터·시간 범위 조절·전체 히스토리는 아래 링크 클릭.
-          </p>
-          <div className="ops-external-link-row">
-            {EXTERNAL_DASHBOARD_LINKS.map((link) => (
-              <a
-                key={link.url}
-                className="ops-external-link-btn"
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {link.label} 열기 ↗
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <details className="ops-card-details">
-        <summary>지표 항목 펼쳐 보기 (서비스 별 9 항목)</summary>
-        <p className="ops-panel-explainer">
-          각 항목은 Datadog (APM · 로그 · 사용자 브라우저 RUM) 의 최근 15 분 데이터를 서버 측에서 가공한 결과입니다.
-          숫자 자체보다 <strong>정상 / 주의 / 오류</strong> 색상에 주목하세요. 상세 추세는 위 외부 대시보드.
+      <div className="ops-external-link" role="note">
+        <p>
+          <strong>상세 그래프는 Grafana 에서 확인하세요.</strong>{" "}
+          호출량, 5xx, p95 지연, CAS 충돌, Node.js heap/event loop 를 한 화면에서 봅니다.
         </p>
-        {loading && !dashboard ? (
-          <div className="ops-loading">Datadog 에서 지표를 불러오는 중...</div>
-        ) : (
-          <div className="ops-card-grid">
-            {(dashboard?.cards ?? []).map((card) => {
-              const copy = getOpsCardCopy(card);
-              const displayValue =
-                card.value === 0 && copy.emptyValue ? copy.emptyValue : formatOpsValue(card);
-              return (
-                <article className={`ops-card ${card.status}`} key={card.id}>
-                  <div className="ops-card-topline">
-                    <span className="ops-source">{sourceLabel(card.source)}</span>
-                    <span className={`ops-card-status ${card.status}`}>
-                      {opsStatusLabel(card.status)}
-                    </span>
-                  </div>
-                  <div className="ops-card-value">{displayValue}</div>
-                  <h3>{copy.title}</h3>
-                  {copy.description && (
-                    <p className="ops-card-description">{copy.description}</p>
-                  )}
-                  {card.errorMessage && (
-                    <p className="ops-card-error">
-                      Datadog 데이터를 가져오지 못했습니다. 외부 대시보드에서 직접 확인하세요.
-                    </p>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </details>
+        <div className="ops-external-link-row">
+          {EXTERNAL_DASHBOARD_LINKS.map((link) => (
+            <a
+              key={link.url}
+              className="ops-external-link-btn"
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {link.label} 열기 ↗
+            </a>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

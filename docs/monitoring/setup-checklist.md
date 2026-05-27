@@ -1,159 +1,85 @@
 ---
 title: Monitoring Setup Checklist
 owner: infra
-status: draft
+status: active
 created_at: 2026-05-22
-last_reviewed_at: 2026-05-27
+last_reviewed_at: 2026-05-28
 ---
 
 # Monitoring Setup Checklist
 
-## 1. Datadog RUM
+Grafana + Prometheus 가 공개 운영 안내의 SoT 이다. Datadog 은 개발자 참고용 legacy
+snapshot 으로 보존하지만, `/admin.html#ops` 에서는 더 이상 Datadog API 를 호출하지 않는다.
 
-- Use `https://us5.datadoghq.com`.
-- Create a JavaScript RUM app named `study-note-web`.
-- Keep `applicationId` and `clientToken`.
-- Do not use Datadog API Key in frontend env.
+## 1. Grafana / Prometheus Runtime
 
-## 2. Vercel Production Env
+- Azure Container Apps environment: `study-note-cae`.
+- Prometheus app: `study-note-prometheus` (internal ingress).
+- Grafana app: `study-note-grafana` (external ingress).
+- Prometheus scrape target: `study-note-api` `/api/metrics`.
+- Grafana dashboard URL:
+  <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops>
+
+## 2. Frontend Env
+
+`VITE_GRAFANA_URL` 은 선택값이다. 미설정 시 admin SPA 는 production Grafana dashboard
+URL 로 fallback 한다.
 
 ```text
-VITE_DD_APPLICATION_ID=<Datadog RUM application id>
-VITE_DD_CLIENT_TOKEN=<Datadog RUM client token>
-VITE_DD_SITE=us5.datadoghq.com
-VITE_DD_SERVICE=study-note-web
-VITE_DD_ENV=production
-VITE_DD_SESSION_REPLAY_SAMPLE_RATE=0
-VITE_DD_TRACK_USER_INTERACTIONS=false
+VITE_GRAFANA_URL=https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops
+VITE_GRAFANA_LABEL=Grafana 운영 대시보드
 ```
 
-Redeploy after changing env. Vite reads `VITE_*` values at build time.
+Datadog public dashboard URL 은 더 이상 frontend 안내에 사용하지 않는다.
 
-## 3. Azure Integration
+## 3. First Verification
 
-- Datadog `Integrations` -> `Azure`.
-- Use Quickstart.
-- Run the generated script in Azure Cloud Shell.
-- Confirm `azure.app_containerapps.*` metrics for `study-note-api`.
+1. Open `https://study-note.910701.xyz`.
+2. Sign in as master/admin.
+3. Open `/admin.html#ops`.
+4. Confirm:
+   - `Grafana + Prometheus 기준` text is visible.
+   - `Datadog 조회 비활성화` button is disabled.
+   - `Grafana 운영 대시보드 열기` opens the Grafana dashboard.
+5. In Grafana, confirm API request count, 5xx, p95 latency, route throughput,
+   CAS conflicts, Node.js heap, and event loop panels render data.
 
-## 4. Backend APM
+## 4. Grafana Dashboard Panels
 
-- Datadog `Organization Settings` -> `API Keys`에서 API key를 만든다.
-- Datadog `Organization Settings` -> `Application Keys`에서 admin snapshot용
-  application key를 만든다.
-- Azure Container Apps `study-note-api`에 secret `dd-api-key`를 추가한다.
-- Azure Container Apps `study-note-api`에 secret `dd-app-key`를 추가한다.
-- Container App environment variable에 `DD_API_KEY=secretref:dd-api-key`를 연결한다.
-- Container App environment variable에 `DD_APP_KEY=secretref:dd-app-key`를 연결한다.
-- 다음 BE 배포 태그부터 Docker image가 `dd-trace`와 `serverless-init`로 실행된다.
-- 배포 후 Datadog `APM` -> `Services`에서 `study-note-api`가 생성되는지 확인한다.
+| Panel | Source | Purpose |
+|---|---|---|
+| API 호출량 (5분) | Prometheus | Recent request volume. |
+| 5xx 오류 (5분) | Prometheus | Backend 5xx pulse. |
+| p95 응답 지연 | Prometheus histogram | Review slow responses quickly. |
+| CAS 충돌 (총) | Prometheus counter | Detect stale annotation writes. |
+| API 호출량 — route 별 | Prometheus labels | Compare endpoint traffic. |
+| 응답 지연 — p50/p95/p99 | Prometheus histogram | Latency distribution. |
+| 필기 자동저장 — outcome 별 | Prometheus counter | Sync success/failure/stale pulse. |
+| Node.js 프로세스 — heap / event loop | Prometheus / Node metrics | Runtime health. |
 
-Azure CLI equivalent:
+## 5. Cost Routine
+
+Grafana/Prometheus always-on can exceed the free ACA grant. If student credit
+protection is more important than always-on monitoring:
 
 ```sh
-az containerapp secret set \
-  --name study-note-api \
-  --resource-group study-note-be-rg \
-  --secrets \
-    dd-api-key=<DATADOG_API_KEY> \
-    dd-app-key=<DATADOG_APPLICATION_KEY>
-
-az containerapp update \
-  --name study-note-api \
-  --resource-group study-note-be-rg \
-  --set-env-vars \
-    DD_API_KEY=secretref:dd-api-key \
-    DD_APP_KEY=secretref:dd-app-key \
-    DD_SITE=us5.datadoghq.com
+pnpm run infra:monitoring:down
 ```
 
-Required production env:
+To bring it back:
 
-```text
-DD_API_KEY=secretref:dd-api-key
-DD_APP_KEY=secretref:dd-app-key
-DD_SERVICE=study-note-api
-DD_ENV=production
-DD_VERSION=<be tag version>
-DD_SITE=us5.datadoghq.com
-DD_TRACE_ENABLED=true
-DD_LOGS_ENABLED=true
-DD_LOGS_INJECTION=true
-DD_SOURCE=nodejs
+```sh
+GRAFANA_PASSWORD='<strong-password>' pnpm run infra:monitoring:up
 ```
 
-## 5. First Verification
+## 6. Datadog Archive
 
-- Deploy FE from a new `fe-v*` tag after the RUM code is committed.
-- Open `https://study-note.910701.xyz`.
-- Confirm a RUM session in Datadog.
-- Test login and PDF upload actions.
-- Deploy BE from a new `be-v*` tag after adding the Azure secret.
-- Open `https://study-note.api.910701.xyz/api/health`.
-- Confirm APM traces and logs under service `study-note-api`.
-- Sign in as master/admin and open `/admin.html`; confirm the 운영 지표 panel
-  returns `ready` or `partial` instead of `not_configured`.
-
-## 6. Operations Dashboard
-
-Dashboard payload:
+Kept for developer-only investigation:
 
 - `docs/monitoring/datadog-study-note-ops-dashboard.json`
+- `docs/monitoring/datadog-dashboard.md`
+- `GET /api/v1/admin/ops-dashboard`
 
-Import it in Datadog US5 from the dashboard JSON editor. Confirm template
-variables after import:
-
-```text
-env=production
-service=study-note-api
-web_service=study-note-web
-```
-
-The dashboard uses:
-
-- APM trace metrics from the actual dd-trace default v0 operation:
-  `trace.web.request`, `trace.web.request.hits`, and
-  `trace.web.request.errors`.
-- Log text searches for the actual backend messages containing
-  `metric=sync.put.success`, `metric=sync.put.failure`,
-  `metric=annotation.cas.stale`, and `metric=annotation.batch.size`.
-- RUM event queries for sessions, browser errors, and login/signup/PDF upload
-  product actions.
-
-The admin dashboard uses the same live sources through
-`GET /api/v1/admin/ops-dashboard`. It requires both `DD_API_KEY` and
-`DD_APP_KEY`; without them, the endpoint returns a safe `not_configured`
-snapshot for review/debugging.
-
-## 7. Optional Log Facets
-
-The dashboard works without custom log parsing because it searches the raw log
-message text. Create these Datadog facets only for nicer manual drill-downs:
-
-| Facet | Required for |
-|---|---|
-| `@metric` | Selecting `sync.put.*` and `annotation.*` log metrics. |
-| `@type` | Splitting sync write success into `create` and `update`. |
-| `@reason` | Splitting sync failures by cause. |
-| `@truncated` | Splitting batch annotation load shape. |
-
-Do not promote user or material identifiers as dashboard facets. Keep the
-operations view at service/resource/reliability granularity.
-
-## 8. Release Check Routine
-
-After each production tag:
-
-1. Set dashboard time range to 15 minutes.
-2. Filter `env=production`.
-3. For BE releases, inspect the Release Comparison panel grouped by `version`.
-4. Check API errors, then p95 latency, then slow/erroring resources.
-5. Check annotation sync failure and stale conflict widgets.
-6. Check RUM browser errors and key product actions.
-7. Drill into the failing APM resource, trace, or log group if any panel is red.
-
-## 9. Hackle
-
-Hackle can be revisited later for feature flags and A/B testing. For now,
-Datadog RUM/Product Analytics is the default because the student-pack account is
-already active.
+2026-05-28 status: Datadog RUM has data, but backend APM trace metrics are not
+reliable on ACA because `serverless-init` reports workloadmeta initialization
+failures. Do not use Datadog as the public demo path.

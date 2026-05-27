@@ -52,17 +52,19 @@ main.ts: 11,049 → **4,448** (-6,601, **-59.74%**). 🎯 **Layer D 분해 완�
 
 - **PR #84** — 관리자 운영 지표 대시보드 (Datadog server-side 조회). **squash merge → main (d2f9895)**.
   - `apps/api/src/admin/ops-dashboard.service.ts` (Codex P2/P3 fix 포함 — sub-100ms preserve + 1_000_000 ns boundary).
-  - `GET /v1/admin/ops-dashboard` (master/admin guard). DD key 서버 only.
+  - `GET /v1/admin/ops-dashboard` (master/admin guard). DD key 서버 only. 2026-05-28 기준 FE 에서는 호출하지 않고 legacy/internal snapshot 으로만 보존.
   - 9 card (APM × 3 + log-derived × 3 + RUM × 3). `not_configured` graceful fallback.
   - 배포 = `be-v0.1.14` tag (2026-05-27) — 122 commit lag 해소 동반.
   - ACA env `DD_APP_KEY=secretref:dd-app-key` 적용 완료.
+  - 공개 운영 SoT = Grafana + Prometheus. `/admin.html#ops` 는 Grafana CTA 만 활성화하고 `Datadog 조회 비활성화` 버튼을 표시.
 
 ## 코드리뷰 시연 안내 (내일)
 
 - URL: <https://study-note.910701.xyz>
 - 리뷰어 계정: 이름 `리뷰어` / 학번 `20260000` / role `MASTER`.
 - admin SPA: <https://study-note.910701.xyz/admin.html> (master/admin 로그인 후 표시).
-  - 사용자 관리 + 학기/과목 관리 + 운영지표 panel (PR #84) 통합.
+  - 사용자 관리 + 학기/과목 관리 + 운영지표 panel 통합.
+  - 운영지표 panel 은 Grafana link 만 안내. Datadog 조회는 비활성화.
 - 권장 흐름 = README.md 의 "코드리뷰 · 시연 안내 (live)" 절 참조.
 
 ## 활성 작업 = ① PR #84 코드리뷰 (내일) + ② React migration cost 재평가

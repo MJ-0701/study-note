@@ -51,12 +51,11 @@
 2. 좌측 메뉴에서 **학기 → 과목** 트리 확인. 학기/과목 추가·이동·삭제 시도 (관리자 권한이라 제한 없음).
 3. 과목 카드에서 **PDF 작업공간** 진입 → PDF 업로드 → 펜·포스트잇·별표·체크리스트·표·그래프 도구로 직접 필기. 다른 디바이스 (또는 새 창) 에서 같은 계정 로그인 → 필기 자동 동기화 확인.
 4. 주차 페이지의 자유 메모 입력 → 새 탭에서 같은 페이지 열면 저장된 메모 보임.
-5. `/admin.html` 접속 → 사용자 목록 + 권한 변경 + 학기/과목 관리 + **운영 지표** 탭 (서버 안정성·사용자 활동 한눈 보기).
+5. `/admin.html` 접속 → 사용자 목록 + 권한 변경 + 학기/과목 관리 확인. 운영 지표 탭은 Grafana CTA 만 활성화하고 Datadog 조회 버튼은 비활성화.
 
 운영 대시보드 (로그인 불필요, 비개발자도 직접 접속 가능):
 
-- **Grafana (자체 호스팅, 1차 모니터링)**: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops>
-- **Datadog (외부 SaaS, 보조)**: <https://p.us5.datadoghq.com/sb/1ecde5d4-55e8-11f1-87bf-2a7c9f601ff0-55f020425896437e5ede2e233c536c25>
+- **Grafana (자체 호스팅, 운영 모니터링 SoT)**: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops>
 
 자세한 docs:
 
@@ -64,7 +63,7 @@
 - 운영 대시보드 안내 = [docs/monitoring/dashboards.md](docs/monitoring/dashboards.md)
 - 현재 sprint 진행 = [docs/solon/handoff/ACTIVE.md](docs/solon/handoff/ACTIVE.md)
 - React 전환 사전 분석 = `.sfs-local/sprints/react-migration-audit.md` (private)
-- 운영 지표 backend 코드 = [PR #84](https://github.com/MJ-0701/study-note/pull/84)
+- 운영 지표 backend 코드 = [PR #84](https://github.com/MJ-0701/study-note/pull/84) (Datadog 기반 내부 snapshot, 공개 시연 경로 아님)
 
 리뷰어 계정은 데모용 권한입니다. 운영 master 계정과 분리되어 있으며 시연 후 권한 회수 / 계정 정리는 별도 운영 결정입니다.
 
@@ -92,7 +91,7 @@ north star = "회사일로 수업을 제대로 듣지 못하는 사용자가 최
 - 주차별 user note + 자유 노트 (`/api/v1/notes/...`) BE persistence + 디바운스 PUT + 401/403 attached-session race guard.
 - Conversation/persona-turn HTTP endpoint (`/api/v1/conversations/:id/turns`, `/api/v1/persona-turns`) — 디공이 1 페르소나 web UI live. fixture default + real Claude CLI opt-in.
 - corpus ingest CLI + MCP server (`get_chunks` tool, stdio).
-- Datadog APM/log/RUM 운영 — frontend RUM (us5) + ACA `serverless-init + dd-trace`. 관리자 운영 지표 panel (`GET /v1/admin/ops-dashboard`, PR #84) 가 server-side 로 DD API 조회.
+- Grafana + Prometheus 운영 모니터링 — Prometheus 가 backend `/api/metrics` 를 15초마다 scrape 하고 Grafana 가 API 호출량, 5xx, p95 지연, route 별 처리량, CAS 충돌, Node.js heap/event-loop 상태를 표시한다.
 - 호스팅 = Azure Static Web Apps (frontend, `study-note.910701.xyz`) + Azure Container Apps (backend, min-replicas=0 + UptimeRobot keep-alive). MySQL Flex (user/session/material/notes/annotation). 도메인 = Porkbun `910701.xyz`.
 - FE bundling = Vite 7 multi-entry — `index.html` (main app) + `admin.html` + `persona-turn.html` + `onboarding-mcp.html`. main app 은 vanilla TS + morphdom rendering. React 19.2.6 의존은 admin/persona-turn entry 가 이미 사용 중이고, main app 의 React migration 은 다음 phase (sprint-W22-sprint-23+).
 - main.ts 분해 phase (Layer A~D) 완료 — 11,049 → 4,448 line / -59.74%. 자세한 sprint 진행은 `docs/solon/handoff/ACTIVE.md`.
@@ -105,18 +104,18 @@ north star = "회사일로 수업을 제대로 듣지 못하는 사용자가 최
 flowchart LR
     subgraph Client["Client (브라우저 · iPad · 모바일)"]
         FE["Vite SPA<br/>index.html · admin.html<br/>persona-turn.html · onboarding-mcp.html"]
-        DDRUM["Datadog RUM<br/>(study-note-web)"]
     end
 
     subgraph Edge["Azure (운영)"]
         SWA["Static Web Apps<br/>study-note.910701.xyz"]
         ACA["Container Apps<br/>study-note-api · min-replicas=0"]
+        PROM["Prometheus<br/>/api/metrics scrape"]
+        GRAF["Grafana<br/>study-note Live Ops"]
         MySQL[("MySQL Flex<br/>user · session · material<br/>userNotes · annotation · term/subject")]
     end
 
     subgraph External["외부"]
         R2[("Cloudflare R2<br/>PDF 원본 + annotation snapshot")]
-        DDAPM["Datadog APM/Logs<br/>(study-note-api)"]
         Claude["Claude CLI<br/>(persona turn opt-in)"]
     end
 
@@ -124,10 +123,10 @@ flowchart LR
     SWA -- "rewrite /api/* → ACA" --> ACA
     ACA -- "Prisma" --> MySQL
     ACA -- "S3 SDK (R2 endpoint)" --> R2
-    ACA -- "dd-trace + serverless-init" --> DDAPM
+    PROM -- "15s scrape /api/metrics" --> ACA
+    GRAF -- "PromQL dashboard" --> PROM
     ACA -- "persona-turn subprocess<br/>(fixture default)" --> Claude
-    FE -- "RUM beacon" --> DDRUM
-    DDRUM -. "us5" .-> DDAPM
+    FE -- "운영 링크" --> GRAF
 ```
 
 ### Repo layout (workspace)
@@ -200,7 +199,7 @@ Application/infra (도메인 아님):
 
 - httpOnly cookie session + `SessionAuthGuard` → `request.user` 주입.
 - role 위계 = `master > admin > normal`. `RoleGuard` + `@Roles(...)` decorator. self-modify 금지 + admin→MASTER 승급 금지.
-- DD_API_KEY/DD_APP_KEY 는 ACA secret only — 브라우저로 내려가지 않음. `/v1/admin/ops-dashboard` 가 server-side 로 Datadog API 호출.
+- 운영 대시보드는 Grafana anonymous viewer (read-only) 로만 공개. Datadog API key 는 legacy/internal snapshot 용 ACA secret 이며 브라우저로 내려가지 않는다.
 - R2 object 직접 노출 X — BE proxy (`/api/materials/:materialId/download`) 가 ownership 확인 후 stream.
 - MCP server 응답 의 `sourcePdfPath` 는 basename 만 (절대 경로 차단).
 
@@ -242,7 +241,7 @@ backend NestJS global prefix = `app.setGlobalPrefix("api")`. health 와 legacy m
 | POST | `/api/v1/persona-turns` | persona | one-shot persona turn (디공이 1 페르소나). fixture/real mode. |
 | GET | `/api/v1/admin/users` | admin | master/admin guard. 사용자 목록. |
 | PUT | `/api/v1/admin/users/:id/role` `/dev-user-flag` `/review` | admin | role 변경 (master/admin 위계 검증), 반려/재활성 toggle (master only), review 완료 표시. |
-| GET | `/api/v1/admin/ops-dashboard` | admin | **PR #84** — Datadog server-side query (APM × 3 + log × 3 + RUM × 3 card). DD_API_KEY/DD_APP_KEY 없으면 `not_configured`. |
+| GET | `/api/v1/admin/ops-dashboard` | admin | **PR #84** — legacy/internal Datadog snapshot. 공개 운영 안내 SoT 는 Grafana. DD_API_KEY/DD_APP_KEY 없으면 `not_configured`. |
 | GET/PUT/POST/PATCH | `/api/materials/...` | materials | legacy prefix (sprint-W21-sprint-2 이후 일부 410 Gone). PDF upload-intent/complete/file/download/export-bundle. annotation read/write 는 `/api/v1/pdf-annotations/...` 가 SoT. |
 | GET | `/api/health` | health | LB / keep-alive ping. |
 
@@ -251,7 +250,7 @@ backend NestJS global prefix = `app.setGlobalPrefix("api")`. health 와 legacy m
 **Runtime**:
 
 - Frontend: Vite 7 + TypeScript + (R)eact 19.2.6 (admin/persona-turn entry). main app 은 vanilla TS + morphdom — React migration 다음 phase.
-- Backend: NestJS 11 + Express + dd-trace v5 + Prisma 6.
+- Backend: NestJS 11 + Express + Prisma 6.
 - Database: MySQL (운영 = Azure MySQL Flex). schema = `packages/persistence/prisma/schema.prisma`.
 - Storage: Cloudflare R2 (S3-compatible). 코드의 `STORAGE_PROVIDER=s3` + `S3_ENDPOINT=https://...r2.cloudflarestorage.com` 가 R2 endpoint. AWS S3 사용 X.
 - AI: Claude CLI provider (real opt-in) + fixture default. 4 과목 4 페르소나 점진 도입 = backlog.
@@ -262,7 +261,7 @@ backend NestJS global prefix = `app.setGlobalPrefix("api")`. health 와 legacy m
 - Frontend = Azure Static Web Apps. 운영 URL = `https://study-note.910701.xyz`. Vercel 미사용.
 - Backend = Azure Container Apps `study-note-api`. min-replicas=0 → UptimeRobot 1분 ping + workflow keep-alive 로 cold-start 완화.
 - Domain = Porkbun `910701.xyz` (운영 = `study-note.910701.xyz`).
-- Observability = Datadog US5. APM (`study-note-api`) + Logs + RUM (`study-note-web`). 운영 대시보드 JSON = `docs/monitoring/datadog-study-note-ops-dashboard.json` (PR #84 머지 이후).
+- Observability = Grafana + Prometheus self-host. Prometheus 가 `study-note-api` 의 `/api/metrics` 를 scrape 하고 Grafana 가 운영 대시보드를 제공한다. Datadog 은 개발자용 내부 보조/히스토리로만 유지하며 공개 시연 안내에서 제외한다.
 
 **Workflow**:
 
@@ -435,7 +434,7 @@ RUN_REAL_S3_SMOKE=1 STORAGE_PROVIDER=s3 S3_BUCKET="..." S3_REGION="auto" S3_ENDP
 분해 phase (Layer A~D) 가 끝났으니 다음은 **React migration + AI 페르소나 확장** 입니다.
 
 - **React migration sprint-23+** — main.ts 4,448 line 의 vanilla string-template + morphdom + document-level event 모델을 React 19.2.6 component model 로 점진 전환. 첫 route = `subject-mcp` (own action 0 / ambient 의존 1개). audit = `.sfs-local/sprints/react-migration-audit.md`.
-- **운영 지표 dashboard** — PR #84 머지 + Datadog console import + alert monitor JSON 결정 (Terraform 관리 여부 포함).
+- **운영 지표 dashboard** — Grafana screenshot/시연 runbook 정리 + 필요 시 Prometheus alert rule 후보 결정.
 - **AI 튜터 페르소나 4명** — 과목별 전용. 공통 system prompt 골격 + 과목별 specialization layer.
 - **Multi-provider AI stack** — Bedrock primary, 월 비용 상한 도달 시 또는 Bedrock 미채택 선택 시 로컬 AI agent (Claude CLI · Codex CLI · Gemini CLI 등) 로 자동 fallback. Provider 교체 시에도 페르소나 가치는 동일.
 - **RAG over lecture PDFs** — 강의 PDF embedding 을 검색 가능한 ANN index (pgvector / OpenSearch 후보) 로 옮겨, 페르소나가 답변 시 PDF 출처 명시.

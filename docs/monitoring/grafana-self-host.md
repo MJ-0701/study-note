@@ -1,31 +1,33 @@
 ---
-title: Grafana + Prometheus 임시 부팅 runbook (Azure for Students 비용 보호)
+title: Grafana + Prometheus 운영 runbook
 owner: infra
-status: temporary
+status: live
 created_at: 2026-05-28
 last_reviewed_at: 2026-05-28
 ---
 
-# Grafana + Prometheus on ACA — 임시 사용 전용
+# Grafana + Prometheus on ACA
 
-study-note 운영 지표의 보조 channel.
+study-note 운영 지표의 공개 SoT.
 
-- **Always-on** = Datadog (push). admin SPA `/admin.html#ops` panel + Datadog Public Dashboard URL. **여기가 SoT**.
-- **Temporary self-host** = Prometheus (pull) + Grafana. 면접/시연/운영 확인 직전에 **올렸다 끄는** 운영. 학생 크레딧 ($100) 안 영구 상시 운영 X.
+- **Grafana** = 면접/시연/운영 안내용 dashboard.
+- **Prometheus** = `study-note-api` 의 `/api/metrics` 를 15s 마다 scrape.
+- **Datadog** = 개발자 참고용 legacy snapshot. admin SPA 에서는 조회 버튼 비활성화.
 
-## 왜 임시인가
+## 비용 메모
 
 Azure for Students $100 credit + 현재 월 과금:
 - MySQL Flex (B1ms, 20GB) ≈ ₩5,500/월 (확정).
 - DNS ≈ ₩200/월.
 - ACA api (min=1, 0.25 vCPU / 0.5 GiB) = 무료 grant 안 (현재 청구 0).
 
-Grafana + Prometheus always-on (min=1) 추가 비용:
+Grafana + Prometheus always-on (min=1) 는 추가 비용이 생길 수 있다:
 - 0.75 vCPU + 1.5 GiB × 24h × 30d = 1.94M vCPU-s + 3.89M GiB-s.
 - 무료 grant (180K vCPU-s / 360K GiB-s) 초과량 청구.
 - **추정 idle ₩25,000~27,000/월 / active ₩86,000/월** — MySQL 보다 비쌈.
 
-→ 항상 띄우지 않는다. 시연 전 부팅, 끝나면 종료.
+→ Grafana 를 공개 SoT 로 쓰되, 학생 크레딧 보호가 더 중요할 때는 아래 종료 절차로
+scale-to-zero 한다.
 
 ## 사전 준비 (한 번만)
 
@@ -63,16 +65,18 @@ pnpm run infra:monitoring:up
 
 부팅 후 user action:
 ```bash
-# Grafana URL 받아서 admin SPA link 활성 (선택).
+# Grafana URL 변경 시 admin SPA link 갱신.
 vercel env add VITE_GRAFANA_URL production
 # value: https://<grafana-fqdn>/d/study-note-ops
 git tag -a fe-v0.1.<next> -m "redeploy with grafana url"
 git push origin fe-v0.1.<next>
 ```
 
-## 종료 (시연 후)
+현재 admin SPA 는 `VITE_GRAFANA_URL` 이 없어도 production Grafana dashboard URL 로 fallback 한다.
 
-**시연 끝나면 즉시**:
+## 종료 (크레딧 보호가 필요할 때)
+
+비용을 0 에 가깝게 줄여야 하면:
 
 ```bash
 bash infra/monitoring-down.sh
@@ -99,13 +103,13 @@ pnpm run infra:monitoring:down
   ```
   → 다음에 다시 띄울 때 `monitoring-up.sh` 재실행.
 
-기본 = **A (scale-to-zero)** — 부팅 빠름. 더 안전 원하면 **B**.
+권장 = **A (scale-to-zero)** — 부팅 빠름. 더 안전 원하면 **B**.
 
 ## Caveat
 
 - **Prometheus min=0**: scrape 안 함. data 손실 (no PV). 장기 retention 불가.
 - **Grafana min=0**: cold-start 첫 접속 시 10~30s 지연.
-- **장기 historical monitoring** = Datadog 가 SoT. self-host 는 demo / spike 용.
+- **장기 historical monitoring**: Prometheus 에 PV 가 없어 scale-to-zero 중 data 는 남지 않는다.
 - **External ingress 보안**: Grafana 가 외부 노출됨 — 강한 admin password + anonymous viewer (read-only).
 - **Prometheus 는 internal only** — 외부 노출 X.
 
@@ -118,10 +122,11 @@ pnpm run infra:monitoring:down
   → fe-v0.1.<next> tag push
 
 시연 진행:
-  /admin.html#ops 에 Datadog + Grafana 두 link 동시 표시.
+  /admin.html#ops 에 Grafana link 표시.
+  Datadog 조회 버튼은 비활성화 상태.
   면접관 click → 외부 Grafana 대시보드 (24h scale).
 
-시연 후 (즉시):
+크레딧 보호가 필요할 때:
   bash infra/monitoring-down.sh
   → 청구 0.
 

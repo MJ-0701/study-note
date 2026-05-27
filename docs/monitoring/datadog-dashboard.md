@@ -1,22 +1,26 @@
 ---
 title: Datadog Operations Dashboard
 owner: infra
-status: importable
+status: archived
 created_at: 2026-05-27
-last_reviewed_at: 2026-05-27
+last_reviewed_at: 2026-05-28
 ---
 
-# Datadog Operations Dashboard
+# Datadog Operations Dashboard (Archived)
 
-This folder contains an importable Datadog dashboard payload wired to the
-current production integration:
+This folder keeps an importable Datadog dashboard payload for developer-only
+investigation:
 
 - `datadog-study-note-ops-dashboard.json`
 
-The app also exposes the same class of live operational checks at
-`GET /api/v1/admin/ops-dashboard`, rendered in `/admin.html` for master/admin
-users. That endpoint uses server-side `DD_API_KEY` and `DD_APP_KEY` values and
-returns `not_configured` if either key is missing.
+The public operations path is now Grafana + Prometheus. `/admin.html#ops`
+shows only the Grafana CTA and a disabled Datadog lookup button. The backend
+endpoint `GET /api/v1/admin/ops-dashboard` remains in the codebase as a
+legacy/internal snapshot, but the admin SPA no longer calls it.
+
+2026-05-28 status: Datadog RUM has data, but ACA backend APM trace metrics are
+not reliable because `serverless-init` reports workloadmeta initialization
+failures. Do not use this dashboard as the demo/reviewer path.
 
 The dashboard is designed for the current production names:
 
@@ -26,7 +30,7 @@ The dashboard is designed for the current production names:
 | Backend APM/log service | `study-note-api` |
 | Frontend RUM service | `study-note-web` |
 | Default env | `production` |
-| Admin snapshot | `/api/v1/admin/ops-dashboard` |
+| Admin snapshot | legacy/internal `/api/v1/admin/ops-dashboard` |
 
 ## Import
 

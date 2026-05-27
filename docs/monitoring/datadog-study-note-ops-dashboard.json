@@ -1,6 +1,6 @@
 {
   "title": "study-note Live Ops - Metrics, Logs, Traces",
-  "description": "Importable Datadog dashboard for study-note production operations. Uses the repo's actual Datadog surfaces: dd-trace v0 service-entry metrics under trace.web.request.*, backend log message searches emitted by pdf-annotations.service, and RUM event queries for study-note-web.",
+  "description": "Archived developer-only Datadog dashboard for study-note. Public operations guidance now uses Grafana + Prometheus. This JSON preserves the repo's Datadog surfaces: dd-trace v0 service-entry metrics under trace.web.request.*, backend log message searches emitted by pdf-annotations.service, and RUM event queries for study-note-web.",
   "layout_type": "ordered",
   "reflow_type": "auto",
   "notify_list": [],
@@ -25,7 +25,7 @@
     {
       "definition": {
         "type": "note",
-        "content": "study-note production operations view\\n\\nThis dashboard is wired to the current repo runtime: backend APM uses dd-trace default v0 service-entry metrics (trace.web.request.*), sync reliability panels search the actual NestJS log messages emitted by pdf-annotations.service, and browser panels query RUM events for study-note-web. Do not facet or display raw note text, PDF payloads, names, student numbers, emails, cookies, API keys, persona prompts, or persona responses.",
+        "content": "study-note Datadog archive\\n\\nPublic operations guidance now uses Grafana + Prometheus. This dashboard is kept for developer-only investigation and preserves the current repo runtime queries: backend APM uses dd-trace default v0 service-entry metrics (trace.web.request.*), sync reliability panels search the actual NestJS log messages emitted by pdf-annotations.service, and browser panels query RUM events for study-note-web. Do not facet or display raw note text, PDF payloads, names, student numbers, emails, cookies, API keys, persona prompts, or persona responses.",
         "background_color": "white",
         "font_size": "14",
         "text_align": "left",
