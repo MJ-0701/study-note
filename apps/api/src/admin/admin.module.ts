@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { AuthModule } from "@study-note/auth";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
+import { OpsDashboardService } from "./ops-dashboard.service";
 
 /**
  * AdminModule — owns admin dashboard endpoints.
@@ -13,6 +14,6 @@ import { AdminService } from "./admin.service";
 @Module({
   imports: [AuthModule],
   controllers: [AdminController],
-  providers: [AdminService]
+  providers: [AdminService, OpsDashboardService]
 })
 export class AdminModule {}

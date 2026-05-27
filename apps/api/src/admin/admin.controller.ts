@@ -14,6 +14,7 @@ import {
 import { Roles, RoleGuard, SessionAuthGuard } from "@study-note/auth";
 import type { UserProfile } from "@study-note/domain";
 import { AdminService, AdminUserRecord } from "./admin.service";
+import { OpsDashboardResponse, OpsDashboardService } from "./ops-dashboard.service";
 
 // Minimal inline request type — avoids importing @types/express (memory constraint).
 interface NestRequest {
@@ -48,7 +49,10 @@ const VALID_ROLES = new Set<string>(["MASTER", "ADMIN", "NORMAL"]);
 
 @Controller("v1/admin")
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly opsDashboardService: OpsDashboardService
+  ) {}
 
   // ── GET /v1/admin/users ────────────────────────────────────────────────────
   @Get("users")
@@ -57,6 +61,14 @@ export class AdminController {
   async listUsers(): Promise<UserAdminWebResponse[]> {
     const records = await this.adminService.listAllOrdered();
     return records.map(toWebResponse);
+  }
+
+  // ── GET /v1/admin/ops-dashboard ───────────────────────────────────────────
+  @Get("ops-dashboard")
+  @UseGuards(SessionAuthGuard, RoleGuard)
+  @Roles("master", "admin")
+  async getOpsDashboard(): Promise<OpsDashboardResponse> {
+    return this.opsDashboardService.getSnapshot();
   }
 
   // ── PUT /v1/admin/users/:id/role ───────────────────────────────────────────
