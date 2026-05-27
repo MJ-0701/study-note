@@ -16,12 +16,19 @@ summary: study-note 의 도메인 용어집. canonical meaning + 금기 의미. 
 **현재 study-note product** 의 용어만 정리. persona 도메인은 `docs/solon/domain-map.md`
 원문 참조.
 
+## 학기 / 과목 트리 (Term × Subject)
+
+| Term | Canonical meaning | Do not use as |
+|---|---|---|
+| Term (학기) | 학년 + 학기 번호 + title 로 식별되는 학기 aggregate. 한 사용자가 여러 Term 보유. `Term -> Subject[]` 1:N. schema = `model Term`. | StudyNotebook 의 시간 단위, "용어 (terminology)" |
+| Subject (과목) | Term 안의 과목 aggregate. `Subject -> PdfMaterial[]` + WeekNote[]. `subjects/:id/move` 로 다른 Term 으로 이동 가능. schema = `model Subject` (`termId` 필수). | SubjectNote (FE state), 학습 단위 일반 명사 |
+
 ## 학습 노트 (Notebook 계열)
 
 | Term | Canonical meaning | Do not use as |
 |---|---|---|
-| StudyNotebook | 한 사용자의 학기 단위 학습 데이터 묶음. subjects[] aggregate root. | DB row, "notes app" 일반 명사 |
-| SubjectNote | 한 과목 (e.g. 회계원리) 의 학습 단위. summary + sources + keywords + concepts + weekNotes 보유. | 과목 메타데이터 (title 만) |
+| StudyNotebook | 한 사용자의 학습 데이터 묶음 (현재 FE state). subjects[] 를 가진 aggregate root. | DB row, "notes app" 일반 명사. Term aggregate (DB schema) 와 구별. |
+| SubjectNote | 한 과목 (e.g. 회계원리) 의 학습 단위 FE state. summary + sources + keywords + concepts + weekNotes 보유. | Subject aggregate (DB schema), 과목 메타데이터 (title 만) |
 | WeekNote | subject 안의 주차 단위 학습 진도. `userNotes` (자유 메모) + `examPhase` (override). | "한 주의 일정" |
 | Concept | 시험 출제 단위 개념. `priority: must-know / high / review`. | 그냥 키워드 |
 | RequiredKeyword | 교수가 시험에 나온다고 한 키워드. coverage status (`covered` / `missing`). | 검색 키워드, tag |
