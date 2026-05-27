@@ -308,6 +308,14 @@ import {
   type QuickNote,
   type QuickNoteContext
 } from "./subject-views/quick-note";
+import {
+  buildNotebookKey,
+  clearNotebookStorageError,
+  getNotebookStorageError,
+  loadStoredNotebook,
+  notebookStorageKey,
+  saveNotebook
+} from "./app/notebook-storage";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 
 const isNodeRuntime =
@@ -325,7 +333,6 @@ type IntakeFeedback =
     }
   | undefined;
 
-const notebookStorageKey = "study-note.notebook.v2";
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
 // ACA scale-to-zero cold start can take ~30s on first hit. Keep the per-request
@@ -572,69 +579,6 @@ function writeInspectorOpen(value: boolean): void {
 // each user now writes to `{base}:{userId}` so A→B account transitions cannot
 // see each other's notebook through localStorage. See plan G1 (2026-W21
 // userId-namespacing sprint) for the leak class this closes.
-function buildNotebookKey(userId: string): string {
-  return `${notebookStorageKey}:${userId}`;
-}
-
-// sprint-4/S1: legacy unscoped-key migration removed. Marker
-// (`study-note.session.lastUserId`) no longer written, so migration owner
-// gate cannot be enforced. Without the gate, migrating legacy data would
-// allow a shared-browser scenario where user B inherits user A's pre-sprint-3
-// notebook on first login after the upgrade. Server autosave is the SoT and
-// GET hydrate restores cross-device data, so dropping the legacy key path is
-// safe (legacy data orphans in localStorage but is never read; can be cleaned
-// up via the "로컬 import 초기화" button if visible to a user).
-
-function loadStoredNotebook(userId: string): StudyNotebook {
-  const scopedKey = buildNotebookKey(userId);
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(scopedKey);
-  } catch {
-    return sampleLectureNote;
-  }
-
-  if (!stored) {
-    // sprint-4/S1: no scoped data yet — start from the fixture default.
-    // Server autosave (sprint-2) restores notebook data via GET hydrate.
-    return sampleLectureNote;
-  }
-
-  try {
-    const parsed = JSON.parse(stored) as Partial<StudyNotebook>;
-
-    if (
-      typeof parsed.id === "string" &&
-      Array.isArray(parsed.subjects) &&
-      hasCurrentSubjectSet(parsed)
-    ) {
-      return parsed as StudyNotebook;
-    }
-
-    window.localStorage.removeItem(scopedKey);
-  } catch {
-    window.localStorage.removeItem(scopedKey);
-  }
-
-  return sampleLectureNote;
-}
-
-function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {
-  const expectedIds = sampleLectureNote.subjects.map((subject) => subject.id).sort();
-  const candidateIds = candidate.subjects
-    ?.map((subject) => subject.id)
-    .filter((id): id is string => typeof id === "string")
-    .sort();
-
-  return (
-    candidateIds?.length === expectedIds.length &&
-    candidateIds.every((id, index) => id === expectedIds[index])
-  );
-}
-
-let notebookStorageErrorReported = false;
-let notebookStorageError: string | undefined;
-
 // sprint-2/S2: BE sync layer state — user-notes 측 잔류 (annotation 측은
 // apps/web/src/pdf-workspace/annotation-sync.ts 가 module-private 보유,
 // sprint-2026-W22-sprint-1 / layer B/slice-1). main.ts 는
@@ -1025,7 +969,7 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
       )
     };
     if (applied) {
-      saveNotebook(notebook);
+      persistNotebook();
       try { renderApp(); } catch { /* ignore */ }
     }
     recordFetchSuccess();
@@ -1036,39 +980,6 @@ async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promis
   }
 }
 
-
-function saveNotebook(nextNotebook: StudyNotebook, userId: string | undefined = authSession?.user.id): boolean {
-  // sprint-3/S1 (codex P1 backlog): require an authenticated userId to write.
-  // Saving without one would either land on the legacy unscoped key (leak
-  // vector) or an empty namespace (data loss). When there is no session yet
-  // (boot before /v1/auth/me resolves), drop the write — the next save after
-  // session attach will persist the same in-memory state.
-  if (!userId) {
-    return true;
-  }
-  const scopedKey = buildNotebookKey(userId);
-  try {
-    window.localStorage.setItem(scopedKey, JSON.stringify(nextNotebook));
-    // Recovery: surface banner removal if we had been failing.
-    if (notebookStorageError !== undefined) {
-      notebookStorageError = undefined;
-      notebookStorageErrorReported = false;
-      try { renderApp(); } catch { /* ignore */ }
-    }
-    return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn("[study-note] notebook localStorage save failed:", error);
-    notebookStorageError = `메모/노트가 브라우저 저장공간에 기록되지 않았습니다 (예: 시크릿 모드, 용량 부족). 새로고침 시 변경 내용이 사라질 수 있으므로 저장 가능한 환경으로 옮기거나 새 탭에서 다시 시도하세요. (${message})`;
-    if (!notebookStorageErrorReported) {
-      // First failure — render once to show banner. Subsequent failures within
-      // the same outage do not re-render (avoids focus loss during typing).
-      notebookStorageErrorReported = true;
-      try { renderApp(); } catch { /* ignore */ }
-    }
-    return false;
-  }
-}
 
 // sprint-2/S3 fix (codex P1) → sprint-3/S2+S3: on session attach (revalidate /
 // sign-in), load each user's localStorage data from their userId-namespaced
@@ -1482,7 +1393,7 @@ function addSubjectClassDate(formData: FormData): void {
         : item
     )
   };
-  const saved = saveNotebook(notebook);
+  const saved = persistNotebook();
   intakeFeedback = saved
     ? {
         kind: "success",
@@ -1707,8 +1618,7 @@ function handleDocumentClick(event: MouseEvent): void {
     // - notebookStorageError: localStorage save failure path.
     // - syncBackendError: BE sync paused after 3×5xx.
     // - syncFailureTracker.paused: unpause so autosave resumes.
-    notebookStorageError = undefined;
-    notebookStorageErrorReported = false;
+    clearNotebookStorageError(() => { try { renderApp(); } catch { /* ignore */ } });
     syncBackendError = undefined;
     syncBackendErrorReported = false;
     syncFailureTracker.paused = false;
@@ -2409,7 +2319,7 @@ function handleDocumentInput(event: Event): void {
             }
       )
     };
-    saveNotebook(notebook);
+    persistNotebook();
     // sprint-2/S2: BE sync (debounced PUT). localStorage 가 primary, BE 가 cross-device 백업.
     scheduleUserNotePut(subjectId, weekId, value);
     return;
@@ -4489,7 +4399,7 @@ async function importWeekNoteFile(
     }
 
     notebook = result.notebook;
-    const saved = saveNotebook(notebook);
+    const saved = persistNotebook();
     intakeFeedback = saved
       ? {
           kind: "success",
@@ -4700,11 +4610,19 @@ function renderApp(): void {
 // app/appShell.ts. AppShellContext = least-privilege narrow (broad
 // authSession / notebook 객체 노출 X). 매 renderApp 호출 시 module
 // state 에서 narrow.
+// sprint-19: notebook-storage slice. saveNotebook 호출은 userId + onErrorChanged
+// 를 직접 전달해야 하므로 main.ts 안 helper 로 묶음. caller 4 site 가 동일 패턴.
+function persistNotebook(): boolean {
+  return saveNotebook(notebook, authSession?.user.id, () => {
+    try { renderApp(); } catch { /* ignore */ }
+  });
+}
+
 function getAppShellContext(): AppShellContext {
   return {
     displayName: authSession?.user.displayName ?? null,
     notebookUpdatedAt: notebook.updatedAt,
-    notebookStorageError: notebookStorageError ?? null,
+    notebookStorageError: getNotebookStorageError() ?? null,
     syncBackendError: syncBackendError ?? null,
     hotkeyHelpModalOpen,
     activePdfWorkspaceSubjectId: getActivePdfWorkspaceSubjectId() ?? null
