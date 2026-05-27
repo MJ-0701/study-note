@@ -562,14 +562,21 @@ if (isBrowserRuntime) {
     closeHotkeyHelpModal();
     renderApp();
   });
-  renderApp();
-
-  // Only browsers with a prior sign-in hint should wake the backend for
-  // `/v1/auth/me`. Anonymous first visits must stay static so ACA can remain
-  // scaled to zero until the user actually signs in.
-  if (readAuthSessionHint()) {
-    void revalidateStoredSession({ blocking: true });
-  }
+  // sprint-W22-hotfix: defer initial render + revalidate to a microtask so all
+  // module-level const (특히 tableWidgetContext / chartWidgetContext / starMarkContext
+  // 등 L3793+ 의 widget ctx) 가 init 된 후 renderApp → mountRender → postMountEffects
+  // → refreshTableWidgets/refreshChartWidgets 가 실행되도록 한다. 동기 호출 시
+  // TDZ ReferenceError ("Cannot access 'tableWidgetContext' before initialization")
+  // 가 boot 마다 throw 되고 revalidate catch 가 무한 retry → UI "세션 확인 중" stuck.
+  queueMicrotask(() => {
+    renderApp();
+    // Only browsers with a prior sign-in hint should wake the backend for
+    // `/v1/auth/me`. Anonymous first visits must stay static so ACA can remain
+    // scaled to zero until the user actually signs in.
+    if (readAuthSessionHint()) {
+      void revalidateStoredSession({ blocking: true });
+    }
+  });
 }
 
 // sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
