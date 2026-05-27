@@ -385,33 +385,33 @@ describe("AC4: PUT revision 분기", () => {
     assert.equal(res.annotations["mat-001"]?.updatedAt, createdAt.toISOString());
   });
 
-  it("clientRevision 보냈는데 snapshot 없음 (다른 device 에서 삭제) → 409 STALE_REVISION_NO_RECORD (canonical empty body)", async () => {
+  it("sprint-W22-be-sync: clientRevision 보냈는데 snapshot 없음 → create fallback (share material 첫 PUT)", async () => {
+    // 신규 share material (MASTER 가 올린 PDF) 의 본인 row 없는 상태에서 FE 가
+    // 다른 user 의 stale revision 을 cache → CAS count=0 + existing=null.
+    // 'stale' 보다 '신규 create' case 로 fallback. race window 는 unique
+    // constraint 가 catch.
+    let createCalled = false;
     const prisma = basePrisma({
       updateMany: async () => ({ count: 0 }),
-      findUnique: async () => null
+      findUnique: async () => null,
+      create: async () => {
+        createCalled = true;
+        return {
+          id: "snap-001",
+          materialId: "mat-001",
+          ownerId: OWNER,
+          savedAt: new Date("2026-05-28T10:00:00Z")
+        };
+      }
     });
     const storage: MockStorage = {
       getJsonObject: async () => null,
       putJsonObject: async () => undefined
     };
     const service = makeService(prisma, storage);
-    let err: ConflictException | null = null;
-    try {
-      await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "2026-05-22T10:00:00Z");
-    } catch (e) {
-      err = e as ConflictException;
-    }
-    assert.ok(err instanceof ConflictException);
-    const body = err.getResponse() as {
-      errorCode: string;
-      annotations: Record<string, unknown>;
-      total: number;
-      returned: number;
-    };
-    assert.equal(body.errorCode, "STALE_REVISION_NO_RECORD");
-    assert.equal(body.total, 0);
-    assert.equal(body.returned, 0);
-    assert.deepEqual(body.annotations, {});
+    const res = await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "2026-05-22T10:00:00Z");
+    assert.ok(createCalled, "create fallback 호출 됨");
+    assert.equal(res.annotations["mat-001"]?.payload !== undefined ? true : false, true);
   });
 
   it("codex round-4: ownsMaterial pre-check 와 CAS 사이에 material 삭제됨 → 404 MATERIAL_NOT_FOUND (NO_RECORD race fix)", async () => {

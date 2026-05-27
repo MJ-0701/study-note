@@ -339,20 +339,21 @@ export class PdfAnnotationsService {
         });
       }
       // codex P2 (PR #35 round-4): CAS count=0 + existing=null 은 (a) snapshot
-      // 만 삭제되어 client 가 stale revision 을 보낸 경우 (NO_RECORD 정상), 또는
-      // (b) ownsMaterial pre-check 와 CAS 사이에 material 자체가 삭제된 race.
+      // 만 삭제되어 client 가 stale revision 을 보낸 경우, 또는 (b) ownsMaterial
+      // pre-check 와 CAS 사이에 material 자체가 삭제된 race.
       // (b) 의 의도는 R6 의 404. ownership 재확인으로 두 case 를 분기.
       if (!(await this.ownsMaterial(ownerId, materialId))) {
         this.throwMaterialNotFound();
       }
-      // record 없음 + clientRevision != undefined → stale empty (canonical).
-      throw new ConflictException({
-        errorCode: "STALE_REVISION_NO_RECORD",
-        annotations: {},
-        truncated: false,
-        total: 0,
-        returned: 0
-      });
+      // sprint-W22-be-sync: shared material 의 본인 row 첫 PUT 시 clientRevision
+      // 가 정의되지만 DB row 없음 (다른 user 의 annotation row 의 savedAt 을 FE 가
+      // 잘못 cache 했을 가능성) → 'stale' 라기보다 신규 create case. 신규 row 로
+      // fallback 처리. race window (다른 client 가 동시 create) 는 unique constraint
+      // 가 catch.
+      this.logger.log(
+        `pdf-annotations.put.create-fallback ownerId=${ownerId} materialId=${materialId} reason=clientRevision-without-existing-row metric=sync.put.create-fallback`
+      );
+      return this.createWithPayloadOrRollback(ownerId, materialId, payload, newSavedAt);
     }
 
     // R9 step 4 last: clientRevision undefined + storage 신규 → create.
