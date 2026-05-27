@@ -32,6 +32,7 @@ hub 다.
 
 ## Aggregates
 
+- [aggregates/term](aggregates/term.md) — T1~T6 (학기, sprint-W21-sprint-1/S1 신규 — Subject 1:N parent)
 - [aggregates/study-notebook](aggregates/study-notebook.md) — N1~N5
 - [aggregates/pdf-workspace](aggregates/pdf-workspace.md) — W1~W6
 - [aggregates/pdf-material](aggregates/pdf-material.md) — M1~M5
