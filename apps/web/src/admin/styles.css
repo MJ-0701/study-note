@@ -468,6 +468,53 @@
   margin: 8px 0 0;
 }
 
+/* sprint-W22-be-sync hotfix: 비개발자 친화 카드 설명 + 패널 설명. */
+.ops-card-description {
+  color: var(--ds-fg);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.ops-panel-explainer {
+  color: var(--ds-fg-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  max-width: 720px;
+}
+
+/* admin tab nav — 사용자 관리 / 운영 지표 별도 페이지 라우팅 */
+.admin-tabs {
+  border-bottom: 1px solid var(--ds-rule);
+  display: flex;
+  gap: 4px;
+  margin: 0 0 16px;
+}
+
+.admin-tab {
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--ds-fg-soft);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  text-decoration: none;
+}
+
+.admin-tab:hover {
+  background: var(--ds-bg-soft);
+  color: var(--ds-fg);
+}
+
+.admin-tab.is-active {
+  background: var(--ds-bg);
+  border-color: var(--ds-rule);
+  color: var(--ds-fg);
+}
+
 .ops-query {
   color: var(--ds-fg-soft);
   font-size: 11px;

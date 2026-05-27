@@ -143,9 +143,59 @@ function opsStatusLabel(status: OpsCardStatus | OpsDashboardStatus): string {
 }
 
 function sourceLabel(source: OpsCardSource): string {
-  if (source === "apm") return "APM";
-  if (source === "logs") return "Logs";
-  return "RUM";
+  if (source === "apm") return "백엔드";
+  if (source === "logs") return "로그";
+  return "사용자";
+}
+
+// 비개발자 친화 카드 설명. card.id 별 매핑. status 색상은 그대로 전달.
+interface OpsCardCopy {
+  title: string;
+  description: string;
+  emptyValue?: string;
+}
+const OPS_CARD_COPY: Record<string, OpsCardCopy> = {
+  api_requests: {
+    title: "백엔드 호출량",
+    description: "최근 15분 동안 서버로 들어온 요청 수입니다. 0 = 트래픽 없음."
+  },
+  api_errors: {
+    title: "백엔드 오류",
+    description: "서버 5xx 응답 건수. 0 = 정상."
+  },
+  api_p95_latency: {
+    title: "응답 지연 (상위 5%)",
+    description: "응답 속도 하위 5% 사례 기준. 800ms 이하 정상, 2초 이상 오류.",
+    emptyValue: "응답 즉시"
+  },
+  sync_put_success: {
+    title: "필기 자동저장 성공",
+    description: "PDF 위 필기·메모가 서버에 자동저장된 횟수."
+  },
+  sync_put_failure: {
+    title: "필기 자동저장 실패",
+    description: "자동저장 실패 횟수. 0 = 안정. 양수면 BE 5xx 또는 네트워크 문제."
+  },
+  sync_conflicts: {
+    title: "동시 편집 충돌",
+    description: "여러 기기에서 같은 PDF 를 편집해서 발생한 충돌 수. 0 = 정상."
+  },
+  rum_sessions: {
+    title: "방문 세션",
+    description: "최근 15분 동안 학생 브라우저에서 발생한 학습 세션 수."
+  },
+  rum_errors: {
+    title: "프론트엔드 오류",
+    description: "사용자 브라우저에서 발생한 JS 오류 수. 0 = 정상."
+  },
+  rum_actions: {
+    title: "사용자 동작",
+    description: "클릭·입력·페이지 이동 등 사용자 인터랙션 카운트."
+  }
+};
+
+function getOpsCardCopy(card: OpsDashboardCard): OpsCardCopy {
+  return OPS_CARD_COPY[card.id] ?? { title: card.label, description: "" };
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -184,6 +234,15 @@ function roleOptions(viewerRole: UserRole): { value: string; label: string }[] {
   ];
 }
 
+type AdminTab = "users" | "ops";
+
+function asAdminTab(hash: string): AdminTab {
+  // location.hash includes leading `#`. tolerate both `#ops` and bare `ops`.
+  const trimmed = hash.replace(/^#\/?/, "").trim().toLowerCase();
+  if (trimmed === "ops") return "ops";
+  return "users";
+}
+
 function AdminApp() {
   const [bootState, setBootState] = useState<BootState>("checking");
   const [viewer, setViewer] = useState<AuthUser | null>(null);
@@ -193,6 +252,18 @@ function AdminApp() {
   const [opsDashboard, setOpsDashboard] = useState<OpsDashboardResponse | null>(null);
   const [opsLoading, setOpsLoading] = useState(false);
   const [opsError, setOpsError] = useState<string | null>(null);
+
+  // Tab routing — sidebar 의 '관리자' 메뉴 하위로 사용자 관리 / 운영 지표 두 별도 페이지.
+  // URL hash 로 라우팅 (#users / #ops). default = users.
+  const [activeTab, setActiveTab] = useState<AdminTab>(() =>
+    typeof window === "undefined" ? "users" : asAdminTab(window.location.hash)
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHashChange = () => setActiveTab(asAdminTab(window.location.hash));
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   // Per-row action state: keyed by user id
   const [rowLoading, setRowLoading] = useState<Record<string, boolean>>({});
@@ -286,11 +357,14 @@ function AdminApp() {
   }, []);
 
   useEffect(() => {
-    if (bootState === "ready") {
+    if (bootState !== "ready") return;
+    // tab 별 lazy fetch — users / ops 진입할 때만 해당 API 호출.
+    if (activeTab === "users") {
       fetchUsers();
+    } else {
       fetchOpsDashboard();
     }
-  }, [bootState, fetchUsers, fetchOpsDashboard]);
+  }, [bootState, activeTab, fetchUsers, fetchOpsDashboard]);
 
   // Reset currentPage to 1 when filters/search/pageSize change
   useEffect(() => {
@@ -439,41 +513,62 @@ function AdminApp() {
           </span>
         </header>
 
-        {unreviewedCount > 0 && (
+        <nav className="admin-tabs" role="tablist" aria-label="관리자 탭">
+          <a
+            href="#users"
+            role="tab"
+            aria-selected={activeTab === "users"}
+            className={`admin-tab ${activeTab === "users" ? "is-active" : ""}`}
+          >
+            사용자 관리
+          </a>
+          <a
+            href="#ops"
+            role="tab"
+            aria-selected={activeTab === "ops"}
+            className={`admin-tab ${activeTab === "ops" ? "is-active" : ""}`}
+          >
+            운영 지표
+          </a>
+        </nav>
+
+        {activeTab === "ops" && (
+          <OpsDashboardPanel
+            dashboard={opsDashboard}
+            loading={opsLoading}
+            error={opsError}
+            onRefresh={fetchOpsDashboard}
+          />
+        )}
+
+        {activeTab === "users" && unreviewedCount > 0 && (
           <div className="unreviewed-badge" role="status" aria-label={`신규 가입 미review ${unreviewedCount}명`}>
             <span className="unreviewed-badge-count">{unreviewedCount}</span>
             신규 가입 (미review)
           </div>
         )}
 
-        {listError && (
+        {activeTab === "users" && listError && (
           <div className="admin-error-banner" role="alert">
             {listError}
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-          <button
-            type="button"
-            className="admin-refresh-btn"
-            onClick={() => {
-              fetchUsers();
-              fetchOpsDashboard();
-            }}
-            disabled={listLoading || opsLoading}
-            aria-label="목록 새로고침"
-          >
-            {listLoading || opsLoading ? "불러오는 중..." : "새로고침"}
-          </button>
-        </div>
+        {activeTab === "users" && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <button
+              type="button"
+              className="admin-refresh-btn"
+              onClick={fetchUsers}
+              disabled={listLoading}
+              aria-label="목록 새로고침"
+            >
+              {listLoading ? "불러오는 중..." : "새로고침"}
+            </button>
+          </div>
+        )}
 
-        <OpsDashboardPanel
-          dashboard={opsDashboard}
-          loading={opsLoading}
-          error={opsError}
-          onRefresh={fetchOpsDashboard}
-        />
-
+        {activeTab === "users" && (<>
         {/* Toolbar */}
         <div className="admin-toolbar" role="search" aria-label="사용자 필터 및 검색">
           <label className="admin-toolbar-item">
@@ -569,6 +664,7 @@ function AdminApp() {
         )}
 
         <TermsPanel viewerId={viewer!.userId} viewerRole={viewerRole} />
+        </>)}
       </div>
     </div>
   );
@@ -589,8 +685,14 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
           <h2 id="ops-dashboard-title">운영 지표</h2>
           <p className="ops-panel-meta">
             {dashboard
-              ? `${dashboard.services.env} · ${dashboard.window.minutes}분 · ${formatDate(dashboard.generatedAt)}`
-              : "Datadog 조회 준비 중"}
+              ? `최근 ${dashboard.window.minutes}분 · ${formatDate(dashboard.generatedAt)} 기준 · 환경 ${dashboard.services.env}`
+              : "운영 지표 불러오는 중..."}
+          </p>
+          <p className="ops-panel-explainer">
+            관리자가 운영 상태를 한눈에 보기 위한 요약 화면입니다.
+            각 카드는 Datadog (APM · 로그 · 사용자 브라우저 RUM) 의 최근 15분 데이터를
+            서버 측에서 한 번 더 가공해서 보여줍니다.
+            <strong>정상 / 주의 / 오류</strong> 색상이 카드 상태입니다.
           </p>
         </div>
         <div className="ops-panel-actions">
@@ -623,28 +725,38 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
       )}
 
       {loading && !dashboard ? (
-        <div className="ops-loading">Datadog에서 지표 조회 중...</div>
+        <div className="ops-loading">Datadog 에서 지표를 불러오는 중...</div>
       ) : (
         <div className="ops-card-grid">
-          {(dashboard?.cards ?? []).map((card) => (
-            <article className={`ops-card ${card.status}`} key={card.id}>
-              <div className="ops-card-topline">
-                <span className="ops-source">{sourceLabel(card.source)}</span>
-                <span className={`ops-card-status ${card.status}`}>
-                  {opsStatusLabel(card.status)}
-                </span>
-              </div>
-              <div className="ops-card-value">{formatOpsValue(card)}</div>
-              <h3>{card.label}</h3>
-              {card.errorMessage && (
-                <p className="ops-card-error">{card.errorMessage}</p>
-              )}
-              <details className="ops-query">
-                <summary>query</summary>
-                <code>{card.query}</code>
-              </details>
-            </article>
-          ))}
+          {(dashboard?.cards ?? []).map((card) => {
+            const copy = getOpsCardCopy(card);
+            const displayValue =
+              card.value === 0 && copy.emptyValue ? copy.emptyValue : formatOpsValue(card);
+            return (
+              <article className={`ops-card ${card.status}`} key={card.id}>
+                <div className="ops-card-topline">
+                  <span className="ops-source">{sourceLabel(card.source)}</span>
+                  <span className={`ops-card-status ${card.status}`}>
+                    {opsStatusLabel(card.status)}
+                  </span>
+                </div>
+                <div className="ops-card-value">{displayValue}</div>
+                <h3>{copy.title}</h3>
+                {copy.description && (
+                  <p className="ops-card-description">{copy.description}</p>
+                )}
+                {card.errorMessage && (
+                  <p className="ops-card-error">
+                    Datadog 데이터를 가져오지 못했습니다. 잠시 후 새로고침해 보세요.
+                  </p>
+                )}
+                <details className="ops-query">
+                  <summary>개발자용 쿼리 보기</summary>
+                  <code>{card.query}</code>
+                </details>
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
