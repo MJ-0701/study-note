@@ -566,6 +566,32 @@ section + section {
 
 .class-day-card__attach select {
   flex: 1;
+  /* iOS/Android native popover 가 system dark theme 시 dark bg + dark text 강제 →
+     contrast 부족. explicit light theme + option color 명시 + min-height 로 가독성 확보. */
+  background-color: #ffffff;
+  color: #111111;
+  border: 1px solid var(--ds-rule, #d1d5db);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  min-height: 40px;
+  /* mobile narrow viewport 에서 long filename overflow 방지 (popover 선택 시 잘리는
+     row 가독성 ↑). */
+  max-width: 100%;
+  text-overflow: ellipsis;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23111' d='M2 4l4 4 4-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+  padding-right: 30px;
+}
+
+.class-day-card__attach select option {
+  background-color: #ffffff;
+  color: #111111;
+  font-size: 14px;
 }
 
 .subject-mcp-callout p {
