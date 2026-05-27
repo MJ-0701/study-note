@@ -29,7 +29,7 @@
 | **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ merged (PR #76, main=930eba4) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
 | **C/slice-8. subject-week** | 2026-W22-sprint-16 | ✅ merged (PR #77, main=15e70bf) — **5.5k 충분 달성 (5,403)** |
 | **C/slice-9. pdf-library** | 2026-W22-sprint-17 | ✅ merged (PR #78, main=6aff0f5) — **5.1k 인접 (5,161)** |
-| **C/slice-10. quick-note** | 2026-W22-sprint-18 | ✅ implemented (Gate 6 self+cross PASS, PR pending) — **🎯 5k 달성 (4,959)** + Layer C closed |
+| **C/slice-10. quick-note** | 2026-W22-sprint-18 | ✅ merged (PR #79, main=a12d62e) — **🎯 5k 달성 (4,959)** + Layer C closed |
 | **D. state/sync residual** | next sprint | ⏳ 다음 진입 (pdfWorkspaceStore / state machinery) |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
