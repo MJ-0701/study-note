@@ -34,7 +34,7 @@
 | **D/slice-2. auth boot module** | 2026-W22-sprint-20 | ✅ merged (PR #81, main=a5e834a) — **4.79k (4,785)** + cold-start fix |
 | D/slice-3. sidebar cache + UI ephemeral | next sprint | ⏳ 다음 진입 (sidebarTermsCache + hotkeyHelpModalOpen + UI ephemeral) |
 | D/slice-4. pdfWorkspaceStore 잔여 | TBD | ⏳ backlog (userNotesPutTimers + syncFailureTracker 등) |
-| D/backlog. session_hint companion cookie | TBD | ⏳ backlog (Codex P2 mitigation — BE에서 non-HttpOnly hint cookie 동반 set) |
+| D/backlog. session_hint cookie (Codex P2 mitigation) | 2026-W22-sprint-20 | ✅ FE-only mitigation 포함 머지 (`study_note_session_hint` readable cookie) |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
 main.ts: 11,049 → **4,785** (-6,264, **-56.69%**). Layer D 진행 중.
