@@ -134,6 +134,22 @@ describe("PDF material library UI", () => {
     assert.match(clickBlock, /assignPdfMaterialClassDate\(subjectId, materialId, selectedOption\.value\)/);
   });
 
+  it("closes open custom classDate pickers on outside pointerdown", () => {
+    const pointerDownBlock = mainTs.slice(
+      mainTs.indexOf("function handleDocumentPointerDown"),
+      mainTs.indexOf("// sprint-12/slice-2: textbox drag")
+    );
+    const closeBlock = mainTs.slice(
+      mainTs.indexOf("function closeOpenPdfClassDatePickers"),
+      mainTs.indexOf("function handleDocumentPointerMove")
+    );
+
+    assert.match(pointerDownBlock, /closeOpenPdfClassDatePickers\(target\)/);
+    assert.match(closeBlock, /\[data-role="pdf-class-date-picker"\]\[open\]/);
+    assert.match(closeBlock, /!picker\.contains\(target\)/);
+    assert.match(closeBlock, /picker\.removeAttribute\("open"\)/);
+  });
+
   it("routes card open clicks to the selected PDF material workspace", () => {
     const clickBlock = mainTs.slice(
       mainTs.indexOf('quickNoteButton?.dataset.action === "open-pdf-material"'),

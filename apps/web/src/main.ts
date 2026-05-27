@@ -2417,6 +2417,8 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
+  closeOpenPdfClassDatePickers(target);
+
   const surface = target.closest<HTMLElement>("[data-pdf-annotation-surface]");
 
   if (!surface) {
@@ -2745,6 +2747,18 @@ function handleDocumentPointerDown(event: PointerEvent): void {
 
   // sprint-W22-sprint-3 / slice-2c — ink stroke begin (pdf-workspace/ink-stroke.ts).
   beginInkStroke(event, surface, subjectId, material, point);
+}
+
+function closeOpenPdfClassDatePickers(target: Element): void {
+  const openPickers = document.querySelectorAll<HTMLDetailsElement>(
+    '[data-role="pdf-class-date-picker"][open]'
+  );
+
+  for (const picker of openPickers) {
+    if (!picker.contains(target)) {
+      picker.removeAttribute("open");
+    }
+  }
 }
 
 function handleDocumentPointerMove(event: PointerEvent): void {
