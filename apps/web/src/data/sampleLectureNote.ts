@@ -126,7 +126,7 @@ const digitalEngineering: SubjectNote = {
   weekNotes: [
     {
       id: "de-week-08",
-      label: "4월 30일(목)",
+      label: "2026-04-30",
       title: "진법과 코드",
       focus: "진법 변환 계산 절차를 반복한다.",
       sourceMaterialIds: ["de-pdf-08-14"],
@@ -137,7 +137,7 @@ const digitalEngineering: SubjectNote = {
     },
     {
       id: "de-week-10",
-      label: "5월 2일(토)",
+      label: "2026-05-02",
       title: "부울대수",
       focus: "드모르간 법칙과 흡수 법칙을 문제에 적용한다.",
       sourceMaterialIds: ["de-pdf-08-14"],
@@ -148,7 +148,7 @@ const digitalEngineering: SubjectNote = {
     },
     {
       id: "de-week-12",
-      label: "5월 7일(목)",
+      label: "2026-05-07",
       title: "조합논리 회로",
       focus: "truth table, 논리식, 회로도 변환 흐름을 잡는다.",
       sourceMaterialIds: ["de-pdf-08-14"],
@@ -275,7 +275,7 @@ const informationCommunication: SubjectNote = {
   weekNotes: [
     {
       id: "ic-week-08",
-      label: "4월 30일(목)",
+      label: "2026-04-30",
       title: "신호와 데이터",
       focus: "아날로그/디지털 신호 차이를 구분한다.",
       sourceMaterialIds: ["ic-pdf-08-14"],
@@ -286,7 +286,7 @@ const informationCommunication: SubjectNote = {
     },
     {
       id: "ic-week-10",
-      label: "5월 2일(토)",
+      label: "2026-05-02",
       title: "네트워크 계층 모델",
       focus: "OSI 7계층의 순서와 역할을 외운다.",
       sourceMaterialIds: ["ic-pdf-08-14"],
@@ -297,7 +297,7 @@ const informationCommunication: SubjectNote = {
     },
     {
       id: "ic-week-12",
-      label: "5월 7일(목)",
+      label: "2026-05-07",
       title: "전송매체와 변조",
       focus: "전송매체 비교를 먼저 보고 변조 방식은 보강한다.",
       sourceMaterialIds: ["ic-pdf-08-14"],
@@ -424,7 +424,7 @@ const cLanguage: SubjectNote = {
   weekNotes: [
     {
       id: "c-week-08",
-      label: "4월 30일(목)",
+      label: "2026-04-30",
       title: "포인터",
       focus: "주소, 포인터 변수, 역참조 관계를 코드로 추적한다.",
       sourceMaterialIds: ["c-pdf-08-14"],
@@ -435,7 +435,7 @@ const cLanguage: SubjectNote = {
     },
     {
       id: "c-week-10",
-      label: "5월 2일(토)",
+      label: "2026-05-02",
       title: "배열과 함수",
       focus: "배열 전달과 원본 수정 여부를 구분한다.",
       sourceMaterialIds: ["c-pdf-08-14"],
@@ -446,7 +446,7 @@ const cLanguage: SubjectNote = {
     },
     {
       id: "c-week-12",
-      label: "5월 7일(목)",
+      label: "2026-05-07",
       title: "구조체와 파일",
       focus: "구조체 멤버 접근을 먼저 정리하고 파일 입출력은 보강한다.",
       sourceMaterialIds: ["c-pdf-08-14"],
@@ -573,7 +573,7 @@ const computerIntroduction: SubjectNote = {
   weekNotes: [
     {
       id: "ci-week-08",
-      label: "4월 30일(목)",
+      label: "2026-04-30",
       title: "컴퓨터 시스템",
       focus: "하드웨어와 소프트웨어의 역할을 구분한다.",
       sourceMaterialIds: ["ci-pdf-08-14"],
@@ -584,7 +584,7 @@ const computerIntroduction: SubjectNote = {
     },
     {
       id: "ci-week-10",
-      label: "5월 2일(토)",
+      label: "2026-05-02",
       title: "데이터 표현",
       focus: "비트/바이트와 정보 표현 방식을 정리한다.",
       sourceMaterialIds: ["ci-pdf-08-14"],
@@ -595,7 +595,7 @@ const computerIntroduction: SubjectNote = {
     },
     {
       id: "ci-week-12",
-      label: "5월 7일(목)",
+      label: "2026-05-07",
       title: "운영체제와 네트워크",
       focus: "운영체제와 네트워크의 역할을 큰 그림으로 연결한다.",
       sourceMaterialIds: ["ci-pdf-08-14"],
