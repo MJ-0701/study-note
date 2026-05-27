@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **Layer D slice-4 PR pending. 4.45k (4,448 / -59.74%)** + sprint-20 prod live (fe-v0.1.24)
+## 진행 상황 (2026-05-27) — **🎯 Layer D 분해 완료. 4.45k (4,448 / -59.74%)** + sprint-22 prod deploy (fe-v0.1.25)
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -33,20 +33,31 @@
 | **D/slice-1. notebook storage** | 2026-W22-sprint-19 | ✅ merged (PR #80, main=52cb472) — **4.88k (4,877)** + Layer D 진입 |
 | **D/slice-2. auth boot module** | 2026-W22-sprint-20 | ✅ merged (PR #81, main=a5e834a) — **4.79k (4,785)** + cold-start fix |
 | **D/slice-3. sidebar cache + UI ephemeral** | 2026-W22-sprint-21 | ✅ merged (PR #82, main=3b25db4) — **4.71k (4,710)** + Codex bot 👍 PASS |
-| **D/slice-4. user-notes sync caches** | 2026-W22-sprint-22 | ✅ Gate 6 self+cross PASS — **4.45k (4,448)** — PR pending |
-| D/backlog. session_hint cookie (Codex P2 mitigation) | 2026-W22-sprint-20 | ✅ FE-only mitigation 포함 머지 (`study_note_session_hint` readable cookie) |
-| **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
+| **D/slice-4. user-notes sync caches** | 2026-W22-sprint-22 | ✅ merged (PR #83, main=f62cf3e) — **🎯 4.45k (4,448)** + Codex P2 fix + bot 👍 PASS |
+| D/backlog. session_hint cookie (Codex P2 mitigation) | 2026-W22-sprint-20 | ✅ FE-only mitigation 머지 (`study_note_session_hint` readable cookie) |
+| D/optional. drag states 6 (slice-5 잠재) | TBD | ⏸ ROI 낮음 — React migration 진입 후 결정 |
+| **React migration** | next phase | ⏳ Layer D 분해 완료 → cost 재평가 진입 |
 
-main.ts: 11,049 → **4,710** (-6,339, **-57.37%**). Layer D 진행 중.
-Layer D/slice-3 (sidebar cache + UI ephemeral) closed. 다음 = Layer D/slice-4 (pdfWorkspaceStore 잔여).
+main.ts: 11,049 → **4,448** (-6,601, **-59.74%**). 🎯 **Layer D 분해 완료 (4 slice)**.
 
 ## Prod deploy 상태
 
-- `fe-v0.1.24` tag pushed (2026-05-27) — sprint-20 cold-start fix + session_hint cookie prod live.
-- bundle hash: `main-BueFaafL.js` → `main-Cwsm8q7t.js`.
-- sprint-21 (slice-3) 는 next fe-tag (예: `fe-v0.1.25`) 로 deploy 예정. slice-4 closeout 과 합쳐서 push 권장.
+- `fe-v0.1.24` (2026-05-27) — sprint-20 cold-start fix + session_hint cookie live (`main-Cwsm8q7t.js`).
+- `fe-v0.1.25` (2026-05-27, **방금 push**) — sprint-21 (sidebar cache + UI ephemeral) + sprint-22 (user-notes-sync + P2 fix) prod deploy 진행 중. workflow 완료 후 bundle hash 갱신 예정.
 
-## 활성 작업 = Layer D/slice-4 (pdfWorkspaceStore 잔여)
+## 활성 작업 = React migration cost 재평가 (Layer D 분해 완료 후)
+
+분해 phase 결산:
+- Layer A (routing/shell) — 1 slice
+- Layer B (PDF workspace) — 14 slice (sprint-1~8)
+- Layer C (subject views) — 10 slice (sprint-9~18, 🎯 5k 달성 at slice-10)
+- Layer D (storage + identity + sync) — 4 slice (sprint-19~22, 🎯 분해 phase 완료)
+- 누적 -6,601 line / -59.74%
+
+다음 결정 candidate:
+1. React migration 진입 (cost 재평가 + provider/component 설계).
+2. 잠재 slice-5 (drag states 6) — 60 line 추가, ROI 낮음.
+3. ambient identity (authSession/authMode/loginFeedback/notebook/pdfWorkspaceStore) module 화 — React migration 비용 분담.
 
 ## SFS 0.6.121 정책 ambient
 
