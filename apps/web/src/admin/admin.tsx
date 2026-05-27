@@ -704,7 +704,45 @@ interface OpsDashboardPanelProps {
   onRefresh: () => void;
 }
 
+function summarizeOpsStatus(dashboard: OpsDashboardResponse | null): {
+  label: string;
+  detail: string;
+  tone: OpsCardStatus | OpsDashboardStatus;
+} {
+  if (!dashboard) {
+    return { label: "불러오는 중", detail: "Datadog 응답을 기다리는 중입니다.", tone: "unknown" };
+  }
+  const okCount = dashboard.cards.filter((c) => c.status === "ok").length;
+  const warnCount = dashboard.cards.filter((c) => c.status === "warn").length;
+  const errCount = dashboard.cards.filter((c) => c.status === "error").length;
+  const total = dashboard.cards.length;
+
+  if (dashboard.status === "not_configured") {
+    return {
+      label: "미설정",
+      detail: "Datadog API 키가 설정되지 않았습니다. 외부 대시보드로 확인하세요.",
+      tone: "not_configured" as OpsDashboardStatus
+    };
+  }
+  if (errCount > 0 && errCount === total) {
+    return { label: "오류", detail: "지표 조회에 모두 실패했습니다.", tone: "error" };
+  }
+  if (warnCount > 0 || errCount > 0) {
+    return {
+      label: "주의",
+      detail: `${total} 지표 중 정상 ${okCount} · 주의 ${warnCount} · 오류 ${errCount}.`,
+      tone: "warn"
+    };
+  }
+  return {
+    label: "정상",
+    detail: `최근 ${dashboard.window.minutes}분 — 모든 지표 정상 (${total} 항목).`,
+    tone: "ok"
+  };
+}
+
 function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboardPanelProps) {
+  const summary = summarizeOpsStatus(dashboard);
   return (
     <section className="ops-panel" aria-labelledby="ops-dashboard-title">
       <div className="ops-panel-header">
@@ -712,22 +750,12 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
           <h2 id="ops-dashboard-title">운영 지표</h2>
           <p className="ops-panel-meta">
             {dashboard
-              ? `최근 ${dashboard.window.minutes}분 · ${formatDate(dashboard.generatedAt)} 기준 · 환경 ${dashboard.services.env}`
+              ? `${formatDate(dashboard.generatedAt)} 기준 · 환경 ${dashboard.services.env}`
               : "운영 지표 불러오는 중..."}
-          </p>
-          <p className="ops-panel-explainer">
-            관리자가 운영 상태를 한눈에 보기 위한 요약 화면입니다.
-            각 카드는 Datadog (APM · 로그 · 사용자 브라우저 RUM) 의 최근 15분 데이터를
-            서버 측에서 한 번 더 가공해서 보여줍니다.
-            <strong>정상 / 주의 / 오류</strong> 색상이 카드 상태입니다.
           </p>
         </div>
         <div className="ops-panel-actions">
-          {dashboard && (
-            <span className={`ops-status ${dashboard.status}`}>
-              {opsStatusLabel(dashboard.status)}
-            </span>
-          )}
+          <span className={`ops-status ${summary.tone}`}>{summary.label}</span>
           <button
             type="button"
             className="admin-refresh-btn"
@@ -738,6 +766,10 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
           </button>
         </div>
       </div>
+
+      <p className="ops-panel-summary">
+        {summary.detail}
+      </p>
 
       {error && (
         <div className="admin-error-banner" role="alert">
@@ -754,7 +786,8 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
       {EXTERNAL_DASHBOARD_LINKS.length > 0 && (
         <div className="ops-external-link" role="note">
           <p>
-            상세 그래프·히스토리·필터는 외부 원본 대시보드에서 확인할 수 있습니다.
+            <strong>상세 그래프는 외부 운영 대시보드에서 확인하세요.</strong>{" "}
+            그래프·필터·시간 범위 조절·전체 히스토리는 아래 링크 클릭.
           </p>
           <div className="ops-external-link-row">
             {EXTERNAL_DASHBOARD_LINKS.map((link) => (
@@ -772,41 +805,44 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
         </div>
       )}
 
-      {loading && !dashboard ? (
-        <div className="ops-loading">Datadog 에서 지표를 불러오는 중...</div>
-      ) : (
-        <div className="ops-card-grid">
-          {(dashboard?.cards ?? []).map((card) => {
-            const copy = getOpsCardCopy(card);
-            const displayValue =
-              card.value === 0 && copy.emptyValue ? copy.emptyValue : formatOpsValue(card);
-            return (
-              <article className={`ops-card ${card.status}`} key={card.id}>
-                <div className="ops-card-topline">
-                  <span className="ops-source">{sourceLabel(card.source)}</span>
-                  <span className={`ops-card-status ${card.status}`}>
-                    {opsStatusLabel(card.status)}
-                  </span>
-                </div>
-                <div className="ops-card-value">{displayValue}</div>
-                <h3>{copy.title}</h3>
-                {copy.description && (
-                  <p className="ops-card-description">{copy.description}</p>
-                )}
-                {card.errorMessage && (
-                  <p className="ops-card-error">
-                    Datadog 데이터를 가져오지 못했습니다. 잠시 후 새로고침해 보세요.
-                  </p>
-                )}
-                <details className="ops-query">
-                  <summary>개발자용 쿼리 보기</summary>
-                  <code>{card.query}</code>
-                </details>
-              </article>
-            );
-          })}
-        </div>
-      )}
+      <details className="ops-card-details">
+        <summary>지표 항목 펼쳐 보기 (서비스 별 9 항목)</summary>
+        <p className="ops-panel-explainer">
+          각 항목은 Datadog (APM · 로그 · 사용자 브라우저 RUM) 의 최근 15 분 데이터를 서버 측에서 가공한 결과입니다.
+          숫자 자체보다 <strong>정상 / 주의 / 오류</strong> 색상에 주목하세요. 상세 추세는 위 외부 대시보드.
+        </p>
+        {loading && !dashboard ? (
+          <div className="ops-loading">Datadog 에서 지표를 불러오는 중...</div>
+        ) : (
+          <div className="ops-card-grid">
+            {(dashboard?.cards ?? []).map((card) => {
+              const copy = getOpsCardCopy(card);
+              const displayValue =
+                card.value === 0 && copy.emptyValue ? copy.emptyValue : formatOpsValue(card);
+              return (
+                <article className={`ops-card ${card.status}`} key={card.id}>
+                  <div className="ops-card-topline">
+                    <span className="ops-source">{sourceLabel(card.source)}</span>
+                    <span className={`ops-card-status ${card.status}`}>
+                      {opsStatusLabel(card.status)}
+                    </span>
+                  </div>
+                  <div className="ops-card-value">{displayValue}</div>
+                  <h3>{copy.title}</h3>
+                  {copy.description && (
+                    <p className="ops-card-description">{copy.description}</p>
+                  )}
+                  {card.errorMessage && (
+                    <p className="ops-card-error">
+                      Datadog 데이터를 가져오지 못했습니다. 외부 대시보드에서 직접 확인하세요.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </details>
     </section>
   );
 }

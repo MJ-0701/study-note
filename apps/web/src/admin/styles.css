@@ -484,6 +484,34 @@
   max-width: 720px;
 }
 
+/* sprint-W22-be-sync 2차 UX: ops panel 의 1줄 status 요약 + collapsed cards. */
+.ops-panel-summary {
+  color: var(--ds-fg);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 8px 0 var(--ds-space-md);
+}
+
+.ops-card-details {
+  margin-top: var(--ds-space-md);
+}
+
+.ops-card-details > summary {
+  color: var(--ds-fg-soft);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 0;
+  user-select: none;
+}
+
+.ops-card-details > summary:hover {
+  color: var(--ds-fg);
+}
+
+.ops-card-details[open] > summary {
+  margin-bottom: var(--ds-space-sm);
+}
+
 /* 운영 지표 탭 외부 link (Datadog public dashboard / Grafana 등) */
 .ops-external-link {
   align-items: center;
