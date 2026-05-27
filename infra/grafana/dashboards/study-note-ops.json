@@ -8,9 +8,9 @@
   "uid": "study-note-ops",
   "title": "study-note Live Ops (Self-host, Prometheus)",
   "tags": ["study-note", "ops", "prometheus"],
-  "time": { "from": "now-24h", "to": "now" },
+  "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
-  "refresh": "30s",
+  "refresh": "15s",
   "templating": { "list": [] },
   "panels": [
     {
