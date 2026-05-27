@@ -350,11 +350,12 @@ export class OpsDashboardService {
     spec: CardSpec,
     fetcher: FetchLike
   ): Promise<OpsDashboardCard> {
-    // Datadog 의 transient 5xx / timeout / rate-limit 회피 = 1회 retry 후 fail.
-    // 같은 query 형식 인데도 한 카드만 random fail 케이스 (logs/rum aggregate
-    // sibling). retry 1회 + 600ms backoff 로 graceful 처리.
+    // Datadog 의 transient 5xx / timeout / rate-limit 회피.
+    // 9 카드 parallel 호출 시 random 1~2 fail 빈번 — retry 3회 + exponential
+    // backoff (400ms / 1000ms / 2000ms) 로 graceful 처리.
+    const backoffs = [400, 1000, 2000];
     let lastError: unknown;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt <= backoffs.length; attempt += 1) {
       try {
         const rawValue = spec.source === "apm"
           ? await this.queryMetric(config, window, spec.query, spec.aggregation, fetcher)
@@ -374,8 +375,8 @@ export class OpsDashboardService {
         };
       } catch (error) {
         lastError = error;
-        if (attempt === 0) {
-          await sleepMs(600);
+        if (attempt < backoffs.length) {
+          await sleepMs(backoffs[attempt] ?? 1000);
           continue;
         }
       }
