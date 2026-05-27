@@ -7,9 +7,9 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    # ACA 같은 Container App Environment 안의 internal FQDN.
-    # ACA 가 same-env service discovery 자동 처리 — service name 으로 호출.
-    url: http://study-note-prometheus:9090
+    # ACA same-env service discovery — internal ingress 는 port 80 만 노출
+    # (target port 9090 으로 자동 mapping). port 9090 명시 시 connection refused.
+    url: http://study-note-prometheus
     isDefault: true
     editable: false
     jsonData:
