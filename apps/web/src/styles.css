@@ -3902,3 +3902,32 @@ body[data-route="pdf-workspace"] .content {
   border-color: #dc2626;
   color: #dc2626;
 }
+/* sprint-W22-sprint-24: 별표 우하단 corner drag resize handle. */
+.pdf-star-mark__resize {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #f59e0b;
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: 1;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 2;
+}
+.pdf-star-mark__resize:active {
+  transform: scale(1.2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pdf-star-mark__resize {
+    opacity: 0;
+  }
+  .pdf-star-mark:hover .pdf-star-mark__resize,
+  .pdf-star-mark:focus-within .pdf-star-mark__resize,
+  .pdf-star-mark__resize:active {
+    opacity: 1;
+  }
+}

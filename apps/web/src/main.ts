@@ -233,7 +233,6 @@ import {
 } from "./pdf-workspace/drill-highlight";
 import {
   addStarMark as addStarMarkModule,
-  cycleStarMarkSize,
   moveStarMark as moveStarMarkModule,
   removeStarMark as removeStarMarkModule,
   resizeStarMark as resizeStarMarkModule,
@@ -474,6 +473,14 @@ let activeStarMarkDrag: {
   startClientY: number;
   startNormX: number;
   startNormY: number;
+} | undefined;
+// sprint-W22-sprint-24: 별표 drag resize — 우하단 핸들 drag 시 sizeRatio 변경.
+let activeStarMarkResize: {
+  subjectId: string;
+  markId: string;
+  pointerId: number;
+  startClientX: number;
+  startSizeRatio: number;
 } | undefined;
 let intakeFeedback: IntakeFeedback;
 let loginFeedback: LoginFeedback;
@@ -1272,21 +1279,8 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
-  // sprint-W21-sprint-1 / S6 / AC29 — 별표 크기 cycle.
-  // cycle logic = pdf-workspace/star-mark.ts 의 cycleStarMarkSize (slice-2e).
-  if (quickNoteButton?.dataset.action === "resize-star-mark") {
-    const subjectId = quickNoteButton.dataset.subjectId;
-    const markId = quickNoteButton.dataset.starMarkId;
-    if (subjectId && markId) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
-      const mark = (workspace.starMarks ?? []).find((m) => m.id === markId);
-      if (mark) {
-        resizeStarMark(subjectId, markId, cycleStarMarkSize(mark.sizeRatio));
-        renderApp();
-      }
-    }
-    return;
-  }
+  // sprint-W22-sprint-24: 별표 cycle click 핸들러 제거 — drag resize 로 대체.
+  // (`resize-star-mark-handle` 의 pointerdown 핸들러가 main pointer dispatcher 에 있음)
 
   if (target instanceof HTMLElement && target.dataset.action === "close-hotkey-help-backdrop") {
     // Click on the backdrop element itself (not bubbled from the inner panel).
@@ -2407,6 +2401,11 @@ function cancelActiveDragsOnEsc(): void {
     moveStarMark(subjectId, markId, { x: startNormX, y: startNormY });
     activeStarMarkDrag = undefined;
   }
+  if (activeStarMarkResize) {
+    const { subjectId, markId, startSizeRatio } = activeStarMarkResize;
+    resizeStarMark(subjectId, markId, startSizeRatio);
+    activeStarMarkResize = undefined;
+  }
   // Eraser drag = continuous erase action (no per-widget revert); ESC simply
   // stops further erase. Already-erased ink/sticky stays deleted (consistent
   // with pointerup commit semantics — eraser drag is not "drag-to-move").
@@ -2592,6 +2591,40 @@ function handleDocumentPointerDown(event: PointerEvent): void {
           startClientY: event.clientY,
           startNormX: chart.position.x,
           startNormY: chart.position.y
+        };
+      }
+    }
+
+    return;
+  }
+
+  // sprint-W22-sprint-24: 별표 우하단 corner drag handle → sizeRatio resize.
+  const starMarkResizeHandle = target.closest<HTMLElement>(
+    "[data-action='resize-star-mark-handle']"
+  );
+
+  if (starMarkResizeHandle) {
+    const subjectIdForResize = starMarkResizeHandle.dataset.subjectId;
+    const markIdForResize = starMarkResizeHandle.dataset.starMarkId;
+
+    if (subjectIdForResize && markIdForResize) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForResize);
+      const mark = (workspace.starMarks ?? []).find((m) => m.id === markIdForResize);
+
+      if (mark) {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          starMarkResizeHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic
+        }
+        activeStarMarkResize = {
+          subjectId: subjectIdForResize,
+          markId: markIdForResize,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startSizeRatio: mark.sizeRatio
         };
       }
     }
@@ -2946,6 +2979,33 @@ function handleDocumentPointerMove(event: PointerEvent): void {
     return;
   }
 
+  // sprint-W22-sprint-24: 별표 resize drag — dx → sizeRatio delta + 즉시 width 반영.
+  if (activeStarMarkResize && activeStarMarkResize.pointerId === event.pointerId) {
+    const { subjectId, markId, startClientX, startSizeRatio } = activeStarMarkResize;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      resizeStarMark(subjectId, markId, startSizeRatio + dx);
+      const el = document.querySelector<HTMLElement>(`[data-star-mark-id="${markId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const mark = (workspace.starMarks ?? []).find((item) => item.id === markId);
+
+        if (mark) {
+          el.style.width = `${(mark.sizeRatio * 100).toFixed(2)}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
@@ -3029,6 +3089,13 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   if (activeStarMarkDrag && activeStarMarkDrag.pointerId === event.pointerId) {
     activeStarMarkDrag = undefined;
     renderApp(); // final re-render to settle position
+    return;
+  }
+
+  // sprint-W22-sprint-24: 별표 resize drag 종료 → final renderApp.
+  if (activeStarMarkResize && activeStarMarkResize.pointerId === event.pointerId) {
+    activeStarMarkResize = undefined;
+    renderApp();
     return;
   }
 

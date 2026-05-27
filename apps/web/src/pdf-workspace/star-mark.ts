@@ -211,6 +211,9 @@ export function renderStarMark(subjectId: string, mark: PdfStarMark): string {
   // 변경 — glyph font-size 가 container 폭에 정확히 따라감 (= sizeRatio *
   // pageWidth). .pdf-star-mark { container-type: inline-size } +
   // .glyph { font-size: 100cqw } 조합.
+  // sprint-W22-sprint-24 fix: ⤢ 버튼 click cycle → 우하단 corner drag handle.
+  // 사용자가 별표 우하단 핸들을 드래그하면 sizeRatio 실시간 변경 (move 와 동일 UX).
+  // 기존 cycle (4단계 토글) 은 제거 — drag 가 자유 사이즈 조절 + 더 직관적.
   return `
     <div
       class="pdf-star-mark"
@@ -222,9 +225,16 @@ export function renderStarMark(subjectId: string, mark: PdfStarMark): string {
     >
       <span class="pdf-star-mark__glyph" aria-hidden="true">★</span>
       <div class="pdf-star-mark__controls" aria-hidden="true">
-        <button type="button" class="pdf-star-mark__btn" data-action="resize-star-mark" data-subject-id="${escapeHtml(subjectId)}" data-star-mark-id="${escapeHtml(mark.id)}" title="크기 변경">⤢</button>
         <button type="button" class="pdf-star-mark__btn pdf-star-mark__btn--danger" data-action="remove-star-mark" data-subject-id="${escapeHtml(subjectId)}" data-star-mark-id="${escapeHtml(mark.id)}" title="삭제">×</button>
       </div>
+      <div
+        class="pdf-star-mark__resize"
+        data-action="resize-star-mark-handle"
+        data-subject-id="${escapeHtml(subjectId)}"
+        data-star-mark-id="${escapeHtml(mark.id)}"
+        title="드래그하여 크기 조절"
+        aria-hidden="true"
+      ></div>
     </div>
   `;
 }
