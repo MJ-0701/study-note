@@ -73,9 +73,29 @@ jobs:
       - name: Deploy prebuilt output to Vercel Production
         id: deploy
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --prod --archive=tgz --logs --token=${{ secrets.VERCEL_TOKEN }})
+          DEPLOY_URL=$(vercel deploy --prebuilt --prod --archive=tgz --no-wait --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
           echo "::notice title=FE Production Deploy::$DEPLOY_URL"
+
+      - name: Verify production domain serves the new bundle
+        run: |
+          EXPECTED_MAIN_ASSET="$(grep -o 'assets/main-[^"]*\.js' .vercel/output/static/index.html | tail -n 1)"
+          if [ -z "$EXPECTED_MAIN_ASSET" ]; then
+            echo "::error::Could not resolve expected main asset from .vercel/output/static/index.html"
+            exit 1
+          fi
+
+          echo "expected main asset: $EXPECTED_MAIN_ASSET"
+          for attempt in $(seq 1 90); do
+            if curl -fsSL https://study-note.910701.xyz/ | grep -q "$EXPECTED_MAIN_ASSET"; then
+              echo "production domain updated on attempt $attempt"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::production domain did not serve $EXPECTED_MAIN_ASSET within 15 minutes"
+          exit 1
 
       - name: Write GitHub Actions summary
         if: always()
