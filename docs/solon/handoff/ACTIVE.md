@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **Layer C/slice-9 closed. 5.1k 인접 (5,161 / -53.29%)**
+## 진행 상황 (2026-05-27) — **🎯 5k 달성. Layer C 전체 closed. (4,959 / -55.12%)**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -29,14 +29,14 @@
 | **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ merged (PR #76, main=930eba4) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
 | **C/slice-8. subject-week** | 2026-W22-sprint-16 | ✅ merged (PR #77, main=15e70bf) — **5.5k 충분 달성 (5,403)** |
 | **C/slice-9. pdf-library** | 2026-W22-sprint-17 | ✅ merged (PR #78, main=6aff0f5) — **5.1k 인접 (5,161)** |
-| **C/slice-10. quick-note builders** | next sprint | ⏳ 다음 진입 (~150 line, 5k 달성 target) |
-| D. state/sync residual | TBD | ⏳ backlog |
+| **C/slice-10. quick-note** | 2026-W22-sprint-18 | ✅ implemented (Gate 6 self+cross PASS, PR pending) — **🎯 5k 달성 (4,959)** + Layer C closed |
+| **D. state/sync residual** | next sprint | ⏳ 다음 진입 (pdfWorkspaceStore / state machinery) |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **5,161** (-5,888, **-53.29%**). Layer C 진행 중.
-5.1k 인접. 5k = slice-10 (~150 line) 후 정확히 도달.
+main.ts: 11,049 → **4,959** (-6,090, **-55.12%**). **🎯 5k 달성**.
+Layer C 전체 closed (10 slice). 다음 = Layer D (state/sync residual).
 
-## 활성 작업 = Layer C/slice-10 (quick-note builders)
+## 활성 작업 = Layer D (state/sync residual)
 
 ## SFS 0.6.121 정책 ambient
 
