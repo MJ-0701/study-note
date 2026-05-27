@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **Layer D slice-3 merged. 4.71k (4,710 / -57.37%)** + sprint-20 prod live (fe-v0.1.24)
+## 진행 상황 (2026-05-27) — **Layer D slice-4 PR pending. 4.45k (4,448 / -59.74%)** + sprint-20 prod live (fe-v0.1.24)
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -33,7 +33,7 @@
 | **D/slice-1. notebook storage** | 2026-W22-sprint-19 | ✅ merged (PR #80, main=52cb472) — **4.88k (4,877)** + Layer D 진입 |
 | **D/slice-2. auth boot module** | 2026-W22-sprint-20 | ✅ merged (PR #81, main=a5e834a) — **4.79k (4,785)** + cold-start fix |
 | **D/slice-3. sidebar cache + UI ephemeral** | 2026-W22-sprint-21 | ✅ merged (PR #82, main=3b25db4) — **4.71k (4,710)** + Codex bot 👍 PASS |
-| D/slice-4. pdfWorkspaceStore 잔여 | next sprint | ⏳ 다음 진입 (userNotesPutTimers + syncFailureTracker 등) |
+| **D/slice-4. user-notes sync caches** | 2026-W22-sprint-22 | ✅ Gate 6 self+cross PASS — **4.45k (4,448)** — PR pending |
 | D/backlog. session_hint cookie (Codex P2 mitigation) | 2026-W22-sprint-20 | ✅ FE-only mitigation 포함 머지 (`study_note_session_hint` readable cookie) |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 

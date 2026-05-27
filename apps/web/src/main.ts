@@ -22,6 +22,18 @@ import {
   type PdfMaterialRecord
 } from "./api/materials";
 import { signIn, signOut, signUp } from "./auth/authApi";
+import {
+  clearUserNotesSync,
+  dismissSyncBackendError as dismissSyncBackendErrorModule,
+  fetchUserNoteIfMissing as fetchUserNoteIfMissingModule,
+  getSyncBackendError,
+  isSyncBackendPaused,
+  scheduleUserNotePut as scheduleUserNotePutModule,
+  setSyncBackendError,
+  setSyncBackendErrorReported,
+  type UserNotesSyncCallbacks,
+  type UserNotesSyncContext
+} from "./sync/user-notes-sync";
 import { resolveEscapeAction } from "./pdf-workspace/esc-action";
 import {
   clearSidebarCache,
@@ -582,36 +594,9 @@ function writeInspectorOpen(value: boolean): void {
 // each user now writes to `{base}:{userId}` so A→B account transitions cannot
 // see each other's notebook through localStorage. See plan G1 (2026-W21
 // userId-namespacing sprint) for the leak class this closes.
-// sprint-2/S2: BE sync layer state — user-notes 측 잔류 (annotation 측은
-// apps/web/src/pdf-workspace/annotation-sync.ts 가 module-private 보유,
-// sprint-2026-W22-sprint-1 / layer B/slice-1). main.ts 는
-// AnnotationSyncContext + AnnotationSyncCallbacks 만 구성하여 호출.
-// syncFailureTracker / syncBackendError 는 user-notes 측 share — annotation
-// 측 callback (setSyncBackendError) 도 같은 banner 변수 갱신하여 단일 UX.
-const USER_NOTES_PUT_DEBOUNCE_MS = 500;
-const SYNC_FAILURE_PAUSE_THRESHOLD = 3;
-const SYNC_FAILURE_PAUSE_WINDOW_MS = 5 * 60 * 1000;
-
-interface SyncFailureTracker {
-  recentFailures: number[];
-  paused: boolean;
-}
-
-const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const userNotesPutAborts = new Map<string, AbortController>();
-const userNotesPutChains = new Map<string, Promise<void>>();
-const userNotesFetchedKeys = new Set<string>();
-const syncFailureTracker: SyncFailureTracker = {
-  recentFailures: [],
-  paused: false
-};
-
-// sprint-2/S2 fix (codex P1): BE sync 실패 banner 를 localStorage save 실패
-// banner 와 분리. saveNotebook 성공 path 가 notebookStorageError 만 clear 하므로,
-// BE sync 실패 메시지가 같은 변수에 들어 있으면 사용자가 typing 시 banner 가
-// 사라지면서 paused flag 만 남아 silent disabled 상태가 된다. 별도 변수로 분리.
-let syncBackendError: string | undefined;
-let syncBackendErrorReported = false;
+// sprint-W22-sprint-22 / layer D/slice-4: user-notes sync infrastructure 본체 →
+// `./sync/user-notes-sync.ts`. main.ts 잔여 = ctx/cb 공급 + thin wrapper.
+// annotation-sync (다른 모듈) 와 share 되는 paused / banner state 도 module 안.
 
 // sprint-2/S3 fix (codex P2): handle 401/403 during background sync. PUT/GET
 // for user-notes/annotations silently failed when the session cookie expired;
@@ -673,47 +658,8 @@ function handleAuthExpiredFromSync(): void {
   handleAuthExpiredFromSyncModule(getAuthSessionStateContext(), getAuthSessionStateCallbacks());
 }
 
-function recordSyncFailure(): void {
-  const now = Date.now();
-  syncFailureTracker.recentFailures.push(now);
-  syncFailureTracker.recentFailures = syncFailureTracker.recentFailures.filter(
-    (ts) => now - ts < SYNC_FAILURE_PAUSE_WINDOW_MS
-  );
-  if (syncFailureTracker.recentFailures.length >= SYNC_FAILURE_PAUSE_THRESHOLD && !syncFailureTracker.paused) {
-    syncFailureTracker.paused = true;
-    syncBackendError =
-      "메모/필기 BE 저장에 연속 실패했습니다. 자동 동기화를 잠시 멈춥니다. 네트워크/세션 상태를 확인한 뒤 닫기를 눌러 재시작하세요.";
-    if (!syncBackendErrorReported) {
-      syncBackendErrorReported = true;
-      try { renderApp(); } catch { /* ignore */ }
-    }
-  }
-}
-
-// sprint-2/S2 fix (codex P1): PUT success only — unpause autosave (PUT 신호).
-// GET success 는 read-only 라 PUT 의 paused 상태를 풀면 안 됨 (사용자가 typing
-// 중인데 PUT 은 여전히 500 일 수 있음).
-function recordSyncSuccess(): void {
-  syncFailureTracker.recentFailures = [];
-  if (syncFailureTracker.paused) {
-    syncFailureTracker.paused = false;
-    syncBackendError = undefined;
-    syncBackendErrorReported = false;
-    try { renderApp(); } catch { /* ignore */ }
-  }
-}
-
-// sprint-2/S2 fix (codex P1): GET success — silent. 별도 함수로 분리해 unpause
-// 신호 X. 5xx 누적 카운트도 그대로 (PUT 만 카운트).
-function recordFetchSuccess(): void {
-  /* no-op intentionally — GET 성공이 PUT paused 상태 변경에 영향 없음. */
-}
-
-// sprint-2/S2 fix (codex P2): GET failure — silent. PUT paused 카운트에 영향 X.
-// read-side 실패가 write-side 차단을 유발하면 안 됨.
-function recordFetchFailure(): void {
-  /* no-op intentionally — GET 실패가 PUT paused 카운트를 키우지 않는다. */
-}
+// sprint-W22-sprint-22 / layer D/slice-4: 4 record fn 본체 → user-notes-sync.ts.
+// main.ts 잔여 = ctx/cb const + thin wrapper.
 
 // ─── sprint-2026-W22-sprint-1 / layer B/slice-1 — annotation sync wiring ──
 // annotation-sync 모듈의 Context (least-privilege read) + Callbacks (least-
@@ -723,7 +669,7 @@ function getAnnotationSyncContext(): AnnotationSyncContext {
   return {
     apiBaseUrl,
     getSessionUserId: () => authSession?.user.id,
-    getSyncBackendPaused: () => syncFailureTracker.paused,
+    getSyncBackendPaused: () => isSyncBackendPaused(),
     readSubjectWorkspace: (subjectId) =>
       pdfWorkspaceStore.workspaces[subjectId]
   };
@@ -732,10 +678,10 @@ function getAnnotationSyncContext(): AnnotationSyncContext {
 function getAnnotationSyncCallbacks(): AnnotationSyncCallbacks {
   return {
     setSyncBackendError: (message) => {
-      syncBackendError = message;
+      setSyncBackendError(message);
     },
     setSyncBackendErrorReported: (reported) => {
-      syncBackendErrorReported = reported;
+      setSyncBackendErrorReported(reported);
     },
     triggerRenderApp: () => {
       try {
@@ -817,205 +763,26 @@ function applyAnnotationHydrationToStore(
   savePdfWorkspaceStore();
 }
 
-async function putUserNoteToBE(
-  subjectId: string,
-  weekId: string,
-  body: string
-): Promise<void> {
-  if (syncFailureTracker.paused) {
-    return;
-  }
-  // sprint-2/S3 fix (codex P1 #NEW-22): chain this PUT after any prior PUT
-  // for the same (subject, week) so server arrival order matches client-issue
-  // order on this device. AbortController inside is for hard termination
-  // from logout / user transition — within the chain there is never more
-  // than one in-flight at a time, so the abort path only fires on session
-  // changes, not on supersession.
-  const key = `${subjectId}:${weekId}`;
-  const sessionUserIdAtSchedule = authSession?.user.id;
-  if (!sessionUserIdAtSchedule) {
-    return;
-  }
-  const previous = userNotesPutChains.get(key) ?? Promise.resolve();
-  const work = previous
-    .catch(() => {})
-    .then(async () => {
-      // sprint-2/S3 fix (advisor): chain may have awaited seconds while the
-      // user logged out and back in. Re-validate session before issuing the
-      // PUT so user A's debounced edit cannot land with user B's cookie.
-      if (authSession?.user.id !== sessionUserIdAtSchedule) {
-        return;
-      }
-      if (syncFailureTracker.paused) {
-        return;
-      }
-      const abortController = new AbortController();
-      userNotesPutAborts.set(key, abortController);
-      try {
-        const response = await fetch(
-          `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
-          {
-            method: "PUT",
-            credentials: "include",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ body }),
-            signal: abortController.signal
-          }
-        );
-        if (response.status === 413) {
-          console.warn("[study-note] userNotes PUT 413 PAYLOAD_TOO_LARGE", weekId);
-          return;
-        }
-        if (response.status === 401 || response.status === 403) {
-          console.warn("[study-note] userNotes PUT auth expired", response.status, weekId);
-          handleAuthExpiredFromSync();
-          return;
-        }
-        if (!response.ok) {
-          console.warn("[study-note] userNotes PUT failed", response.status, weekId);
-          if (response.status >= 500 || response.status === 429) {
-            recordSyncFailure();
-          }
-          return;
-        }
-        recordSyncSuccess();
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        console.warn("[study-note] userNotes PUT network error", error);
-        recordSyncFailure();
-      } finally {
-        if (userNotesPutAborts.get(key) === abortController) {
-          userNotesPutAborts.delete(key);
-        }
-      }
-    });
-  userNotesPutChains.set(key, work);
-  try {
-    await work;
-  } finally {
-    if (userNotesPutChains.get(key) === work) {
-      userNotesPutChains.delete(key);
-    }
-  }
-}
-
+// sprint-W22-sprint-22 / layer D/slice-4: PUT + GET + chain + abort + race
+// guard 본체 → `./sync/user-notes-sync.ts`. main.ts 잔여 = ctx/cb const + thin
+// wrapper. annotation-sync (다른 모듈) 와 share 되는 paused / banner state 도
+// module 안. cross-domain reset 6 step 은 `clearUserNotesSync(ctx)` 1 호출.
+const userNotesSyncCtx: UserNotesSyncContext = {
+  apiBaseUrl,
+  getAuthSession: () => authSession,
+  getNotebook: () => notebook
+};
+const userNotesSyncCb: UserNotesSyncCallbacks = {
+  setNotebook: (next) => { notebook = next; },
+  persistNotebook: () => { persistNotebook(); },
+  triggerRender: () => { try { renderApp(); } catch { /* ignore */ } },
+  handleAuthExpired: () => { handleAuthExpiredFromSync(); }
+};
 function scheduleUserNotePut(subjectId: string, weekId: string, body: string): void {
-  const timerKey = `${subjectId}:${weekId}`;
-  const existing = userNotesPutTimers.get(timerKey);
-  if (existing) {
-    clearTimeout(existing);
-  }
-  const timer = setTimeout(() => {
-    userNotesPutTimers.delete(timerKey);
-    void putUserNoteToBE(subjectId, weekId, body);
-  }, USER_NOTES_PUT_DEBOUNCE_MS);
-  userNotesPutTimers.set(timerKey, timer);
+  scheduleUserNotePutModule(userNotesSyncCtx, userNotesSyncCb, subjectId, weekId, body);
 }
-
-async function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promise<void> {
-  // sprint-2/S2 fix (codex P1): scope cache key to authenticated user so
-  // logout/login on a shared SPA runtime does not skip GET for the new user.
-  const sessionUserId = authSession?.user.id;
-  if (!sessionUserId) {
-    return;
-  }
-  const cacheKey = `${sessionUserId}:${subjectId}:${weekId}`;
-  if (userNotesFetchedKeys.has(cacheKey)) {
-    return;
-  }
-  userNotesFetchedKeys.add(cacheKey);
-  const releaseNoteCache = () => userNotesFetchedKeys.delete(cacheKey);
-  try {
-    const response = await fetch(
-      `${apiBaseUrl}/v1/notes/subject/${encodeURIComponent(subjectId)}/week/${encodeURIComponent(weekId)}`,
-      { credentials: "include" }
-    );
-    if (response.status === 404) {
-      // sprint-2/S3 fix (codex P2): keep the cache marker on 404. The previous
-      // fix released it so cross-device note creation could appear without
-      // reload, but `renderApp()` re-invokes fetchUserNoteIfMissing on every
-      // week-page render → released cache → re-fetch → 404 → release =
-      // per-render request storm for any week without a server note. Trade
-      // accepted: cross-device new notes appear after the next page reload
-      // instead of mid-session (server data wins on reload).
-      return;
-    }
-    if (response.status === 401 || response.status === 403) {
-      // sprint-2/S3 fix (codex P2): GET auth expiry also surfaces re-login.
-      releaseNoteCache();
-      handleAuthExpiredFromSync();
-      return;
-    }
-    if (!response.ok) {
-      // Allow retry on later view by clearing cache marker.
-      userNotesFetchedKeys.delete(cacheKey);
-      if (response.status >= 500) {
-        recordFetchFailure();
-      }
-      return;
-    }
-    const payload = (await response.json()) as { body?: unknown; updatedAt?: unknown };
-    if (typeof payload.body !== "string") {
-      return;
-    }
-    // sprint-2/S2 fix (codex P1): session re-validate after async resolves —
-    // a logout/login between fetch start and resolve must NOT apply user A's
-    // server data into user B's notebook.
-    if (authSession?.user.id !== sessionUserId) {
-      return;
-    }
-    const incoming = payload.body;
-    // sprint-2/S2 fix (codex P1): protect against stale GET overwriting fresh
-    // local edits. Skip hydrate when:
-    //   (a) the user has a pending debounced PUT for this weekId (still typing),
-    //   (b) the active week has a non-empty local userNotes that differs from
-    //       the server payload — treat that as a local edit not yet flushed
-    //       and let the next PUT carry the local value to the server.
-    // Cross-device restore still works on first visit (local empty → hydrate).
-    if (userNotesPutTimers.has(`${subjectId}:${weekId}`)) {
-      recordFetchSuccess();
-      return;
-    }
-    const localSubject = notebook.subjects.find((subject) => subject.id === subjectId);
-    const localWeek = localSubject?.weekNotes.find((week) => week.id === weekId);
-    const localValue = typeof localWeek?.userNotes === "string" ? localWeek.userNotes : "";
-    if (localValue.length > 0 && localValue !== incoming) {
-      recordFetchSuccess();
-      return;
-    }
-    let applied = false;
-    notebook = {
-      ...notebook,
-      subjects: notebook.subjects.map((subject) =>
-        subject.id !== subjectId
-          ? subject
-          : {
-              ...subject,
-              weekNotes: subject.weekNotes.map((week) => {
-                if (week.id !== weekId) {
-                  return week;
-                }
-                if ((week.userNotes ?? "") === incoming) {
-                  return week;
-                }
-                applied = true;
-                return { ...week, userNotes: incoming };
-              })
-            }
-      )
-    };
-    if (applied) {
-      persistNotebook();
-      try { renderApp(); } catch { /* ignore */ }
-    }
-    recordFetchSuccess();
-  } catch (error) {
-    userNotesFetchedKeys.delete(cacheKey);
-    console.warn("[study-note] userNotes GET network error", error);
-    recordFetchFailure();
-  }
+function fetchUserNoteIfMissing(subjectId: string, weekId: string): Promise<void> {
+  return fetchUserNoteIfMissingModule(userNotesSyncCtx, userNotesSyncCb, subjectId, weekId);
 }
 
 
@@ -1064,30 +831,16 @@ function applySessionTransitionForUser(newUserId: string): void {
   // new user's namespace above; only the sync caches and in-flight PUTs need
   // to be reset so user A's pending traffic does not land under user B's
   // cookie.
-  for (const timer of userNotesPutTimers.values()) {
-    clearTimeout(timer);
-  }
-  userNotesPutTimers.clear();
-  for (const ac of userNotesPutAborts.values()) {
-    ac.abort();
-  }
-  userNotesPutAborts.clear();
-  userNotesPutChains.clear();
-  userNotesFetchedKeys.clear();
+  // sprint-W22-sprint-22 / layer D/slice-4: 6 step (timers/aborts/chains/
+  // fetched/tracker/banner) → `clearUserNotesSync(ctx)` 1 line.
+  clearUserNotesSync(userNotesSyncCtx);
   // sprint-2026-W22-sprint-1 / layer B/slice-1: annotation sync caches
   // (timers/aborts/chains/fetched/by-material/revision/batch/inflight/tracker)
   // 는 annotation-sync 모듈이 module-private 으로 보유. 한 줄 API 로 reset.
   clearAnnotationSyncCaches();
-  // sprint-2/S3 fix (self-review): user-notes 측 sync-failure tracker +
-  // banner state 도 함께 reset. annotation 측 tracker 는 위
-  // clearAnnotationSyncCaches() 가 처리.
-  syncFailureTracker.paused = false;
   // PR #49 codex R5 P1 — A→B revalidate transition 시 sidebar term cache 도
   // 무효화. 이전 user A 의 term/subject metadata 가 B session UI 에 leak 차단.
   clearSidebarCache();
-  syncFailureTracker.recentFailures = [];
-  syncBackendError = undefined;
-  syncBackendErrorReported = false;
   lastSessionUserId = newUserId;
 }
 
@@ -1110,23 +863,11 @@ function clearAuthSession(): void {
   // delayed PUT from user A cannot be sent with user B's cookie after a
   // logout/login. Also reset the fetch caches (they are user-scoped, but old
   // entries are stale once the session is gone) and the failure tracker.
-  for (const timer of userNotesPutTimers.values()) {
-    clearTimeout(timer);
-  }
-  userNotesPutTimers.clear();
-  for (const ac of userNotesPutAborts.values()) {
-    ac.abort();
-  }
-  userNotesPutAborts.clear();
-  userNotesPutChains.clear();
-  userNotesFetchedKeys.clear();
+  // sprint-W22-sprint-22 / layer D/slice-4: 6 step → `clearUserNotesSync(ctx)`.
+  clearUserNotesSync(userNotesSyncCtx);
   // sprint-2026-W22-sprint-1 / layer B/slice-1: annotation sync caches
   // 는 annotation-sync 모듈이 module-private 으로 보유. 한 줄 reset.
   clearAnnotationSyncCaches();
-  syncFailureTracker.paused = false;
-  syncFailureTracker.recentFailures = [];
-  syncBackendError = undefined;
-  syncBackendErrorReported = false;
 }
 
 // sprint-W22-sprint-20 / layer D/slice-2: 5 lifecycle fn 본체 →
@@ -1531,10 +1272,7 @@ function handleDocumentClick(event: MouseEvent): void {
     // - syncBackendError: BE sync paused after 3×5xx.
     // - syncFailureTracker.paused: unpause so autosave resumes.
     clearNotebookStorageError(() => { try { renderApp(); } catch { /* ignore */ } });
-    syncBackendError = undefined;
-    syncBackendErrorReported = false;
-    syncFailureTracker.paused = false;
-    syncFailureTracker.recentFailures = [];
+    dismissSyncBackendErrorModule();
     renderApp();
     return;
   }
@@ -4534,7 +4272,7 @@ function getAppShellContext(): AppShellContext {
     displayName: authSession?.user.displayName ?? null,
     notebookUpdatedAt: notebook.updatedAt,
     notebookStorageError: getNotebookStorageError() ?? null,
-    syncBackendError: syncBackendError ?? null,
+    syncBackendError: getSyncBackendError() ?? null,
     hotkeyHelpModalOpen: getHotkeyHelpModalOpen(),
     activePdfWorkspaceSubjectId: getActivePdfWorkspaceSubjectId() ?? null
   };
