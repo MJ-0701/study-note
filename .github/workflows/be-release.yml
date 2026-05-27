@@ -24,10 +24,13 @@ on:
     tags:
       - 'be-v*'
 
-# 같은 태그/ref 중복 실행 방지
+# workflow-level single group — 다음 be-v* tag push 시 이전 run 자동 cancel.
+# Docker build + ACA deploy 가 6~7분 들어서 옛 build 가 새 build 보다 늦게
+# 끝나면 prod image 가 옛 결과로 overwrite. 같은 tag 재푸시 / force-push 도
+# 같은 group.
 concurrency:
-  group: be-release-${{ github.ref }}
-  cancel-in-progress: false
+  group: be-release
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io

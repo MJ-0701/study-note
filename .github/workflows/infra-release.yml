@@ -11,9 +11,11 @@ on:
       - "infra-v*"
   workflow_dispatch: {}
 
+# 다음 infra-v* tag push 시 이전 run 자동 cancel — 옛 image 가 latest 로
+# overwrite 되는 회귀 차단.
 concurrency:
-  group: infra-release-${{ github.ref }}
-  cancel-in-progress: false
+  group: infra-release
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io

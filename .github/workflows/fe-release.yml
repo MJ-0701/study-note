@@ -16,10 +16,12 @@ on:
     tags:
       - 'fe-v*'
 
-# 같은 태그/ref 중복 실행 방지 (재푸시·force-push 등)
+# workflow-level single group — 다음 fe-v* tag push 시 이전 run 자동 cancel.
+# 옛 build 가 새 build 보다 늦게 끝나 prod bundle 이 옛 결과로 overwrite 되는
+# 회귀 차단. 같은 tag 재푸시 / force-push 도 같은 group.
 concurrency:
-  group: fe-release-${{ github.ref }}
-  cancel-in-progress: false
+  group: fe-release
+  cancel-in-progress: true
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
