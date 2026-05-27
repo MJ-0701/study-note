@@ -1,0 +1,79 @@
+# sprint-W22-be-sync/B — Prometheus + Grafana image build + push.
+# tag = `infra-v*` 시 trigger. ghcr.io 에 두 image push.
+# ACA Container App update 는 별 workflow (또는 az CLI manual) — 본 workflow
+# 는 image build 만 책임.
+
+name: Infra Release (Prometheus + Grafana)
+
+on:
+  push:
+    tags:
+      - "infra-v*"
+  workflow_dispatch: {}
+
+concurrency:
+  group: infra-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-prometheus:
+    name: Build & Push Prometheus
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push study-note-prometheus
+        uses: docker/build-push-action@v5
+        with:
+          context: ./infra/prometheus
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/study-note-prometheus:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/study-note-prometheus:latest
+
+  build-grafana:
+    name: Build & Push Grafana
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push study-note-grafana
+        uses: docker/build-push-action@v5
+        with:
+          context: ./infra/grafana
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/study-note-grafana:${{ github.ref_name }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/study-note-grafana:latest

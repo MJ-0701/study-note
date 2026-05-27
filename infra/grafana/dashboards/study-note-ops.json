@@ -1,0 +1,182 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "schemaVersion": 39,
+  "version": 1,
+  "uid": "study-note-ops",
+  "title": "study-note Live Ops (Self-host, Prometheus)",
+  "tags": ["study-note", "ops", "prometheus"],
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "refresh": "30s",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "안내",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "study-note self-host 운영 대시보드. Prometheus 가 study-note-api 의 /api/metrics 를 15s 마다 scrape. Datadog (push) 와 별 lane — 같은 신호 다른 채널. 비개발자용 한글 요약 = `/admin.html#ops`."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "API 호출량 (5분)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(study_note_http_requests_total[5m]))",
+          "legendFormat": "총 요청"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "5xx 오류 (5분)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(study_note_http_requests_total{status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "p95 응답 지연",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(study_note_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 (s)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.8 },
+              { "color": "red", "value": 2.0 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "CAS 충돌 (총)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "study_note_annotation_cas_stale_total",
+          "legendFormat": "stale 누적"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "API 호출량 — route 별",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (route) (rate(study_note_http_requests_total[1m]))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "응답 지연 — p50/p95/p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "targets": [
+        {
+          "refId": "p50",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(study_note_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "p95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(study_note_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "p99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(study_note_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "필기 자동저장 — outcome 별",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(study_note_sync_put_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Node.js 프로세스 — heap / event loop",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "targets": [
+        {
+          "refId": "heap",
+          "expr": "nodejs_heap_size_used_bytes",
+          "legendFormat": "heap used (B)"
+        },
+        {
+          "refId": "lag",
+          "expr": "nodejs_eventloop_lag_seconds",
+          "legendFormat": "event loop lag (s)"
+        }
+      ]
+    }
+  ]
+}

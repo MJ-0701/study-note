@@ -1,0 +1,17 @@
+# sprint-W22-be-sync/B-4 — Grafana data source provisioning.
+# Image start 시 자동 등록. UI 에서 추가 없음.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # ACA 같은 Container App Environment 안의 internal FQDN.
+    # ACA 가 same-env service discovery 자동 처리 — service name 으로 호출.
+    url: http://study-note-prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST

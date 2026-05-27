@@ -1,0 +1,16 @@
+# sprint-W22-be-sync/B-4 — Grafana dashboard provisioning.
+# /etc/grafana/dashboards/ 에 JSON 파일 두면 자동 import.
+
+apiVersion: 1
+
+providers:
+  - name: study-note
+    orgId: 1
+    folder: ""
+    folderUid: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
