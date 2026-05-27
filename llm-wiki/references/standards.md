@@ -9,6 +9,10 @@ load_when:
   - CLAUDE.md
   - SFS.md
   - DTO 규칙
+  - README
+  - 문서 최신화
+  - scope creep
+  - agent handoff
 summary: 컨벤션 / 표준 문서 색인. **repo-local** 만. user-home (~/.claude/...) 파일은 by-reference 정책 위반이라 wiki SoT 로 인용하지 않는다.
 ---
 
@@ -81,6 +85,18 @@ repo 안에 안착된 운영 규칙만 정리. 개인 environment 의 working me
 
 - commit message 는 사용자/저장소의 native 언어 (`CLAUDE.md` SFS 0.6.102 §Commit policy).
 - self-review (diff + 7 영역) → codex `@codex review` 순. push 직후 codex 자동 트리거 금지.
+- Agent 문서 변경 규율 (2026-05-27 회고): `README.md` / `ACTIVE.md` 같은 공용 문서는
+  사용자가 명시적으로 rewrite 를 요구하지 않는 한 **최소 diff** 로만 갱신한다.
+  기존 언어와 톤을 보존한다. 본 repo 는 KO-first 문서가 있으면 한국어를 기본으로
+  유지하고, 영어 전면 rewrite 로 바꾸지 않는다.
+- `README 최신화` 는 형식 재작성이나 랜딩 페이지화가 아니다. 새 코드/운영 기능이
+  실제 구현됐으면 그 사실을 반영하는 짧은 섹션/링크/명령만 추가한다. 구현 없이
+  문서만 대체 산출물로 만들지 않는다.
+- 문서 self-review 필수 체크: scope creep, 기존 invariant/도메인 설명 삭제,
+  언어 drift, Claude/Codex 병렬 작업 파일과의 충돌 가능성. 하나라도 보이면 먼저
+  해당 파일을 원상 보존한 뒤 원래 작업 범위만 다시 적용한다.
+- 관측/운영 대시보드 요구는 실제 endpoint/UI/query/권한/secret boundary 를 우선한다.
+  Markdown 은 구현 결과의 색인과 운영 runbook 이며, 대시보드 기능의 대체물이 아니다.
 - 구현 단계에서는 Gate 3 plan PASS 만으로 충분하지 않다. AC/ADR 별 implementation
   ledger + spec/evidence mapping 이 없으면 Gate 6 PASS 로 보지 않는다
   ([sfs-harness-gaps](sfs-harness-gaps.md)).
