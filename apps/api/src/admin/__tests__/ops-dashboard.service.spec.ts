@@ -61,6 +61,10 @@ describe("OpsDashboardService Datadog parsers", () => {
   it("normalizes common Datadog trace duration scales to milliseconds", () => {
     assert.equal(normalizeTraceDurationMs(0.42), 420);
     assert.equal(normalizeTraceDurationMs(250_000_000), 250);
+    // Codex P2 fix — sub-100ms healthy latency must pass through as ms.
+    assert.equal(normalizeTraceDurationMs(50), 50);
+    assert.equal(normalizeTraceDurationMs(1), 1);
+    assert.equal(normalizeTraceDurationMs(0), 0);
   });
 });
 

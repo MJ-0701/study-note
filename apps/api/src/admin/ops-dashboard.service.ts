@@ -250,7 +250,7 @@ export function normalizeTraceDurationMs(value: number): number {
   if (value > 1_000_000) {
     return value / 1_000_000;
   }
-  if (value < 100) {
+  if (value > 0 && value < 1) {
     return value * 1_000;
   }
   return value;
