@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Logger, Post, Req, UseGuards } from "@nestjs/common";
 import { SessionAuthGuard } from "@study-note/auth";
 import type { UserProfile } from "@study-note/domain";
 import {
@@ -16,6 +16,9 @@ interface NestRequest {
 @Controller("v1/persona-turns")
 @UseGuards(SessionAuthGuard)
 export class PersonaTurnController {
+  // sprint-W22-sprint-24 / AC4 — log-derived metric source (PII 0).
+  private readonly metricsLogger = new Logger("study-note.metric-event");
+
   constructor(private readonly conversations: ConversationService) {}
 
   @Post()
@@ -24,6 +27,8 @@ export class PersonaTurnController {
     @Req() req: NestRequest
   ): Promise<PersonaTurnHttpResult> {
     const owner = req.user as UserProfile;
-    return this.conversations.runStandalone(dto, owner.id);
+    const result = await this.conversations.runStandalone(dto, owner.id);
+    this.metricsLogger.log("event=study_note.event.mcp_call");
+    return result;
   }
 }

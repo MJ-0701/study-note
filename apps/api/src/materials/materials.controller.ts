@@ -6,6 +6,7 @@ import {
   Get,
   GoneException,
   HttpCode,
+  Logger,
   Param,
   Patch,
   Post,
@@ -30,6 +31,9 @@ interface AuthenticatedUploadRequest extends IncomingMessage {
 @Controller("materials")
 @UseGuards(SessionAuthGuard)
 export class MaterialsController {
+  // sprint-W22-sprint-24 / AC4 — log-derived metric source (PII 0).
+  private readonly metricsLogger = new Logger("study-note.metric-event");
+
   constructor(private readonly materials: MaterialsService) {}
 
   @Post("upload-intent")
@@ -69,7 +73,10 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Param("materialId") materialId: string
   ) {
-    return this.materials.completeUpload(request.user.id, materialId);
+    const result = await this.materials.completeUpload(request.user.id, materialId);
+    // sprint-W22-sprint-24 / AC4 — log-derived metric source.
+    this.metricsLogger.log("event=study_note.event.pdf_upload");
+    return result;
   }
 
   @Get()

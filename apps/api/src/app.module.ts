@@ -16,6 +16,7 @@ import { PdfAnnotationsModule } from "./pdf-annotations/pdf-annotations.module";
 import { TermsModule } from "./terms/terms.module";
 import { SubjectsModule } from "./subjects/subjects.module";
 import { MetricsModule } from "./observability/metrics.module";
+import { TelemetryModule } from "./telemetry/telemetry.module";
 
 @Module({
   imports: [
@@ -28,7 +29,8 @@ import { MetricsModule } from "./observability/metrics.module";
     PdfAnnotationsModule,
     TermsModule,
     SubjectsModule,
-    MetricsModule
+    MetricsModule,
+    TelemetryModule
   ],
   controllers: [
     AuthController,

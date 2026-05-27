@@ -342,6 +342,7 @@ import {
   saveNotebook
 } from "./app/notebook-storage";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
+import { emitWidgetCreate } from "./telemetry/widget-create";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -1432,6 +1433,8 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "select-drill-item") {
     handleDrillItemClick(quickNoteButton);
+    // sprint-W22-sprint-24 / AC4 — drill use (highlight 적용) telemetry.
+    emitWidgetCreate(apiBaseUrl, "drill");
     return;
   }
 
@@ -2678,6 +2681,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-13/slice-2: table tool — click-to-place a new table at the surface point.
   if ((material.selectedTool as LocalPdfTool) === "table") {
     addTable(subjectId, point);
+    emitWidgetCreate(apiBaseUrl, "table");
     setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
@@ -2687,6 +2691,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-13/slice-3: chart tool — click-to-place a new chart at the surface point.
   if ((material.selectedTool as LocalPdfTool) === "chart") {
     addChart(subjectId, point);
+    emitWidgetCreate(apiBaseUrl, "chart");
     setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
@@ -2696,6 +2701,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   // sprint-W21-sprint-1 / S6 / AC27 — 별표 click-to-add at point.
   if ((material.selectedTool as LocalPdfTool) === "star") {
     addStarMark(subjectId, point);
+    emitWidgetCreate(apiBaseUrl, "star");
     setPdfTool(subjectId, "read");
     renderApp();
     event.preventDefault();
@@ -2723,6 +2729,8 @@ function handleDocumentPointerDown(event: PointerEvent): void {
       pageNumber,
       dragPath: [point]
     };
+    // sprint-W22-sprint-24 / AC4 — widget create telemetry (eraser session start).
+    emitWidgetCreate(apiBaseUrl, "eraser");
 
     const rect = surface.getBoundingClientRect();
     applyEraserAtPoint(
