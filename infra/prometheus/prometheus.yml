@@ -10,14 +10,16 @@ global:
 
 scrape_configs:
   - job_name: "study-note-api"
+    scheme: https
     metrics_path: /api/metrics
     static_configs:
       - targets:
-          # ACA 같은 Container App Environment 안의 internal FQDN.
-          # study-note-api.<env-default-domain>:<port>. 외부 FQDN (910701.xyz) 사용 시
-          # 인증/네트워크 hop 비용. 같은 env 내 internal 권장.
-          # 운영 적용 시 az containerapp show 로 정확한 internal FQDN 확인 후 갱신.
-          - "study-note-api:3000"
+          # ACA external ingress FQDN + HTTPS. internal-to-external (Prometheus
+          # internal → study-note-api external) 시 ACA 가 internal alias resolve
+          # 안 함 — explicit external FQDN 으로 호출.
+          # 같은 env 안 internal-to-internal 이면 port 미명시 alias 사용 가능
+          # (Grafana → Prometheus 패턴), 단 cross-ingress 는 FQDN 필요.
+          - "study-note-api.bluesea-474361c6.koreacentral.azurecontainerapps.io"
     relabel_configs:
       - target_label: service
         replacement: "study-note-api"
