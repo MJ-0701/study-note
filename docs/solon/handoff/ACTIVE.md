@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **🎯 Layer D 분해 완료. 4.45k (4,448 / -59.74%)** + sprint-22 prod deploy (fe-v0.1.25)
+## 진행 상황 (2026-05-27) — **🎯 Layer D 분해 완료. 4.45k (4,448 / -59.74%)** + sprint-22 prod deploy (fe-v0.1.25) + **운영지표 dashboard PR #84 open (코드리뷰 대기)**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -43,9 +43,19 @@ main.ts: 11,049 → **4,448** (-6,601, **-59.74%**). 🎯 **Layer D 분해 완�
 ## Prod deploy 상태
 
 - `fe-v0.1.24` (2026-05-27) — sprint-20 cold-start fix + session_hint cookie live (`main-Cwsm8q7t.js`).
-- `fe-v0.1.25` (2026-05-27, **방금 push**) — sprint-21 (sidebar cache + UI ephemeral) + sprint-22 (user-notes-sync + P2 fix) prod deploy 진행 중. workflow 완료 후 bundle hash 갱신 예정.
+- `fe-v0.1.25` (2026-05-27) — sprint-21 (sidebar cache + UI ephemeral) + sprint-22 (user-notes-sync + P2 fix) prod deploy.
 
-## 활성 작업 = React migration cost 재평가 (Layer D 분해 완료 후)
+## PR open — 내일 코드리뷰 대상
+
+- **PR #84** — 관리자 운영 지표 대시보드 + Datadog server-side 조회. branch = `codex/readme-datadog-ops`.
+  - `apps/api/src/admin/ops-dashboard.service.ts` 신규 (515 line + spec 165 line).
+  - `GET /v1/admin/ops-dashboard` (master/admin guard). DD key 서버 only.
+  - 9 card (APM × 3 + log-derived × 3 + RUM × 3). `not_configured` graceful fallback.
+  - check: BE build PASS / spec 142 PASS (4 신규) / web build PASS.
+  - 배포 시 user 작업 = ACA secret `dd-app-key` 추가 + env `DD_APP_KEY=secretref:dd-app-key`.
+  - Codex worktree 의 README.md 한→영 rewrite (288→205 line) revert 완료 (KO-first 정책 보존).
+
+## 활성 작업 = ① PR #84 코드리뷰 (내일) + ② React migration cost 재평가
 
 분해 phase 결산:
 - Layer A (routing/shell) — 1 slice
@@ -55,7 +65,7 @@ main.ts: 11,049 → **4,448** (-6,601, **-59.74%**). 🎯 **Layer D 분해 완�
 - 누적 -6,601 line / -59.74%
 
 다음 결정 candidate:
-1. React migration 진입 (cost 재평가 + provider/component 설계).
+1. React migration 진입 (cost 재평가 + provider/component 설계). audit = `.sfs-local/sprints/react-migration-audit.md` (53 data-action site / 13 listener / 9 ambient let / route × action 분포). 권장 = **Option B + 첫 route `subject-mcp`**.
 2. 잠재 slice-5 (drag states 6) — 60 line 추가, ROI 낮음.
 3. ambient identity (authSession/authMode/loginFeedback/notebook/pdfWorkspaceStore) module 화 — React migration 비용 분담.
 
