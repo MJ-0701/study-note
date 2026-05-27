@@ -10,13 +10,31 @@ const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
 // 운영 지표 탭의 외부 원본 대시보드 link.
-// Datadog Public Dashboard URL (read-only share) 또는 Grafana URL 등.
-// 미설정 시 link section 숨김.
-const PUBLIC_DASHBOARD_URL =
-  (import.meta.env.VITE_PUBLIC_DASHBOARD_URL as string | undefined)?.trim() || "";
-const PUBLIC_DASHBOARD_LABEL =
-  (import.meta.env.VITE_PUBLIC_DASHBOARD_LABEL as string | undefined)?.trim() ||
-  "Datadog 원본 대시보드 (전문가용)";
+// VITE_PUBLIC_DASHBOARD_URL — primary (Datadog Public Dashboard 권장).
+// VITE_GRAFANA_URL — secondary (self-host Grafana, 선택). 미설정 시 link 숨김.
+interface ExternalDashboardLink {
+  url: string;
+  label: string;
+}
+function readExternalLinks(): ExternalDashboardLink[] {
+  const links: ExternalDashboardLink[] = [];
+  const ddUrl = (import.meta.env.VITE_PUBLIC_DASHBOARD_URL as string | undefined)?.trim();
+  if (ddUrl) {
+    const label =
+      (import.meta.env.VITE_PUBLIC_DASHBOARD_LABEL as string | undefined)?.trim() ||
+      "Datadog 원본 대시보드 (전문가용)";
+    links.push({ url: ddUrl, label });
+  }
+  const grafanaUrl = (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim();
+  if (grafanaUrl) {
+    const label =
+      (import.meta.env.VITE_GRAFANA_LABEL as string | undefined)?.trim() ||
+      "자체 Grafana 대시보드";
+    links.push({ url: grafanaUrl, label });
+  }
+  return links;
+}
+const EXTERNAL_DASHBOARD_LINKS: ExternalDashboardLink[] = readExternalLinks();
 
 type UserRole = "master" | "admin" | "normal";
 
@@ -733,19 +751,24 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
         </div>
       )}
 
-      {PUBLIC_DASHBOARD_URL && (
+      {EXTERNAL_DASHBOARD_LINKS.length > 0 && (
         <div className="ops-external-link" role="note">
           <p>
             상세 그래프·히스토리·필터는 외부 원본 대시보드에서 확인할 수 있습니다.
           </p>
-          <a
-            className="ops-external-link-btn"
-            href={PUBLIC_DASHBOARD_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {PUBLIC_DASHBOARD_LABEL} 열기 ↗
-          </a>
+          <div className="ops-external-link-row">
+            {EXTERNAL_DASHBOARD_LINKS.map((link) => (
+              <a
+                key={link.url}
+                className="ops-external-link-btn"
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {link.label} 열기 ↗
+              </a>
+            ))}
+          </div>
         </div>
       )}
 
