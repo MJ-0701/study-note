@@ -45,6 +45,9 @@ interface UploadFileInput {
 @Injectable()
 export class MaterialsService {
   private readonly logger = new Logger(MaterialsService.name);
+  // sprint-W22-sprint-24 / AC4 — log-derived metric source. transition 분기 안에서만
+  // emit (controller 에서 emit 시 idempotent retry → 인플레이션. Codex PR #85 P2).
+  private readonly metricsLogger = new Logger("study-note.metric-event");
 
   constructor(
     private readonly prisma: PrismaService,
@@ -233,6 +236,9 @@ export class MaterialsService {
       this.logger.log(
         `materials.complete.transitioned materialId=${materialId} from=pending to=uploaded headObjectSize=${headSize}`
       );
+      // sprint-W22-sprint-24 / AC4 — log-derived metric source. transition 분기 only
+      // (idempotent retry 차단). PII 0.
+      this.metricsLogger.log("event=study_note.event.pdf_upload");
     }
 
     const updated = await this.prisma.pdfMaterial.findFirst({

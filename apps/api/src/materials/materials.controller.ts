@@ -6,7 +6,6 @@ import {
   Get,
   GoneException,
   HttpCode,
-  Logger,
   Param,
   Patch,
   Post,
@@ -31,9 +30,6 @@ interface AuthenticatedUploadRequest extends IncomingMessage {
 @Controller("materials")
 @UseGuards(SessionAuthGuard)
 export class MaterialsController {
-  // sprint-W22-sprint-24 / AC4 — log-derived metric source (PII 0).
-  private readonly metricsLogger = new Logger("study-note.metric-event");
-
   constructor(private readonly materials: MaterialsService) {}
 
   @Post("upload-intent")
@@ -73,10 +69,10 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Param("materialId") materialId: string
   ) {
-    const result = await this.materials.completeUpload(request.user.id, materialId);
-    // sprint-W22-sprint-24 / AC4 — log-derived metric source.
-    this.metricsLogger.log("event=study_note.event.pdf_upload");
-    return result;
+    // sprint-W22-sprint-24 / AC4 — log emit 은 service 의 transition 분기 안에서.
+    // controller 에서 emit 시 idempotent retry / duplicate callback 가 metric 부풀림
+    // (Codex PR #85 round-2 P2 finding).
+    return this.materials.completeUpload(request.user.id, materialId);
   }
 
   @Get()

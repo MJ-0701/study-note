@@ -34,7 +34,10 @@ export function readDdUsageConfig(env: NodeJS.ProcessEnv = process.env): DdUsage
   };
 }
 
-const PRODUCT_FAMILIES = ["logs_indexed_logs", "infra_host"];
+// Codex PR #85 round-2 P2 fix: Datadog v2 usage API family keys = `indexed_logs`
+// + `infra_hosts` (복수형). 이전 `logs_indexed_logs`/`infra_host` 는 reject 또는
+// no match → cost gauge 가 0 으로 인입되어 cost dashboard 가 비었음.
+const PRODUCT_FAMILIES = ["indexed_logs", "infra_hosts"];
 
 export async function fetchDdIngestionGb(
   config: DdUsageConfig,
