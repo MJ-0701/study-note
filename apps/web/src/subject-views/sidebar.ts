@@ -105,10 +105,10 @@ export function renderCurrentSubjectDepthNav(subject: SubjectNote, route: Route)
 
 export function renderSubjectNavItem(
   item: SubjectNote,
-  currentSubject: SubjectNote,
+  currentSubject: SubjectNote | null,
   route: Route
 ): string {
-  const isCurrent = item.id === currentSubject.id;
+  const isCurrent = currentSubject !== null && item.id === currentSubject.id;
 
   return `
     <div class="subject-sidebar-item ${isCurrent ? "is-current" : ""}">
@@ -139,7 +139,7 @@ export function renderAdminLink(ctx: SidebarContext): string {
 export function renderSidebarTermGroup(
   ctx: SidebarContext,
   group: SidebarGroup,
-  currentSubject: SubjectNote,
+  currentSubject: SubjectNote | null,
   route: Route
 ): string {
   const termId = group.term?.id ?? "__orphan__";
@@ -167,7 +167,7 @@ export function renderSidebarTermGroup(
 
 export function renderSidebarTermGroups(
   ctx: SidebarContext,
-  currentSubject: SubjectNote,
+  currentSubject: SubjectNote | null,
   route: Route
 ): string | null {
   const termsCache = ctx.getSidebarTermsCache();
@@ -204,10 +204,16 @@ export function renderHomeSidebar(
       </div>
       <div class="sidebar-group sidebar-group--subjects">
         <p class="group-label">과목 공부</p>
-        <nav>
-          ${studyNotebook.subjects.map((subject) => `
-            <a href="${escapeHtml(subjectClassPath(subject))}">${escapeHtml(subject.title)}</a>
-          `).join("")}
+        <nav aria-label="학기/과목 트리">
+          ${
+            // sprint-W22-be-sync hotfix: home sidebar 도 term group 표시.
+            // term cache 가 로드되면 학기별 그룹화. 미로드 (boot 직후 / BE 4xx)
+            // 시 fallback = flat list (이전 동작).
+            renderSidebarTermGroups(ctx, null, route) ??
+            studyNotebook.subjects.map((subject) =>
+              `<a href="${escapeHtml(subjectClassPath(subject))}">${escapeHtml(subject.title)}</a>`
+            ).join("")
+          }
         </nav>
       </div>
       <div class="sidebar-group sidebar-group--workspaces">
