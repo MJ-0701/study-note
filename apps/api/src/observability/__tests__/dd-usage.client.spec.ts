@@ -100,21 +100,25 @@ describe("fetchDdIngestionGb", () => {
     );
   });
 
-  it("sums measurements across data rows and converts to GiB", async () => {
+  it("sums only bytes-typed measurements and converts to GiB", async () => {
     const fetcher: FetchLike = async () =>
       jsonResponse({
         data: [
           {
             attributes: {
               measurements: [
-                { usage_type: "logs_indexed", value: 1_000_000_000 },
-                { usage_type: "logs_other", value: 500_000_000 }
+                { usage_type: "ingested_logs_bytes", value: 1_000_000_000 },
+                { usage_type: "indexed_events_count", value: 12345 },
+                { usage_type: "rehydrated_logs_bytes", value: 500_000_000 }
               ]
             }
           },
           {
             attributes: {
-              measurements: [{ usage_type: "infra_hosts", value: 500_000_000 }]
+              measurements: [
+                { usage_type: "host_count", value: 500_000_000 },
+                { usage_type: "logs_live_indexed_bytes", value: 500_000_000 }
+              ]
             }
           }
         ]
@@ -124,7 +128,30 @@ describe("fetchDdIngestionGb", () => {
       fetcher
     );
     assert.equal(result.status, "ok");
+    // 1B + 0.5B + 0.5B = 2GB (event_count + host_count 무시).
     assert.equal(result.ingestionGb, 2);
+  });
+
+  it("ignores non-bytes usage_type (host counts, event counts)", async () => {
+    const fetcher: FetchLike = async () =>
+      jsonResponse({
+        data: [
+          {
+            attributes: {
+              measurements: [
+                { usage_type: "host_count", value: 5_000_000_000 },
+                { usage_type: "indexed_events_count", value: 999_999 }
+              ]
+            }
+          }
+        ]
+      });
+    const result = await fetchDdIngestionGb(
+      { apiKey: "k", appKey: "a" },
+      fetcher
+    );
+    assert.equal(result.status, "ok");
+    assert.equal(result.ingestionGb, 0);
   });
 
   it("returns ok with 0 when measurements are empty", async () => {

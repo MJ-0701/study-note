@@ -34,10 +34,12 @@ export function readDdUsageConfig(env: NodeJS.ProcessEnv = process.env): DdUsage
   };
 }
 
-// Codex PR #85 round-2 P2 fix: Datadog v2 usage API family keys = `indexed_logs`
-// + `infra_hosts` (복수형). 이전 `logs_indexed_logs`/`infra_host` 는 reject 또는
-// no match → cost gauge 가 0 으로 인입되어 cost dashboard 가 비었음.
-const PRODUCT_FAMILIES = ["indexed_logs", "infra_hosts"];
+// Datadog v2 hourly_usage 는 family 별로 단위가 다름 (`indexed_logs` = bytes/event
+// count, `infra_hosts` = host count). 본 gauge 의미 = ingestion volume in GB →
+// `indexed_logs` family + `usage_type` 이 bytes 인 measurement 만 합산.
+// host count 같은 비-bytes value 를 /1e9 GB 변환 시 가짜 수치 발생 (Codex PR #85
+// round-3 P2). family / usage_type 추가 시 본 filter 확장.
+const PRODUCT_FAMILIES = ["indexed_logs"];
 
 export async function fetchDdIngestionGb(
   config: DdUsageConfig,
@@ -109,17 +111,24 @@ function sumIngestionGb(json: {
     };
   }>;
 }): number {
-  let total = 0;
+  let totalBytes = 0;
   const rows = json.data ?? [];
   for (const row of rows) {
     const measurements = row.attributes?.measurements ?? [];
     for (const m of measurements) {
-      if (typeof m.value === "number" && Number.isFinite(m.value)) {
-        total += m.value;
+      if (
+        typeof m.value !== "number" ||
+        !Number.isFinite(m.value) ||
+        typeof m.usage_type !== "string"
+      ) {
+        continue;
+      }
+      // bytes 단위 usage_type 만 합산 — host_count / event_count 등은 skip.
+      // family 가 indexed_logs 만이라 일반적으로 `ingested_logs_bytes` 등이 도착.
+      if (m.usage_type.toLowerCase().includes("bytes")) {
+        totalBytes += m.value;
       }
     }
   }
-  // Usage API returns bytes for ingestion measurements (per product family);
-  // converted to GiB-equivalent for symmetry with R2 payloadGb.
-  return total > 0 ? total / 1_000_000_000 : 0;
+  return totalBytes > 0 ? totalBytes / 1_000_000_000 : 0;
 }
