@@ -16,6 +16,36 @@
 
 주요 사용 환경은 데스크톱보다 iPad·태블릿·모바일에 가깝습니다. 좁은 화면에서도 PDF 보기·페르소나와 대화·핵심 메모 남기기가 끊기지 않는 쪽을 우선합니다.
 
+## 코드리뷰 · 시연 안내 (live)
+
+운영 서버가 실제로 떠 있어서 로컬 셋업 없이 흐름을 확인할 수 있습니다.
+
+- 홈페이지 URL: <https://study-note.910701.xyz>
+- 관리자 대시보드: <https://study-note.910701.xyz/admin.html> (master / admin 권한 로그인 후 표시)
+- 리뷰어 시연 계정 (DB seed 완료):
+  - 이름: `리뷰어`
+  - 학번: `20260000`
+  - role: `MASTER`
+- backend = Azure Container Apps `study-note-api`, min-replicas=0 → 첫 요청 시 cold-start 약 5~35 초 발생 가능. session_hint cookie 또는 UptimeRobot keep-alive 가 warm 상태일 땐 50~150ms.
+
+권장 시연 흐름:
+
+1. `https://study-note.910701.xyz` 접속 → 이름 `리뷰어` + 학번 `20260000` 으로 로그인.
+2. 좌측 사이드바에서 **학기 → 과목 → 주차** 트리 확인. 학기/과목 추가·이동·삭제 시도 (master 권한이라 제한 없음).
+3. 과목 카드에서 **PDF 작업공간** 진입 → PDF 업로드 → 펜·포스트잇·별표·표·그래프 widget 사용. 다른 디바이스 (또는 새 창) 에서 같은 계정 로그인 → cross-device sync 확인.
+4. 주차 페이지의 자유 노트 입력 → 새 탭에서 같은 페이지 열면 디바운스 PUT 으로 저장된 노트 보임.
+5. `/admin.html` 접속 → 사용자 목록 + role / dev-user-flag / review 액션 확인. PR #84 머지 후에는 같은 화면 상단에 **운영 지표 panel** (APM × 3 / log × 3 / RUM × 3 카드) 이 추가됩니다 — Datadog 응답 기준.
+6. 페르소나 turn UI 는 `https://study-note.910701.xyz/persona-turn.html` — 단, 운영 환경은 fixture mode 기본이라 실제 LLM 호출 없음 (안내 banner 노출).
+
+운영/리뷰 관련 cross-reference:
+
+- 현재 sprint 진행 상태 = `docs/solon/handoff/ACTIVE.md` (Layer A~D 분해 완료, sprint-W22-sprint-22).
+- 운영 지표 dashboard 코드 = [PR #84](https://github.com/MJ-0701/study-note/pull/84).
+- React migration audit (다음 phase 진입 자료) = `.sfs-local/sprints/react-migration-audit.md` (private workbench).
+- Agent 문서 변경 규율 = `llm-wiki/references/standards.md`.
+
+리뷰어 시연 계정은 데모용 master 권한입니다. 운영 master 계정과 분리되어 있으며 시연 후 권한 회수/계정 정리 여부는 별도 운영 결정입니다.
+
 ## Core Experience
 
 `study-note`가 만들고 싶은 학습 흐름:
