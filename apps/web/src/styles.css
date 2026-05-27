@@ -482,6 +482,27 @@ section + section {
   width: 100%;
 }
 
+.pdf-material-card__class-date-list {
+  height: auto;
+  line-height: 1.35;
+  min-height: 138px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.pdf-material-card__class-date-list option {
+  border-radius: 5px;
+  min-height: 34px;
+  padding: 8px 10px;
+  white-space: normal;
+}
+
+.pdf-material-card__field-hint {
+  color: var(--ds-fg-soft);
+  font-size: var(--ds-fs-meta);
+  line-height: 1.35;
+}
+
 .class-day-grid {
   display: grid;
   gap: var(--ds-space-md);

@@ -133,6 +133,15 @@ describe("pdf-library — (a) canManagePdfMaterials fail-closed", () => {
   test("case 7: role=\"admin\" → true", () => {
     assert.equal(pl.canManagePdfMaterials(makeCtx({ id: "u1", role: "admin" })), true);
   });
+
+  test("case 7b: classDate edit follows manager role", () => {
+    const own = makeMaterial({ uploaderId: "u1" });
+    const shared = makeMaterial({ uploaderId: "u2" });
+
+    assert.equal(pl.canEditPdfMaterialClassDate(makeCtx({ id: "u1", role: "admin" }), own), true);
+    assert.equal(pl.canEditPdfMaterialClassDate(makeCtx({ id: "u1", role: "admin" }), shared), true);
+    assert.equal(pl.canEditPdfMaterialClassDate(makeCtx({ id: "u1", role: "student" }), own), false);
+  });
 });
 
 // ─── (b) getPdfMaterialOwnerLabel — ownership boundary ────────────────────
@@ -262,7 +271,7 @@ describe("pdf-library — (e) renderPdfMaterialCard XSS", () => {
 // ─── (f) renderPdfMaterialClassDateControl + denylist + week label ────────
 
 describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
-  test("case 22: canManage=false → select.disabled", () => {
+  test("case 22: canManage=false → listbox select.disabled", () => {
     const subject = makeSubject();
     const mat = makeMaterial();
     const html = pl.renderPdfMaterialClassDateControl(makeCtx(), subject, mat, "m1");
@@ -270,15 +279,28 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
     const sel = c.querySelector("select");
     assert.notEqual(sel, null);
     assert.equal(sel!.hasAttribute("disabled"), true);
+    assert.equal(sel!.getAttribute("size"), "3");
   });
 
-  test("case 23: canManage=true → select editable", () => {
+  test("case 23: canManage=true + own material → listbox editable", () => {
     const subject = makeSubject();
-    const mat = makeMaterial();
+    const mat = makeMaterial({ uploaderId: "u1" });
     const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
     const c = parseC(html);
     const sel = c.querySelector("select");
     assert.equal(sel!.hasAttribute("disabled"), false);
+    assert.equal(sel!.getAttribute("size"), "3");
+    assert.equal(c.querySelectorAll(".pdf-material-card__class-date-list").length, 1);
+  });
+
+  test("case 23b: canManage=true + shared material → editable", () => {
+    const subject = makeSubject();
+    const mat = makeMaterial({ uploaderId: "other-admin" });
+    const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
+    const c = parseC(html);
+    const sel = c.querySelector("select");
+    assert.equal(sel!.hasAttribute("disabled"), false);
+    assert.match(c.querySelector(".pdf-material-card__field-hint")?.textContent ?? "", /바로 저장/);
   });
 
   test("case 24: non-ISO week.label → disabled + \"사용 불가\" hint", () => {
@@ -335,6 +357,7 @@ describe("pdf-library — (h) export shape + helpers", () => {
     assert.equal(typeof pl.getPdfMaterialStatusLabel, "function");
     assert.equal(typeof pl.getPdfMaterialOwnerLabel, "function");
     assert.equal(typeof pl.canManagePdfMaterials, "function");
+    assert.equal(typeof pl.canEditPdfMaterialClassDate, "function");
 
     const subject = makeSubject({ weekLabels: ["2026-05-14"] });
     assert.equal(pl.isUnconfirmedPdfClassDate(subject, undefined), true);

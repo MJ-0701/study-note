@@ -53,6 +53,13 @@ export function canManagePdfMaterials(ctx: PdfLibraryContext): boolean {
   return role === "master" || role === "admin";
 }
 
+export function canEditPdfMaterialClassDate(
+  ctx: PdfLibraryContext,
+  _material: PdfMaterialDraft
+): boolean {
+  return canManagePdfMaterials(ctx);
+}
+
 export function getPdfMaterialOwnerLabel(
   ctx: PdfLibraryContext,
   material: PdfMaterialDraft
@@ -289,15 +296,19 @@ export function renderPdfMaterialClassDateControl(
   materialKey: string
 ): string {
   const selectedValue = getPdfMaterialClassDateValue(material);
+  const canEdit = canEditPdfMaterialClassDate(ctx, material);
+  const visibleOptionCount = Math.min(6, Math.max(2, subject.weekNotes.length + 1));
 
   return `
     <label class="pdf-material-card__field">
       <span>수업일</span>
       <select
+        class="pdf-material-card__class-date-list"
         data-action="assign-pdf-class-date"
         data-subject-id="${escapeHtml(subject.id)}"
         data-material-id="${escapeHtml(materialKey)}"
-        ${canManagePdfMaterials(ctx) ? "" : "disabled"}
+        size="${visibleOptionCount}"
+        ${canEdit ? "" : "disabled"}
       >
         <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
         ${subject.weekNotes.map((week) => {
@@ -310,6 +321,9 @@ export function renderPdfMaterialClassDateControl(
           return `<option value="${escapeHtml(week.label)}" ${sel} ${isIso ? "" : "disabled"}>${escapeHtml(label)}</option>`;
         }).join("")}
       </select>
+      <small class="pdf-material-card__field-hint">
+        ${canEdit ? "날짜를 선택하면 바로 저장됩니다." : "수업일 수정은 관리자만 가능합니다."}
+      </small>
     </label>
   `;
 }

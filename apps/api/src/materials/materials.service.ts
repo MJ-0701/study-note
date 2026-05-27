@@ -310,7 +310,7 @@ export class MaterialsService {
     materialId: string,
     input: UpdateMaterialMetadataInput
   ): Promise<PdfMaterialRecord> {
-    const material = await this.getOwnedMaterial(ownerId, materialId);
+    const material = await this.getManageableMaterial(ownerId, materialId);
     const saved = await this.prisma.pdfMaterial.update({
       where: { id: material.id },
       data: {
@@ -428,6 +428,35 @@ export class MaterialsService {
         id: materialId,
         ownerId,
         deletedAt: null
+      }
+    });
+
+    if (!material) {
+      throw materialNotFound();
+    }
+
+    return toPdfMaterialRecord(material);
+  }
+
+  private async getManageableMaterial(
+    ownerId: string,
+    materialId: string
+  ): Promise<PdfMaterialRecord> {
+    const material = await this.prisma.pdfMaterial.findFirst({
+      where: {
+        id: materialId,
+        deletedAt: null,
+        OR: [
+          { ownerId },
+          {
+            uploadStatus: "uploaded",
+            owner: {
+              role: {
+                in: ["MASTER", "ADMIN"]
+              }
+            }
+          }
+        ]
       }
     });
 

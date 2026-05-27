@@ -13,9 +13,25 @@ const mainTs = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
 // 함수 (parseRoute + path helpers) 가 app/routes.ts 로 이동. spec 의
 // source-grep 패턴이 두 곳을 모두 검색하도록 SOURCES 확장.
 const appRoutesTs = readFileSync(new URL("../app/routes.ts", import.meta.url), "utf8");
+const pdfLibraryTs = readFileSync(new URL("../subject-views/pdf-library.ts", import.meta.url), "utf8");
+const pdfWorkspacePageTs = readFileSync(new URL("../pdf-workspace/workspace-page.ts", import.meta.url), "utf8");
+const sidebarTs = readFileSync(new URL("../subject-views/sidebar.ts", import.meta.url), "utf8");
+const subjectClassTs = readFileSync(new URL("../subject-views/subject-class.ts", import.meta.url), "utf8");
+const summariesTs = readFileSync(new URL("../subject-views/summaries.ts", import.meta.url), "utf8");
+const memorizeTs = readFileSync(new URL("../subject-views/memorize.ts", import.meta.url), "utf8");
+const mcpTs = readFileSync(new URL("../subject-views/mcp.ts", import.meta.url), "utf8");
+const classDateTs = readFileSync(new URL("../pdf-workspace/class-date.ts", import.meta.url), "utf8");
 const SOURCES: Array<{ name: string; text: string }> = [
   { name: "main.ts", text: mainTs },
-  { name: "app/routes.ts", text: appRoutesTs }
+  { name: "app/routes.ts", text: appRoutesTs },
+  { name: "subject-views/pdf-library.ts", text: pdfLibraryTs },
+  { name: "pdf-workspace/workspace-page.ts", text: pdfWorkspacePageTs },
+  { name: "subject-views/sidebar.ts", text: sidebarTs },
+  { name: "subject-views/subject-class.ts", text: subjectClassTs },
+  { name: "subject-views/summaries.ts", text: summariesTs },
+  { name: "subject-views/memorize.ts", text: memorizeTs },
+  { name: "subject-views/mcp.ts", text: mcpTs },
+  { name: "pdf-workspace/class-date.ts", text: classDateTs }
 ];
 
 function getFunctionBlock(name: string): string {
@@ -67,17 +83,17 @@ describe("PDF material library UI", () => {
     assert.match(indexBlock, /과목별 PDF/);
     assert.match(indexBlock, /renderPdfSubjectLibrarySection/);
     assert.match(sectionBlock, /pdf-material-slider/);
-    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(subject, materials\.length\)/);
+    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(ctx, subject, materials\.length\)/);
   });
 
   it("lets admins upload a new PDF directly from each subject library section", () => {
     const sectionBlock = getFunctionBlock("renderPdfSubjectLibrarySection");
     const uploadCardBlock = getFunctionBlock("renderPdfLibraryUploadCard");
 
-    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(subject, materials\.length\)/);
-    assert.match(uploadCardBlock, /pdf-library-upload-\$\{subject\.id\}/);
+    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(ctx, subject, materials\.length\)/);
+    assert.match(uploadCardBlock, /pdf-library-upload-\$\{safeSubjectId\}/);
     assert.match(uploadCardBlock, /data-action="import-pdf-material"/);
-    assert.match(uploadCardBlock, /data-subject-id="\$\{escapeHtml\(subject\.id\)\}"/);
+    assert.match(uploadCardBlock, /data-subject-id="\$\{safeSubjectId\}"/);
     assert.match(uploadCardBlock, /새 PDF 업로드/);
     assert.match(uploadCardBlock, /수업 자료 추가/);
     assert.match(uploadCardBlock, /PDF 업로드는 관리자만 가능합니다/);
@@ -96,8 +112,8 @@ describe("PDF material library UI", () => {
     assert.match(cardBlock, /다시 열기/);
     assert.match(cardBlock, /열기/);
     assert.match(cardBlock, /getPdfMaterialClassDateLabel\(subject, material\)/);
-    assert.match(cardBlock, /renderPdfMaterialClassDateControl\(subject, material, materialKey\)/);
-    assert.match(mainTs, /data-action="assign-pdf-class-date"/);
+    assert.match(cardBlock, /renderPdfMaterialClassDateControl\(ctx, subject, material, materialKey\)/);
+    assert.match(pdfLibraryTs, /data-action="assign-pdf-class-date"/);
     assert.match(cardBlock, /나중에 수정/);
     assert.match(ownerLabelBlock, /공유 자료/);
     assert.match(statusLabelBlock, /공유 가능/);
@@ -134,8 +150,8 @@ describe("PDF material library UI", () => {
   it("keeps upload open for additional PDFs without auto-mapping lecture dates", () => {
     const workspaceBlock = getFunctionBlock("renderPdfWorkspacePage");
 
-    assert.match(mainTs, /const PDF_MATERIAL_UNASSIGNED_CLASS_DATE = "metadata-pending";/);
-    assert.match(mainTs, /classDate:\s*PDF_MATERIAL_UNASSIGNED_CLASS_DATE/);
+    assert.match(pdfLibraryTs, /PDF_MATERIAL_UNASSIGNED_CLASS_DATE/);
+    assert.match(mainTs, /pendingMaterial\.classDate = PDF_MATERIAL_UNASSIGNED_CLASS_DATE/);
     assert.doesNotMatch(mainTs, /classDate:\s*getPdfMaterialClassDate\(subjectId\)/);
     assert.match(workspaceBlock, /강의 PDF 추가 업로드/);
     assert.match(workspaceBlock, /PDF를 계속 추가할 수 있습니다/);
@@ -167,7 +183,7 @@ describe("PDF material library UI", () => {
     const cardBlock = getCssRuleBlock(".pdf-material-card");
     const sliderBlock = getCssRuleBlock(".pdf-material-slider");
     const summaryBlock = getCssRuleBlock(".pdf-library-summary");
-    const mobileBlock = css.slice(css.indexOf("@media (max-width: 820px)"));
+    const mobileBlock = css.slice(css.indexOf("@media (max-width: 767px)"));
 
     assert.match(summaryBlock, /grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\);/);
     assert.match(sliderBlock, /overflow-x:\s*auto;/);
@@ -206,10 +222,11 @@ describe("PDF material library UI", () => {
     assert.match(routeBlock, /name: "subject-mcp"/);
     assert.match(routeBlock, /parts\[2\] === "memorize"/);
     assert.match(routeBlock, /name: "subject-memorize"/);
-    assert.match(renderAppBlock, /route\.name === "subject" \|\|\s*\n\s*route\.name === "subject-class"/);
-    assert.match(renderAppBlock, /renderSubjectClassPage\(subject\)/);
-    assert.match(renderAppBlock, /renderSubjectSummariesPage\(subject\)/);
-    assert.match(renderAppBlock, /renderWeekSummaryPage\(subject, week\)/);
+    assert.match(renderAppBlock, /route\.name === "subject"/);
+    assert.match(renderAppBlock, /route\.name === "subject-class"/);
+    assert.match(renderAppBlock, /renderSubjectClassPage\(subjectClassContext, subject\)/);
+    assert.match(renderAppBlock, /renderSubjectSummariesPage\(summariesContext, subject\)/);
+    assert.match(renderAppBlock, /renderWeekSummaryPage\(summariesContext, subject, week\)/);
     assert.match(renderAppBlock, /renderSubjectMcpPage\(subject\)/);
     assert.match(renderAppBlock, /renderSubjectMemorizePage\(subject\)/);
     assert.match(sidebarBlock, /renderSubjectNavItem/);
@@ -223,18 +240,18 @@ describe("PDF material library UI", () => {
     assert.match(depthBlock, /subjectMemorizePath\(subject\)/);
     assert.match(depthBlock, />필수 암기노트<\/a>/);
     assert.doesNotMatch(sidebarBlock, /subject-week-details/);
-    assert.match(classBlock, /renderClassDateAddSection\(subject\)/);
+    assert.match(classBlock, /renderClassDateAddSection\(ctx, subject\)/);
     assert.match(classBlock, /renderClassDayCard/);
-    assert.match(classBlock, /renderPdfMaterialAssignmentSection\(subject, subjectMaterials\)/);
-    assert.match(mainTs, /function renderClassDayPdfLinks/);
-    assert.match(mainTs, /data-action="open-pdf-material"/);
-    assert.match(mainTs, /연결 PDF/);
+    assert.match(classBlock, /renderPdfMaterialAssignmentSection\(ctx, subject, subjectMaterials\)/);
+    assert.match(subjectClassTs, /function renderClassDayPdfLinks/);
+    assert.match(subjectClassTs, /data-action="open-pdf-material"/);
+    assert.match(subjectClassTs, /연결 PDF/);
     assert.match(summariesBlock, /수업일별 요약 목록/);
-    assert.match(summariesBlock, /renderSummaryDayCard\(subject, week\)/);
+    assert.match(summariesBlock, /renderSummaryDayCard\(ctx, subject, week\)/);
     assert.match(summaryDetailBlock, /이 날짜 요약 만들기/);
     assert.match(memorizeBlock, /필수 암기노트/);
     assert.match(memorizeBlock, /반드시 외울 개념/);
-    assert.match(mcpPageBlock, /<h1>\$\{subject\.title\} MCP 호출<\/h1>/);
+    assert.match(mcpPageBlock, /<h1>\$\{safeTitle\} MCP 호출<\/h1>/);
     assert.match(mcpPageBlock, /persona-turn\.html\?subject=/);
     assert.match(mcpPageBlock, /질문거리 점검/);
     assert.match(mcpPanelBlock, /교수님 페르소나에게 질문하기/);
@@ -253,10 +270,12 @@ describe("PDF material library UI", () => {
 
     assert.match(submitBlock, /action === "add-class-date"/);
     assert.match(addDateBlock, /const newWeek: WeekNote/);
-    assert.match(addDateBlock, /saveNotebook\(notebook\)/);
-    assert.match(assignBlock, /updatePdfMaterialMetadata\(apiBaseUrl, material\.backendMaterialId/);
+    assert.match(addDateBlock, /persistNotebook\(\)/);
+    assert.match(assignBlock, /callbacks\.updatePdfMaterialMetadata/);
     assert.match(apiTs, /export async function updatePdfMaterialMetadata/);
     assert.match(apiTs, /method: "PATCH"/);
     assert.match(apiTs, /classDate: string/);
+    assert.match(css, /\.pdf-material-card__class-date-list/);
+    assert.match(css, /min-height:\s*138px;/);
   });
 });

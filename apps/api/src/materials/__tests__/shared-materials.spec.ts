@@ -155,7 +155,7 @@ describe("Materials shared-read contract", () => {
     );
   });
 
-  it("updates classDate only for uploader-owned materials (S3 AC12 — Date)", async () => {
+  it("updates classDate for uploader-owned materials (S3 AC12 — Date)", async () => {
     const { service, queries } = makeService({
       material: makeMaterial({ ownerId: "admin-1" })
     });
@@ -167,13 +167,50 @@ describe("Materials shared-read contract", () => {
     assert.equal(material.classDate, "2026-05-07");
     assert.deepEqual(queries.findFirstWheres[0], {
       id: "mat-shared",
-      ownerId: "admin-1",
-      deletedAt: null
+      deletedAt: null,
+      OR: [
+        { ownerId: "admin-1" },
+        {
+          uploadStatus: "uploaded",
+          owner: {
+            role: {
+              in: ["MASTER", "ADMIN"]
+            }
+          }
+        }
+      ]
     });
     const updateArgs = queries.updateArgs as { where: unknown; data: { classDate: Date } };
     assert.deepEqual(updateArgs.where, { id: "mat-shared" });
     assert.ok(updateArgs.data.classDate instanceof Date);
     assert.equal(updateArgs.data.classDate.toISOString().slice(0, 10), "2026-05-07");
+  });
+
+  it("updates classDate for uploaded master/admin shared materials", async () => {
+    const { service, queries } = makeService({
+      material: makeMaterial({ ownerId: "master-1" })
+    });
+
+    const material = await service.updateMaterialMetadata("admin-2", "mat-shared", {
+      classDate: "2026-05-28"
+    });
+
+    assert.equal(material.classDate, "2026-05-28");
+    assert.deepEqual(queries.findFirstWheres[0], {
+      id: "mat-shared",
+      deletedAt: null,
+      OR: [
+        { ownerId: "admin-2" },
+        {
+          uploadStatus: "uploaded",
+          owner: {
+            role: {
+              in: ["MASTER", "ADMIN"]
+            }
+          }
+        }
+      ]
+    });
   });
 
   it("(S3 AC12) update with invalid classDate → 400", async () => {

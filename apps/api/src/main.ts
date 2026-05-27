@@ -53,7 +53,7 @@ async function bootstrap() {
     origin: allowedOrigins,
     credentials: true,
     allowedHeaders: ["Authorization", "Content-Type"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
   });
   // sprint-5 plan §3 AC3 — DTO validation. CLAUDE.md API conv 의 errorResponse shape
   // (`{errorCode, errorMessage}`) 으로 emit (default Nest 의 `{statusCode, message, error}` 대신).
