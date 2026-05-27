@@ -296,7 +296,7 @@ describe("AC6 (4) — savePdfWorkspaceStore", () => {
 // ─── AC6 (5) — updatePdfWorkspace + annotation PUT 분기 ───────────────────
 
 describe("AC6 (5) — updatePdfWorkspace", () => {
-  it("nextMaterial === previousMaterial → annotation PUT 호출", () => {
+  it("nextMaterial === previousMaterial + annotation payload 변경 → annotation PUT 호출", () => {
     const material = makeMaterial("m1");
     const h = makeHarness({
       userId: "userA",
@@ -304,12 +304,33 @@ describe("AC6 (5) — updatePdfWorkspace", () => {
     });
     updatePdfWorkspace(
       "s1",
-      (ws) => ({ ...ws, stickyNotes: [...ws.stickyNotes] }),
+      (ws) => ({
+        ...ws,
+        stickyNotes: [{ id: "note-1", content: "memo" } as never]
+      }),
       h.ctx,
       h.cb
     );
     assert.equal(h.putCalls.length, 1);
     assert.equal(h.putCalls[0]!.materialId, "m1");
+  });
+
+  it("material metadata only 변경 → annotation PUT 호출 0", () => {
+    const material = makeMaterial("m1", { classDate: "2026-05-02" } as never);
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: { workspaces: { s1: makeWorkspace({ material }) } }
+    });
+    updatePdfWorkspace(
+      "s1",
+      (ws) => ({
+        ...ws,
+        material: { ...material, classDate: "2026-05-28" } as never
+      }),
+      h.ctx,
+      h.cb
+    );
+    assert.equal(h.putCalls.length, 0);
   });
 
   it("nextMaterial 전환 (m1 → m2) → annotation PUT 호출 0 (PR #29 codex P1 fix)", () => {
@@ -336,7 +357,10 @@ describe("AC6 (5) — updatePdfWorkspace", () => {
     });
     updatePdfWorkspace(
       "s1",
-      (ws) => ({ ...ws, stickyNotes: [...ws.stickyNotes] }),
+      (ws) => ({
+        ...ws,
+        stickyNotes: [{ id: "note-1", content: "memo" } as never]
+      }),
       h.ctx,
       h.cb
     );

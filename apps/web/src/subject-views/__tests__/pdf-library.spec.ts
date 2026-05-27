@@ -271,7 +271,7 @@ describe("pdf-library — (e) renderPdfMaterialCard XSS", () => {
 // ─── (f) renderPdfMaterialClassDateControl + denylist + week label ────────
 
 describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
-  test("case 22: canManage=false → listbox select.disabled", () => {
+  test("case 22: canManage=false → select/button disabled", () => {
     const subject = makeSubject();
     const mat = makeMaterial();
     const html = pl.renderPdfMaterialClassDateControl(makeCtx(), subject, mat, "m1");
@@ -279,18 +279,18 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
     const sel = c.querySelector("select");
     assert.notEqual(sel, null);
     assert.equal(sel!.hasAttribute("disabled"), true);
-    assert.equal(sel!.getAttribute("size"), "3");
+    assert.equal(c.querySelector('button[data-action="assign-pdf-class-date"]')?.hasAttribute("disabled"), true);
   });
 
-  test("case 23: canManage=true + own material → listbox editable", () => {
+  test("case 23: canManage=true + own material → dropdown editable", () => {
     const subject = makeSubject();
     const mat = makeMaterial({ uploaderId: "u1" });
     const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
     const c = parseC(html);
     const sel = c.querySelector("select");
     assert.equal(sel!.hasAttribute("disabled"), false);
-    assert.equal(sel!.getAttribute("size"), "3");
-    assert.equal(c.querySelectorAll(".pdf-material-card__class-date-list").length, 1);
+    assert.equal(c.querySelector('button[data-action="assign-pdf-class-date"]')?.hasAttribute("disabled"), false);
+    assert.equal(c.querySelectorAll(".pdf-material-card__class-date-select").length, 1);
   });
 
   test("case 23b: canManage=true + shared material → editable", () => {
@@ -300,7 +300,7 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
     const c = parseC(html);
     const sel = c.querySelector("select");
     assert.equal(sel!.hasAttribute("disabled"), false);
-    assert.match(c.querySelector(".pdf-material-card__field-hint")?.textContent ?? "", /바로 저장/);
+    assert.match(c.querySelector(".pdf-material-card__field-hint")?.textContent ?? "", /적용/);
   });
 
   test("case 24: non-ISO week.label → disabled + \"사용 불가\" hint", () => {
@@ -320,6 +320,28 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
     const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
     const c = parseC(html);
     assert.equal(c.querySelectorAll("script").length, 0);
+  });
+
+  test("case 25b: ISO week labels are sorted ascending in dropdown", () => {
+    const subject = makeSubject({
+      weekLabels: ["2026-06-04", "2026-04-30", "2026-05-28", "2026-05-02"]
+    });
+    const html = pl.renderPdfMaterialClassDateControl(
+      makeCtx({ id: "u1", role: "admin" }),
+      subject,
+      makeMaterial(),
+      "m1"
+    );
+    const c = parseC(html);
+    const labels = Array.from(c.querySelectorAll("option"))
+      .map((option) => option.textContent.trim())
+      .filter((label) => /^\d{4}-/.test(label));
+    assert.deepEqual(labels, [
+      "2026-04-30 · wk2",
+      "2026-05-02 · wk4",
+      "2026-05-28 · wk3",
+      "2026-06-04 · wk1"
+    ]);
   });
 });
 
@@ -352,6 +374,8 @@ describe("pdf-library — (h) export shape + helpers", () => {
     assert.equal(typeof pl.renderPdfMaterialClassDateControl, "function");
     assert.equal(typeof pl.getPdfMaterialClassDateLabel, "function");
     assert.equal(typeof pl.getPdfMaterialClassDateValue, "function");
+    assert.equal(typeof pl.getPdfMaterialClassDateSelectValue, "function");
+    assert.equal(typeof pl.getSortedPdfClassDateWeeks, "function");
     assert.equal(typeof pl.isUnconfirmedPdfClassDate, "function");
     assert.equal(typeof pl.getPdfMaterialsForWeek, "function");
     assert.equal(typeof pl.getPdfMaterialStatusLabel, "function");

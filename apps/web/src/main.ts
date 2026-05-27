@@ -994,6 +994,16 @@ function formatWeekLabel(label: string | undefined | null, classDate?: string | 
   return candidate;
 }
 
+function sortWeekNotesByClassDate(weekNotes: WeekNote[]): WeekNote[] {
+  return [...weekNotes].sort((a, b) => {
+    const aIso = isCanonicalIsoDate(a.label);
+    const bIso = isCanonicalIsoDate(b.label);
+    if (aIso && bIso) return a.label.localeCompare(b.label);
+    if (aIso !== bIso) return aIso ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
 function addSubjectClassDate(formData: FormData): void {
   const subjectId = String(formData.get("subjectId") ?? "").trim();
   const classDate = String(formData.get("classDate") ?? "").trim();
@@ -1049,7 +1059,7 @@ function addSubjectClassDate(formData: FormData): void {
     updatedAt: new Date().toISOString().slice(0, 10),
     subjects: notebook.subjects.map((item) =>
       item.id === subject.id
-        ? { ...item, weekNotes: [...item.weekNotes, newWeek] }
+        ? { ...item, weekNotes: sortWeekNotesByClassDate([...item.weekNotes, newWeek]) }
         : item
     )
   };
@@ -1301,6 +1311,22 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (quickNoteButton?.dataset.action === "retry-session-check") {
     void revalidateStoredSession({ blocking: true });
+    return;
+  }
+
+  if (quickNoteButton?.dataset.action === "assign-pdf-class-date") {
+    const subjectId = quickNoteButton.dataset.subjectId;
+    const materialId = quickNoteButton.dataset.materialId;
+    const field = quickNoteButton.closest<HTMLElement>(".pdf-material-card__field");
+    const select = field?.querySelector<HTMLSelectElement>(
+      'select[data-role="pdf-class-date-select"]'
+    );
+
+    if (subjectId && materialId && select && !select.disabled) {
+      event.preventDefault();
+      void assignPdfMaterialClassDate(subjectId, materialId, select.value);
+    }
+
     return;
   }
 
@@ -4452,4 +4478,3 @@ function formatPdfTool(tool: LocalPdfTool): string {
 
   return labels[tool];
 }
-

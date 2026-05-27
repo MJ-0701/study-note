@@ -93,6 +93,24 @@ export interface WorkspaceStoreCallbacks {
 
 // ─── 1) Pure helpers (state-free) ────────────────────────────────────────
 
+type AnnotationPayload = Parameters<WorkspaceStoreCallbacks["scheduleAnnotationPut"]>[1];
+
+function buildAnnotationPayload(workspace: SubjectPdfWorkspace): AnnotationPayload {
+  return {
+    stickyNotes: workspace.stickyNotes,
+    inkStrokes: workspace.inkStrokes,
+    textBoxes: workspace.textBoxes,
+    checklists: workspace.checklists,
+    tables: workspace.tables,
+    charts: workspace.charts,
+    starMarks: workspace.starMarks ?? []
+  };
+}
+
+function serializeAnnotationPayload(workspace: SubjectPdfWorkspace): string {
+  return JSON.stringify(buildAnnotationPayload(workspace));
+}
+
 // sprint-3/S2: userId-scoped pdfWorkspaceStore localStorage key. Mirrors the
 // S1 notebook namespacing pattern (`{base}:{userId}`) so A→B account
 // transitions cannot see each other's PDF workspace through localStorage.
@@ -326,19 +344,10 @@ export function updatePdfWorkspace(
   const nextMaterial = updated.material;
   const previousId = previousMaterial?.backendMaterialId ?? previousMaterial?.id;
   const nextId = nextMaterial?.backendMaterialId ?? nextMaterial?.id;
-  if (nextMaterial && previousId === nextId) {
-    const payload = {
-      stickyNotes: updated.stickyNotes,
-      inkStrokes: updated.inkStrokes,
-      textBoxes: updated.textBoxes,
-      checklists: updated.checklists,
-      tables: updated.tables,
-      charts: updated.charts,
-      // PR #52 codex Round-1 P1 — starMarks 가 annotation PUT 에 누락되어
-      // reload 후 사라지던 문제. BE Zod whole-reject (starMark.dto.ts) 가
-      // valid payload 만 통과시킴.
-      starMarks: updated.starMarks ?? []
-    };
+  const annotationsChanged =
+    serializeAnnotationPayload(current) !== serializeAnnotationPayload(updated);
+  if (nextMaterial && previousId === nextId && annotationsChanged) {
+    const payload = buildAnnotationPayload(updated);
     callbacks.scheduleAnnotationPut(
       nextId!,
       payload,

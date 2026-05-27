@@ -1,130 +1,63 @@
 ---
-title: study-note 용어집 (Ubiquitous Language)
-audience: 면접관 + 개발자
+title: study-note 용어집
+audience: 사용자, 리뷰어, 개발자
 status: live
 created_at: 2026-05-28
 ---
 
-# 용어집 — 비개발자도 이해할 수 있도록
+# 용어집
 
-이 문서는 README · admin SPA · 코드 안 모든 곳에서 같은 의미로 쓰는 용어 정의입니다.
-면접관 (비개발자) 가 화면 봐도 매칭 가능하게 한국어 풀이 우선.
+이 문서는 study-note 화면과 코드에서 특별한 의미로 쓰는 단어만 정리합니다.
+일상적인 뜻 그대로 이해되는 단어는 제외합니다.
 
-## 비개발자 면접관 — 5 분 안 알아야 할 핵심
+## 사용자 화면 용어
 
-| 화면에 보이는 단어 | 진짜 의미 |
+| 용어 | 의미 |
 |---|---|
-| **학기** | 1학년 1학기 / 2학년 2학기 등. 학생이 한 텀 동안 듣는 강의 묶음. |
-| **과목** | 학기 안의 과목 (디지털공학개론 / C언어 등). 학기 안에 여러 개 있음. |
-| **수업** | 과목 안의 한 주차 수업. 보통 수업일 (예: 5월 7일) 1개와 PDF 자료 1개가 묶임. |
-| **PDF 자료** | 교수님이 올린 강의 자료 PDF 파일. 학생이 다운로드 + 그 위에 필기. |
-| **필기 / 메모** | 학생이 PDF 위에 직접 그리는 펜·포스트잇·별표·체크리스트·표·그래프. |
-| **수업일 미지정** | PDF 가 어느 주차 수업에 속하는지 아직 안 정한 상태. 나중에 수업일 지정 가능. |
-| **사용자 관리** | 가입한 학생/관리자 목록. 신규 가입자 승인·반려·권한 변경 화면. |
-| **운영 지표** | 서버가 안정한지 / 사용자가 잘 쓰고 있는지 모니터링 화면. |
+| **PDF 작업공간** | PDF를 열어 보면서 펜, 포스트잇, 별표, 체크리스트, 표, 그래프 같은 필기를 남기는 화면입니다. |
+| **PDF 자료** | 과목에 연결된 강의 PDF 원본입니다. 파일 자체는 공유될 수 있지만 필기는 사용자마다 따로 저장됩니다. |
+| **공유 자료** | 운영자나 관리자가 올려 같은 과목 사용자들이 함께 볼 수 있는 PDF 자료입니다. |
+| **개인 필기** | 같은 공유 PDF 위에 작성해도 사용자별로 분리 저장되는 필기 데이터입니다. |
+| **수업일** | PDF 자료를 특정 주차 또는 날짜의 수업과 연결하기 위한 기준값입니다. |
+| **수업일 미지정** | PDF 자료가 아직 어떤 수업일에 속하는지 정해지지 않은 상태입니다. |
+| **주차 노트** | 과목 안에서 특정 수업 단위로 남기는 텍스트 메모 영역입니다. |
+| **자유 메모** | PDF 위 필기가 아니라 과목/주차 화면에 직접 적는 일반 메모입니다. |
+| **자동저장** | 사용자가 별도 저장 버튼을 누르지 않아도 일정 시간 뒤 서버에 반영되는 저장 방식입니다. |
+| **동기화** | 한 기기에서 저장한 필기와 메모를 다른 기기에서도 이어서 볼 수 있게 맞추는 과정입니다. |
+| **운영 지표** | 서비스가 정상 동작하는지 확인하기 위한 요청량, 오류, 지연 시간, 저장 충돌 등의 지표입니다. |
 
-## 권한 (사용자 등급)
+## 권한 용어
 
-| 권한 | 누가 | 권한 범위 |
-|---|---|---|
-| **MASTER** | 운영자 (mj 본인 + 시연용 리뷰어) | 모든 화면 + 사용자 관리 + 학기/과목 생성·삭제 |
-| **ADMIN** | 협업자 (조교/공동 관리자) | MASTER 와 동일하지만 다른 사람을 MASTER 로 승급은 불가 |
-| **NORMAL** | 일반 학생 | 본인 자료 보기 + 본인 필기 + 강의자료 보기 (운영자가 올린 PDF) |
-
-## 데이터 위계 (모델)
-
-```
-학기 (Term)
-└─ 과목 (Subject)
-   ├─ PDF 자료 (PdfMaterial)
-   │  └─ 필기 (AnnotationSnapshot)  ← 학생별로 따로 저장
-   └─ 주차 노트 (WeekNote)
-      └─ 자유 메모 (userNotes)
-```
-
-- **Term (학기)** — `1학년 1학기 기본 학기` 같은 묶음. 학년·학기·제목 으로 식별.
-- **Subject (과목)** — Term 안의 과목 row.
-- **PdfMaterial** — Subject 안의 강의 자료 PDF.
-- **AnnotationSnapshot** — PDF 위 필기. 같은 PDF 라도 학생마다 본인 row.
-- **WeekNote** — Subject 안의 한 주차. 자유 메모 보유.
-
-## 사용 시나리오 (학생 입장)
-
-1. 학기 생성 → 과목 추가 → 주차 수업일 추가.
-2. 운영자가 PDF 업로드 → 학생이 다운로드해서 본문 봄.
-3. PDF 위에 포스트잇·펜·별표·체크리스트·표·그래프 widget 으로 필기.
-4. 필기는 자동저장 + 다른 기기 로그인 시 cross-device sync.
-5. 시험 직전 = 주차 노트 + PDF 필기 다시 봄.
-
-## 사용 시나리오 (운영자 = mj / 리뷰어)
-
-1. `/admin.html` 접속 → 사용자 관리 + 학기/과목 관리.
-2. 학기·과목 추가/이동/삭제. 학생 가입 승인/반려.
-3. 운영 지표 탭에서 서버 상태·사용자 활동 monitoring.
-4. PDF 업로드 시 권한이 MASTER/ADMIN 이면 자동 "공유 자료" — 모든 학생이 download 가능.
-
-## 기술 용어 (개발자 면접관용)
-
-| 단어 | 의미 |
+| 용어 | 의미 |
 |---|---|
-| **SoT (Source of Truth)** | "이 데이터의 정답이 어디 있는가" — 예: PDF 원본 = R2, annotation = DB + R2 hybrid. |
-| **BE (Backend)** | 서버 코드 = `apps/api` (NestJS). |
-| **FE (Frontend)** | 브라우저 코드 = `apps/web` (Vite + TypeScript). |
-| **ACA (Azure Container Apps)** | 백엔드 운영 인프라. Docker 컨테이너 호스팅. |
-| **SWA / Vercel** | 프론트엔드 운영 인프라 (Vercel SaaS 사용 중. README 의 SWA 언급은 legacy). |
-| **R2** | Cloudflare 의 S3 호환 object storage. PDF 원본 + annotation snapshot 저장. |
-| **RUM (Real User Monitoring)** | 사용자 브라우저에서 발생하는 click/오류/성능 측정. Datadog SDK. |
-| **APM (Application Performance Monitoring)** | 백엔드 요청별 trace + 응답 시간 측정. Datadog dd-trace. |
-| **CAS (Compare And Swap)** | 동시 편집 충돌 차단 패턴. annotation save 시 revision 비교 후 다르면 거부. |
-| **CSRF / XSS** | 웹 보안 공격. HttpOnly cookie + SameSite=Lax + escape-html 로 차단. |
-| **httpOnly cookie** | JS 로 못 읽는 쿠키. session token 만 담음 (사용자 PII X). |
-| **session token** | 사용자 로그인 식별자. 32-byte random + HMAC pepper hash 로 DB 저장. |
-| **Prisma / MySQL Flex** | DB ORM + 운영 MySQL 호스팅. |
-| **dd-trace** | Datadog 의 BE trace agent. |
-| **Prometheus / Grafana** | 자체 호스팅 metric stack (Datadog 외 보조). |
+| **MASTER** | 전체 운영 권한입니다. 사용자 권한 변경, 학기/과목 관리, 운영 화면 접근이 가능합니다. |
+| **ADMIN** | 운영 보조 권한입니다. 대부분의 관리 기능을 사용할 수 있지만 MASTER 승급 같은 최상위 권한 변경은 제한됩니다. |
+| **NORMAL** | 일반 사용자 권한입니다. 공유 자료를 보고 본인의 필기와 메모를 관리합니다. |
 
-## Solon Product SFS / sprint 용어
+## 코드 이름 매핑
 
-| 단어 | 의미 |
+| 코드 이름 | 화면/제품 의미 |
 |---|---|
-| **sprint** | 단위 작업 묶음 (Solon Product SFS 의 workflow). 1 sprint = 1 PR 기준. |
-| **Gate 2 (Brainstorm)** | sprint 시작 시 요구사항 정리. |
-| **Gate 3 (Plan)** | 작업 범위·완료 기준·위험 정리. |
-| **Gate 6 (Review)** | 구현 후 self/cross review. |
-| **AC (Acceptance Criteria)** | 완료 기준 체크리스트. |
-| **ADR (Architecture Decision Record)** | 큰 결정 의 근거 기록. |
-| **Layer A/B/C/D** | main.ts 분해 단계 (routing / PDF workspace / subject views / storage·identity·sync). |
+| `Term` | 학기 단위의 묶음 |
+| `Subject` | 학기 안의 과목 |
+| `WeekNote` | 과목 안의 주차 노트 |
+| `PdfMaterial` | 과목에 연결된 PDF 자료 |
+| `AnnotationSnapshot` | PDF 위 개인 필기의 저장 스냅샷 |
+| `AuthSession` | 로그인한 사용자의 세션 |
+| `Role` | `MASTER`, `ADMIN`, `NORMAL` 권한 |
+| `classDate` | PDF 자료가 연결된 수업일 값 |
 
-## DDD (Domain-Driven Design) 용어
+## 도메인 경계
 
-| 단어 | 의미 |
+| 경계 | 맡는 일 |
 |---|---|
-| **Aggregate** | 같이 변경되는 단위 (예: PdfWorkspace = subject 1개 의 모든 widget). |
-| **Bounded Context** | 의미가 분리되는 영역 (Notebook / PdfWorkspace / PdfMaterial / AuthSession / Term). |
-| **Invariant** | "절대 깨지지 않아야 할 규칙" (예: subject.termId 는 항상 valid Term.id). |
-| **Ubiquitous Language** | 코드 · 화면 · 문서 모두에서 **같은 단어** 사용. 이 문서가 그 정의. |
+| **Notebook** | 학기, 과목, 주차 노트처럼 학습 구조를 다룹니다. |
+| **PdfWorkspace** | PDF 위 필기 도구와 필기 저장 상태를 다룹니다. |
+| **PdfMaterial** | PDF 원본 파일, 공유 여부, 수업일 같은 자료 메타데이터를 다룹니다. |
+| **AuthSession** | 로그인 세션과 사용자 권한을 다룹니다. |
 
-자세한 DDD 모델 = `llm-wiki/ddd/README.md`.
+## 갱신 기준
 
-## 줄임말 (자주 등장)
-
-| 줄임 | 풀이 |
-|---|---|
-| SoT | Source of Truth (정답 위치) |
-| SPA | Single Page Application (한 페이지 안에서 화면 전환) |
-| BE / FE | Backend / Frontend |
-| ACA | Azure Container Apps |
-| RUM | Real User Monitoring (사용자 행동 측정) |
-| APM | Application Performance Monitoring (서버 trace 측정) |
-| CAS | Compare And Swap (충돌 차단) |
-| PR | Pull Request (코드 변경 제안) |
-| AC | Acceptance Criteria (완료 기준) |
-| ADR | Architecture Decision Record (결정 기록) |
-| UL | Ubiquitous Language (도메인 용어집) |
-| DDD | Domain-Driven Design (도메인 중심 설계) |
-
-## 갱신 의무
-
-- 새 sprint 가 학생이 보는 화면에 새 단어를 추가하면 본 문서에도 1줄 + 의미 추가.
-- 줄임말 새로 도입 시 위 줄임말 표 갱신.
-- DDD aggregate 추가 시 `llm-wiki/ddd/aggregates/` + 본 문서의 데이터 위계 도식 갱신.
+- 화면에 새 단어가 생겼고 일반 사용자가 뜻을 헷갈릴 수 있으면 추가합니다.
+- 코드 이름과 화면 용어가 다르면 코드 이름 매핑에 추가합니다.
+- 공개 용어집에는 화면과 도메인 의미가 분명히 필요한 단어만 남깁니다.

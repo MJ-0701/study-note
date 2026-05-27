@@ -114,9 +114,23 @@ describe("PDF material library UI", () => {
     assert.match(cardBlock, /getPdfMaterialClassDateLabel\(subject, material\)/);
     assert.match(cardBlock, /renderPdfMaterialClassDateControl\(ctx, subject, material, materialKey\)/);
     assert.match(pdfLibraryTs, /data-action="assign-pdf-class-date"/);
+    assert.match(pdfLibraryTs, /data-role="pdf-class-date-select"/);
+    assert.match(pdfLibraryTs, /날짜를 고른 뒤 적용/);
     assert.match(cardBlock, /나중에 수정/);
     assert.match(ownerLabelBlock, /공유 자료/);
     assert.match(statusLabelBlock, /공유 가능/);
+  });
+
+  it("routes class date apply clicks through the selected dropdown value", () => {
+    const clickBlock = mainTs.slice(
+      mainTs.indexOf('quickNoteButton?.dataset.action === "assign-pdf-class-date"'),
+      mainTs.indexOf('quickNoteButton?.dataset.action === "open-pdf-material"')
+    );
+
+    assert.match(clickBlock, /const subjectId = quickNoteButton\.dataset\.subjectId;/);
+    assert.match(clickBlock, /const materialId = quickNoteButton\.dataset\.materialId;/);
+    assert.match(clickBlock, /select\[data-role="pdf-class-date-select"\]/);
+    assert.match(clickBlock, /assignPdfMaterialClassDate\(subjectId, materialId, select\.value\)/);
   });
 
   it("routes card open clicks to the selected PDF material workspace", () => {
@@ -275,7 +289,8 @@ describe("PDF material library UI", () => {
     assert.match(apiTs, /export async function updatePdfMaterialMetadata/);
     assert.match(apiTs, /method: "PATCH"/);
     assert.match(apiTs, /classDate: string/);
-    assert.match(css, /\.pdf-material-card__class-date-list/);
-    assert.match(css, /min-height:\s*138px;/);
+    assert.match(css, /\.pdf-material-card__class-date-row/);
+    assert.match(css, /\.pdf-material-card__class-date-select/);
+    assert.match(css, /\.pdf-material-card__class-date-apply/);
   });
 });

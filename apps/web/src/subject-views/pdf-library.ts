@@ -87,6 +87,31 @@ export function getPdfMaterialClassDateValue(material: PdfMaterialDraft): string
   return trimmed || PDF_MATERIAL_UNASSIGNED_CLASS_DATE;
 }
 
+export function getPdfMaterialClassDateSelectValue(
+  subject: SubjectNote,
+  material: PdfMaterialDraft
+): string {
+  const value = getPdfMaterialClassDateValue(material);
+  return isUnconfirmedPdfClassDate(subject, value)
+    ? PDF_MATERIAL_UNASSIGNED_CLASS_DATE
+    : value;
+}
+
+export function getSortedPdfClassDateWeeks(subject: SubjectNote): WeekNote[] {
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  return [...subject.weekNotes].sort((a, b) => {
+    const aIso = ISO.test(a.label);
+    const bIso = ISO.test(b.label);
+    if (aIso && bIso) {
+      return a.label.localeCompare(b.label);
+    }
+    if (aIso !== bIso) {
+      return aIso ? -1 : 1;
+    }
+    return a.label.localeCompare(b.label);
+  });
+}
+
 export function isUnconfirmedPdfClassDate(subject: SubjectNote, classDate: string | undefined): boolean {
   const trimmed = classDate?.trim();
   if (
@@ -295,34 +320,41 @@ export function renderPdfMaterialClassDateControl(
   material: PdfMaterialDraft,
   materialKey: string
 ): string {
-  const selectedValue = getPdfMaterialClassDateValue(material);
+  const selectedValue = getPdfMaterialClassDateSelectValue(subject, material);
   const canEdit = canEditPdfMaterialClassDate(ctx, material);
-  const visibleOptionCount = Math.min(6, Math.max(2, subject.weekNotes.length + 1));
 
   return `
     <label class="pdf-material-card__field">
       <span>수업일</span>
-      <select
-        class="pdf-material-card__class-date-list"
-        data-action="assign-pdf-class-date"
-        data-subject-id="${escapeHtml(subject.id)}"
-        data-material-id="${escapeHtml(materialKey)}"
-        size="${visibleOptionCount}"
-        ${canEdit ? "" : "disabled"}
-      >
-        <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
-        ${subject.weekNotes.map((week) => {
+      <div class="pdf-material-card__class-date-row">
+        <select
+          class="pdf-material-card__class-date-select"
+          data-role="pdf-class-date-select"
+          ${canEdit ? "" : "disabled"}
+        >
+          <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
+          ${getSortedPdfClassDateWeeks(subject).map((week) => {
           // PR #51 codex R7 P1: 비-ISO legacy week.label 은 BE reject.
           // disabled + "[migrate 필요]" hint 표시.
           const ISO = /^\d{4}-\d{2}-\d{2}$/;
           const isIso = ISO.test(week.label);
           const sel = selectedValue === week.label ? "selected" : "";
-          const label = isIso ? week.label : `${week.label} (사용 불가 — 이전 형식)`;
+          const displayLabel = week.title ? `${week.label} · ${week.title}` : week.label;
+          const label = isIso ? displayLabel : `${displayLabel} (사용 불가 — 이전 형식)`;
           return `<option value="${escapeHtml(week.label)}" ${sel} ${isIso ? "" : "disabled"}>${escapeHtml(label)}</option>`;
         }).join("")}
-      </select>
+        </select>
+        <button
+          class="secondary-action pdf-material-card__class-date-apply"
+          type="button"
+          data-action="assign-pdf-class-date"
+          data-subject-id="${escapeHtml(subject.id)}"
+          data-material-id="${escapeHtml(materialKey)}"
+          ${canEdit ? "" : "disabled"}
+        >적용</button>
+      </div>
       <small class="pdf-material-card__field-hint">
-        ${canEdit ? "날짜를 선택하면 바로 저장됩니다." : "수업일 수정은 관리자만 가능합니다."}
+        ${canEdit ? "날짜를 고른 뒤 적용을 눌러 저장합니다." : "수업일 수정은 관리자만 가능합니다."}
       </small>
     </label>
   `;

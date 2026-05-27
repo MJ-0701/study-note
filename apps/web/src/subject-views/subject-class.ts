@@ -46,12 +46,24 @@ export interface SubjectClassContext {
 
 // ─── Public renderers ────────────────────────────────────────────────────
 
+function sortWeekNotesByLabel(weekNotes: WeekNote[]): WeekNote[] {
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
+  return [...weekNotes].sort((a, b) => {
+    const aIso = ISO.test(a.label);
+    const bIso = ISO.test(b.label);
+    if (aIso && bIso) return a.label.localeCompare(b.label);
+    if (aIso !== bIso) return aIso ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
 export function renderSubjectClassPage(
   ctx: SubjectClassContext,
   subject: SubjectNote
 ): string {
   const subjectMaterials = ctx.getSubjectPdfMaterials(subject.id);
   const safeTitle = escapeHtml(subject.title);
+  const sortedWeeks = sortWeekNotesByLabel(subject.weekNotes);
 
   return `
     <section class="subject-page-hero">
@@ -90,7 +102,7 @@ export function renderSubjectClassPage(
       <h2 id="weekly-title">수업일별 자료</h2>
       <p class="lede">날짜별 카드에서 수업 상세, 요약 상세, 연결된 PDF 수를 확인합니다.</p>
       <div class="class-day-grid">
-        ${subject.weekNotes.map((week) =>
+        ${sortedWeeks.map((week) =>
           renderClassDayCard(ctx, subject, week, subjectMaterials)
         ).join("")}
       </div>
