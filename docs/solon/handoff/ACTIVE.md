@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **Layer D slice-2 merged. 4.79k (4,785 / -56.69%)**
+## 진행 상황 (2026-05-27) — **Layer D slice-3 PR pending. 4.71k (4,710 / -57.37%)**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -32,15 +32,15 @@
 | **C/slice-10. quick-note** | 2026-W22-sprint-18 | ✅ merged (PR #79, main=a12d62e) — **🎯 5k 달성 (4,959)** + Layer C closed |
 | **D/slice-1. notebook storage** | 2026-W22-sprint-19 | ✅ merged (PR #80, main=52cb472) — **4.88k (4,877)** + Layer D 진입 |
 | **D/slice-2. auth boot module** | 2026-W22-sprint-20 | ✅ merged (PR #81, main=a5e834a) — **4.79k (4,785)** + cold-start fix |
-| D/slice-3. sidebar cache + UI ephemeral | next sprint | ⏳ 다음 진입 (sidebarTermsCache + hotkeyHelpModalOpen + UI ephemeral) |
-| D/slice-4. pdfWorkspaceStore 잔여 | TBD | ⏳ backlog (userNotesPutTimers + syncFailureTracker 등) |
+| **D/slice-3. sidebar cache + UI ephemeral** | 2026-W22-sprint-21 | ✅ Gate 6 self+cross PASS — **4.71k (4,710)** — PR pending |
+| D/slice-4. pdfWorkspaceStore 잔여 | next sprint | ⏳ 다음 진입 (userNotesPutTimers + syncFailureTracker 등) |
 | D/backlog. session_hint cookie (Codex P2 mitigation) | 2026-W22-sprint-20 | ✅ FE-only mitigation 포함 머지 (`study_note_session_hint` readable cookie) |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **4,785** (-6,264, **-56.69%**). Layer D 진행 중.
-Layer D/slice-2 (auth boot) closed. 다음 = Layer D/slice-3 (sidebar cache + UI ephemeral).
+main.ts: 11,049 → **4,710** (-6,339, **-57.37%**). Layer D 진행 중.
+Layer D/slice-3 (sidebar cache + UI ephemeral) Gate 6 PASS. 다음 = PR + @codex review + merge → slice-4.
 
-## 활성 작업 = Layer D/slice-3 (sidebar cache + UI ephemeral)
+## 활성 작업 = Layer D/slice-3 (sidebar cache + UI ephemeral) — PR pending
 
 ## SFS 0.6.121 정책 ambient
 
