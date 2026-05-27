@@ -92,7 +92,7 @@ describe("AC9 — getDefaultOpenTermIds (현재 학기 기준)", () => {
     assert.deepEqual(open, ["t-active"]);
   });
 
-  it("now 가 어떤 term range 와도 매칭 X 면 첫 group default open", () => {
+  it("now 가 어떤 term range 와도 매칭 X 면 모든 term default open (sprint-W22-be-sync hotfix)", () => {
     const terms = [
       term("t-future", 2, 1, "미래 학기", "2027-03-01", "2027-06-30"),
       term("t-past", 1, 2, "과거 학기", "2025-09-01", "2025-12-31")
@@ -100,8 +100,10 @@ describe("AC9 — getDefaultOpenTermIds (현재 학기 기준)", () => {
     const subjects = [subj("s-a", "A", "t-future"), subj("s-b", "B", "t-past")];
     const groups = groupSubjectsByTerm(subjects, terms);
     const open = getDefaultOpenTermIds(groups, now);
-    // 1학년 2학기 (t-past) 가 (grade,semester) 기준 첫 group
-    assert.equal(open.length, 1);
+    // 활성 학기 매칭 0 → fallback = 모든 term (sidebar 빈 공간 회피).
+    assert.equal(open.length, 2);
+    assert.ok(open.includes("t-future"));
+    assert.ok(open.includes("t-past"));
   });
 
   it("startDate/endDate 모두 null 인 term 은 활성으로 보지 않음", () => {

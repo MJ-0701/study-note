@@ -79,9 +79,15 @@ function termLabel(term: SidebarTerm): string {
 }
 
 /**
- * 현재 시점(now) 에 활성화된 학기 id 집합.
- * 조건: term.startDate ≤ now ≤ term.endDate (모두 null 인 경우는 활성 X).
- * 둘 다 not null 인 학기만 매칭. 매칭 없으면 첫 group 의 termId 1개 default open.
+ * 현재 시점(now) 에 활성화된 학기 id 집합 + sidebar 빈 공간 회피.
+ * 조건:
+ *   1. term.startDate ≤ now ≤ term.endDate 인 학기는 default open (활성 학기 우선).
+ *   2. 매칭 없으면 모든 학기 default open (sprint-W22-be-sync hotfix).
+ *      이전엔 첫 group 의 termId 1개만 default open 이었지만, 학기가 1개 뿐인
+ *      신규 사용자 + startDate/endDate 없는 default Term backfill 시점에 closed
+ *      상태가 sidebar 빈 공간 만들어서 "UI 잘못 개발된 듯" 인상.
+ *   3. 사용자 명시 close (stored=false) 는 resolveOpenTermIds 에서 우선 — 본 함수의
+ *      default 가 모든 학기여도, 명시 close 한 학기는 그대로 closed.
  */
 export function getDefaultOpenTermIds(
   groups: ReadonlyArray<SidebarGroup>,
@@ -108,9 +114,7 @@ export function getDefaultOpenTermIds(
     matched.push(group.term.id);
   }
   if (matched.length > 0) return matched;
-  const first = groups.find((g) => g.term !== null);
-  if (first && first.term) return [first.term.id];
-  return [];
+  return groups.filter((g) => g.term !== null).map((g) => g.term!.id);
 }
 
 /**
