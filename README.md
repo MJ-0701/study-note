@@ -75,6 +75,126 @@ north star = "회사일로 수업을 제대로 듣지 못하는 사용자가 최
 - FE bundling = Vite 7 multi-entry — `index.html` (main app) + `admin.html` + `persona-turn.html` + `onboarding-mcp.html`. main app 은 vanilla TS + morphdom rendering. React 19.2.6 의존은 admin/persona-turn entry 가 이미 사용 중이고, main app 의 React migration 은 다음 phase (sprint-W22-sprint-23+).
 - main.ts 분해 phase (Layer A~D) 완료 — 11,049 → 4,448 line / -59.74%. 자세한 sprint 진행은 `docs/solon/handoff/ACTIVE.md`.
 
+## Architecture
+
+### System diagram
+
+```mermaid
+flowchart LR
+    subgraph Client["Client (브라우저 · iPad · 모바일)"]
+        FE["Vite SPA<br/>index.html · admin.html<br/>persona-turn.html · onboarding-mcp.html"]
+        DDRUM["Datadog RUM<br/>(study-note-web)"]
+    end
+
+    subgraph Edge["Azure (운영)"]
+        SWA["Static Web Apps<br/>study-note.910701.xyz"]
+        ACA["Container Apps<br/>study-note-api · min-replicas=0"]
+        MySQL[("MySQL Flex<br/>user · session · material<br/>userNotes · annotation · term/subject")]
+    end
+
+    subgraph External["외부"]
+        R2[("Cloudflare R2<br/>PDF 원본 + annotation snapshot")]
+        DDAPM["Datadog APM/Logs<br/>(study-note-api)"]
+        Claude["Claude CLI<br/>(persona turn opt-in)"]
+    end
+
+    FE -- "hash router / fetch /api/v1/*" --> SWA
+    SWA -- "rewrite /api/* → ACA" --> ACA
+    ACA -- "Prisma" --> MySQL
+    ACA -- "S3 SDK (R2 endpoint)" --> R2
+    ACA -- "dd-trace + serverless-init" --> DDAPM
+    ACA -- "persona-turn subprocess<br/>(fixture default)" --> Claude
+    FE -- "RUM beacon" --> DDRUM
+    DDRUM -. "us5" .-> DDAPM
+```
+
+### Repo layout (workspace)
+
+| Path | 역할 | 핵심 모듈 |
+|---|---|---|
+| `apps/web` | Vite 7 SPA. main app + 3 entry. | `src/main.ts` (4,448 line, Layer A~D 분해 완료), `src/admin/admin.tsx`, `src/persona-turn/`, `src/onboarding-mcp/` |
+| `apps/api` | NestJS 11 backend. 모든 HTTP endpoint. | `src/auth`, `src/subjects`, `src/terms`, `src/user-notes`, `src/pdf-annotations`, `src/materials`, `src/persona`, `src/admin`, `src/health.controller.ts` |
+| `apps/cli` | CLI tool. corpus ingest + persona turn 직접 실행. | `ingest-pdf.ts`, `persona-turn.ts` |
+| `apps/mcp` | MCP server. `get_chunks` tool over stdio. | `src/index.ts` |
+| `packages/domain` | 순수 domain type + helper. side-effect 0. | `lecture-note.ts`, `pdf-workspace.ts` |
+| `packages/auth` | NestJS guard + session decorator (shared). | `SessionAuthGuard`, `RoleGuard`, `@Roles` |
+| `packages/persistence` | Prisma schema + migration + seed. | `prisma/schema.prisma`, `seed.mjs`, `seed-subjects.mjs` |
+| `packages/storage` | StoragePort (R2/S3 SDK adapter). | `s3-storage.service.ts` |
+| `packages/corpus` | PDF → chunk → embedding pipeline. | `extract.ts`, `embedding.ts`, `cosine.ts` |
+| `packages/persona-engine` | persona turn orchestrator. fixture / real Claude CLI. | `persona-engine.ts`, `provider/claude-cli.ts` |
+
+### Domain bounded context (DDD)
+
+원문 = `llm-wiki/ddd/context-map.md`. 4 개 domain context + 1 application layer + 1 infra layer.
+
+1. **Notebook (학습 노트)** — `StudyNotebook` aggregate root. 과목/주차/개념/키워드/시험분류. 원문 = `packages/domain/src/lecture-note.ts`.
+2. **PdfWorkspace (PDF annotation)** — `SubjectPdfWorkspace` aggregate. 7 widget (sticky/pen/star/highlight/text/checklist/table/chart). 원문 = `packages/domain/src/pdf-workspace.ts`.
+3. **PdfMaterial (PDF 원본)** — `PdfMaterialRecord` (BE) / `PdfMaterialDraft` (FE intake VO). 원문 = `apps/api/src/materials/`.
+4. **AuthSession (인증)** — FE in-memory `AuthSession` + BE `/api/v1/auth/me`. 원문 = `apps/api/src/auth/`, `apps/web/src/auth/sessionState.ts` (sprint-W22-sprint-20 분해).
+
+Application/infra (도메인 아님):
+
+- **Sync flow** = autosave debounce + per-key promise chain + 401/403 attached-session race guard + 5xx pause/resume. 원문 = `apps/web/src/sync/annotation-sync.ts`, `apps/web/src/sync/user-notes-sync.ts`.
+- **Storage adapter** = StoragePort (R2 S3-compatible). PDF 원본 + annotation snapshot 둘 다 R2. metadata 만 MySQL.
+
+### Data flow 예시 (3 가지)
+
+**1. Sign-in flow**
+
+```
+[FE form] → POST /api/v1/auth/sign-in (name, studentNumber)
+         ← cookie session + JSON {userId, role, displayName}
+[FE]   → setAuthSession + writeAuthSessionHint (readable cookie hint, no localStorage)
+       → GET /api/v1/auth/me 호출 = boot revalidate (cold-start gate)
+       → renderApp() → home 진입
+```
+
+**2. PDF annotation sync (디바운스 PUT + CAS)**
+
+```
+[FE pointerup] → updatePdfWorkspace(subjectId, mutate)
+              → saveNotebook (localStorage) + scheduleAnnotationPut (750ms debounce)
+              ↓ debounce 만료
+[FE PUT]      → PUT /api/v1/pdf-annotations/:materialId  body {payload, clientRevision}
+              ↓ BE
+[ACA]         → atomic CAS on AnnotationSnapshot.savedAt
+              → 200 {savedAt} | 409 stale {canonical body 동봉}
+[FE]          → 409 = remote 가 더 신선 = rehydrate. 200 = revision 갱신.
+```
+
+**3. Persona turn (fixture default)**
+
+```
+[FE persona-turn.html] → POST /api/v1/persona-turns body {subject, query, k?, mode?}
+[ACA]                  → cosine top-k retrieval on chunk.embedding BLOB
+                       → resolveProviderMode (mode > REAL_OPT_IN > FIXTURE > fixture default)
+                       → fixture → 미리 정의된 응답 JSON
+                       → real  → child_process spawn(claude -p) ↦ Claude CLI subprocess
+                                  ↦ Anthropic API 로 PDF chunk + system prompt 송신
+                       ← {personaName, response, sources[], provider, modelName}
+```
+
+### 보안 · 권한 경계
+
+- httpOnly cookie session + `SessionAuthGuard` → `request.user` 주입.
+- role 위계 = `master > admin > normal`. `RoleGuard` + `@Roles(...)` decorator. self-modify 금지 + admin→MASTER 승급 금지.
+- DD_API_KEY/DD_APP_KEY 는 ACA secret only — 브라우저로 내려가지 않음. `/v1/admin/ops-dashboard` 가 server-side 로 Datadog API 호출.
+- R2 object 직접 노출 X — BE proxy (`/api/materials/:materialId/download`) 가 ownership 확인 후 stream.
+- MCP server 응답 의 `sourcePdfPath` 는 basename 만 (절대 경로 차단).
+
+### 분해 phase 상태 (Layer A~D 완료)
+
+main.ts 11,049 → 4,448 line (-59.74%).
+
+| Layer | sprint | 추출 모듈 |
+|---|---|---|
+| A. routing/shell | W21-2 | `app/routes.ts`, `app/appShell.ts`, `app/escape-html.ts` |
+| B. PDF workspace (14 slice) | W22-1~8 | `pdf-workspace/annotation-sync.ts`, `canvas-mount.ts`, `workspace-store.ts`, `class-date.ts`, `ink-stroke.ts`, `drill-highlight.ts`, `star-mark.ts`, `chart-content.ts`, `markdown-table.ts`, `chart-widget.ts`, `table-widget.ts`, `simple-widget.ts`, `page-render.ts`, `renderPdfWorkspacePage.ts` |
+| C. subject views (10 slice) | W22-9~18 | `subject-views/{cards,sidebar,intake,class,summaries,memorize,mcp,week}`, `pdf-library`, `quick-note` |
+| D. storage + identity + sync (4 slice) | W22-19~22 | `notebook-storage.ts`, `auth/sessionState.ts`, `sidebar/sidebar-cache.ts`, `ui/ephemeral-state.ts`, `sync/user-notes-sync.ts` |
+
+다음 phase = **React migration** (sprint-W22-sprint-23+). audit = `.sfs-local/sprints/react-migration-audit.md`.
+
 ## API Endpoints (current main)
 
 backend NestJS global prefix = `app.setGlobalPrefix("api")`. health 와 legacy materials 제외하면 전부 `/api/v1/...` 안에 산다. 자세한 wire 규격은 `llm-wiki/modules/apps-api.md`.
