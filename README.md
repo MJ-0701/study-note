@@ -40,9 +40,15 @@
 운영/리뷰 관련 cross-reference:
 
 - 현재 sprint 진행 상태 = `docs/solon/handoff/ACTIVE.md` (Layer A~D 분해 완료, sprint-W22-sprint-22).
+- **운영 대시보드 (Grafana / Datadog) 안내 + screenshot** = [docs/monitoring/dashboards.md](docs/monitoring/dashboards.md).
 - 운영 지표 dashboard 코드 = [PR #84](https://github.com/MJ-0701/study-note/pull/84).
 - React migration audit (다음 phase 진입 자료) = `.sfs-local/sprints/react-migration-audit.md` (private workbench).
 - Agent 문서 변경 규율 = `llm-wiki/references/standards.md`.
+
+운영 대시보드 (anonymous viewer, 비개발자 면접관용 직접 접속):
+
+- **Grafana (self-host, 1차 SoT)**: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops>
+- **Datadog (public share)**: <https://p.us5.datadoghq.com/sb/1ecde5d4-55e8-11f1-87bf-2a7c9f601ff0-55f020425896437e5ede2e233c536c25>
 
 리뷰어 시연 계정은 데모용 master 권한입니다. 운영 master 계정과 분리되어 있으며 시연 후 권한 회수/계정 정리 여부는 별도 운영 결정입니다.
 
