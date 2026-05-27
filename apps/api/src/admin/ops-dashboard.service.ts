@@ -247,7 +247,7 @@ function latencyStatus(value: number): OpsCardStatus {
 }
 
 export function normalizeTraceDurationMs(value: number): number {
-  if (value > 1_000_000) {
+  if (value >= 1_000_000) {
     return value / 1_000_000;
   }
   if (value > 0 && value < 1) {

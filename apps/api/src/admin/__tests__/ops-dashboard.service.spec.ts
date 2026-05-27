@@ -65,6 +65,8 @@ describe("OpsDashboardService Datadog parsers", () => {
     assert.equal(normalizeTraceDurationMs(50), 50);
     assert.equal(normalizeTraceDurationMs(1), 1);
     assert.equal(normalizeTraceDurationMs(0), 0);
+    // Codex P3 fix — exact 1_000_000 ns boundary = 1ms.
+    assert.equal(normalizeTraceDurationMs(1_000_000), 1);
   });
 });
 
