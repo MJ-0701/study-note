@@ -14,6 +14,25 @@ summary: 최근 sprint 색인. 본문은 `.sfs-local/sprints/`, PR, retro 원문
 
 본문은 `.sfs-local/sprints/<id>/`, GitHub PR, retro 원문에. wiki 는 한 줄 + 닿은 aggregate / flow 만.
 
+## 2026 W22 (FE DDD 리팩토링 + BE sync — 최근)
+
+main.ts 11,049 → 4,448 line (-6,601 / -59.74%). Layer A~D 분해 phase 완료. 다음 phase = React migration (sprint-23+).
+
+| Sprint | 작업 | PR | 닿은 aggregate / flow |
+|---|---|---|---|
+| **W22-sprint-1 (B/slice-1 annotation-sync)** | pdf-workspace/annotation-sync.ts 추출 (605 line + spec 20) | [#58](https://github.com/MJ-0701/study-note/pull/58) | PdfWorkspace, Sync, [flows/autosave-sync](../flows/autosave-sync.md) |
+| **W22-sprint-1 (B/slice-2a canvas mount)** | canvas-mount.ts + workspace-store.ts 추출 | [#59](https://github.com/MJ-0701/study-note/pull/59) | PdfWorkspace |
+| **W22-sprint-2 (B/slice-2d drill highlight)** | 9k target 달성 (drill-highlight.ts 669 line) | [#62](https://github.com/MJ-0701/study-note/pull/62) | PdfWorkspace |
+| **W22-sprint-3~7 (B/slice-2e~iv)** | star/chart-content/markdown-table/chart-widget/table-widget/simple-widget/page-render 추출. 8k → 7k 달성 | #63~#69 | PdfWorkspace |
+| **W22-sprint-8 (B/slice-2f/iv-bis renderPdfWorkspacePage)** | Layer B closed, 6.7k 달성 (main 직 push) | (no PR) | PdfWorkspace |
+| **W22-sprint-9~18 (C/slice-1~10)** | subject-cards / sidebar / home+intake / subject-class / summaries / memorize / mcp / week / pdf-library / quick-note 추출. 6.5k → 🎯 5k 달성 | #70~#79 | Notebook (subject-views) |
+| **W22-sprint-19 (D/slice-1 notebook-storage)** | app/notebook-storage.ts 추출 (4.88k 진입) | [#80](https://github.com/MJ-0701/study-note/pull/80) | Notebook, [flows/storage-namespacing](../flows/storage-namespacing.md) |
+| **W22-sprint-20 (D/slice-2 auth-boot)** | auth/sessionState.ts 추출 (354 line + spec 26) + session_hint cookie (Codex P2 mitigation) | [#81](https://github.com/MJ-0701/study-note/pull/81) | AuthSession, [flows/session-transition](../flows/session-transition.md) |
+| **W22-sprint-21 (D/slice-3 sidebar cache + UI ephemeral)** | sidebar/sidebar-cache.ts + ui/ephemeral-state.ts | [#82](https://github.com/MJ-0701/study-note/pull/82) | Notebook, AuthSession |
+| **W22-sprint-22 (D/slice-4 user-notes-sync)** | sync/user-notes-sync.ts 추출 (422 line + spec 28). 🎯 Layer D 분해 완료 4,448 / -59.74% | [#83](https://github.com/MJ-0701/study-note/pull/83) | Sync, [flows/autosave-sync](../flows/autosave-sync.md) |
+| **W22-be-sync (BE deploy 122 commit lag 해소)** | sprint-W21-sprint-1~2 + sprint-2 + PR #84 ops dashboard + backfill default Term migration 한꺼번에 deploy. tag = be-v0.1.14 | [#84](https://github.com/MJ-0701/study-note/pull/84) | 전 영역 (Term/Subject + admin ops) |
+| **W22-be-sync hotfix (FE TDZ + sidebar union)** | fe-v0.1.26 TDZ (queueMicrotask defer) + fe-v0.1.27 home sidebar hierarchy + fe-v0.1.28 sidebar BE subjects union | (no PR) | AppShell, Sidebar |
+
 ## 2026 W21 (현재 진행 / 직전)
 
 | Sprint | 작업 | PR | 닿은 aggregate / flow |
