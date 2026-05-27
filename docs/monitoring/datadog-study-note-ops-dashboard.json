@@ -1,0 +1,431 @@
+{
+  "title": "study-note Live Ops - Metrics, Logs, Traces",
+  "description": "Importable Datadog dashboard for study-note production operations. Uses the repo's actual Datadog surfaces: dd-trace v0 service-entry metrics under trace.web.request.*, backend log message searches emitted by pdf-annotations.service, and RUM event queries for study-note-web.",
+  "layout_type": "ordered",
+  "reflow_type": "auto",
+  "notify_list": [],
+  "template_variables": [
+    {
+      "name": "env",
+      "prefix": "env",
+      "default": "production"
+    },
+    {
+      "name": "service",
+      "prefix": "service",
+      "default": "study-note-api"
+    },
+    {
+      "name": "web_service",
+      "prefix": "service",
+      "default": "study-note-web"
+    }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "study-note production operations view\\n\\nThis dashboard is wired to the current repo runtime: backend APM uses dd-trace default v0 service-entry metrics (trace.web.request.*), sync reliability panels search the actual NestJS log messages emitted by pdf-annotations.service, and browser panels query RUM events for study-note-web. Do not facet or display raw note text, PDF payloads, names, student numbers, emails, cookies, API keys, persona prompts, or persona responses.",
+        "background_color": "white",
+        "font_size": "14",
+        "text_align": "left",
+        "vertical_align": "center",
+        "show_tick": false,
+        "tick_pos": "50%",
+        "tick_edge": "left"
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "API Requests - last 5m",
+        "title_size": "16",
+        "title_align": "left",
+        "autoscale": true,
+        "precision": 0,
+        "timeseries_background": {
+          "type": "bars"
+        },
+        "requests": [
+          {
+            "q": "sum:trace.web.request.hits{env:$env,service:$service}.as_count()",
+            "aggregator": "sum"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "API Errors - last 5m",
+        "title_size": "16",
+        "title_align": "left",
+        "autoscale": true,
+        "precision": 0,
+        "custom_unit": "errors",
+        "timeseries_background": {
+          "type": "bars"
+        },
+        "requests": [
+          {
+            "q": "sum:trace.web.request.errors{env:$env,service:$service}.as_count()",
+            "aggregator": "sum",
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 0,
+                "palette": "white_on_red"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "API p95 Latency",
+        "title_size": "16",
+        "title_align": "left",
+        "autoscale": true,
+        "precision": 2,
+        "custom_unit": "s",
+        "timeseries_background": {
+          "type": "area"
+        },
+        "requests": [
+          {
+            "q": "p95:trace.web.request{env:$env,service:$service}",
+            "aggregator": "avg",
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 1,
+                "palette": "white_on_yellow"
+              },
+              {
+                "comparator": ">",
+                "value": 2,
+                "palette": "white_on_red"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "API Throughput By Resource",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "legend_columns": [
+          "avg",
+          "max",
+          "value"
+        ],
+        "requests": [
+          {
+            "display_type": "bars",
+            "q": "sum:trace.web.request.hits{env:$env,service:$service} by {resource_name}.as_count()",
+            "style": {
+              "palette": "dog_classic"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Slowest API Resources - p95",
+        "title_size": "16",
+        "title_align": "left",
+        "requests": [
+          {
+            "q": "top(p95:trace.web.request{env:$env,service:$service} by {resource_name}, 10, 'mean', 'desc')",
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 1,
+                "palette": "white_on_yellow"
+              },
+              {
+                "comparator": ">",
+                "value": 2,
+                "palette": "white_on_red"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Erroring API Resources",
+        "title_size": "16",
+        "title_align": "left",
+        "requests": [
+          {
+            "q": "top(sum:trace.web.request.errors{env:$env,service:$service} by {resource_name}.as_count(), 10, 'sum', 'desc')",
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 0,
+                "palette": "white_on_red"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Annotation Sync Writes From Actual Logs",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "requests": [
+          {
+            "display_type": "bars",
+            "log_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$service \"metric=sync.put.success\" \"type=update\""
+              }
+            }
+          },
+          {
+            "display_type": "bars",
+            "log_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$service \"metric=sync.put.success\" \"type=create\""
+              }
+            },
+            "style": {
+              "palette": "cool"
+            }
+          },
+          {
+            "display_type": "bars",
+            "log_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$service \"metric=sync.put.failure\""
+              }
+            },
+            "style": {
+              "palette": "warm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Stale Annotation Conflicts - last 15m",
+        "title_size": "16",
+        "title_align": "left",
+        "autoscale": true,
+        "precision": 0,
+        "custom_unit": "conflicts",
+        "requests": [
+          {
+            "log_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$service \"metric=annotation.cas.stale\""
+              }
+            },
+            "aggregator": "sum",
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 5,
+                "palette": "white_on_yellow"
+              },
+              {
+                "comparator": ">",
+                "value": 20,
+                "palette": "white_on_red"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Batch Annotation Load Shape From Actual Logs",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "requests": [
+          {
+            "display_type": "bars",
+            "log_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$service \"metric=annotation.batch.size\" \"truncated=false\""
+              }
+            }
+          },
+          {
+            "display_type": "bars",
+            "log_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$service \"metric=annotation.batch.size\" \"truncated=true\""
+              }
+            },
+            "style": {
+              "palette": "warm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "RUM Sessions - last 5m",
+        "title_size": "16",
+        "title_align": "left",
+        "autoscale": true,
+        "precision": 0,
+        "timeseries_background": {
+          "type": "bars"
+        },
+        "requests": [
+          {
+            "rum_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$web_service @type:session"
+              }
+            },
+            "aggregator": "sum"
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Browser Errors - last 5m",
+        "title_size": "16",
+        "title_align": "left",
+        "autoscale": true,
+        "precision": 0,
+        "custom_unit": "errors",
+        "requests": [
+          {
+            "rum_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$web_service @type:error"
+              }
+            },
+            "aggregator": "sum",
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 0,
+                "palette": "white_on_red"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "RUM Product Actions",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "requests": [
+          {
+            "display_type": "bars",
+            "rum_query": {
+              "index": "*",
+              "compute": {
+                "aggregation": "count"
+              },
+              "search": {
+                "query": "env:$env service:$web_service @type:action (@action.name:login_completed OR @action.name:sign_up_completed OR @action.name:pdf_upload_started OR @action.name:pdf_upload_completed)"
+              },
+              "group_by": [
+                {
+                  "facet": "@action.name",
+                  "limit": 10,
+                  "sort": {
+                    "aggregation": "count",
+                    "order": "desc"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Release Comparison By Version",
+        "title_size": "16",
+        "title_align": "left",
+        "show_legend": true,
+        "requests": [
+          {
+            "display_type": "line",
+            "q": "p95:trace.web.request{env:$env,service:$service} by {version}",
+            "style": {
+              "palette": "cool"
+            }
+          },
+          {
+            "display_type": "bars",
+            "q": "sum:trace.web.request.errors{env:$env,service:$service} by {version}.as_count()",
+            "style": {
+              "palette": "warm"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -61,6 +61,7 @@ NestJS global prefix = `app.setGlobalPrefix("api")` (`apps/api/src/main.ts:38`).
 | GET | `/api/v1/pdf-annotations/by-subject/:subjectId` | pdf-annotations | cookie → `request.user.id` × subjectId 로 material enumerate | **sprint-W21-sprint-2/S2 신규 batch GET**. 응답 = canonical schema `{ annotations:{[matId]:{payload,updatedAt}}, truncated, total, returned }`. cap = 50 material / 1MB. foreign/nonexistent/empty 모두 동일 `200 {annotations:{}}`. |
 | GET | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | cookie + material ownership pre-check (Prisma `pdfMaterial.findFirst where ownerId+id`) | annotation single-material GET. 응답 = canonical schema (1 entry 또는 empty). foreign/nonexistent → 404 indistinguishable. |
 | PUT | `/api/v1/pdf-annotations/:materialId` | pdf-annotations | 동일 + atomic CAS on `AnnotationSnapshot.savedAt` | body = `{ payload, clientRevision? }`. clientRevision exact equality. 409 = stale (canonical body 동봉). |
+| GET | `/api/v1/admin/ops-dashboard` | admin | cookie + `RoleGuard` + `@Roles("master", "admin")` | Datadog API를 서버 사이드에서 조회해 관리자 화면 운영 지표 snapshot 반환. `DD_API_KEY` + `DD_APP_KEY` 필요, 없으면 `not_configured`. |
 | ~~PUT~~ | ~~`/api/materials/:materialId/annotation`~~ | materials | — | **410 Gone (sprint-W21-sprint-2/S2 R6 deprecation)**. Use `/api/v1/pdf-annotations/:materialId`. |
 | ~~GET~~ | ~~`/api/materials/:materialId/annotation`~~ | materials | — | **410 Gone**. |
 | GET | `/api/health` | health | — | LB / keep-alive (`HealthController` 는 prefix 없이 `@Controller("health")`) |
@@ -79,7 +80,16 @@ key 가 아니다 — 둘을 혼동하지 않게 주의.
   endpoint = R2, env = `S3_ENDPOINT=https://...r2.cloudflarestorage.com`.
 - **MySQL Flex**: user / material / userNotes / pdfAnnotation 테이블 (Prisma).
 - **Cookie session**: ACA + SWA cross-subdomain (`.910701.xyz`).
-- **Datadog APM**: 현재 source truth (decision / runbook / 코드 import) 에 적용 흔적 없음. sprint-15 brainstorm 후보였으나 운영 진입 여부 미확정 — 적용되면 본 절 갱신.
+- **Datadog APM/logs**: `apps/api/Dockerfile` runner 가
+  `datadog/serverless-init:1-alpine` 를 copy 하고,
+  `apps/api/docker-entrypoint.sh` 가 최종 NestJS 프로세스를
+  `node --require dd-trace/init dist/main.js` 로 실행한다. 운영 service =
+  `study-note-api`, env/version 은 `be-release.yml` 의 `DD_*` 값이 주입한다.
+  `DD_TRACE_SPAN_ATTRIBUTE_SCHEMA` 는 설정하지 않으므로 dd-trace 기본 v0
+  operation metric (`trace.web.request.*`) 이 dashboard 기준이다.
+  운영 dashboard JSON 은 `docs/monitoring/datadog-study-note-ops-dashboard.json`.
+  관리자 화면의 `/api/v1/admin/ops-dashboard` 는 Datadog Metrics v1 query,
+  Logs v2 aggregate, RUM v2 aggregate API 를 직접 조회한다.
 
 ## 환경변수 / secret
 
@@ -87,6 +97,8 @@ key 가 아니다 — 둘을 혼동하지 않게 주의.
 - `STORAGE_PROVIDER=s3` (legacy 명칭, R2 가리킴).
 - `DATABASE_URL` (MySQL flex).
 - `AUTH_SESSION_COOKIE_*` (auth.env.ts 참조).
+- `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE`, `DD_SERVICE`, `DD_ENV`,
+  `DD_RUM_SERVICE` (admin ops snapshot + Datadog APM/log/RUM query).
 - secret 은 ACA env (managed identity + Key Vault 또는 직접 secret).
 
 ## Testing

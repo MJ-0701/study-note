@@ -54,6 +54,41 @@ interface AdminUser {
   createdAt: string;
 }
 
+type OpsDashboardStatus = "ready" | "partial" | "not_configured" | "error";
+type OpsCardStatus = "ok" | "warn" | "error" | "unknown";
+type OpsCardSource = "apm" | "logs" | "rum";
+type OpsCardUnit = "count" | "ms" | "percent";
+
+interface OpsDashboardCard {
+  id: string;
+  label: string;
+  value: number | null;
+  unit: OpsCardUnit;
+  status: OpsCardStatus;
+  source: OpsCardSource;
+  query: string;
+  errorMessage?: string;
+}
+
+interface OpsDashboardResponse {
+  source: "datadog";
+  status: OpsDashboardStatus;
+  message?: string;
+  generatedAt: string;
+  window: {
+    from: string;
+    to: string;
+    minutes: number;
+  };
+  services: {
+    api: string;
+    web: string;
+    env: string;
+    site: string;
+  };
+  cards: OpsDashboardCard[];
+}
+
 type BootState = "checking" | "unauth" | "forbidden" | "ready" | "error";
 
 function isUserRole(r: string): r is UserRole {
@@ -73,6 +108,44 @@ function formatDate(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+function formatOpsValue(card: OpsDashboardCard): string {
+  if (card.value === null) return "-";
+
+  if (card.unit === "count") {
+    return card.value.toLocaleString("ko-KR", { maximumFractionDigits: 0 });
+  }
+
+  if (card.unit === "ms") {
+    return `${card.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })} ms`;
+  }
+
+  return `${card.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`;
+}
+
+function opsStatusLabel(status: OpsCardStatus | OpsDashboardStatus): string {
+  switch (status) {
+    case "ready":
+    case "ok":
+      return "정상";
+    case "partial":
+    case "warn":
+      return "주의";
+    case "error":
+      return "오류";
+    case "not_configured":
+    case "unknown":
+      return "미설정";
+    default:
+      return status;
+  }
+}
+
+function sourceLabel(source: OpsCardSource): string {
+  if (source === "apm") return "APM";
+  if (source === "logs") return "Logs";
+  return "RUM";
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -117,6 +190,9 @@ function AdminApp() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+  const [opsDashboard, setOpsDashboard] = useState<OpsDashboardResponse | null>(null);
+  const [opsLoading, setOpsLoading] = useState(false);
+  const [opsError, setOpsError] = useState<string | null>(null);
 
   // Per-row action state: keyed by user id
   const [rowLoading, setRowLoading] = useState<Record<string, boolean>>({});
@@ -190,9 +266,31 @@ function AdminApp() {
       .finally(() => setListLoading(false));
   }, []);
 
+  const fetchOpsDashboard = useCallback(() => {
+    setOpsLoading(true);
+    setOpsError(null);
+    fetch(`${BACKEND_BASE}/api/v1/admin/ops-dashboard`, { credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { errorMessage?: string };
+          setOpsError(body.errorMessage ?? `운영 지표 조회 실패 (${res.status})`);
+          return;
+        }
+        const snapshot = await res.json() as OpsDashboardResponse;
+        setOpsDashboard(snapshot);
+      })
+      .catch(() => {
+        setOpsError("Datadog 운영 지표 네트워크 오류");
+      })
+      .finally(() => setOpsLoading(false));
+  }, []);
+
   useEffect(() => {
-    if (bootState === "ready") fetchUsers();
-  }, [bootState, fetchUsers]);
+    if (bootState === "ready") {
+      fetchUsers();
+      fetchOpsDashboard();
+    }
+  }, [bootState, fetchUsers, fetchOpsDashboard]);
 
   // Reset currentPage to 1 when filters/search/pageSize change
   useEffect(() => {
@@ -358,13 +456,23 @@ function AdminApp() {
           <button
             type="button"
             className="admin-refresh-btn"
-            onClick={fetchUsers}
-            disabled={listLoading}
+            onClick={() => {
+              fetchUsers();
+              fetchOpsDashboard();
+            }}
+            disabled={listLoading || opsLoading}
             aria-label="목록 새로고침"
           >
-            {listLoading ? "불러오는 중..." : "새로고침"}
+            {listLoading || opsLoading ? "불러오는 중..." : "새로고침"}
           </button>
         </div>
+
+        <OpsDashboardPanel
+          dashboard={opsDashboard}
+          loading={opsLoading}
+          error={opsError}
+          onRefresh={fetchOpsDashboard}
+        />
 
         {/* Toolbar */}
         <div className="admin-toolbar" role="search" aria-label="사용자 필터 및 검색">
@@ -463,6 +571,83 @@ function AdminApp() {
         <TermsPanel viewerId={viewer!.userId} viewerRole={viewerRole} />
       </div>
     </div>
+  );
+}
+
+interface OpsDashboardPanelProps {
+  dashboard: OpsDashboardResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}
+
+function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboardPanelProps) {
+  return (
+    <section className="ops-panel" aria-labelledby="ops-dashboard-title">
+      <div className="ops-panel-header">
+        <div>
+          <h2 id="ops-dashboard-title">운영 지표</h2>
+          <p className="ops-panel-meta">
+            {dashboard
+              ? `${dashboard.services.env} · ${dashboard.window.minutes}분 · ${formatDate(dashboard.generatedAt)}`
+              : "Datadog 조회 준비 중"}
+          </p>
+        </div>
+        <div className="ops-panel-actions">
+          {dashboard && (
+            <span className={`ops-status ${dashboard.status}`}>
+              {opsStatusLabel(dashboard.status)}
+            </span>
+          )}
+          <button
+            type="button"
+            className="admin-refresh-btn"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            {loading ? "조회 중..." : "지표 새로고침"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="admin-error-banner" role="alert">
+          {error}
+        </div>
+      )}
+
+      {dashboard?.message && (
+        <div className={`ops-message ${dashboard.status}`}>
+          {dashboard.message}
+        </div>
+      )}
+
+      {loading && !dashboard ? (
+        <div className="ops-loading">Datadog에서 지표 조회 중...</div>
+      ) : (
+        <div className="ops-card-grid">
+          {(dashboard?.cards ?? []).map((card) => (
+            <article className={`ops-card ${card.status}`} key={card.id}>
+              <div className="ops-card-topline">
+                <span className="ops-source">{sourceLabel(card.source)}</span>
+                <span className={`ops-card-status ${card.status}`}>
+                  {opsStatusLabel(card.status)}
+                </span>
+              </div>
+              <div className="ops-card-value">{formatOpsValue(card)}</div>
+              <h3>{card.label}</h3>
+              {card.errorMessage && (
+                <p className="ops-card-error">{card.errorMessage}</p>
+              )}
+              <details className="ops-query">
+                <summary>query</summary>
+                <code>{card.query}</code>
+              </details>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

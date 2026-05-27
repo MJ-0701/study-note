@@ -104,9 +104,10 @@ VITE_DD_TRACK_USER_INTERACTIONS=false</code></pre>
         <h2>Azure Backend APM 환경변수</h2>
         <p>
           백엔드는 Datadog에서 <code>study-note-api</code> 서비스로 생성되게 합니다.
-          API key는 코드와 GitHub에 넣지 않고 Azure Container App secret으로만 보관합니다.
+          API key와 Application key는 코드와 GitHub에 넣지 않고 Azure Container App secret으로만 보관합니다.
         </p>
         <pre><code>DD_API_KEY=secretref:dd-api-key
+DD_APP_KEY=secretref:dd-app-key
 DD_SERVICE=study-note-api
 DD_ENV=production
 DD_VERSION=&lt;be tag version&gt;
@@ -118,22 +119,27 @@ DD_SOURCE=nodejs</code></pre>
         <div class="grid">
           <div class="card">
             <h3>사용자 콘솔 작업</h3>
-            <p>Datadog API key 생성 후 Azure Container Apps의 <code>study-note-api</code>에 secret <code>dd-api-key</code>로 저장합니다.</p>
+            <p>Datadog API key와 Application key 생성 후 Azure Container Apps의 <code>study-note-api</code>에 secret으로 저장합니다.</p>
           </div>
           <div class="card">
             <h3>배포 후 확인</h3>
-            <p>Datadog <code>APM</code> -> <code>Services</code>에서 <code>study-note-api</code>를 열고 API latency, 5xx, logs를 확인합니다.</p>
+            <p>Datadog <code>APM</code> -> <code>Services</code>와 <code>/admin.html</code> 운영 지표 패널에서 API latency, 5xx, logs를 확인합니다.</p>
           </div>
         </div>
         <pre><code>az containerapp secret set \
   --name study-note-api \
   --resource-group study-note-be-rg \
-  --secrets dd-api-key=&lt;DATADOG_API_KEY&gt;
+  --secrets \
+    dd-api-key=&lt;DATADOG_API_KEY&gt; \
+    dd-app-key=&lt;DATADOG_APPLICATION_KEY&gt;
 
 az containerapp update \
   --name study-note-api \
   --resource-group study-note-be-rg \
-  --set-env-vars DD_API_KEY=secretref:dd-api-key</code></pre>
+  --set-env-vars \
+    DD_API_KEY=secretref:dd-api-key \
+    DD_APP_KEY=secretref:dd-app-key \
+    DD_SITE=us5.datadoghq.com</code></pre>
       </section>
 
       <section>
@@ -147,6 +153,26 @@ az containerapp update \
             <tr><td>Product</td><td>signup, login, PDF upload, annotation actions</td><td>학습 퍼널과 activation 확인</td></tr>
             <tr><td>Backend</td><td><code>study-note-api</code> traces/logs, API 5xx, p95 latency</td><td>Spring Boot APM처럼 요청 단위 병목과 에러 원인 확인</td></tr>
             <tr><td>Cost</td><td>Datadog usage, Azure credit</td><td>학생팩/학생 크레딧 한도 관리</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>운영 대시보드</h2>
+        <p>
+          Datadog 콘솔에서 바로 import 할 수 있는 dashboard JSON은
+          <code>datadog-study-note-ops-dashboard.json</code> 입니다. 앱 내부에서는
+          <code>/api/v1/admin/ops-dashboard</code> 가 같은 운영 지표를 server-side Datadog API 조회로 제공합니다.
+        </p>
+        <table>
+          <thead>
+            <tr><th>영역</th><th>데이터 소스</th><th>패널</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>API Health</td><td>APM metrics</td><td><code>trace.web.request</code>, <code>trace.web.request.hits</code>, <code>trace.web.request.errors</code></td></tr>
+            <tr><td>Sync Reliability</td><td>logs</td><td>actual log searches for <code>metric=sync.put.success</code>, <code>metric=sync.put.failure</code>, <code>metric=annotation.cas.stale</code>, <code>metric=annotation.batch.size</code></td></tr>
+            <tr><td>Browser UX</td><td>RUM events</td><td><code>@type:session</code>, <code>@type:error</code>, login/signup/upload actions</td></tr>
+            <tr><td>Release Check</td><td>APM version tags</td><td>p95 latency and errors grouped by <code>DD_VERSION</code></td></tr>
           </tbody>
         </table>
       </section>
