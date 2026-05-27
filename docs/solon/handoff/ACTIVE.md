@@ -44,16 +44,26 @@ main.ts: 11,049 → **4,448** (-6,601, **-59.74%**). 🎯 **Layer D 분해 완�
 
 - `fe-v0.1.24` (2026-05-27) — sprint-20 cold-start fix + session_hint cookie live (`main-Cwsm8q7t.js`).
 - `fe-v0.1.25` (2026-05-27) — sprint-21 (sidebar cache + UI ephemeral) + sprint-22 (user-notes-sync + P2 fix) prod deploy.
+- `fe-v0.1.26` (2026-05-27) — **TDZ hotfix**: initial renderApp/revalidate 를 queueMicrotask 로 defer. 이전 bundle (`main-Cciz0Wkp.js`) 의 boot crash + "세션 확인 중" 무한 stuck 해결.
+- `fe-v0.1.27` (2026-05-27) — **home sidebar 학기/과목 hierarchy** 표시. renderSubjectNavItem 의 currentSubject nullable.
+- `be-v0.1.14` (2026-05-27) — **122 commit BE deploy lag 해소**. Term/Subject controller + classDate Date migration + 별표 widget + Subject move + Datadog log-derived metric + PR #84 ops dashboard + backfill default Term migration. last BE = be-v0.1.13 (2026-05-23).
 
-## PR open — 내일 코드리뷰 대상
+## PR #84 — merged + deployed (be-v0.1.14)
 
-- **PR #84** — 관리자 운영 지표 대시보드 + Datadog server-side 조회. branch = `codex/readme-datadog-ops`.
-  - `apps/api/src/admin/ops-dashboard.service.ts` 신규 (515 line + spec 165 line).
+- **PR #84** — 관리자 운영 지표 대시보드 (Datadog server-side 조회). **squash merge → main (d2f9895)**.
+  - `apps/api/src/admin/ops-dashboard.service.ts` (Codex P2/P3 fix 포함 — sub-100ms preserve + 1_000_000 ns boundary).
   - `GET /v1/admin/ops-dashboard` (master/admin guard). DD key 서버 only.
   - 9 card (APM × 3 + log-derived × 3 + RUM × 3). `not_configured` graceful fallback.
-  - check: BE build PASS / spec 142 PASS (4 신규) / web build PASS.
-  - 배포 시 user 작업 = ACA secret `dd-app-key` 추가 + env `DD_APP_KEY=secretref:dd-app-key`.
-  - Codex worktree 의 README.md 한→영 rewrite (288→205 line) revert 완료 (KO-first 정책 보존).
+  - 배포 = `be-v0.1.14` tag (2026-05-27) — 122 commit lag 해소 동반.
+  - ACA env `DD_APP_KEY=secretref:dd-app-key` 적용 완료.
+
+## 코드리뷰 시연 안내 (내일)
+
+- URL: <https://study-note.910701.xyz>
+- 리뷰어 계정: 이름 `리뷰어` / 학번 `20260000` / role `MASTER`.
+- admin SPA: <https://study-note.910701.xyz/admin.html> (master/admin 로그인 후 표시).
+  - 사용자 관리 + 학기/과목 관리 + 운영지표 panel (PR #84) 통합.
+- 권장 흐름 = README.md 의 "코드리뷰 · 시연 안내 (live)" 절 참조.
 
 ## 활성 작업 = ① PR #84 코드리뷰 (내일) + ② React migration cost 재평가
 
