@@ -3853,9 +3853,12 @@ body[data-route="pdf-workspace"] .content {
   align-items: center;
   justify-content: center;
   user-select: none;
-  cursor: pointer;
+  cursor: grab;
   transform: translate(-50%, -50%);
   container-type: inline-size;
+}
+.pdf-star-mark:active {
+  cursor: grabbing;
 }
 .pdf-star-mark__glyph {
   font-size: 100cqw;

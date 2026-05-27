@@ -55,10 +55,30 @@ interface MockStorage {
   listJsonObjects?: unknown;
 }
 
-function makeService(prisma: MockPrisma, storage: MockStorage): PdfAnnotationsService {
+function makeMetricsRecorder(): {
+  outcomes: string[];
+  metrics: { observeSyncPut: (outcome: "success" | "failure" | "stale") => void };
+} {
+  const outcomes: string[] = [];
+  return {
+    outcomes,
+    metrics: {
+      observeSyncPut: (outcome) => {
+        outcomes.push(outcome);
+      }
+    }
+  };
+}
+
+function makeService(
+  prisma: MockPrisma,
+  storage: MockStorage,
+  metrics?: { observeSyncPut: (outcome: "success" | "failure" | "stale") => void }
+): PdfAnnotationsService {
   return new PdfAnnotationsService(
     prisma as unknown as import("@study-note/persistence").PrismaService,
-    storage as unknown as import("@study-note/storage").StoragePort
+    storage as unknown as import("@study-note/storage").StoragePort,
+    metrics as unknown as import("../../observability/metrics.service").MetricsService
   );
 }
 
@@ -85,7 +105,8 @@ describe("AC11: single-material GET/PUT — foreign / nonexistent 동일 404", (
       getJsonObject: async () => null,
       putJsonObject: async () => undefined
     };
-    const service = makeService(prisma, storage);
+    const recorder = makeMetricsRecorder();
+    const service = makeService(prisma, storage, recorder.metrics);
 
     let foreignError: NotFoundException | null = null;
     try {
@@ -123,7 +144,8 @@ describe("AC11: single-material GET/PUT — foreign / nonexistent 동일 404", (
       getJsonObject: async () => null,
       putJsonObject: async () => undefined
     };
-    const service = makeService(prisma, storage);
+    const recorder = makeMetricsRecorder();
+    const service = makeService(prisma, storage, recorder.metrics);
 
     const res = await service.getSingleAnnotation(OWNER, "mat-001");
     assert.deepEqual(res, {
@@ -270,7 +292,8 @@ describe("AC4: PUT revision 분기", () => {
       getJsonObject: async () => null,
       putJsonObject: async () => undefined
     };
-    const service = makeService(prisma, storage);
+    const recorder = makeMetricsRecorder();
+    const service = makeService(prisma, storage, recorder.metrics);
     const res = await service.putAnnotation(
       OWNER,
       "mat-001",
@@ -280,6 +303,7 @@ describe("AC4: PUT revision 분기", () => {
     assert.equal(res.total, 1);
     assert.equal(res.returned, 1);
     assert.ok(res.annotations["mat-001"]);
+    assert.deepEqual(recorder.outcomes, ["success"]);
   });
 
   it("clientRevision past (stale) → 409 + canonical body with server state", async () => {
@@ -292,7 +316,8 @@ describe("AC4: PUT revision 분기", () => {
       getJsonObject: async () => ({ payload: { server: true } }),
       putJsonObject: async () => undefined
     };
-    const service = makeService(prisma, storage);
+    const recorder = makeMetricsRecorder();
+    const service = makeService(prisma, storage, recorder.metrics);
     let err: ConflictException | null = null;
     try {
       await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "2026-05-22T10:00:00Z");
@@ -312,6 +337,7 @@ describe("AC4: PUT revision 분기", () => {
     assert.equal(body.returned, 1);
     assert.equal(body.annotations["mat-001"]?.updatedAt, serverSaved.toISOString());
     assert.deepEqual(body.annotations["mat-001"]?.payload, { server: true });
+    assert.deepEqual(recorder.outcomes, ["stale"]);
   });
 
   it("clientRevision future (위조) → 409 (exact equality)", async () => {
@@ -324,7 +350,8 @@ describe("AC4: PUT revision 분기", () => {
       getJsonObject: async () => null,
       putJsonObject: async () => undefined
     };
-    const service = makeService(prisma, storage);
+    const recorder = makeMetricsRecorder();
+    const service = makeService(prisma, storage, recorder.metrics);
     let err: ConflictException | null = null;
     try {
       await service.putAnnotation(OWNER, "mat-001", { x: 1 }, "2099-12-31T23:59:59Z");
@@ -506,7 +533,8 @@ describe("AC10: R2 rollback on failure", () => {
         throw new Error("simulated R2 failure");
       }
     };
-    const service = makeService(prisma, storage);
+    const recorder = makeMetricsRecorder();
+    const service = makeService(prisma, storage, recorder.metrics);
     let err: ServiceUnavailableException | null = null;
     try {
       await service.putAnnotation(OWNER, "mat-001", { x: 1 }, previous.toISOString());
@@ -516,6 +544,7 @@ describe("AC10: R2 rollback on failure", () => {
     assert.ok(err instanceof ServiceUnavailableException);
     assert.equal(rolledBack.length, 1);
     assert.equal(rolledBack[0]?.getTime(), previous.getTime());
+    assert.deepEqual(recorder.outcomes, ["failure"]);
   });
 });
 

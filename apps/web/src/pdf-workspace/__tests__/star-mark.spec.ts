@@ -17,6 +17,7 @@ import {
   cycleStarMarkSize,
   DEFAULT_STAR_MARK_SIZE_RATIO,
   makeStarMarkId,
+  moveStarMark,
   removeStarMark,
   renderStarMark,
   resizeStarMark,
@@ -151,6 +152,31 @@ describe("removeStarMark", () => {
 
 // ─── resizeStarMark ─────────────────────────────────────────────────────
 
+describe("moveStarMark", () => {
+  it("xRatio/yRatio 가 [0, 1] clamp 되고 일치 mark 만 이동한다", () => {
+    const { callbacks, snapshot, seed } = makeCallbacks();
+    seed([
+      fakeStarMark({ id: "sm-a", xRatio: 0.2, yRatio: 0.2 }),
+      fakeStarMark({ id: "sm-b", xRatio: 0.4, yRatio: 0.4 })
+    ]);
+    moveStarMark(callbacks, "subject-1", "sm-a", { x: 1.5, y: -0.5 });
+
+    const marks = snapshot().starMarks ?? [];
+    assert.equal(marks[0]!.xRatio, 1);
+    assert.equal(marks[0]!.yRatio, 0);
+    assert.equal(marks[1]!.xRatio, 0.4);
+    assert.equal(marks[1]!.yRatio, 0.4);
+  });
+
+  it("markId 미일치 시 no-op", () => {
+    const { callbacks, snapshot, seed } = makeCallbacks();
+    seed([fakeStarMark({ id: "sm-a", xRatio: 0.2, yRatio: 0.2 })]);
+    moveStarMark(callbacks, "subject-1", "sm-missing", { x: 0.9, y: 0.9 });
+    assert.equal(snapshot().starMarks![0]!.xRatio, 0.2);
+    assert.equal(snapshot().starMarks![0]!.yRatio, 0.2);
+  });
+});
+
 describe("resizeStarMark", () => {
   it("sizeRatio 가 [SIZE_MIN, SIZE_MAX] clamp 된다", () => {
     const { callbacks, snapshot, seed } = makeCallbacks();
@@ -204,6 +230,7 @@ describe("renderStarMark", () => {
   it("happy path HTML 에 data-star-mark-id + glyph + 2 button 이 있다", () => {
     const html = renderStarMark("subject-1", fakeStarMark({ id: "sm-happy" }));
     assert.match(html, /data-star-mark-id="sm-happy"/);
+    assert.match(html, /data-action="star-mark-drag-handle"/);
     assert.match(html, /data-subject-id="subject-1"/);
     assert.match(html, /★/);
     assert.match(html, /data-action="resize-star-mark"/);

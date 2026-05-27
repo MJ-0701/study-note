@@ -234,6 +234,7 @@ import {
 import {
   addStarMark as addStarMarkModule,
   cycleStarMarkSize,
+  moveStarMark as moveStarMarkModule,
   removeStarMark as removeStarMarkModule,
   resizeStarMark as resizeStarMarkModule,
   type StarMarkCallbacks,
@@ -457,6 +458,16 @@ let activeChartDrag: {
 let activeStickyDrag: {
   subjectId: string;
   noteId: string;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startNormX: number;
+  startNormY: number;
+} | undefined;
+// sprint-W22 hotfix: existing star marks should move like other annotation widgets.
+let activeStarMarkDrag: {
+  subjectId: string;
+  markId: string;
   pointerId: number;
   startClientX: number;
   startClientY: number;
@@ -2388,6 +2399,11 @@ function cancelActiveDragsOnEsc(): void {
     applyChartMove(subjectId, chartId, { x: startNormX, y: startNormY });
     activeChartDrag = undefined;
   }
+  if (activeStarMarkDrag) {
+    const { subjectId, markId, startNormX, startNormY } = activeStarMarkDrag;
+    moveStarMark(subjectId, markId, { x: startNormX, y: startNormY });
+    activeStarMarkDrag = undefined;
+  }
   // Eraser drag = continuous erase action (no per-widget revert); ESC simply
   // stops further erase. Already-erased ink/sticky stays deleted (consistent
   // with pointerup commit semantics — eraser drag is not "drag-to-move").
@@ -2571,6 +2587,38 @@ function handleDocumentPointerDown(event: PointerEvent): void {
           startClientY: event.clientY,
           startNormX: chart.position.x,
           startNormY: chart.position.y
+        };
+      }
+    }
+
+    return;
+  }
+
+  const starMarkDragHandle = target.closest<HTMLElement>("[data-action='star-mark-drag-handle']");
+
+  if (starMarkDragHandle && !target.closest("button")) {
+    const subjectIdForDrag = surface.dataset.subjectId;
+    const markIdForDrag = starMarkDragHandle.dataset.starMarkId;
+
+    if (subjectIdForDrag && markIdForDrag) {
+      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const mark = (workspace.starMarks ?? []).find((item) => item.id === markIdForDrag);
+
+      if (mark) {
+        event.preventDefault();
+        try {
+          starMarkDragHandle.setPointerCapture(event.pointerId);
+        } catch {
+          // synthetic events may not support setPointerCapture
+        }
+        activeStarMarkDrag = {
+          subjectId: subjectIdForDrag,
+          markId: markIdForDrag,
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startNormX: mark.xRatio,
+          startNormY: mark.yRatio
         };
       }
     }
@@ -2848,6 +2896,34 @@ function handleDocumentPointerMove(event: PointerEvent): void {
     return;
   }
 
+  if (activeStarMarkDrag && activeStarMarkDrag.pointerId === event.pointerId) {
+    const { subjectId, markId, startClientX, startClientY, startNormX, startNormY } = activeStarMarkDrag;
+    const surface = document.querySelector<HTMLElement>(
+      `[data-pdf-annotation-surface][data-subject-id="${subjectId}"]`
+    );
+
+    if (surface) {
+      event.preventDefault();
+      const rect = surface.getBoundingClientRect();
+      const dx = (event.clientX - startClientX) / rect.width;
+      const dy = (event.clientY - startClientY) / rect.height;
+      moveStarMark(subjectId, markId, { x: startNormX + dx, y: startNormY + dy });
+      const el = document.querySelector<HTMLElement>(`[data-star-mark-id="${markId}"]`);
+
+      if (el) {
+        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const mark = (workspace.starMarks ?? []).find((item) => item.id === markId);
+
+        if (mark) {
+          el.style.left = `${mark.xRatio * 100}%`;
+          el.style.top = `${mark.yRatio * 100}%`;
+        }
+      }
+    }
+
+    return;
+  }
+
   // R10-c: eraser drag — apply erase at each move position.
   if (activeEraserDrag && activeEraserDrag.pointerId === event.pointerId) {
     const { subjectId, pageNumber } = activeEraserDrag;
@@ -2924,6 +3000,12 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-12/slice-6: clear sticky note drag state on pointer release.
   if (activeStickyDrag && activeStickyDrag.pointerId === event.pointerId) {
     activeStickyDrag = undefined;
+    renderApp(); // final re-render to settle position
+    return;
+  }
+
+  if (activeStarMarkDrag && activeStarMarkDrag.pointerId === event.pointerId) {
+    activeStarMarkDrag = undefined;
     renderApp(); // final re-render to settle position
     return;
   }
@@ -3888,6 +3970,9 @@ function addStarMark(subjectId: string, position: { x: number; y: number }): voi
 }
 function removeStarMark(subjectId: string, markId: string): void {
   removeStarMarkModule(starMarkCallbacks, subjectId, markId);
+}
+function moveStarMark(subjectId: string, markId: string, position: { x: number; y: number }): void {
+  moveStarMarkModule(starMarkCallbacks, subjectId, markId, position);
 }
 function resizeStarMark(subjectId: string, markId: string, sizeRatio: number): void {
   resizeStarMarkModule(starMarkCallbacks, subjectId, markId, sizeRatio);

@@ -94,6 +94,7 @@ describe("AC22 — main.ts ESC handler 가 commit/cancel 헬퍼를 호출하는�
       "activeChecklistDrag",
       "activeTableDrag",
       "activeChartDrag",
+      "activeStarMarkDrag",
       "activeEraserDrag"
     ]) {
       assert.ok(
@@ -109,7 +110,8 @@ describe("AC22 — main.ts ESC handler 가 commit/cancel 헬퍼를 호출하는�
       "applyStickyMove",
       "applyChecklistMove",
       "applyTableMove",
-      "applyChartMove"
+      "applyChartMove",
+      "moveStarMark"
     ]) {
       assert.ok(
         cancelBlock.includes(applyFn),

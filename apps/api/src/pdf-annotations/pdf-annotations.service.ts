@@ -5,12 +5,14 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   PayloadTooLargeException,
   ServiceUnavailableException
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "@study-note/persistence";
 import { StoragePort } from "@study-note/storage";
+import { MetricsService } from "../observability/metrics.service";
 
 // sprint-2/S1: payload size hard cap.
 const MAX_PAYLOAD_BYTES = 256 * 1024;
@@ -38,7 +40,8 @@ export class PdfAnnotationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(StoragePort) private readonly storage: StoragePort
+    @Inject(StoragePort) private readonly storage: StoragePort,
+    @Optional() private readonly metrics?: MetricsService
   ) {}
 
   /** R2 key — `annotations/{userId}/material-{materialId}.json`. */
@@ -266,6 +269,27 @@ export class PdfAnnotationsService {
 
   /** PUT /api/v1/pdf-annotations/:materialId — plan §R4 + §R9 (Hybrid CAS). */
   async putAnnotation(
+    ownerId: string,
+    materialId: string,
+    payload: unknown,
+    rawClientRevision?: string
+  ): Promise<AnnotationBatchResponse> {
+    try {
+      const result = await this.putAnnotationUnsafe(
+        ownerId,
+        materialId,
+        payload,
+        rawClientRevision
+      );
+      this.metrics?.observeSyncPut("success");
+      return result;
+    } catch (err) {
+      this.metrics?.observeSyncPut(err instanceof ConflictException ? "stale" : "failure");
+      throw err;
+    }
+  }
+
+  private async putAnnotationUnsafe(
     ownerId: string,
     materialId: string,
     payload: unknown,

@@ -1,6 +1,6 @@
 // sprint-2026-W22-sprint-3 / layer B/slice-2e — PDF star mark widget domain.
-// main.ts 의 makeStarMarkId + addStarMark + removeStarMark + resizeStarMark +
-// cycleStarMarkSize + renderStarMark + 5 const (SIZE_CYCLE / DEFAULT_SIZE_RATIO /
+// main.ts 의 makeStarMarkId + addStarMark + removeStarMark + moveStarMark +
+// resizeStarMark + cycleStarMarkSize + renderStarMark + 5 const (SIZE_CYCLE / DEFAULT_SIZE_RATIO /
 // COLOR_DEFAULT / SIZE_MIN / SIZE_MAX) 격리.
 // slice-2a/2b/2c/2d 패턴 (Context + Callbacks + named export + module-private
 // 미사용 + characterization spec) 일관.
@@ -133,6 +133,26 @@ export function removeStarMark(
 }
 
 /**
+ * star mark 위치 변경. xRatio/yRatio 는 [0, 1] clamp.
+ */
+export function moveStarMark(
+  callbacks: StarMarkCallbacks,
+  subjectId: string,
+  markId: string,
+  position: { x: number; y: number }
+): void {
+  const now = new Date().toISOString();
+  const xRatio = Math.min(1, Math.max(0, position.x));
+  const yRatio = Math.min(1, Math.max(0, position.y));
+  callbacks.updateWorkspace(subjectId, (workspace) => ({
+    ...workspace,
+    starMarks: (workspace.starMarks ?? []).map((m) =>
+      m.id === markId ? { ...m, xRatio, yRatio, updatedAt: now } : m
+    )
+  }));
+}
+
+/**
  * star mark sizeRatio 변경 ([SIZE_MIN, SIZE_MAX] clamp).
  */
 export function resizeStarMark(
@@ -194,6 +214,7 @@ export function renderStarMark(subjectId: string, mark: PdfStarMark): string {
   return `
     <div
       class="pdf-star-mark"
+      data-action="star-mark-drag-handle"
       data-star-mark-id="${escapeHtml(mark.id)}"
       data-subject-id="${escapeHtml(subjectId)}"
       style="left: ${(safeXRatio * 100).toFixed(2)}%; top: ${(safeYRatio * 100).toFixed(2)}%; width: ${sizePct}%; aspect-ratio: 1; color: ${escapeHtml(safeColor)};"
