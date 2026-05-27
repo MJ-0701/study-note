@@ -227,14 +227,17 @@ describe("cycleStarMarkSize", () => {
 // ─── renderStarMark ─────────────────────────────────────────────────────
 
 describe("renderStarMark", () => {
-  it("happy path HTML 에 data-star-mark-id + glyph + 2 button 이 있다", () => {
+  it("happy path HTML 에 data-star-mark-id + glyph + remove btn + resize drag handle 있다", () => {
     const html = renderStarMark("subject-1", fakeStarMark({ id: "sm-happy" }));
     assert.match(html, /data-star-mark-id="sm-happy"/);
     assert.match(html, /data-action="star-mark-drag-handle"/);
     assert.match(html, /data-subject-id="subject-1"/);
     assert.match(html, /★/);
-    assert.match(html, /data-action="resize-star-mark"/);
+    // sprint-W22-sprint-24: resize button cycle → corner drag handle.
+    assert.match(html, /data-action="resize-star-mark-handle"/);
     assert.match(html, /data-action="remove-star-mark"/);
+    // pdf-star-mark__resize div 가 우하단 corner 에 위치 (CSS-driven 변경).
+    assert.match(html, /class="pdf-star-mark__resize"/);
   });
 
   it("color HEX regex 통과 시 그대로, 통과 못하면 COLOR_DEFAULT", () => {

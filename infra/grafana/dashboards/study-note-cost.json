@@ -1,0 +1,111 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "schemaVersion": 39,
+  "version": 1,
+  "uid": "study-note-cost",
+  "title": "study-note Cost (R2 / MySQL / DD)",
+  "tags": ["study-note", "cost", "prometheus"],
+  "time": { "from": "now-7d", "to": "now" },
+  "timepicker": {},
+  "refresh": "10m",
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "안내",
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "CostMetricsCron 이 6h마다 emit. R2 storage/object + MySQL row + DD ingestion. ACA Active-CPU 는 별 sprint (AC2-2 deferred)."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "R2 storage (GB)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(study_note_cost_r2_storage_gb)",
+          "legendFormat": "R2 GB"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decgbytes" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "R2 object 수",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(study_note_cost_r2_object_count)",
+          "legendFormat": "R2 objects"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "MySQL row 총합",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(study_note_cost_mysql_row_total)",
+          "legendFormat": "MySQL rows"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "DD ingestion (GB, 최근 hour)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 3 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(study_note_cost_dd_ingestion_gb)",
+          "legendFormat": "DD GB/h"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decgbytes" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "R2 storage trend (7d)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(study_note_cost_r2_storage_gb)",
+          "legendFormat": "R2 GB"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "DD ingestion trend (7d)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max(study_note_cost_dd_ingestion_gb)",
+          "legendFormat": "DD GB/h"
+        }
+      ]
+    }
+  ]
+}

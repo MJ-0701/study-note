@@ -12,6 +12,13 @@ scrape_configs:
   - job_name: "study-note-api"
     scheme: https
     metrics_path: /api/metrics
+    # sprint-W22-sprint-24 / AC14 — /api/metrics 가 fail-closed 토큰 게이트.
+    # `Authorization: Bearer <token>` 헤더로 호출. token = ACA secret 의 file
+    # 마운트 (`metrics-internal-token` → /etc/prometheus/metrics-token).
+    # 동일 token 값이 study-note-api 의 METRICS_INTERNAL_TOKEN env 와 일치해야 함.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics-token
     static_configs:
       - targets:
           # ACA external ingress FQDN + HTTPS. internal-to-external (Prometheus

@@ -37,6 +37,10 @@ export interface AnnotationBatchResponse {
 @Injectable()
 export class PdfAnnotationsService {
   private readonly logger = new Logger("pdf-annotations");
+  // sprint-W22-sprint-24 / AC4 + AC15 — log-derived metric source 전용 logger
+  // (별도 context 로 Datadog pipeline 분리). 이 logger 경로로 emit 되는 줄은
+  // 사용자 식별자/콘텐츠/토큰을 일절 포함하지 않는다.
+  private readonly metricsLogger = new Logger("study-note.metric-event");
 
   constructor(
     private readonly prisma: PrismaService,
@@ -282,6 +286,8 @@ export class PdfAnnotationsService {
         rawClientRevision
       );
       this.metrics?.observeSyncPut("success");
+      // sprint-W22-sprint-24 / AC4 — log-derived metric source (PII 0).
+      this.metricsLogger.log("event=study_note.event.annotation_put");
       return result;
     } catch (err) {
       this.metrics?.observeSyncPut(err instanceof ConflictException ? "stale" : "failure");

@@ -150,15 +150,29 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "필기 자동저장 — outcome 별",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "title": "필기 자동저장 rate (outcome 별, 1m)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (outcome) (rate(study_note_sync_put_total[5m]))",
+          "expr": "sum by (outcome) (irate(study_note_sync_put_total[1m]))",
           "legendFormat": "{{outcome}}"
         }
       ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "필기 자동저장 누적 (outcome 별)",
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 15 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (study_note_sync_put_total)",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
     },
     {
       "id": 9,

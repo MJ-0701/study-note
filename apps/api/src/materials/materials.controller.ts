@@ -69,6 +69,9 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Param("materialId") materialId: string
   ) {
+    // sprint-W22-sprint-24 / AC4 — log emit 은 service 의 transition 분기 안에서.
+    // controller 에서 emit 시 idempotent retry / duplicate callback 가 metric 부풀림
+    // (Codex PR #85 round-2 P2 finding).
     return this.materials.completeUpload(request.user.id, materialId);
   }
 

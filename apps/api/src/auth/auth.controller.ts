@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
@@ -53,6 +54,10 @@ function toProfileResponse(user: UserProfile): UserProfileResponse {
 
 @Controller("v1/auth")
 export class AuthController {
+  // sprint-W22-sprint-24 / AC4 — log-derived metric source. PII 0 — emit 줄에는
+  // event 이름만, name/studentNumber/userId 미포함 (AC15 schema invariant).
+  private readonly metricsLogger = new Logger("study-note.metric-event");
+
   constructor(private readonly auth: AuthService) {}
 
   // ── POST /v1/auth/sign-in ──────────────────────────────────────────────────
@@ -72,6 +77,8 @@ export class AuthController {
     // F2: token goes to httpOnly cookie only — never in body.
     res.setHeader("Set-Cookie", buildSessionCookie(session.token));
 
+    // sprint-W22-sprint-24 / AC4 — log-derived metric source.
+    this.metricsLogger.log("event=study_note.event.signin");
     return toProfileResponse(session.user);
   }
 
@@ -92,6 +99,8 @@ export class AuthController {
 
     res.setHeader("Set-Cookie", buildSessionCookie(session.token));
 
+    // sprint-W22-sprint-24 / AC4 — log-derived metric source.
+    this.metricsLogger.log("event=study_note.event.signup");
     return toProfileResponse(session.user);
   }
 
