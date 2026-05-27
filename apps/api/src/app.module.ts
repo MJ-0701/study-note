@@ -15,6 +15,7 @@ import { UserNotesModule } from "./user-notes/user-notes.module";
 import { PdfAnnotationsModule } from "./pdf-annotations/pdf-annotations.module";
 import { TermsModule } from "./terms/terms.module";
 import { SubjectsModule } from "./subjects/subjects.module";
+import { MetricsModule } from "./observability/metrics.module";
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { SubjectsModule } from "./subjects/subjects.module";
     UserNotesModule,
     PdfAnnotationsModule,
     TermsModule,
-    SubjectsModule
+    SubjectsModule,
+    MetricsModule
   ],
   controllers: [
     AuthController,
