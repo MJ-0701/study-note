@@ -21,7 +21,7 @@ import {
   type MaterialUploadIntent,
   type PdfMaterialRecord
 } from "./api/materials";
-import { parseAuthMePayload, requestAuthMe, signIn, signOut, signUp } from "./auth/authApi";
+import { signIn, signOut, signUp } from "./auth/authApi";
 import { resolveEscapeAction } from "./pdf-workspace/esc-action";
 import {
   getDefaultOpenTermIds,
@@ -40,14 +40,20 @@ import {
 } from "./auth/authSession";
 import {
   clearAuthSessionHint,
-  getAuthBootRetryNotice,
-  getAuthBootStateForMode,
-  getInitialAuthBootState,
   readAuthSessionHint,
-  writeAuthSessionHint,
-  type AuthBootNotice,
-  type AuthBootState
+  writeAuthSessionHint
 } from "./auth/sessionBoot";
+import {
+  cancelAuthBootRequest as cancelAuthBootRequestModule,
+  getAuthBootNoticeValue,
+  getAuthBootStateValue,
+  handleAuthExpiredFromSync as handleAuthExpiredFromSyncModule,
+  markSignInSuccess as markSignInSuccessModule,
+  markSignOut as markSignOutModule,
+  revalidateStoredSession as revalidateStoredSessionModule,
+  type AuthSessionStateCallbacks,
+  type AuthSessionStateContext
+} from "./auth/sessionState";
 import {
   renderLoginPage as renderAuthLoginPage,
   renderSessionCheckPage as renderAuthSessionCheckPage
@@ -334,14 +340,6 @@ type IntakeFeedback =
   | undefined;
 
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
-const AUTH_SESSION_WAKE_NOTICE_DELAY_MS = 2500;
-// ACA scale-to-zero cold start can take ~30s on first hit. Keep the per-request
-// timeout above that so /v1/auth/me does not abort prematurely; the "waking"
-// banner already shows after AUTH_SESSION_WAKE_NOTICE_DELAY_MS so the user sees
-// progress while we wait.
-const AUTH_SESSION_REQUEST_TIMEOUT_MS = 45000;
-const AUTH_SESSION_RETRY_DELAY_MS = 3000;
-const AUTH_SESSION_MAX_AUTO_RETRIES = 3;
 // sprint-3/S1 (codex P1 backlog): notebook is no longer loaded at module init —
 // without an authenticated userId we cannot pick the correct namespaced key.
 // Boot starts with the fixture default; revalidate / sign-in success paths
@@ -373,11 +371,10 @@ let authSession: AuthSession | undefined;
 let sidebarTermsCache: SidebarTerm[] | null = null;
 let sidebarSubjectsCache: SidebarSubject[] | null = null;
 let sidebarOpenTermIds: Set<string> = new Set();
-let authBootState: AuthBootState = getInitialAuthBootState(readAuthSessionHint());
-let authBootNotice: AuthBootNotice = "checking";
-let authBootRequestId = 0;
-let authBootNoticeTimer: ReturnType<typeof setTimeout> | undefined;
-let authBootRetryTimer: ReturnType<typeof setTimeout> | undefined;
+// sprint-W22-sprint-20 / layer D/slice-2: 6 auth boot mutable state + 8 lifecycle
+// fn → `./auth/sessionState.ts`. ambient identity (`authSession` / `authMode`) 만
+// main.ts 잔류 (각 37 / 7 read site). render gate (L4427/L4429) 는
+// `getAuthBootStateValue()` / `getAuthBootNoticeValue()` 로 read.
 // slice-3 (sign-up UX): current auth form tab ("login" | "signup").
 let authMode: AuthMode = "login";
 // sprint-W22-sprint-1 layer B/slice-2a: 4 module-state Map/Set
@@ -551,10 +548,12 @@ if (isBrowserRuntime) {
   });
   renderApp();
 
-  // slice-2: always rehydrate from server — cookie carries the session token.
-  // First-time visitors should see login/signup immediately; only browsers
-  // with a prior sign-in hint get the blocking cold-start session check.
-  void revalidateStoredSession({ blocking: readAuthSessionHint() });
+  // Only browsers with a prior sign-in hint should wake the backend for
+  // `/v1/auth/me`. Anonymous first visits must stay static so ACA can remain
+  // scaled to zero until the user actually signs in.
+  if (readAuthSessionHint()) {
+    void revalidateStoredSession({ blocking: true });
+  }
 }
 
 // sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
@@ -618,21 +617,56 @@ let syncBackendErrorReported = false;
 // to login with a feedback banner. Guarded by a one-shot flag so concurrent
 // in-flight requests do not stack multiple banners; the flag resets when a
 // new session is attached (revalidate / sign-in).
-let authExpiryHandled = false;
-function handleAuthExpiredFromSync(): void {
-  if (authExpiryHandled) {
-    return;
-  }
-  authExpiryHandled = true;
-  clearAuthSessionHint();
-  clearAuthSession();
-  authMode = "login";
-  loginFeedback = {
-    kind: "error",
-    title: "세션이 만료되었습니다.",
-    detail: "자동 저장이 중단되어 다시 로그인이 필요합니다."
+// sprint-W22-sprint-20 / layer D/slice-2: auth boot lifecycle ctx + cb.
+// ctx = read-only (apiBaseUrl + getAuthSession + test seam timer).
+// cb = write (ambient identity setter + cross-domain reset 위임 + render).
+function getAuthSessionStateContext(): AuthSessionStateContext {
+  return {
+    apiBaseUrl,
+    getAuthSession: () => authSession
   };
-  try { renderApp(); } catch { /* ignore */ }
+}
+
+function getAuthSessionStateCallbacks(): AuthSessionStateCallbacks {
+  return {
+    setAuthSession: (session) => {
+      authSession = session;
+    },
+    setAuthMode: (mode) => {
+      authMode = mode;
+    },
+    setLoginFeedback: (feedback) => {
+      loginFeedback = feedback;
+    },
+    clearCrossDomainSession: () => {
+      clearAuthSession();
+    },
+    applySessionTransition: (userId) => {
+      applySessionTransitionForUser(userId);
+    },
+    restoreUploadedPdfMaterials: (session) => restoreUploadedPdfMaterialsForSession(session),
+    setDatadogRumUser: (user) => {
+      setDatadogRumUser(user);
+    },
+    clearDatadogRumUser: () => {
+      clearDatadogRumUser();
+    },
+    loadSidebarTermsCache: () => loadSidebarTermsCache().then(() => {}),
+    triggerRender: () => {
+      try {
+        renderApp();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+}
+
+// sprint-W22-sprint-20 / layer D/slice-2: one-shot guard + 401/403 본체 →
+// `./auth/sessionState.ts` 의 handleAuthExpiredFromSync. main.ts 는 ctx/cb
+// 만 공급.
+function handleAuthExpiredFromSync(): void {
+  handleAuthExpiredFromSyncModule(getAuthSessionStateContext(), getAuthSessionStateCallbacks());
 }
 
 function recordSyncFailure(): void {
@@ -1056,10 +1090,12 @@ function applySessionTransitionForUser(newUserId: string): void {
 }
 
 function clearAuthSession(): void {
-  authBootRequestId += 1;
+  // sprint-W22-sprint-20 / layer D/slice-2: boot 측 (requestId + timer) →
+  // `./auth/sessionState.ts`.markSignOut(ctx). cross-domain reset 은 본 함수가
+  // 계속 책임 (sidebar/userNotes sync/annotation cache/hotkey modal/PDF blob URL).
+  markSignOutModule(getAuthSessionStateContext());
   authSession = undefined;
   clearDatadogRumUser();
-  clearAuthBootTimers();
   revokeAllPdfObjectUrls();
   // sprint-W21-sprint-1/S2 — clear sidebar term cache on session reset so the
   // next user's terms/subjects don't leak from prior session.
@@ -1093,23 +1129,10 @@ function clearAuthSession(): void {
   syncBackendErrorReported = false;
 }
 
-function clearAuthBootTimers(): void {
-  if (authBootNoticeTimer) {
-    clearTimeout(authBootNoticeTimer);
-    authBootNoticeTimer = undefined;
-  }
-
-  if (authBootRetryTimer) {
-    clearTimeout(authBootRetryTimer);
-    authBootRetryTimer = undefined;
-  }
-}
-
+// sprint-W22-sprint-20 / layer D/slice-2: 5 lifecycle fn 본체 →
+// `./auth/sessionState.ts`. main.ts 잔여 = ctx/cb 공급 + module 호출.
 function cancelAuthBootRequest(): void {
-  authBootRequestId += 1;
-  clearAuthBootTimers();
-  authBootState = "ready";
-  authBootNotice = "checking";
+  cancelAuthBootRequestModule(getAuthSessionStateContext());
 }
 
 // sprint-W22-sprint-1 layer B/slice-2a: 4 object-URL lifecycle 함수 본체 →
@@ -1123,122 +1146,11 @@ const revokeAllPdfObjectUrls = revokeAllPdfObjectUrlsModule;
 async function revalidateStoredSession(
   options: { attempt?: number; blocking?: boolean } = {}
 ): Promise<void> {
-  const attempt = options.attempt ?? 0;
-  const blocking = options.blocking ?? readAuthSessionHint();
-  const requestId = beginAuthBootRequest({ blocking });
-
-  try {
-    // slice-2: cookie-based session rehydration — credentials:include sends the
-    // httpOnly study_note_session cookie. No localStorage fallback (F2).
-    const response = await requestAuthMe(apiBaseUrl, AUTH_SESSION_REQUEST_TIMEOUT_MS);
-
-    if (requestId !== authBootRequestId) {
-      return;
-    }
-
-    clearAuthBootTimers();
-
-    if (!response.ok) {
-      if (response.status >= 500) {
-        scheduleAuthBootRetry(attempt, { blocking });
-        return;
-      }
-
-      // 401/403 = no valid cookie or insufficient auth for /me. Either way:
-      // leave the cold-start lane and show the login page quickly.
-      authSession = undefined;
-      clearAuthSessionHint();
-      authBootState = "ready";
-      authBootNotice = "checking";
-      renderApp();
-      return;
-    }
-
-    const payload = parseAuthMePayload(await response.json());
-
-    if (!payload) {
-      authSession = undefined;
-      clearAuthSessionHint();
-      authBootState = "ready";
-      authBootNotice = "checking";
-      renderApp();
-      return;
-    }
-
-    authSession = meResponseToSession(payload);
-    writeAuthSessionHint();
-    setDatadogRumUser({
-      id: authSession.user.id,
-      role: authSession.user.role
-    });
-    // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot so a future
-    // session loss can re-surface the banner.
-    authExpiryHandled = false;
-    // sprint-2/S3 fix (codex P1): wipe local data if this revalidate landed
-    // on a different user than the previous session on this browser. Must run
-    // before restoreUploadedPdfMaterialsForSession so the workspace rebuild
-    // starts from an empty pdfWorkspaceStore.
-    applySessionTransitionForUser(authSession.user.id);
-    await restoreUploadedPdfMaterialsForSession(authSession);
-    if (requestId !== authBootRequestId) {
-      return;
-    }
-    loginFeedback = undefined;
-    authBootState = "ready";
-    authBootNotice = "checking";
-    // sprint-W21-sprint-1/S2 (AC8-AC10) — fetch terms/subjects for sidebar grouping
-    // (fire-and-forget; sidebar renders flat fallback until cache lands).
-    void loadSidebarTermsCache().then(() => renderApp());
-    renderApp();
-  } catch {
-    if (requestId !== authBootRequestId) {
-      return;
-    }
-
-    clearAuthBootTimers();
-    scheduleAuthBootRetry(attempt, { blocking });
-  }
-}
-
-function beginAuthBootRequest(options: { blocking: boolean }): number {
-  const requestId = authBootRequestId + 1;
-  authBootRequestId = requestId;
-  clearAuthBootTimers();
-  authBootState = getAuthBootStateForMode(options.blocking);
-  authBootNotice = "checking";
-  renderApp();
-
-  if (!options.blocking) {
-    return requestId;
-  }
-
-  authBootNoticeTimer = setTimeout(() => {
-    if (authBootState !== "checking" || requestId !== authBootRequestId) {
-      return;
-    }
-
-    authBootNotice = "waking";
-    renderApp();
-  }, AUTH_SESSION_WAKE_NOTICE_DELAY_MS);
-
-  return requestId;
-}
-
-function scheduleAuthBootRetry(attempt: number, options: { blocking: boolean }): void {
-  authSession = undefined;
-  authBootState = getAuthBootStateForMode(options.blocking);
-
-  if (attempt >= AUTH_SESSION_MAX_AUTO_RETRIES) {
-    authBootNotice = getAuthBootRetryNotice(options.blocking, true);
-    renderApp();
-    return;
-  }
-
-  authBootNotice = getAuthBootRetryNotice(options.blocking, false);
-  renderApp();
-  authBootRetryTimer = setTimeout(() => {
-    void revalidateStoredSession({ attempt: attempt + 1, blocking: options.blocking });
-  }, AUTH_SESSION_RETRY_DELAY_MS);
+  await revalidateStoredSessionModule(
+    getAuthSessionStateContext(),
+    getAuthSessionStateCallbacks(),
+    options
+  );
 }
 
 // sprint-W22-sprint-1 layer B/slice-2a: 13 workspace-store 함수 본체 →
@@ -2195,10 +2107,8 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
         role: session.user.role
       });
       // sprint-2/S3 fix (codex P2): clear auth-expiry one-shot on fresh sign-in.
-      authExpiryHandled = false;
-      authBootState = "ready";
-      authBootNotice = "checking";
-      clearAuthBootTimers();
+      // sprint-W22-sprint-20: 4 line → markSignInSuccess(ctx) 캡슐화.
+      markSignInSuccessModule(getAuthSessionStateContext());
       // sprint-2/S3 fix (codex P1): wipe local notebook + pdfWorkspaceStore if
       // sign-in landed on a different user than the previous session, before
       // any autosave PUT can leak the prior user's content.
@@ -4424,9 +4334,9 @@ async function importWeekNoteFile(
 }
 
 function renderApp(): void {
-  if (authBootState === "checking") {
+  if (getAuthBootStateValue() === "checking") {
     document.body.removeAttribute("data-route");
-    mountRender(renderAuthSessionCheckPage(authBootNotice));
+    mountRender(renderAuthSessionCheckPage(getAuthBootNoticeValue()));
     return;
   }
 
@@ -4873,5 +4783,4 @@ function formatPdfTool(tool: LocalPdfTool): string {
 
   return labels[tool];
 }
-
 
