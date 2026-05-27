@@ -76,6 +76,7 @@ jobs:
           DEPLOY_URL=$(vercel deploy --prebuilt --prod --archive=tgz --no-wait --token=${{ secrets.VERCEL_TOKEN }})
           echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
           echo "::notice title=FE Production Deploy::$DEPLOY_URL"
+          vercel promote "$DEPLOY_URL" --yes --timeout=5m --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Write GitHub Actions summary
         if: always()
