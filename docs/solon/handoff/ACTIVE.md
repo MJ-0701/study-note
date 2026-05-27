@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
 
-## 진행 상황 (2026-05-27) — **Layer D 진입. 4.88k (4,877 / -55.85%)**
+## 진행 상황 (2026-05-27) — **Layer D slice-2 PR pending. 4.79k (4,785 / -56.69%)**
 
 | Layer | Sprint | 상태 |
 |---|---|---|
@@ -30,16 +30,16 @@
 | **C/slice-8. subject-week** | 2026-W22-sprint-16 | ✅ merged (PR #77, main=15e70bf) — **5.5k 충분 달성 (5,403)** |
 | **C/slice-9. pdf-library** | 2026-W22-sprint-17 | ✅ merged (PR #78, main=6aff0f5) — **5.1k 인접 (5,161)** |
 | **C/slice-10. quick-note** | 2026-W22-sprint-18 | ✅ merged (PR #79, main=a12d62e) — **🎯 5k 달성 (4,959)** + Layer C closed |
-| **D/slice-1. notebook storage** | 2026-W22-sprint-19 | ✅ implemented (Gate 6 self+cross PASS, PR pending) — **4.88k (4,877)** + Layer D 진입 |
-| D/slice-2. auth boot module | next sprint | ⏳ 다음 진입 (authSession + authBoot* timer) |
+| **D/slice-1. notebook storage** | 2026-W22-sprint-19 | ✅ merged (PR #80, main=52cb472) — **4.88k (4,877)** + Layer D 진입 |
+| **D/slice-2. auth boot module** | 2026-W22-sprint-20 | ✅ Gate 6 self+cross PASS — **4.79k (4,785)** — PR pending |
 | D/slice-3. sidebar cache + UI ephemeral | TBD | ⏳ backlog |
 | D/slice-4. pdfWorkspaceStore 잔여 | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
 
-main.ts: 11,049 → **4,877** (-6,172, **-55.85%**). Layer D 진입.
-Layer D/slice-1 (notebook storage) closed. 다음 = Layer D/slice-2 (auth boot).
+main.ts: 11,049 → **4,785** (-6,264, **-56.69%**). Layer D 진행 중.
+Layer D/slice-2 (auth boot) Gate 6 PASS. 다음 = PR + @codex review + merge → slice-3.
 
-## 활성 작업 = Layer D/slice-2 (auth boot module)
+## 활성 작업 = Layer D/slice-2 (auth boot module) — PR pending
 
 ## SFS 0.6.121 정책 ambient
 
