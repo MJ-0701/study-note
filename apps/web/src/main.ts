@@ -24,14 +24,20 @@ import {
 import { signIn, signOut, signUp } from "./auth/authApi";
 import { resolveEscapeAction } from "./pdf-workspace/esc-action";
 import {
-  getDefaultOpenTermIds,
-  groupSubjectsByTerm,
-  parseStoredOpenState,
-  resolveOpenTermIds,
-  sidebarTermOpenStorageKey,
-  type SidebarSubject,
-  type SidebarTerm
-} from "./sidebar/term-grouping";
+  clearSidebarCache,
+  getSidebarOpenTermIds,
+  getSidebarSubjectsCache,
+  getSidebarTermsCache,
+  loadSidebarTermsCache as loadSidebarTermsCacheModule,
+  toggleSidebarTermOpen as toggleSidebarTermOpenModule,
+  type SidebarCacheCallbacks,
+  type SidebarCacheContext
+} from "./sidebar/sidebar-cache";
+import {
+  closeHotkeyHelpModal,
+  getHotkeyHelpModalOpen,
+  toggleHotkeyHelpModal
+} from "./ui/ephemeral-state";
 import {
   meResponseToSession,
   type AuthMode,
@@ -365,12 +371,10 @@ if (isBrowserRuntime) {
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
 let authSession: AuthSession | undefined;
 
-// sprint-W21-sprint-1/S2 (AC8-AC10) — sidebar term grouping cache. Fetched once
-// per auth-ready transition via loadSidebarTermsCache(). null = not loaded yet
-// (renderSidebarSubjectGroups falls back to flat notebook list).
-let sidebarTermsCache: SidebarTerm[] | null = null;
-let sidebarSubjectsCache: SidebarSubject[] | null = null;
-let sidebarOpenTermIds: Set<string> = new Set();
+// sprint-W22-sprint-21 / layer D/slice-3: sidebar term grouping cache (3 state)
+// + 3 lifecycle fn (loadSidebarTermsCache / refreshSidebarOpenTermIds /
+// toggleSidebarTermOpen) → `./sidebar/sidebar-cache.ts`. main.ts 는 ctx/cb
+// 공급 + getter 사용.
 // sprint-W22-sprint-20 / layer D/slice-2: 6 auth boot mutable state + 8 lifecycle
 // fn → `./auth/sessionState.ts`. ambient identity (`authSession` / `authMode`) 만
 // main.ts 잔류 (각 37 / 7 read site). render gate (L4427/L4429) 는
@@ -543,7 +547,7 @@ if (isBrowserRuntime) {
     // sprint-1/S2: close transient overlays on route change so they do not
     // bleed across pages (the hotkey help modal is only meaningful on the PDF
     // workspace).
-    hotkeyHelpModalOpen = false;
+    closeHotkeyHelpModal();
     renderApp();
   });
   renderApp();
@@ -1080,9 +1084,7 @@ function applySessionTransitionForUser(newUserId: string): void {
   syncFailureTracker.paused = false;
   // PR #49 codex R5 P1 — A→B revalidate transition 시 sidebar term cache 도
   // 무효화. 이전 user A 의 term/subject metadata 가 B session UI 에 leak 차단.
-  sidebarTermsCache = null;
-  sidebarSubjectsCache = null;
-  sidebarOpenTermIds = new Set();
+  clearSidebarCache();
   syncFailureTracker.recentFailures = [];
   syncBackendError = undefined;
   syncBackendErrorReported = false;
@@ -1099,13 +1101,11 @@ function clearAuthSession(): void {
   revokeAllPdfObjectUrls();
   // sprint-W21-sprint-1/S2 — clear sidebar term cache on session reset so the
   // next user's terms/subjects don't leak from prior session.
-  sidebarTermsCache = null;
-  sidebarSubjectsCache = null;
-  sidebarOpenTermIds = new Set();
+  clearSidebarCache();
   // sprint-1/S2 fix (codex P2): drop transient overlays that should not survive
   // a session reset. Without this the hotkey help modal could persist into the
   // post-login render and lock the shell in `inert`.
-  hotkeyHelpModalOpen = false;
+  closeHotkeyHelpModal();
   // sprint-2/S2 fix (codex P1): cancel all pending debounced sync timers so a
   // delayed PUT from user A cannot be sent with user B's cookie after a
   // logout/login. Also reset the fetch caches (they are user-scoped, but old
@@ -1469,7 +1469,7 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "close-hotkey-help") {
-    hotkeyHelpModalOpen = false;
+    closeHotkeyHelpModal();
     renderApp();
     return;
   }
@@ -1520,7 +1520,7 @@ function handleDocumentClick(event: MouseEvent): void {
 
   if (target instanceof HTMLElement && target.dataset.action === "close-hotkey-help-backdrop") {
     // Click on the backdrop element itself (not bubbled from the inner panel).
-    hotkeyHelpModalOpen = false;
+    closeHotkeyHelpModal();
     renderApp();
     return;
   }
@@ -2374,7 +2374,8 @@ const PDF_TOOL_KEY_LABEL_LOOKUP: Record<string, LocalPdfTool> = {
   y: "star"
 };
 
-let hotkeyHelpModalOpen = false;
+// sprint-W22-sprint-21 / layer D/slice-3: hotkeyHelpModalOpen mutable →
+// `./ui/ephemeral-state.ts` module-private. main.ts 는 getter/setter 사용.
 
 // sprint-1/S3: Browser Fullscreen API wrapper for the PDF workspace container.
 // `PDF_WORKSPACE_ROOT_ID` 는 pdf-workspace/constants.ts 로 이전 (sprint-W22-sprint-2/S0).
@@ -2451,13 +2452,13 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   if (event.code === "Escape") {
     const workspaceForEsc = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
     const escAction = resolveEscapeAction({
-      modalOpen: hotkeyHelpModalOpen,
+      modalOpen: getHotkeyHelpModalOpen(),
       selectedTool: (workspaceForEsc.material?.selectedTool ?? "read") as string
     });
 
     if (escAction === "close-modal") {
       event.preventDefault();
-      hotkeyHelpModalOpen = false;
+      closeHotkeyHelpModal();
       renderApp();
       return;
     }
@@ -2488,7 +2489,7 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
     )
   ) {
     event.preventDefault();
-    hotkeyHelpModalOpen = !hotkeyHelpModalOpen;
+    toggleHotkeyHelpModal();
     renderApp();
     return;
   }
@@ -2496,7 +2497,7 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   // sprint-1/S2 fix (codex P2): when the help modal is open, all other hotkeys
   // are suppressed. Otherwise workspace state could change behind the dialog
   // (page flip, tool switch) while the user is reading shortcut help.
-  if (hotkeyHelpModalOpen) {
+  if (getHotkeyHelpModalOpen()) {
     return;
   }
 
@@ -4534,7 +4535,7 @@ function getAppShellContext(): AppShellContext {
     notebookUpdatedAt: notebook.updatedAt,
     notebookStorageError: getNotebookStorageError() ?? null,
     syncBackendError: syncBackendError ?? null,
-    hotkeyHelpModalOpen,
+    hotkeyHelpModalOpen: getHotkeyHelpModalOpen(),
     activePdfWorkspaceSubjectId: getActivePdfWorkspaceSubjectId() ?? null
   };
 }
@@ -4553,9 +4554,9 @@ const quickNoteContext: QuickNoteContext = {
 const sidebarContext: SidebarContext = {
   getNotebook: () => notebook,
   getAdminRole: () => authSession?.user.role,
-  getSidebarTermsCache: () => sidebarTermsCache,
-  getSidebarSubjectsCache: () => sidebarSubjectsCache,
-  getSidebarOpenTermIds: () => sidebarOpenTermIds
+  getSidebarTermsCache,
+  getSidebarSubjectsCache,
+  getSidebarOpenTermIds
 };
 
 // Summaries context (slice-5 — summaries.ts). 2 field (fn ref + callback).
@@ -4594,98 +4595,21 @@ function composeShell(sidebar: string, mainContent: string, crumb: string): stri
 }
 
 
-// sprint-W21-sprint-1/S2/AC8-AC10 — sidebar term cache loader + render.
-// PR #49 codex Round-1 P1 fix: user A 의 fetch 가 resolve 되는 사이 user B 로
-// 로그인 전환되면 stale response 가 cache 를 오염시킴. capture user 후 await,
-// resolve 시점에 authSession.user.id 가 여전히 동일한지 확인 후에만 write.
-async function loadSidebarTermsCache(): Promise<void> {
-  const userIdAtStart = authSession?.user.id;
-  if (!userIdAtStart) return;
-  try {
-    const [termsRes, subjectsRes] = await Promise.all([
-      fetch(`${apiBaseUrl}/v1/terms`, { credentials: "include" }),
-      fetch(`${apiBaseUrl}/v1/subjects`, { credentials: "include" })
-    ]);
-    // session race guard — A의 응답이 B 세션에 쓰이지 않게.
-    if (authSession?.user.id !== userIdAtStart) return;
-    // PR #49 codex R2 P2 — fetch fail 시 cache 를 빈 array 로 "loaded" 표시
-    // 하면 sidebar 가 grouped (orphan 한 그룹) 로 영구 전환됨. flat fallback
-    // 유지 위해 null 그대로 두고 다음 trigger 에서 retry.
-    if (!termsRes.ok || !subjectsRes.ok) {
-      return;
-    }
-    const termsJson = (await termsRes.json()) as Array<{
-      id: string;
-      grade: number;
-      semester: number;
-      title: string;
-      startDate: string | null;
-      endDate: string | null;
-    }>;
-    const subjectsJson = (await subjectsRes.json()) as Array<{
-      id: string;
-      title: string;
-      termId: string | null;
-    }>;
-    // race guard 재확인 (await json 사이 race 가능).
-    if (authSession?.user.id !== userIdAtStart) return;
-    sidebarTermsCache = termsJson.map((t) => ({
-      id: t.id,
-      grade: t.grade,
-      semester: t.semester,
-      title: t.title,
-      startDate: t.startDate ?? null,
-      endDate: t.endDate ?? null
-    }));
-    sidebarSubjectsCache = subjectsJson.map((s) => ({
-      id: s.id,
-      title: s.title,
-      termId: s.termId ?? null
-    }));
-    refreshSidebarOpenTermIds();
-  } catch {
-    if (authSession?.user.id !== userIdAtStart) return;
-    // PR #49 codex R2 P2 — 네트워크 error 도 cache 를 빈 array 로 채우지 않음
-    // (flat fallback 유지). 다음 trigger 에서 retry.
-  }
+// sprint-W22-sprint-21 / layer D/slice-3: sidebar load/refresh/toggle 본체 →
+// `./sidebar/sidebar-cache.ts`. main.ts 잔여 = ctx/cb const + thin wrapper.
+const sidebarCacheCtx: SidebarCacheContext = {
+  apiBaseUrl,
+  getAuthSession: () => authSession,
+  isBrowserRuntime
+};
+const sidebarCacheCb: SidebarCacheCallbacks = {
+  triggerRender: () => { try { renderApp(); } catch { /* ignore */ } }
+};
+function loadSidebarTermsCache(): Promise<void> {
+  return loadSidebarTermsCacheModule(sidebarCacheCtx, sidebarCacheCb);
 }
-
-function refreshSidebarOpenTermIds(): void {
-  const userId = authSession?.user.id;
-  if (!userId || !sidebarTermsCache || !sidebarSubjectsCache) return;
-  const groups = groupSubjectsByTerm(sidebarSubjectsCache, sidebarTermsCache);
-  const defaults = getDefaultOpenTermIds(groups, new Date().toISOString());
-  // PR #49 codex R5 P2 — localStorage getItem 도 SecurityError 던질 수 있음
-  // (private window, ITP). try/catch + fallback {} 으로 보호.
-  let stored: Record<string, boolean> = {};
-  if (isBrowserRuntime) {
-    try {
-      stored = parseStoredOpenState(window.localStorage.getItem(sidebarTermOpenStorageKey(userId)));
-    } catch {
-      stored = {};
-    }
-  }
-  sidebarOpenTermIds = resolveOpenTermIds(groups, defaults, stored);
-}
-
 function toggleSidebarTermOpen(termId: string): void {
-  const userId = authSession?.user.id;
-  if (!userId || !isBrowserRuntime) return;
-  const next = !sidebarOpenTermIds.has(termId);
-  if (next) sidebarOpenTermIds.add(termId);
-  else sidebarOpenTermIds.delete(termId);
-  // PR #49 codex R3 P2 — localStorage quota / private window / safari ITP 등에서
-  // getItem/setItem 이 throw 가능. in-memory state 는 갱신되었으므로 persist
-  // 실패해도 UI 동작은 유지 (다음 trigger 가 재시도).
-  try {
-    const key = sidebarTermOpenStorageKey(userId);
-    const stored = parseStoredOpenState(window.localStorage.getItem(key));
-    stored[termId] = next;
-    window.localStorage.setItem(key, JSON.stringify(stored));
-  } catch {
-    // localStorage unavailable / quota — silent skip (in-memory state survives 세션).
-  }
-  renderApp();
+  toggleSidebarTermOpenModule(sidebarCacheCtx, sidebarCacheCb, termId);
 }
 
 
