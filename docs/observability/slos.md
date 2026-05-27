@@ -17,16 +17,16 @@ Datadog UI 의 *Service Mgmt → SLO* 등록 시 본 정의를 1:1 옮긴다.
 ### 1. API Availability
 
 - objective: **99.5%** (월 약 3.6h 다운 허용).
-- numerator: `study_note_http_requests_total{status=~"2..|3..", route!~"/api/health.*"}`
-- denominator: `study_note_http_requests_total{route!~"/api/health.*"}`
+- numerator: `study_note_http_requests_total{status=~"2..|3..", route!~"/api/health.*|/api/metrics"}`
+- denominator: `study_note_http_requests_total{route!~"/api/health.*|/api/metrics"}`
 - 출처: prom-client `MetricsService.observeHttp`.
-- 비고: `/api/health` 는 keep-alive ping 이므로 제외해야 사용자 트래픽 기준이 된다.
+- 비고: `/api/health` (keep-alive ping) + `/api/metrics` (Prom scraper, 15s 마다 호출 + token 게이트 rollout 실패 시 403) 둘 다 제외 — SLO 가 사용자 트래픽 기준이 되도록.
 
 ### 2. Latency p95 < 800ms
 
 - objective: **95%** of requests under 800ms (per 1m window).
-- threshold: histogram `study_note_http_request_duration_seconds` bucket le=0.8 점유율 ≥ 0.95.
-- 비고: cold-start tick (sprint-15 keep-alive) 가 1~2% spike. burn 평가 시 99분위만 추적.
+- threshold: histogram `study_note_http_request_duration_seconds_bucket{route!~"/api/health.*|/api/metrics"}` 의 le=0.8 점유율 ≥ 0.95.
+- 비고: `/api/health` + `/api/metrics` 제외 (cheap scrape 가 평균 잡아당겨 사용자 latency 신호 흐려짐 방지). cold-start tick (sprint-15 keep-alive) 가 1~2% spike. burn 평가 시 99분위만 추적.
 
 ### 3. Sync success rate
 

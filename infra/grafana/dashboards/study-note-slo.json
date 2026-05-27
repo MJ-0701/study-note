@@ -31,7 +31,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(study_note_http_requests_total{status=~\"2..|3..\",route!~\"/api/health.*\"}[7d])) / sum(rate(study_note_http_requests_total{route!~\"/api/health.*\"}[7d]))",
+          "expr": "sum(rate(study_note_http_requests_total{status=~\"2..|3..\",route!~\"/api/health.*|/api/metrics\"}[7d])) / sum(rate(study_note_http_requests_total{route!~\"/api/health.*|/api/metrics\"}[7d]))",
           "legendFormat": "availability"
         }
       ],
@@ -58,7 +58,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(study_note_http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(study_note_http_request_duration_seconds_bucket{route!~\"/api/health.*|/api/metrics\"}[5m])))",
           "legendFormat": "p95 (s)"
         }
       ],
@@ -112,7 +112,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(study_note_http_requests_total{status=~\"2..|3..\",route!~\"/api/health.*\"}[1h])) / sum(rate(study_note_http_requests_total{route!~\"/api/health.*\"}[1h]))",
+          "expr": "sum(rate(study_note_http_requests_total{status=~\"2..|3..\",route!~\"/api/health.*|/api/metrics\"}[1h])) / sum(rate(study_note_http_requests_total{route!~\"/api/health.*|/api/metrics\"}[1h]))",
           "legendFormat": "availability (1h)"
         }
       ],
@@ -126,7 +126,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(study_note_http_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(study_note_http_request_duration_seconds_bucket{route!~\"/api/health.*|/api/metrics\"}[5m])))",
           "legendFormat": "p95 (s)"
         }
       ],
