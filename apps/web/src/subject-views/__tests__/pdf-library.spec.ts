@@ -271,26 +271,26 @@ describe("pdf-library — (e) renderPdfMaterialCard XSS", () => {
 // ─── (f) renderPdfMaterialClassDateControl + denylist + week label ────────
 
 describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
-  test("case 22: canManage=false → select/button disabled", () => {
+  test("case 22: canManage=false → picker/button disabled", () => {
     const subject = makeSubject();
     const mat = makeMaterial();
     const html = pl.renderPdfMaterialClassDateControl(makeCtx(), subject, mat, "m1");
     const c = parseC(html);
-    const sel = c.querySelector("select");
-    assert.notEqual(sel, null);
-    assert.equal(sel!.hasAttribute("disabled"), true);
+    assert.equal(c.querySelector("select"), null);
+    assert.equal(c.querySelector('[data-role="pdf-class-date-current"]')?.hasAttribute("disabled"), true);
     assert.equal(c.querySelector('button[data-action="assign-pdf-class-date"]')?.hasAttribute("disabled"), true);
   });
 
-  test("case 23: canManage=true + own material → dropdown editable", () => {
+  test("case 23: canManage=true + own material → custom picker editable", () => {
     const subject = makeSubject();
     const mat = makeMaterial({ uploaderId: "u1" });
     const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
     const c = parseC(html);
-    const sel = c.querySelector("select");
-    assert.equal(sel!.hasAttribute("disabled"), false);
+    const picker = c.querySelector('[data-role="pdf-class-date-picker"]');
+    assert.notEqual(picker, null);
+    assert.equal(c.querySelector("select"), null);
     assert.equal(c.querySelector('button[data-action="assign-pdf-class-date"]')?.hasAttribute("disabled"), false);
-    assert.equal(c.querySelectorAll(".pdf-material-card__class-date-select").length, 1);
+    assert.equal(c.querySelectorAll('input[data-role="pdf-class-date-option"]').length, 3);
   });
 
   test("case 23b: canManage=true + shared material → editable", () => {
@@ -298,8 +298,7 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
     const mat = makeMaterial({ uploaderId: "other-admin" });
     const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
     const c = parseC(html);
-    const sel = c.querySelector("select");
-    assert.equal(sel!.hasAttribute("disabled"), false);
+    assert.notEqual(c.querySelector('[data-role="pdf-class-date-picker"]'), null);
     assert.match(c.querySelector(".pdf-material-card__field-hint")?.textContent ?? "", /적용/);
   });
 
@@ -308,9 +307,11 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
     const mat = makeMaterial();
     const html = pl.renderPdfMaterialClassDateControl(makeCtx({ id: "u1", role: "admin" }), subject, mat, "m1");
     const c = parseC(html);
-    const opts = c.querySelectorAll("option[disabled]");
+    const opts = c.querySelectorAll('input[data-role="pdf-class-date-option"][disabled]');
     assert.ok(opts.length >= 1, `expected ≥1 disabled option, got ${opts.length}`);
-    const text = opts.map((o) => o.textContent).join("");
+    const text = c.querySelectorAll(".pdf-material-card__class-date-option.is-disabled")
+      .map((o) => o.textContent)
+      .join("");
     assert.ok(text.includes("사용 불가"), `expected 사용 불가 hint, got=${text}`);
   });
 
@@ -333,7 +334,7 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
       "m1"
     );
     const c = parseC(html);
-    const labels = Array.from(c.querySelectorAll("option"))
+    const labels = Array.from(c.querySelectorAll(".pdf-material-card__class-date-option-label"))
       .map((option) => option.textContent.trim())
       .filter((label) => /^\d{4}-/.test(label));
     assert.deepEqual(labels, [

@@ -1318,13 +1318,13 @@ function handleDocumentClick(event: MouseEvent): void {
     const subjectId = quickNoteButton.dataset.subjectId;
     const materialId = quickNoteButton.dataset.materialId;
     const field = quickNoteButton.closest<HTMLElement>(".pdf-material-card__field");
-    const select = field?.querySelector<HTMLSelectElement>(
-      'select[data-role="pdf-class-date-select"]'
+    const selectedOption = field?.querySelector<HTMLInputElement>(
+      'input[data-role="pdf-class-date-option"]:checked'
     );
 
-    if (subjectId && materialId && select && !select.disabled) {
+    if (subjectId && materialId && selectedOption && !selectedOption.disabled) {
       event.preventDefault();
-      void assignPdfMaterialClassDate(subjectId, materialId, select.value);
+      void assignPdfMaterialClassDate(subjectId, materialId, selectedOption.value);
     }
 
     return;

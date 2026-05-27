@@ -8,8 +8,9 @@
 //   - chart branch: `<select data-action="update-chart-type">` 만. point
 //     editor 존재 시 current DOM 값 우선, 없으면 stored points 보존.
 //     chartPointDebounceMap 의 in-flight handle 은 clear (callback 위임).
-//   - classDate branch: `<select data-action="assign-pdf-class-date">` →
+//   - classDate legacy branch: `<select data-action="assign-pdf-class-date">` →
 //     assignPdfMaterialClassDate.
+//   - classDate preview branch: custom radio option updates the visible summary.
 //   - 이후 HTMLInputElement 한정 branch 5종:
 //     · import-pdf-material → importPdfMaterialFile (+ target.value = "").
 //     · select-pdf-page → requestPdfPage + renderApp (Number.isInteger guard).
@@ -165,6 +166,19 @@ export function handleDocumentChange(
   }
 
   if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  if (target.dataset.action === "preview-pdf-class-date") {
+    const label = target.dataset.label;
+    const field = target.closest<HTMLElement>(".pdf-material-card__field");
+    const current = field?.querySelector<HTMLElement>('[data-role="pdf-class-date-current"]');
+    const picker = field?.querySelector<HTMLDetailsElement>('[data-role="pdf-class-date-picker"]');
+
+    if (label && current) {
+      current.textContent = label;
+    }
+    picker?.removeAttribute("open");
     return;
   }
 

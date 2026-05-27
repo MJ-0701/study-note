@@ -1,8 +1,8 @@
 /**
  * document-change.spec.ts — sprint-2026-W22-sprint-2 / layer B/slice-2b AC3.
  *
- * handleDocumentChange 7 분기 (chart / classDate / fileImport / pageSel /
- * eraserSize / checklist / weekNote) characterization. 각 branch ≥ 1 case +
+ * handleDocumentChange 분기 (chart / classDate legacy / classDate preview /
+ * fileImport / pageSel / eraserSize / checklist / weekNote) characterization. 각 branch ≥ 1 case +
  * non-target ignore + branch isolation (early return) case.
  *
  * 실행:
@@ -24,6 +24,9 @@ class StubInput {
   dataset: Record<string, string | undefined> = {};
   value = "";
   files: { 0?: File } | null = null;
+  closest(_selector: string): HTMLElement | null {
+    return null;
+  }
 }
 class StubSelect {
   dataset: Record<string, string | undefined> = {};
@@ -185,6 +188,34 @@ describe("classDate branch — assign-pdf-class-date", () => {
     ]);
     // classDate branch does NOT render — assignPdfMaterialClassDate owns its own render.
     assert.equal(log.renders, 0);
+  });
+
+  it("previews custom classDate radio choice in the visible summary", () => {
+    const { ctx, callbacks, log } = makeHarness();
+    const input = new StubInput();
+    const current = { textContent: "수업일 미지정" };
+    const picker = {
+      removed: "",
+      removeAttribute(name: string) {
+        this.removed = name;
+      }
+    };
+    const field = {
+      querySelector(selector: string) {
+        if (selector === '[data-role="pdf-class-date-current"]') return current;
+        if (selector === '[data-role="pdf-class-date-picker"]') return picker;
+        return null;
+      }
+    };
+    input.dataset.action = "preview-pdf-class-date";
+    input.dataset.label = "2026-05-28 · 보강 수업";
+    input.closest = () => field as unknown as HTMLElement;
+
+    handleDocumentChange(inputEvent(input), ctx, callbacks);
+
+    assert.equal(current.textContent, "2026-05-28 · 보강 수업");
+    assert.equal(picker.removed, "open");
+    assert.equal(log.classDate.length, 0);
   });
 });
 

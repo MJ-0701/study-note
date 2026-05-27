@@ -321,41 +321,96 @@ export function renderPdfMaterialClassDateControl(
   materialKey: string
 ): string {
   const selectedValue = getPdfMaterialClassDateSelectValue(subject, material);
+  const selectedLabel = getPdfClassDateOptionLabel(subject, selectedValue);
   const canEdit = canEditPdfMaterialClassDate(ctx, material);
+  const safeSubjectId = escapeHtml(subject.id);
+  const safeMaterialKey = escapeHtml(materialKey);
+  const radioName = `pdf-class-date-${subject.id}-${materialKey}`;
+  const options = [
+    renderPdfClassDateOption(
+      radioName,
+      PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
+      "수업일 미지정",
+      selectedValue,
+      false
+    ),
+    ...getSortedPdfClassDateWeeks(subject).map((week) => {
+      // PR #51 codex R7 P1: 비-ISO legacy week.label 은 BE reject.
+      // disabled + "[migrate 필요]" hint 표시.
+      const ISO = /^\d{4}-\d{2}-\d{2}$/;
+      const isIso = ISO.test(week.label);
+      const displayLabel = week.title ? `${week.label} · ${week.title}` : week.label;
+      const label = isIso ? displayLabel : `${displayLabel} (사용 불가 — 이전 형식)`;
+      return renderPdfClassDateOption(radioName, week.label, label, selectedValue, !isIso);
+    })
+  ].join("");
 
   return `
-    <label class="pdf-material-card__field">
+    <div class="pdf-material-card__field">
       <span>수업일</span>
       <div class="pdf-material-card__class-date-row">
-        <select
-          class="pdf-material-card__class-date-select"
-          data-role="pdf-class-date-select"
-          ${canEdit ? "" : "disabled"}
-        >
-          <option value="${PDF_MATERIAL_UNASSIGNED_CLASS_DATE}" ${selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE ? "selected" : ""}>수업일 미지정</option>
-          ${getSortedPdfClassDateWeeks(subject).map((week) => {
-          // PR #51 codex R7 P1: 비-ISO legacy week.label 은 BE reject.
-          // disabled + "[migrate 필요]" hint 표시.
-          const ISO = /^\d{4}-\d{2}-\d{2}$/;
-          const isIso = ISO.test(week.label);
-          const sel = selectedValue === week.label ? "selected" : "";
-          const displayLabel = week.title ? `${week.label} · ${week.title}` : week.label;
-          const label = isIso ? displayLabel : `${displayLabel} (사용 불가 — 이전 형식)`;
-          return `<option value="${escapeHtml(week.label)}" ${sel} ${isIso ? "" : "disabled"}>${escapeHtml(label)}</option>`;
-        }).join("")}
-        </select>
+        ${canEdit ? `
+          <details class="pdf-material-card__class-date-picker" data-role="pdf-class-date-picker">
+            <summary class="pdf-material-card__class-date-summary">
+              <span data-role="pdf-class-date-current">${escapeHtml(selectedLabel)}</span>
+            </summary>
+            <div class="pdf-material-card__class-date-options" role="radiogroup" aria-label="수업일 선택">
+              ${options}
+            </div>
+          </details>
+        ` : `
+          <button
+            class="pdf-material-card__class-date-summary is-disabled"
+            type="button"
+            data-role="pdf-class-date-current"
+            disabled
+          >${escapeHtml(selectedLabel)}</button>
+        `}
         <button
           class="secondary-action pdf-material-card__class-date-apply"
           type="button"
           data-action="assign-pdf-class-date"
-          data-subject-id="${escapeHtml(subject.id)}"
-          data-material-id="${escapeHtml(materialKey)}"
+          data-subject-id="${safeSubjectId}"
+          data-material-id="${safeMaterialKey}"
           ${canEdit ? "" : "disabled"}
         >적용</button>
       </div>
       <small class="pdf-material-card__field-hint">
         ${canEdit ? "날짜를 고른 뒤 적용을 눌러 저장합니다." : "수업일 수정은 관리자만 가능합니다."}
       </small>
+    </div>
+  `;
+}
+
+function getPdfClassDateOptionLabel(subject: SubjectNote, value: string): string {
+  if (value === PDF_MATERIAL_UNASSIGNED_CLASS_DATE) {
+    return "수업일 미지정";
+  }
+  const week = subject.weekNotes.find((item) => item.label === value);
+  return week?.title ? `${week.label} · ${week.title}` : value;
+}
+
+function renderPdfClassDateOption(
+  radioName: string,
+  value: string,
+  label: string,
+  selectedValue: string,
+  disabled: boolean
+): string {
+  return `
+    <label class="pdf-material-card__class-date-option${disabled ? " is-disabled" : ""}">
+      <input
+        class="pdf-material-card__class-date-radio"
+        type="radio"
+        name="${escapeHtml(radioName)}"
+        value="${escapeHtml(value)}"
+        data-action="preview-pdf-class-date"
+        data-role="pdf-class-date-option"
+        data-label="${escapeHtml(label)}"
+        ${selectedValue === value ? "checked" : ""}
+        ${disabled ? "disabled" : ""}
+      />
+      <span class="pdf-material-card__class-date-option-label">${escapeHtml(label)}</span>
     </label>
   `;
 }
