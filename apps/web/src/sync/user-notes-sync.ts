@@ -106,9 +106,14 @@ export function setSyncBackendErrorReported(reported: boolean): void {
 }
 
 export function dismissSyncBackendError(): void {
+  // sprint-W22-sprint-22 Gate 6 codex P2 fix: pre-refactor handler 가 dismiss 시
+  // recentFailures 도 [] 로 초기화했음. 누락 시 dismiss 직후 1회 실패만으로
+  // 즉시 re-pause (5min window 안에 3 이전 failure 잔존 + 1 신규 = threshold).
+  // pre-refactor 동작 그대로 보존.
   syncBackendError = undefined;
   syncBackendErrorReported = false;
   syncFailureTracker.paused = false;
+  syncFailureTracker.recentFailures = [];
 }
 
 export function recordSyncFailure(cb: UserNotesSyncCallbacks): void {

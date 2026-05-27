@@ -380,11 +380,17 @@ describe("sync/user-notes-sync (sprint-W22-sprint-22)", () => {
     assert.equal(getSyncBackendError(), undefined);
   });
 
-  it("dismissSyncBackendError: banner + paused 모두 reset", () => {
+  it("dismissSyncBackendError: banner + paused + recentFailures 모두 reset (codex P2 fix)", () => {
     for (let i = 0; i < SYNC_FAILURE_PAUSE_THRESHOLD; i++) recordSyncFailure(h.cb);
     dismissSyncBackendError();
     assert.equal(isSyncBackendPaused(), false);
     assert.equal(getSyncBackendError(), undefined);
+    const { tracker } = __getInternalCachesForTesting__();
+    assert.equal(tracker.recentFailures.length, 0);
+    // Critical: dismiss 직후 1 failure 만으로 re-pause 가 발생하면 안 됨
+    // (pre-refactor behavior 보존 — recentFailures clear 없으면 즉시 re-trigger).
+    recordSyncFailure(h.cb);
+    assert.equal(isSyncBackendPaused(), false, "single failure post-dismiss should NOT re-pause");
   });
 
   // ─── AC6 / AC8 grep evidence ──────────────────────────────────────────
