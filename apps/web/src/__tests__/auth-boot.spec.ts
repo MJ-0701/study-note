@@ -7,11 +7,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
+  AUTH_SESSION_HINT_COOKIE_NAME,
   AUTH_SESSION_HINT_STORAGE_KEY,
   clearAuthSessionHint,
   getAuthBootRetryNotice,
   getAuthBootStateForMode,
   getInitialAuthBootState,
+  readAuthSessionHintFromCookieHeader,
   readAuthSessionHint,
   writeAuthSessionHint,
   type AuthSessionHintStorage
@@ -63,6 +65,14 @@ describe("auth boot UX", () => {
     assert.equal(readAuthSessionHint(storage), true);
     clearAuthSessionHint(storage);
     assert.equal(readAuthSessionHint(storage), false);
+  });
+
+  it("uses a non-secret readable cookie hint before waking /auth/me", () => {
+    assert.equal(AUTH_SESSION_HINT_COOKIE_NAME, "study_note_session_hint");
+    assert.equal(readAuthSessionHintFromCookieHeader("study_note_session_hint=1"), true);
+    assert.equal(readAuthSessionHintFromCookieHeader("other=1; study_note_session_hint=1"), true);
+    assert.equal(readAuthSessionHintFromCookieHeader("study_note_session_hint=0"), false);
+    assert.equal(readAuthSessionHintFromCookieHeader("other=1"), false);
   });
 
   it("does not wake the backend for first-time visitors without a session hint", () => {
