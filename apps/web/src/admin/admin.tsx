@@ -9,6 +9,15 @@ import { TermsPanel } from "./terms-panel";
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
+// 운영 지표 탭의 외부 원본 대시보드 link.
+// Datadog Public Dashboard URL (read-only share) 또는 Grafana URL 등.
+// 미설정 시 link section 숨김.
+const PUBLIC_DASHBOARD_URL =
+  (import.meta.env.VITE_PUBLIC_DASHBOARD_URL as string | undefined)?.trim() || "";
+const PUBLIC_DASHBOARD_LABEL =
+  (import.meta.env.VITE_PUBLIC_DASHBOARD_LABEL as string | undefined)?.trim() ||
+  "Datadog 원본 대시보드 (전문가용)";
+
 type UserRole = "master" | "admin" | "normal";
 
 type RoleFilter = "all" | "master" | "admin" | "normal";
@@ -721,6 +730,22 @@ function OpsDashboardPanel({ dashboard, loading, error, onRefresh }: OpsDashboar
       {dashboard?.message && (
         <div className={`ops-message ${dashboard.status}`}>
           {dashboard.message}
+        </div>
+      )}
+
+      {PUBLIC_DASHBOARD_URL && (
+        <div className="ops-external-link" role="note">
+          <p>
+            상세 그래프·히스토리·필터는 외부 원본 대시보드에서 확인할 수 있습니다.
+          </p>
+          <a
+            className="ops-external-link-btn"
+            href={PUBLIC_DASHBOARD_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {PUBLIC_DASHBOARD_LABEL} 열기 ↗
+          </a>
         </div>
       )}
 

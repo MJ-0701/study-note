@@ -484,6 +484,41 @@
   max-width: 720px;
 }
 
+/* 운영 지표 탭 외부 link (Datadog public dashboard / Grafana 등) */
+.ops-external-link {
+  align-items: center;
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: var(--ds-space-md);
+  padding: 10px 14px;
+}
+
+.ops-external-link p {
+  color: var(--ds-fg-soft);
+  font-size: 12px;
+  margin: 0;
+}
+
+.ops-external-link-btn {
+  background: var(--ds-fg);
+  border-radius: 4px;
+  color: var(--ds-bg);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ops-external-link-btn:hover {
+  opacity: 0.9;
+}
+
 /* admin tab nav — 사용자 관리 / 운영 지표 별도 페이지 라우팅 */
 .admin-tabs {
   border-bottom: 1px solid var(--ds-rule);
