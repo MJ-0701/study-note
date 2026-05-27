@@ -148,8 +148,17 @@ export function renderSidebarTermGroup(
   const subjectsHtml = group.subjects
     .map((s) => {
       const notebookEntry = notebook.subjects.find((n) => n.id === s.id);
-      if (!notebookEntry) return "";
-      return renderSubjectNavItem(notebookEntry, currentSubject, route);
+      if (notebookEntry) {
+        return renderSubjectNavItem(notebookEntry, currentSubject, route);
+      }
+      // sprint-W22-be-sync: BE-only subject (admin SPA 에서 추가, FE notebook 미반영).
+      // rich SubjectNote shape 없으므로 minimal link 만 표시. depth nav X.
+      const safeTitle = escapeHtml(s.title);
+      return `
+        <div class="subject-sidebar-item">
+          <a class="subject-sidebar-parent" href="#/subjects/${escapeHtml(s.id)}/class">${safeTitle}</a>
+        </div>
+      `;
     })
     .join("");
   return `
@@ -174,12 +183,19 @@ export function renderSidebarTermGroups(
   const subjectsCache = ctx.getSidebarSubjectsCache();
   if (!termsCache || !subjectsCache) return null;
   const notebook = ctx.getNotebook();
-  // Merge BE subjects with FE notebook subjects (subject.id matching).
-  // FE notebook holds rich SubjectNote shape; BE subjects 가 source-of-truth 인
-  // termId 만 가져온다.
-  const enrichedSubjects: SidebarSubject[] = notebook.subjects.map((s) => {
-    const beSubject = subjectsCache.find((bs) => bs.id === s.id);
-    return { id: s.id, title: s.title, termId: beSubject?.termId ?? null };
+  // sprint-W22-be-sync: union of FE notebook + BE Subject API 응답.
+  // FE notebook (seed 4과목) 만 표시하면 admin SPA 에서 추가된 새 과목이
+  // main sidebar 에 안 보이는 staleness 발생.
+  // BE subjectsCache 가 source-of-truth (termId + 모든 row 포함).
+  // notebook 안에 있으면 rich title 사용, 없으면 BE title 그대로.
+  const notebookById = new Map(notebook.subjects.map((s) => [s.id, s]));
+  const enrichedSubjects: SidebarSubject[] = subjectsCache.map((bs) => {
+    const notebookEntry = notebookById.get(bs.id);
+    return {
+      id: bs.id,
+      title: notebookEntry?.title ?? bs.title,
+      termId: bs.termId ?? null
+    };
   });
   const groups = groupSubjectsByTerm(enrichedSubjects, termsCache);
   if (groups.length === 0) return null;
