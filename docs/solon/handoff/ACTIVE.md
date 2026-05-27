@@ -28,7 +28,7 @@
 | **C/slice-6. subject-memorize** | 2026-W22-sprint-14 | ✅ merged (PR #75, main=e7e894c) — **5.6k 달성** |
 | **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ merged (PR #76, main=930eba4) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
 | **C/slice-8. subject-week** | 2026-W22-sprint-16 | ✅ merged (PR #77, main=15e70bf) — **5.5k 충분 달성 (5,403)** |
-| **C/slice-9. pdf-library** | 2026-W22-sprint-17 | ✅ implemented (Gate 6 self+cross PASS, PR pending) — **5.1k 인접 (5,161)** |
+| **C/slice-9. pdf-library** | 2026-W22-sprint-17 | ✅ merged (PR #78, main=6aff0f5) — **5.1k 인접 (5,161)** |
 | **C/slice-10. quick-note builders** | next sprint | ⏳ 다음 진입 (~150 line, 5k 달성 target) |
 | D. state/sync residual | TBD | ⏳ backlog |
 | **React migration** | TBD | ⏳ 분해 A~D 완료 후 |
