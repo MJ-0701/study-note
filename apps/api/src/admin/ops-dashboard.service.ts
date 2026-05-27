@@ -350,36 +350,48 @@ export class OpsDashboardService {
     spec: CardSpec,
     fetcher: FetchLike
   ): Promise<OpsDashboardCard> {
-    try {
-      const rawValue = spec.source === "apm"
-        ? await this.queryMetric(config, window, spec.query, spec.aggregation, fetcher)
-        : await this.queryAggregate(config, window, spec.source, spec.query, fetcher);
-      const value = "normalize" in spec && spec.normalize ? spec.normalize(rawValue) : rawValue;
-      const rounded = roundOpsValue(value, spec.unit);
-      const status = spec.statusForValue ? spec.statusForValue(rounded) : "ok";
+    // Datadog 의 transient 5xx / timeout / rate-limit 회피 = 1회 retry 후 fail.
+    // 같은 query 형식 인데도 한 카드만 random fail 케이스 (logs/rum aggregate
+    // sibling). retry 1회 + 600ms backoff 로 graceful 처리.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const rawValue = spec.source === "apm"
+          ? await this.queryMetric(config, window, spec.query, spec.aggregation, fetcher)
+          : await this.queryAggregate(config, window, spec.source, spec.query, fetcher);
+        const value = "normalize" in spec && spec.normalize ? spec.normalize(rawValue) : rawValue;
+        const rounded = roundOpsValue(value, spec.unit);
+        const status = spec.statusForValue ? spec.statusForValue(rounded) : "ok";
 
-      return {
-        id: spec.id,
-        label: spec.label,
-        value: rounded,
-        unit: spec.unit,
-        status,
-        source: spec.source,
-        query: spec.query
-      };
-    } catch (error) {
-      this.logger.warn(`Datadog ops card failed id=${spec.id}: ${errorMessage(error)}`);
-      return {
-        id: spec.id,
-        label: spec.label,
-        value: null,
-        unit: spec.unit,
-        status: "error",
-        source: spec.source,
-        query: spec.query,
-        errorMessage: "Datadog query failed"
-      };
+        return {
+          id: spec.id,
+          label: spec.label,
+          value: rounded,
+          unit: spec.unit,
+          status,
+          source: spec.source,
+          query: spec.query
+        };
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) {
+          await sleepMs(600);
+          continue;
+        }
+      }
     }
+
+    this.logger.warn(`Datadog ops card failed id=${spec.id}: ${errorMessage(lastError)}`);
+    return {
+      id: spec.id,
+      label: spec.label,
+      value: null,
+      unit: spec.unit,
+      status: "error",
+      source: spec.source,
+      query: spec.query,
+      errorMessage: "Datadog query failed"
+    };
   }
 
   private async queryMetric(
@@ -511,4 +523,8 @@ function roundOpsValue(value: number, unit: OpsCardUnit): number {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
