@@ -46,10 +46,30 @@ export class PdfAnnotationsService {
     return `annotations/${encodeURIComponent(userId)}/material-${encodeURIComponent(materialId)}.json`;
   }
 
-  /** R6 material ownership pre-check. material 존재 + ownerId 일치 시 true. */
+  /**
+   * R6 material accessibility pre-check.
+   * 본인 material 또는 master/admin uploader 의 shared material 이면 true.
+   * = listMaterials 의 share 정책과 동일 (`OR: [{ownerId}, {uploaded master/admin}]`).
+   * AnnotationSnapshot row 자체는 (currentUserId, materialId) composite 라 다른 user
+   * annotation 노출 위험 X — 본 check 는 material accessibility 만 책임.
+   */
   private async ownsMaterial(ownerId: string, materialId: string): Promise<boolean> {
     const material = await this.prisma.pdfMaterial.findFirst({
-      where: { id: materialId, ownerId, deletedAt: null },
+      where: {
+        id: materialId,
+        deletedAt: null,
+        OR: [
+          { ownerId },
+          {
+            uploadStatus: "uploaded",
+            owner: {
+              role: {
+                in: ["MASTER", "ADMIN"]
+              }
+            }
+          }
+        ]
+      },
       select: { id: true }
     });
     return material !== null;
@@ -163,10 +183,27 @@ export class PdfAnnotationsService {
     ownerId: string,
     subjectId: string
   ): Promise<AnnotationBatchResponse> {
-    // R2: server-side material enumeration via materials repository
-    // (subjectId × ownerId). client materialId 입력을 신뢰 X.
+    // R2: server-side material enumeration. share 정책 = listMaterials 와 동일
+    // (본인 material + uploaded master/admin material). 다른 user 의 material
+    // 위에서도 본인 annotation 가능하므로 batch 도 share 적용.
+    // AnnotationSnapshot lookup 은 (currentUserId, materialId) composite 라
+    // 다른 user annotation 노출 위험 X.
     const materials = await this.prisma.pdfMaterial.findMany({
-      where: { subjectId, ownerId, deletedAt: null },
+      where: {
+        subjectId,
+        deletedAt: null,
+        OR: [
+          { ownerId },
+          {
+            uploadStatus: "uploaded",
+            owner: {
+              role: {
+                in: ["MASTER", "ADMIN"]
+              }
+            }
+          }
+        ]
+      },
       select: { id: true },
       orderBy: { createdAt: "asc" }
     });
