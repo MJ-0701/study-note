@@ -1,149 +1,141 @@
 ---
-title: Grafana + Prometheus 자체 호스팅 가이드
+title: Grafana + Prometheus 임시 부팅 runbook (Azure for Students 비용 보호)
 owner: infra
-status: draft
+status: temporary
 created_at: 2026-05-28
 last_reviewed_at: 2026-05-28
 ---
 
-# Grafana + Prometheus on ACA (B path)
+# Grafana + Prometheus on ACA — 임시 사용 전용
 
-study-note 운영 지표의 두 번째 channel.
+study-note 운영 지표의 보조 channel.
 
-- **A** (already live) = Datadog (push). admin SPA `/admin.html#ops` panel + Datadog Public Dashboard URL.
-- **B** (이 문서) = Prometheus (pull) + Grafana. study-note-api `/api/metrics` 를 scrape, Grafana 가 시각화. Datadog plugin 이 enterprise-only 라서 무료 self-host stack 별도 구축.
+- **Always-on** = Datadog (push). admin SPA `/admin.html#ops` panel + Datadog Public Dashboard URL. **여기가 SoT**.
+- **Temporary self-host** = Prometheus (pull) + Grafana. 면접/시연/운영 확인 직전에 **올렸다 끄는** 운영. 학생 크레딧 ($100) 안 영구 상시 운영 X.
 
-## 구성
+## 왜 임시인가
 
-| Component | image | port | ACA Container App |
-|---|---|---|---|
-| study-note-api | (기존) | 3000 (인지 internal) | `study-note-api` (기존) |
-| Prometheus | `ghcr.io/<owner>/study-note-prometheus:latest` | 9090 | `study-note-prometheus` (신규) |
-| Grafana | `ghcr.io/<owner>/study-note-grafana:latest` | 3000 | `study-note-grafana` (신규) |
+Azure for Students $100 credit + 현재 월 과금:
+- MySQL Flex (B1ms, 20GB) ≈ ₩5,500/월 (확정).
+- DNS ≈ ₩200/월.
+- ACA api (min=1, 0.25 vCPU / 0.5 GiB) = 무료 grant 안 (현재 청구 0).
 
-같은 Container Apps Environment 안. ACA service discovery 가 internal FQDN (`study-note-prometheus`, `study-note-grafana`) 로 호출 가능.
+Grafana + Prometheus always-on (min=1) 추가 비용:
+- 0.75 vCPU + 1.5 GiB × 24h × 30d = 1.94M vCPU-s + 3.89M GiB-s.
+- 무료 grant (180K vCPU-s / 360K GiB-s) 초과량 청구.
+- **추정 idle ₩25,000~27,000/월 / active ₩86,000/월** — MySQL 보다 비쌈.
 
-## Image build + push
+→ 항상 띄우지 않는다. 시연 전 부팅, 끝나면 종료.
 
-`infra-v*` tag 푸시 → `.github/workflows/infra-release.yml` 가 두 image 빌드 + ghcr push.
+## 사전 준비 (한 번만)
 
-```bash
-# repo 안에서
-git tag -a infra-v0.1.0 -m "first Prometheus + Grafana image build"
-git push origin infra-v0.1.0
-```
+### A. GHCR image public 변경
 
-또는 workflow_dispatch 로 수동 실행:
+GitHub.com → 본인 profile → **Packages** tab → 각 image:
+- `study-note-prometheus` → Settings → "Danger Zone" → **Change visibility → Public**.
+- `study-note-grafana` → 동일.
 
-```bash
-gh workflow run infra-release.yml
-```
+(private 면 ACA pull 시 PAT secret 필요 — public 이 간단.)
 
-빌드 끝나면 GHCR 에 이미지 두 개:
-- `ghcr.io/mj-0701/study-note-prometheus:latest`
-- `ghcr.io/mj-0701/study-note-grafana:latest`
-
-GHCR 이미지가 private 면 ACA 가 GHCR pull 권한 필요. workflow 가 `packages: write` 권한으로 push 하지만, public/private 가시성은 ghcr.io 콘솔에서 별 설정. **public 권장** (운영 image 자체에 secret 없음).
-
-## ACA Prometheus Container App 생성
+### B. ACA Environment 이름 = `study-note-cae`
 
 ```bash
-# admin password 등 secret 없음 — Prometheus 는 internal 만 expose 권장.
-# 단 demo 용으로 external = true 도 가능 (anonymous read).
-az containerapp create \
-  --name study-note-prometheus \
-  --resource-group study-note-be-rg \
-  --environment study-note-be-env \
-  --image ghcr.io/mj-0701/study-note-prometheus:latest \
-  --target-port 9090 \
-  --ingress internal \
-  --min-replicas 1 \
-  --max-replicas 1 \
-  --cpu 0.25 \
-  --memory 0.5Gi
-
-# 만약 environment 이름이 다르면:
-#   az containerapp env list --resource-group study-note-be-rg
-# 로 정확한 environment 이름 확인.
+az containerapp env list -g study-note-be-rg --query "[].name" -o tsv
+# study-note-cae
 ```
 
-(Container Apps Environment 이름 확인 = `az containerapp show -n study-note-api -g study-note-be-rg --query properties.managedEnvironmentId -o tsv`.)
-
-## ACA Grafana Container App 생성
+## 부팅 (시연 전)
 
 ```bash
-# admin 비밀번호 (anonymous read 외 admin 작업 시).
-az containerapp secret set \
-  --name study-note-grafana \
-  --resource-group study-note-be-rg \
-  --secrets grafana-admin-password=<STRONG_PASSWORD>
-
-# 단 secret set 은 container app 가 존재해야 함. 첫 create 시 --secrets 같이.
-az containerapp create \
-  --name study-note-grafana \
-  --resource-group study-note-be-rg \
-  --environment study-note-be-env \
-  --image ghcr.io/mj-0701/study-note-grafana:latest \
-  --target-port 3000 \
-  --ingress external \
-  --min-replicas 1 \
-  --max-replicas 1 \
-  --cpu 0.5 \
-  --memory 1.0Gi \
-  --secrets grafana-admin-password=<STRONG_PASSWORD> \
-  --env-vars \
-    GF_SECURITY_ADMIN_PASSWORD=secretref:grafana-admin-password
+bash infra/monitoring-up.sh
 ```
 
-생성 후 fqdn 확인:
+또는 npm script:
 
 ```bash
-az containerapp show \
-  --name study-note-grafana \
-  --resource-group study-note-be-rg \
-  --query "properties.configuration.ingress.fqdn" -o tsv
-# 예: study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io
+pnpm run infra:monitoring:up
 ```
 
-## admin SPA link 활성
+내부 동작:
+1. Prometheus container app create (internal ingress, min=1, 0.25 vCPU/0.5 GiB).
+2. Grafana container app create (external ingress, min=1, 0.5 vCPU/1.0 GiB, secret password).
+3. Grafana fqdn 출력.
 
-발급된 Grafana FQDN 을 Vercel env 에 등록 — admin ops 탭 link 두 번째:
+부팅 후 user action:
+```bash
+# Grafana URL 받아서 admin SPA link 활성 (선택).
+vercel env add VITE_GRAFANA_URL production
+# value: https://<grafana-fqdn>/d/study-note-ops
+git tag -a fe-v0.1.<next> -m "redeploy with grafana url"
+git push origin fe-v0.1.<next>
+```
+
+## 종료 (시연 후)
+
+**시연 끝나면 즉시**:
 
 ```bash
-# 만약 Datadog public URL 만 link 표시 중이라면 두 개 별도 노출:
-# 옵션 1: VITE_PUBLIC_DASHBOARD_URL 를 Grafana 로 바꾸고 Datadog 는 별도 env
-# 옵션 2: VITE_PUBLIC_DASHBOARD_URL_2 신규 (코드 변경 필요)
-
-vercel env add VITE_PUBLIC_DASHBOARD_URL production
-# value: https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops
+bash infra/monitoring-down.sh
 ```
 
-또는 Porkbun 도메인 `grafana.910701.xyz` → ACA Grafana fqdn 으로 CNAME → ACA custom domain binding + managed TLS. 안정적 URL.
+또는:
 
-## 검증 순서
+```bash
+pnpm run infra:monitoring:down
+```
 
-1. **be-v0.1.15** (or later) BE deploy 후 → `curl https://study-note.api.910701.xyz/api/metrics` 가 Prometheus text format 반환 (HTTP 200, header `Content-Type: text/plain`).
-2. `infra-v*` tag push → infra-release.yml 가 image build + ghcr push (2~3분).
-3. ACA Prometheus + Grafana create (위 az 명령).
-4. Grafana fqdn 접속 → "study-note Live Ops (Self-host, Prometheus)" dashboard 보임.
-5. 처음엔 데이터 없음 — `curl https://study-note.910701.xyz/api/v1/auth/me` 등으로 traffic 발생시키면 채워짐 (15s scrape interval).
+내부 동작 (택 1):
+- **A. scale-to-zero** (resource 보존, 빠른 재기동):
+  ```bash
+  az containerapp update -n study-note-grafana    -g study-note-be-rg --min-replicas 0 --max-replicas 1
+  az containerapp update -n study-note-prometheus -g study-note-be-rg --min-replicas 0 --max-replicas 1
+  ```
+  → 진행: replicas=0 / 차세 idle traffic 들어오면 cold-start. Prometheus 는 scrape 안 함 (멈춤).
+  → 비용: ACA 0, idle 시.
+- **B. 완전 삭제** (가장 안전):
+  ```bash
+  az containerapp delete -n study-note-grafana    -g study-note-be-rg --yes
+  az containerapp delete -n study-note-prometheus -g study-note-be-rg --yes
+  ```
+  → 다음에 다시 띄울 때 `monitoring-up.sh` 재실행.
 
-## 비용 추정
+기본 = **A (scale-to-zero)** — 부팅 빠름. 더 안전 원하면 **B**.
 
-ACA 무료 credit:
-- 매월 첫 180,000 vCPU-초 + 360,000 GiB-초 무료.
-- Prometheus 0.25 vCPU + 0.5 GiB = ~648,000 vCPU-초/월 (24/7).
-- Grafana 0.5 vCPU + 1.0 GiB = ~1,296,000 vCPU-초/월.
+## Caveat
 
-→ 무료 credit 부족할 수 있음. 결과 = 월 ~$15~30 추정 (Standard tier 기준).
+- **Prometheus min=0**: scrape 안 함. data 손실 (no PV). 장기 retention 불가.
+- **Grafana min=0**: cold-start 첫 접속 시 10~30s 지연.
+- **장기 historical monitoring** = Datadog 가 SoT. self-host 는 demo / spike 용.
+- **External ingress 보안**: Grafana 가 외부 노출됨 — 강한 admin password + anonymous viewer (read-only).
+- **Prometheus 는 internal only** — 외부 노출 X.
 
-비용 ↓ 옵션:
-- min-replicas=0 — scale-to-zero. 단 Grafana 첫 접속 시 cold-start.
-- 더 작은 cpu/memory.
-- 또는 demo 용으로만 일시 띄우고 종료.
+## 사용 흐름 요약
 
-## Open question
+```
+시연 30분 전:
+  bash infra/monitoring-up.sh
+  → vercel env add VITE_GRAFANA_URL ...
+  → fe-v0.1.<next> tag push
 
-- **TLS** — `grafana.910701.xyz` custom domain 시 ACA managed cert 자동 발급 (DNS validation 완료 후).
-- **Auth** — anonymous read 활성. admin login 막으려면 `GF_AUTH_DISABLE_LOGIN_FORM=true`.
-- **Persistence** — Prometheus / Grafana storage 가 ACA replicas restart 시 손실. 영속 필요 시 Azure Files volume mount.
+시연 진행:
+  /admin.html#ops 에 Datadog + Grafana 두 link 동시 표시.
+  면접관 click → 외부 Grafana 대시보드 (24h scale).
+
+시연 후 (즉시):
+  bash infra/monitoring-down.sh
+  → 청구 0.
+
+(VITE_GRAFANA_URL 은 env 에 남겨도 OK — URL 만 dead link 됨.
+admin SPA 가 fetch 안 함, 단순 anchor.)
+```
+
+## 추가 비용 보호 옵션
+
+study-note-api min-replicas=1 도 비용 잠재 — 면접 외 idle 시 0 로 변경 고려:
+
+```bash
+# 시연 끝나면 (학생 크레딧 보호)
+az containerapp update -n study-note-api -g study-note-be-rg --min-replicas 0
+```
+
+→ cold-start 5~35s 다시 발생. UptimeRobot keep-alive 가 완화. 일상 운영 시 trade-off.
