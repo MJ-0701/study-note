@@ -1154,6 +1154,24 @@ describe("DDD Slice 1b: factory deterministic injection", () => {
     assert.notEqual(a.id, b.id, "position 변경 시 suffix 달라야 함");
   });
 
+  it("createTextBox({ at }) — corner positions {0,0} 와 {1,1} 다른 id (Codex P2 round-3)", () => {
+    const a = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0, y: 0 },
+      at: 1700000000005
+    });
+    const b = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 1, y: 1 },
+      at: 1700000000005
+    });
+    assert.notEqual(a.id, b.id, "corner position collision 없음");
+    assert.equal(a.id, "textbox-1700000000005-0-0");
+    assert.equal(b.id, "textbox-1700000000005-1000-1000");
+  });
+
   it("createTextBox() — at 미주입 시 backward compat", () => {
     const tb = createTextBox({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
     assert.ok(tb.id.startsWith("textbox-"));
