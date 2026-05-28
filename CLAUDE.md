@@ -211,9 +211,18 @@ CLAUDE.md (Claude Code adapter) 와 짝이 되는 AGENTS.md (Codex) / GEMINI.md 
   `S3_REGION=auto`, `S3_BUCKET=study-note-prod`. AWS S3 를 사용하지 않는다.
 - DB = Azure MySQL Flex (user / session). 새 영속화 시 우선 R2 object storage 검토,
   관계형이 필요한 경우만 MySQL 신규 테이블.
-- 호스팅: Azure SWA (frontend) + Azure Container Apps (backend, min-replicas=0
-  → cold start 가능, sprint-15 의 keep-alive workflow 가 완화).
-- 도메인: Porkbun `910701.xyz` (운영 = `study-note.910701.xyz`).
+- 호스팅 (frontend) = **Vercel**. `fe-v*` tag push → `.github/workflows/fe-release.yml`
+  ("FE Release Pipeline (Vercel)") 가 **유일한 prod 배포 경로**. Vercel git
+  auto-deploy 는 Ignored Build Step ("Don't build anything") + `vercel.json`
+  `git.deploymentEnabled=false` 로 차단. 과거 "Azure SWA (frontend)" 표기는
+  stale — decision 0004 의 SWA 계획에서 Vercel 로 이관됨 (2026-05-28 확인). FE
+  배포 = `git tag fe-v0.1.NN <commit> && git push origin fe-v0.1.NN` (최신 tag
+  = `git tag -l 'fe-v*' | sort -V | tail`).
+- 호스팅 (backend) = Azure Container Apps. `be-v*` tag → be-release.yml.
+  min-replicas=0 → cold start 가능, sprint-15 의 keep-alive workflow 가 완화.
+  infra = `infra-v*` → infra-release.yml.
+- 도메인: Porkbun `910701.xyz` (운영 = `study-note.910701.xyz`, FE custom domain
+  = Vercel).
 - 신규 storage 작업은 새 R2 provider 도입 불필요. 기존 `StoragePort` /
   `S3StorageService` 의 `putObject`/`getObject` 재사용 + key prefix 분리
   (예: `materials/`, `notes/`, `annotations/`).
