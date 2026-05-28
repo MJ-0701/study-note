@@ -20,9 +20,17 @@ interface ExternalDashboardLink {
   description: string;
 }
 function readExternalLinks(): ExternalDashboardLink[] {
-  const base =
-    (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim().replace(/\/$/, "") ||
-    DEFAULT_GRAFANA_BASE;
+  // VITE_GRAFANA_URL 이 legacy 단일 dashboard pointer (예: '<host>/d/study-note-ops')
+  // 일 수 있어 origin 만 추출 — 4 dashboard 분리 노출 path 가 중복되지 않도록.
+  const raw = (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim();
+  let base = DEFAULT_GRAFANA_BASE;
+  if (raw) {
+    try {
+      base = new URL(raw).origin;
+    } catch {
+      base = raw.replace(/\/$/, "").replace(/\/d\/.*$/, "");
+    }
+  }
   return [
     {
       url: `${base}/d/study-note-ops`,
