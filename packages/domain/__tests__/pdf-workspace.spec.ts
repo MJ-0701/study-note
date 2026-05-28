@@ -47,6 +47,9 @@ import {
   // Eraser
   setEraserShape,
   setEraserSize,
+  // Sticky / Ink (DDD Slice 1b deterministic factory)
+  createStickyNote,
+  createInkStroke,
   // Hydration
   hydrateSubjectPdfWorkspace,
   createEmptyPdfWorkspace,
@@ -1073,6 +1076,48 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
 // ---------------------------------------------------------------------------
 // createEmptyPdfWorkspace — sprint-12 확장 검증
 // ---------------------------------------------------------------------------
+// DDD Slice 1b — F-5 partial: factory 함수 deterministic mode 검증.
+describe("DDD Slice 1b: factory deterministic injection", () => {
+  it("createStickyNote(at) → id + updatedAt 가 동일 ts 사용", () => {
+    const note = createStickyNote(2, "text", { x: 0.1, y: 0.2 }, 1700000000000);
+    assert.equal(note.id, "note-1700000000000-100-200");
+    assert.equal(note.blocks[0]?.id, "block-1700000000000");
+    assert.equal(note.updatedAt, new Date(1700000000000).toISOString());
+  });
+
+  it("createStickyNote() — at 미주입 시 Date.now() 사용 (backward compat)", () => {
+    const before = Date.now();
+    const note = createStickyNote(1, "text", { x: 0, y: 0 });
+    const after = Date.now();
+    const tInId = Number(note.id.split("-")[1]);
+    assert.ok(tInId >= before && tInId <= after, `id ts in [${before}, ${after}]`);
+  });
+
+  it("createInkStroke(at) → id + createdAt 가 동일 ts", () => {
+    const stroke = createInkStroke(3, [{ x: 0, y: 0, pressure: 0.5 }], 1700000000001);
+    assert.equal(stroke.id, "stroke-1700000000001-1");
+    assert.equal(stroke.createdAt, new Date(1700000000001).toISOString());
+  });
+
+  it("createTextBox({ at }) → id + createdAt + updatedAt 가 동일 ts", () => {
+    const tb = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0.5, y: 0.5 },
+      at: 1700000000002
+    });
+    assert.ok(tb.id.startsWith("textbox-1700000000002-"));
+    assert.equal(tb.createdAt, new Date(1700000000002).toISOString());
+    assert.equal(tb.updatedAt, tb.createdAt);
+  });
+
+  it("createTextBox() — at 미주입 시 backward compat", () => {
+    const tb = createTextBox({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    assert.ok(tb.id.startsWith("textbox-"));
+    assert.ok(new Date(tb.createdAt).getTime() > 0);
+  });
+});
+
 describe("createEmptyPdfWorkspace: sprint-12 확장", () => {
   it("textBoxes + checklists + tables + charts + eraser defaults 가 초기화됨", () => {
     const ws = createEmptyPdfWorkspace("sub-test");
