@@ -609,7 +609,7 @@ describe("AC8: logging redaction — payload / clientRevision 노출 X", () => {
 // ─── PayloadTooLarge ──────────────────────────────────────────────────────────
 
 describe("payload size cap (sprint-2/S1 회귀)", () => {
-  it("256KB 초과 → PayloadTooLargeException", async () => {
+  it("4MB 초과 → PayloadTooLargeException", async () => {
     const prisma = {
       pdfMaterial: {
         findFirst: async () => ({ id: "mat-001" }),
@@ -628,7 +628,7 @@ describe("payload size cap (sprint-2/S1 회귀)", () => {
       putJsonObject: async () => undefined
     };
     const service = makeService(prisma, storage);
-    const huge = { blob: "x".repeat(300 * 1024) };
+    const huge = { blob: "x".repeat(5 * 1024 * 1024) };
     let err: PayloadTooLargeException | null = null;
     try {
       await service.putAnnotation(OWNER, "mat-001", huge);

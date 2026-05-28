@@ -15,11 +15,14 @@ import { MetricsService } from "../observability/metrics.service";
 import { PdfMaterialRepository } from "./pdf-material.repository";
 import { AnnotationSnapshotRepository } from "./annotation-snapshot.repository";
 
-// sprint-2/S1: payload size hard cap.
-const MAX_PAYLOAD_BYTES = 256 * 1024;
-// sprint-W21-sprint-2/S2 (R7): batch response cap.
+// payload size hard cap. 2026-05-28: 256KB → 4MB. annotation snapshot 은 material 의
+// 전체 ink stroke 를 매 저장마다 PUT 하는 모델이라 필기가 쌓이면 256KB(=약 50획)를 쉽게
+// 넘겨 413 으로 저장 실패 → 필기 소실. 페이로드는 R2 object storage 에 저장되므로 size 여유.
+// (장기 fix = snapshot 대신 delta/압축 — bl-annotation-payload-growth backlog.)
+const MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
+// sprint-W21-sprint-2/S2 (R7): batch response cap. 단일 cap 상향에 맞춰 batch 도 비례 상향.
 const BATCH_MAX_MATERIALS = 50;
-const BATCH_MAX_BYTES = 1024 * 1024;
+const BATCH_MAX_BYTES = 8 * 1024 * 1024;
 
 /** canonical wire entry — plan §R2. */
 export interface AnnotationEntry {
