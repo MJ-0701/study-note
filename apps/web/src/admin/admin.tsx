@@ -9,23 +9,42 @@ import { TermsPanel } from "./terms-panel";
 const BACKEND_BASE =
   (import.meta.env.VITE_BACKEND_BASE as string | undefined) ?? "";
 
-const DEFAULT_GRAFANA_DASHBOARD_URL =
-  "https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops";
+const DEFAULT_GRAFANA_BASE =
+  "https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io";
 
-// 운영 지표 탭의 외부 원본 대시보드 link.
-// Grafana + Prometheus 를 공개 안내/시연용 SoT 로 사용한다.
+// sprint-W22-sprint-24: 4 dashboard (Live Ops APM / Product / Cost / SLO) 분리 노출.
+// 운영 지표 탭의 외부 원본 대시보드 link 목록.
 interface ExternalDashboardLink {
   url: string;
   label: string;
+  description: string;
 }
 function readExternalLinks(): ExternalDashboardLink[] {
-  const grafanaUrl =
-    (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim() ||
-    DEFAULT_GRAFANA_DASHBOARD_URL;
-  const label =
-    (import.meta.env.VITE_GRAFANA_LABEL as string | undefined)?.trim() ||
-    "Grafana 운영 대시보드";
-  return [{ url: grafanaUrl, label }];
+  const base =
+    (import.meta.env.VITE_GRAFANA_URL as string | undefined)?.trim().replace(/\/$/, "") ||
+    DEFAULT_GRAFANA_BASE;
+  return [
+    {
+      url: `${base}/d/study-note-ops`,
+      label: "APM Live Ops",
+      description: "API 호출량 · 5xx · p95 latency · CAS 충돌 · Node.js heap/event loop"
+    },
+    {
+      url: `${base}/d/study-note-product`,
+      label: "Product",
+      description: "DAU · 신규가입 · 콘텐츠 누적 · 역할 분포 (30min cron)"
+    },
+    {
+      url: `${base}/d/study-note-cost`,
+      label: "Cost",
+      description: "R2 storage/object · MySQL row · Datadog ingestion (6h cron)"
+    },
+    {
+      url: `${base}/d/study-note-slo`,
+      label: "SLO",
+      description: "Availability 99.5% · p95 latency 800ms · sync success 99.0% (7d)"
+    }
+  ];
 }
 const EXTERNAL_DASHBOARD_LINKS: ExternalDashboardLink[] = readExternalLinks();
 
@@ -563,28 +582,30 @@ function OpsDashboardPanel() {
       </div>
 
       <p className="ops-panel-summary">
-        운영 지표는 Grafana 대시보드에서 확인합니다. Prometheus 가 API 의 /api/metrics 를
-        15초마다 수집하고, Datadog snapshot 은 개발자 참고용으로만 남깁니다.
+        운영 지표는 Grafana 대시보드 4종에서 확인합니다. Prometheus 가 API 의
+        /api/metrics 를 15초마다 수집하고, Datadog snapshot 은 개발자 참고용으로만 남깁니다.
       </p>
 
       <div className="ops-external-link" role="note">
         <p>
-          <strong>상세 그래프는 Grafana 에서 확인하세요.</strong>{" "}
-          호출량, 5xx, p95 지연, CAS 충돌, Node.js heap/event loop 를 한 화면에서 봅니다.
+          <strong>아래 대시보드 중 하나를 골라 여세요.</strong>{" "}
+          용도별로 분리돼 있습니다 (APM · Product · Cost · SLO).
         </p>
-        <div className="ops-external-link-row">
+        <ul className="ops-external-link-list">
           {EXTERNAL_DASHBOARD_LINKS.map((link) => (
-            <a
-              key={link.url}
-              className="ops-external-link-btn"
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {link.label} 열기 ↗
-            </a>
+            <li key={link.url} className="ops-external-link-item">
+              <a
+                className="ops-external-link-btn"
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {link.label} 열기 ↗
+              </a>
+              <span className="ops-external-link-desc">{link.description}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );

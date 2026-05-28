@@ -562,6 +562,39 @@
   opacity: 0.9;
 }
 
+/* sprint-W22-sprint-24: 4 dashboard 리스트 (APM/Product/Cost/SLO). */
+.ops-external-link-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  width: 100%;
+}
+
+.ops-external-link-item {
+  align-items: center;
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 4px;
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: minmax(160px, max-content) 1fr;
+  padding: 8px 12px;
+}
+
+.ops-external-link-desc {
+  color: var(--ds-fg-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .ops-external-link-item {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* admin tab nav — 사용자 관리 / 운영 지표 별도 페이지 라우팅 */
 .admin-tabs {
   border-bottom: 1px solid var(--ds-rule);
