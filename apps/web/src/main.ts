@@ -219,7 +219,6 @@ import {
   type InkStrokeContext,
   type InkStrokeDomainHelpers
 } from "./pdf-workspace/ink-stroke";
-import { inkDebug, inkDebugEnabled } from "./pdf-workspace/ink-debug";
 import {
   applyQueuedDrillHighlight as applyQueuedDrillHighlightModule,
   getInspectorDrill,
@@ -2784,24 +2783,21 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  if (inkDebugEnabled()) {
-    const liveLayer = surface.querySelector("[data-live-ink-layer]");
-    const tgt = `${(target.tagName || "").toLowerCase()}.${(target.getAttribute("class") || "").split(" ")[0] || "-"}`;
-    inkDebug(
-      `DOWN tool=${material.selectedTool} pType=${event.pointerType} pId=${event.pointerId} layer=${liveLayer ? "Y" : "N"} tgt=${tgt}`
-    );
-  }
-
   if (material.selectedTool !== "pen") {
     return;
   }
 
   // sprint-W22-sprint-3 / slice-2c — ink stroke begin (pdf-workspace/ink-stroke.ts).
+  const liveInkLayerPresent = surface.querySelector("[data-live-ink-layer]") !== null;
   beginInkStroke(event, surface, subjectId, material, point);
 
-  if (inkDebugEnabled()) {
-    const a = peekActiveInkStroke();
-    inkDebug(`  begin-> active=${a ? `Y pts=${a.points.length} pId=${a.pointerId}` : "NO"}`);
+  // 관측: 펜 pointerdown 이 들어왔으나 stroke 가 시작되지 못한 anomaly (live ink
+  // layer 누락 등) 를 Datadog 으로 기록. 실수업 중 "획 누락" 재발 시 root cause 추적용.
+  if (!peekActiveInkStroke()) {
+    trackRumAction("pen-stroke.begin-failed", {
+      pointer_type: event.pointerType,
+      live_layer: liveInkLayerPresent
+    });
   }
 }
 
@@ -3062,12 +3058,6 @@ function handleDocumentPointerMove(event: PointerEvent): void {
 
   // sprint-W22-sprint-3 / slice-2c — ink stroke extend (pdf-workspace/ink-stroke.ts).
   // RAF batch + getCoalescedEvents 내부 처리.
-  if (inkDebugEnabled() && event.pointerType === "pen") {
-    const a = peekActiveInkStroke();
-    if (!a || a.pointerId !== event.pointerId) {
-      inkDebug(`MOVE-DROP active=${a ? "Y" : "NO"} match=${a ? a.pointerId === event.pointerId : "-"} pId=${event.pointerId}`);
-    }
-  }
   extendInkStroke(event, inkStrokeCtx, inkStrokeDomainHelpers);
 }
 
@@ -3131,12 +3121,15 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-W22-sprint-3 / slice-2c — ink stroke commit (pdf-workspace/ink-stroke.ts).
   // points>1 → workspace push + RAF (renderApp + reattach + measure RUM emit).
   // points<=1 → skip metric + state reset.
-  if (inkDebugEnabled()) {
-    const a = peekActiveInkStroke();
-    if (a || event.pointerType === "pen") {
-      inkDebug(
-        `${event.type.toUpperCase()} active=${a ? `Y pts=${a.points.length} match=${a.pointerId === event.pointerId}` : "NO"} pId=${event.pointerId}`
-      );
+  // 관측: 진행 중인 펜 stroke 가 pointercancel 로 중단된 anomaly (iPad Safari palm/
+  // hover 판정 등) 를 Datadog 으로 기록. points 수가 작으면 "획 누락" 증상과 직결.
+  if (event.type === "pointercancel") {
+    const active = peekActiveInkStroke();
+    if (active && active.pointerId === event.pointerId) {
+      trackRumAction("pen-stroke.cancel", {
+        points: active.points.length,
+        pointer_type: event.pointerType
+      });
     }
   }
   commitInkStroke(event, inkStrokeCtx, inkStrokeCallbacks, inkStrokeDomainHelpers);
