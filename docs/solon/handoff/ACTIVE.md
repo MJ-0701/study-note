@@ -10,7 +10,7 @@
 - BE: ProductMetricsCron(30min 13 gauge) + CostMetricsCron(6h 4 gauge) + `/api/metrics` Bearer token gate(AC14) + log-derived metric 10 + TelemetryController(widget create).
 - Infra: Prometheus tsdb **Azure Files 영속** + Grafana 4 dashboard provisioning(코드 SoT) + Bearer auth cutover.
 - FE: widget telemetry beacon + admin `#ops` 4-dashboard 링크 + 별표 drag resize + 자동저장 outcome panel.
-- 배포 tag: be-v0.1.22~32, fe-v0.1.52~57, infra-v0.1.4~7. 전부 prod live.
+- 배포 tag: be-v0.1.22~34, fe-v0.1.52~59, infra-v0.1.4~7. 전부 prod live. (be-v0.1.34=annotation cap 4MB, fe-v0.1.59=F-12+펜 텍스트선택 fix.)
 - PR #85~111 머지 완료.
 
 ### 2. DDD 리팩토링 — 8 slice 완료 (audit: docs/solon/handoff/20260528-ddd-audit.md)
@@ -31,7 +31,8 @@
 
 - **upload E2E**: 실 PDF 업로드 → 자료실 노출 ✅ (F-3 분할 후 동작 동일 — be-v0.1.32 배포 success + prod health 200 / materials 401).
 - **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
-- **iPad 펜 "두 번째 획 누락"**: 🔴 **2026-05-28 실수업 중 실제 재현됨** (user 보고). telemetry(fe-v0.1.57 RUM emit) prod live 상태라 그 순간 RUM 에 찍혔을 것. **다음 first action (집에서, DD key 필요) = Datadog RUM 확인** — app.us5.datadoghq.com → RUM → `@action.name:pen-stroke.cancel`(`@context.points` 작으면 root cause 확정) / `pen-stroke.begin-failed`(`live_layer:false`). 둘 다 0이면 제3경로 = 계측 보강. RUM emit = main.ts:2797(begin-failed)/3129(cancel). 로컬엔 DD key 없음 (ACA secret 한정).
+- **iPad 펜 "두 번째 획 누락"**: ✅ **RESOLVED (2026-05-29)** — 실은 두 버그. (1) **iOS Safari 텍스트선택 hijack** = 진짜 root cause (펜 터치를 PDF 텍스트 선택으로 가로챔) → fix `.pdf-workspace` user-select:none, **fe-v0.1.59 배포**. (2) **annotation 413** (payload 256KB 초과 → 저장실패→소실) → cap 4MB, **be-v0.1.34 배포**. Safari 원격 inspector 로 확정. 상세 = [[project-ipad-pen-second-stroke]].
+  - follow-up: bl-annotation-payload-growth(snapshot 무한증가 → decimation/압축), FE 413 silent return → 사용자 경고, **API 4xx/5xx 를 trackRumError 로 RUM Error emit** (413 이 RUM Actions/Error 에 안 보여 디버깅 오래 걸림 — resources 엔 있었음).
 
 ## DDD 자율 PR run (2026-05-28 저녁, PR-only · 미배포)
 
@@ -39,7 +40,8 @@
 
 - **PR #112/#113/#115 = merge + 배포 완료** (self+cross+@codex 3계층 green). `be-v0.1.33` prod live (health 200 / materials·subjects 401 검증). #112 spec + #113 F-11(canDeleteSubject) + #115 F-10(MaterialPublicResponse DTO).
 - **PR #114** F-12 WeekNote import Concept↔Keyword invariant — **merge 완료** (main e9bcab3). self+cross+@codex 전부 green. Codex 가 trim(P2) + **XSS(P2)** 2건 발견 → 둘 다 fix (XSS = renderIntakeFeedback detail/title escapeHtml, 잠재 file.name XSS 도 동시 차단). strictness=Reject(user 승인). domain spec 6 + web build green.
-  - ⚠ **fe 배포만 미완**: `fe-v0.1.58` 이 Vercel **일일 배포 한도(100/day) 초과** 로 실패 (`api-deployments-free-per-day`). 코드/빌드 정상, 외부 rate-limit. **~24h 후 재배포 필요** = `git push origin fe-v0.1.58 --force` 또는 새 fe tag 재푸시 (limit 리셋 후). prod FE 는 현재 fe-v0.1.57 (F-12/XSS escape 미반영 — XSS 는 admin 악성 import JSON 한정이라 임시 위험 낮음).
+  - ✅ **fe-v0.1.59 로 배포 완료** (Vercel 한도 리셋 후 성공). F-12 + import XSS escape + 펜 텍스트선택 fix 전부 prod live. (fe-v0.1.58 은 한도로 실패했던 tag, fe-v0.1.59 가 대체.)
+  - ⚠ Vercel 일일한도(100/day) 재발 방지: vercel.json `git.deploymentEnabled=false`(b202f63) 로 push-당 배포 차단 — **대시보드 Git auto-deploy OFF 도 확인 권장**.
 
 ## DDD backlog — 종료
 
@@ -57,8 +59,8 @@
 ## 다음 세션 first action 후보
 
 1. 🔴 **iPad 펜 버그 — Datadog RUM 확인 (집에서, DD key 필요)**: 2026-05-28 실수업 재현됨. RUM `@action.name:pen-stroke.cancel`(points 작음 = pointercancel root cause 확정)/`pen-stroke.begin-failed`(live_layer:false) 조회 → 그 signal 로 fix 작성. 둘 다 0이면 제3경로 계측 보강.
-2. **fe-v0.1.58 재배포** (F-12 + import XSS escape) — Vercel 일일한도 리셋(~24h) 후 `git push origin fe-v0.1.58 --force` 또는 새 fe tag. **+ Vercel 대시보드 Git auto-deploy OFF 확인** (vercel.json git.deploymentEnabled=false 보완, b202f63). 단 fe 배포 1번은 vercel.json 발효 위해 필요.
-3. (완료) PR #112/#113/#115 = be-v0.1.33 prod live. #114 = merge 완료, fe 배포만 한도 대기.
+2. (완료) DDD F-3/F-10/F-11/F-12 + 펜버그(텍스트선택+413) 전부 배포 (be-v0.1.33/34, fe-v0.1.59). 펜버그 follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
+3. Vercel 대시보드 Git auto-deploy OFF 확인 (push-당 배포 한도소진 방지, b202f63 보완).
 4. R-DTO-storageKey (P3 supervised) / React migration 재평가 / CLAUDE.md infra Vercel 정정(chip).
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
