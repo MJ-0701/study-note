@@ -13,14 +13,17 @@ export function validateWeekNoteImportReferences(
   payload: WeekNoteImportPayload
 ): string[] {
   const errors: string[] = [];
-  const conceptIds = new Set(payload.concepts.map((concept) => concept.id));
-  const keywordIds = new Set(payload.requiredKeywords.map((keyword) => keyword.id));
+  // sanitizeWeekNoteImportPayload(cleanText) 가 id 앞뒤 공백을 trim 하므로, validate(=sanitize 이전)
+  // 단계의 참조 비교도 trim 정규화해야 importer 가 정리할 수 있는 payload 를 오탐 reject 하지 않음
+  // (Codex PR #114 P2). cleanText 의 HTML escape 는 양쪽 id 에 동일 적용돼 매칭에 영향 없어 trim 만으로 충분.
+  const conceptIds = new Set(payload.concepts.map((concept) => concept.id.trim()));
+  const keywordIds = new Set(payload.requiredKeywords.map((keyword) => keyword.id.trim()));
 
   for (const keyword of payload.requiredKeywords) {
     for (const conceptId of keyword.conceptIds) {
-      if (!conceptIds.has(conceptId)) {
+      if (!conceptIds.has(conceptId.trim())) {
         errors.push(
-          `requiredKeywords["${keyword.id}"].conceptIds references unknown concept "${conceptId}".`
+          `requiredKeywords["${keyword.id.trim()}"].conceptIds references unknown concept "${conceptId.trim()}".`
         );
       }
     }
@@ -28,9 +31,9 @@ export function validateWeekNoteImportReferences(
 
   for (const concept of payload.concepts) {
     for (const keywordId of concept.relatedKeywordIds) {
-      if (!keywordIds.has(keywordId)) {
+      if (!keywordIds.has(keywordId.trim())) {
         errors.push(
-          `concepts["${concept.id}"].relatedKeywordIds references unknown keyword "${keywordId}".`
+          `concepts["${concept.id.trim()}"].relatedKeywordIds references unknown keyword "${keywordId.trim()}".`
         );
       }
     }

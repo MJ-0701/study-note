@@ -57,4 +57,12 @@ describe("validateWeekNoteImportReferences (F-12 invariant)", () => {
   it("treats an empty payload as consistent", () => {
     assert.deepEqual(validateWeekNoteImportReferences(payload({})), []);
   });
+
+  it("tolerates surrounding whitespace the sanitizer would trim (Codex PR #114 P2)", () => {
+    const p = payload({
+      requiredKeywords: [{ id: "k1", conceptIds: [" c1 "] }],
+      concepts: [{ id: " c1 ", relatedKeywordIds: ["k1 "] }]
+    });
+    assert.deepEqual(validateWeekNoteImportReferences(p), []);
+  });
 });
