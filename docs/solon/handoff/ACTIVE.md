@@ -1,8 +1,8 @@
-# 🎯 ACTIVE — 운영지표 v2 완료 + DDD Repository 리팩토링 진행 중
+# 🎯 ACTIVE — 운영지표 v2 + DDD 9 slice 완료 (F-3 God Service split 포함)
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 
-## 현재 상태 (2026-05-28) — 운영지표 v2 prod 완료 + DDD 8 slice 완료
+## 현재 상태 (2026-05-28) — 운영지표 v2 prod 완료 + DDD 9 slice 완료 + E2E 검증
 
 ### 1. 운영지표 v2 (sprint-W22-sprint-24) — ✅ 완료 + prod 배포
 
@@ -10,8 +10,8 @@
 - BE: ProductMetricsCron(30min 13 gauge) + CostMetricsCron(6h 4 gauge) + `/api/metrics` Bearer token gate(AC14) + log-derived metric 10 + TelemetryController(widget create).
 - Infra: Prometheus tsdb **Azure Files 영속** + Grafana 4 dashboard provisioning(코드 SoT) + Bearer auth cutover.
 - FE: widget telemetry beacon + admin `#ops` 4-dashboard 링크 + 별표 drag resize + 자동저장 outcome panel.
-- 배포 tag: be-v0.1.22~31, fe-v0.1.52~55, infra-v0.1.4~7. 전부 prod live.
-- PR #85~109 머지 완료.
+- 배포 tag: be-v0.1.22~32, fe-v0.1.52~57, infra-v0.1.4~7. 전부 prod live.
+- PR #85~111 머지 완료.
 
 ### 2. DDD 리팩토링 — 8 slice 완료 (audit: docs/solon/handoff/20260528-ddd-audit.md)
 
@@ -23,19 +23,19 @@
 | F-8 Subjects→Term read → TermRepository | ✅ | be-v0.1.29 |
 | F-1 MaterialsService Repository (PdfMaterial + AnnotationSnapshot) | ✅ | be-v0.1.30 |
 | F-7 PdfAnnotations AnnotationSnapshotRepository | ✅ | be-v0.1.31 |
+| F-3 MaterialsService God Service split (MaterialUploadService 추출) | ✅ | PR #111, be-v0.1.32 |
 
-**결과**: API 4 service (Terms/Subjects/Materials/PdfAnnotations) = **Prisma 직접 의존 0**. (Materials 의 subject 존재검증 1곳만 cross-aggregate prisma 잔존 — 의도.)
+**결과**: API service = **Prisma 직접 의존 0** (MaterialUploadService 의 subject 존재검증 1곳만 cross-aggregate prisma 잔존 — 의도). MaterialsService = 조회/메타데이터/필기 slim, MaterialUploadService = 업로드 상태머신. material-shared.ts = 공유 헬퍼.
 
-### 3. ⚠ 검증 대기 (auth-required, 운영자 수동)
+### 3. ✅ E2E 검증 완료 (2026-05-28, 운영자 수동)
 
-- **be-v0.1.30 upload E2E**: 실 PDF 업로드 → createUploadIntent → 파일 PUT → completeUpload → 자료실 노출. smoke(health/materials 401)는 green이나 인증 흐름 미검증.
-- **be-v0.1.31 annotation/CAS E2E**: 필기 저장 + 동시 편집 CAS 충돌(409 STALE_REVISION) 동작. smoke green이나 인증 흐름 미검증.
-- 이상 시 즉시 roll-back (직전 be tag 재배포).
+- **upload E2E**: 실 PDF 업로드 → 자료실 노출 ✅ (F-3 분할 후 동작 동일 — be-v0.1.32 배포 success + prod health 200 / materials 401).
+- **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
+- **iPad 펜 "두 번째 획 누락"**: 간헐 버그, 재현 실패(입력 파이프라인 매번 정상). blind fix 회피, `pen-stroke.cancel`/`pen-stroke.begin-failed` Datadog RUM anomaly emit 만 prod 에 심음 (fe-v0.1.57). 실수업 재발 시 Datadog 누적 먼저 확인.
 
 ## DDD 잔여 backlog (user 검토 권장 — 큰 변경)
 
-- **F-3** MaterialsService God Service 책임 분할 (Upload / Annotation / Query service). Repository는 추출 완료, service split만 남음. upload E2E 검증 동반 필요.
-- **F-4** Anemic StudyNotebook (interface → class + behavior 이동). domain only.
+- **F-4** Anemic StudyNotebook (interface → class). ⚠ StudyNotebook 이 apps/web 전반 + localStorage `JSON.parse` 직렬화 → class 전환 시 plain object method 호출 footgun. 재설계(rehydration) 필요, 위험. 보류 권장.
 - **F-10** Material DTO mapping (controller raw entity → DTO). FE 응답 contract 동시 변경 필요.
 - **F-11/F-12** invariant polish (P3).
 
@@ -47,9 +47,10 @@
 
 ## 다음 세션 first action 후보
 
-1. upload + annotation E2E 검증 (운영자 수동) → 이상 없으면 DDD 잔여 진입.
-2. DDD F-3 (God Service split) 또는 F-4 (Anemic model).
+1. iPad 펜 버그 — 실수업 후 Datadog RUM `pen-stroke.cancel`(points 작음)/`begin-failed` 누적 확인. 있으면 root cause 확정 후 fix, 0이면 timing 이슈로 종결.
+2. DDD F-10 (Material DTO mapping, FE contract 동시) 또는 F-11/F-12 (P3 polish). F-4 는 localStorage 직렬화 footgun 으로 보류 권장.
 3. React migration cost 재평가 (별 트랙, `.sfs-local/sprints/` 참고).
+4. CLAUDE.md infra 정정 (FE = Vercel, "Azure SWA" stale — spawn task chip 띄움).
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 
