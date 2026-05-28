@@ -42,4 +42,14 @@ export class SubjectRepository {
   async deleteById(id: string): Promise<void> {
     await this.prisma.subject.delete({ where: { id } });
   }
+
+  /**
+   * Subject 의 자식 PdfMaterial 수 (delete preflight / child count). PdfMaterial
+   * 테이블을 읽지만 "Subject 의 자식 개수" 라는 Subject 관점 read 라 캡슐화
+   * (subjects→materials 모듈 순환 의존 회피). soft-delete 포함 전체 count
+   * (FK RESTRICT 정합, Codex Round-4 P1 lineage).
+   */
+  async countChildMaterials(subjectId: string): Promise<number> {
+    return this.prisma.pdfMaterial.count({ where: { subjectId } });
+  }
 }

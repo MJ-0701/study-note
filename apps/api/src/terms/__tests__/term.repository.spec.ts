@@ -33,6 +33,12 @@ function buildPrisma(row: unknown = { id: "t-1", grade: 1, semester: 1, title: "
         calls.push({ method: "delete", arg });
         return row;
       }
+    },
+    subject: {
+      count: async (arg: unknown) => {
+        calls.push({ method: "subject.count", arg });
+        return 3;
+      }
     }
   };
   return { prisma, calls };
@@ -82,5 +88,14 @@ describe("TermRepository", () => {
     const repo = new TermRepository(prisma as unknown as never);
     await repo.deleteById("t-1");
     assert.deepEqual(calls[0]?.arg, { where: { id: "t-1" } });
+  });
+
+  it("countChildSubjects → subject.count where termId", async () => {
+    const { prisma, calls } = buildPrisma();
+    const repo = new TermRepository(prisma as unknown as never);
+    const n = await repo.countChildSubjects("t-1");
+    assert.equal(n, 3);
+    assert.equal(calls[0]?.method, "subject.count");
+    assert.deepEqual(calls[0]?.arg, { where: { termId: "t-1" } });
   });
 });

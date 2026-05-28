@@ -33,6 +33,12 @@ function buildPrisma(row: unknown = { id: "s-1", title: "T", termId: "term-1" })
         calls.push({ method: "delete", arg });
         return row;
       }
+    },
+    pdfMaterial: {
+      count: async (arg: unknown) => {
+        calls.push({ method: "pdfMaterial.count", arg });
+        return 5;
+      }
     }
   };
   return { prisma, calls };
@@ -81,5 +87,14 @@ describe("SubjectRepository", () => {
     const repo = new SubjectRepository(prisma as unknown as never);
     await repo.deleteById("s-1");
     assert.deepEqual(calls[0]?.arg, { where: { id: "s-1" } });
+  });
+
+  it("countChildMaterials → pdfMaterial.count where subjectId", async () => {
+    const { prisma, calls } = buildPrisma();
+    const repo = new SubjectRepository(prisma as unknown as never);
+    const n = await repo.countChildMaterials("s-1");
+    assert.equal(n, 5);
+    assert.equal(calls[0]?.method, "pdfMaterial.count");
+    assert.deepEqual(calls[0]?.arg, { where: { subjectId: "s-1" } });
   });
 });

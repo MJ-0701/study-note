@@ -54,4 +54,14 @@ export class TermRepository {
   async deleteById(id: string): Promise<void> {
     await this.prisma.term.delete({ where: { id } });
   }
+
+  /**
+   * Term 의 자식 Subject 수 (delete preflight / child count). Subject 테이블을
+   * 읽지만 "Term 의 자식 개수" 라는 Term 관점의 read 라 TermRepository 가 캡슐화
+   * (terms→subjects 모듈 순환 의존 회피). soft-delete 무관 전체 count (FK RESTRICT
+   * 정합).
+   */
+  async countChildSubjects(termId: string): Promise<number> {
+    return this.prisma.subject.count({ where: { termId } });
+  }
 }
