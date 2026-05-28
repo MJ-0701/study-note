@@ -18,7 +18,7 @@ scrape_configs:
     # 동일 token 값이 study-note-api 의 METRICS_INTERNAL_TOKEN env 와 일치해야 함.
     authorization:
       type: Bearer
-      credentials_file: /etc/prometheus/metrics-token
+      credentials_file: /run/secrets/metrics-token
     static_configs:
       - targets:
           # ACA external ingress FQDN + HTTPS. internal-to-external (Prometheus
