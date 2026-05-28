@@ -646,6 +646,7 @@ describe("Legacy /api/materials/:materialId/annotation deprecation", () => {
     // controller spec 은 instance 만 만들어 메서드 동작 검증.
     const { MaterialsController } = await import("../../materials/materials.controller");
     const controller = new MaterialsController(
+      {} as unknown as import("../../materials/material-upload.service").MaterialUploadService,
       {} as unknown as import("../../materials/materials.service").MaterialsService
     );
     assert.throws(() => controller.saveAnnotationDeprecated(), GoneException);

@@ -17,9 +17,8 @@ import { describe, it } from "node:test";
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import type { HeadObjectResult } from "@study-note/storage";
 import { ObjectNotFoundError } from "@study-note/storage";
-import { MaterialsService } from "../materials.service";
+import { MaterialUploadService } from "../material-upload.service";
 import { PdfMaterialRepository } from "../pdf-material.repository";
-import { AnnotationSnapshotRepository } from "../annotation-snapshot.repository";
 
 // ─── Minimal type stubs ───────────────────────────────────────────────────────
 
@@ -130,7 +129,7 @@ function buildService(
   row: PdfMaterialRow | null,
   headResult: HeadObjectResult | Error,
   updateManyCount: number
-): MaterialsService {
+): MaterialUploadService {
   let findCallIndex = 0;
 
   const findFirstImpl: MockPrismaFindFirst = async (_args) => {
@@ -145,7 +144,7 @@ function buildService(
 
   const prisma = makePrisma(findFirstImpl, updateManyImpl) as unknown as import("@study-note/persistence").PrismaService;
   const storage = makeStorage(headResult) as unknown as import("@study-note/storage").StoragePort;
-  return new MaterialsService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService), new AnnotationSnapshotRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
+  return new MaterialUploadService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -195,7 +194,7 @@ describe("MaterialsService.completeUpload", () => {
     } as unknown as import("@study-note/persistence").PrismaService;
 
     const storage = makeStorage({ contentLength: 100 }) as unknown as import("@study-note/storage").StoragePort;
-    const service = new MaterialsService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService), new AnnotationSnapshotRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
+    const service = new MaterialUploadService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
 
     const results = await Promise.all([
       service.completeUpload("user-001", "mat-001"),
@@ -246,7 +245,7 @@ describe("MaterialsService.completeUpload", () => {
       }
     } as unknown as import("@study-note/storage").StoragePort;
 
-    const service = new MaterialsService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService), new AnnotationSnapshotRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
+    const service = new MaterialUploadService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
     const result = await service.completeUpload("user-001", "mat-001");
 
     assert.equal(result.uploadStatus, "uploaded");
@@ -325,7 +324,7 @@ describe("MaterialsService.completeUpload", () => {
       }
     } as unknown as import("@study-note/storage").StoragePort;
 
-    const service = new MaterialsService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService), new AnnotationSnapshotRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
+    const service = new MaterialUploadService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
 
     await assert.rejects(
       () => service.completeUpload("user-001", "mat-001"),
@@ -362,7 +361,7 @@ describe("MaterialsService.completeUpload", () => {
       }
     } as unknown as import("@study-note/storage").StoragePort;
 
-    const service = new MaterialsService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService), new AnnotationSnapshotRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
+    const service = new MaterialUploadService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
 
     await assert.rejects(
       () => service.completeUpload("user-001", "mat-001"),
@@ -400,7 +399,7 @@ describe("MaterialsService.completeUpload", () => {
       ...makeStorage({ contentLength: 100 }, wrongPrefix)
     } as unknown as import("@study-note/storage").StoragePort;
 
-    const service = new MaterialsService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService), new AnnotationSnapshotRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
+    const service = new MaterialUploadService(prisma, storage, new PdfMaterialRepository(prisma as unknown as import("@study-note/persistence").PrismaService));
 
     await assert.rejects(
       () => service.completeUpload("user-001", "mat-001"),
