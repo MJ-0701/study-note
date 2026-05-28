@@ -7,10 +7,12 @@
 
 | 파일명 | 대시보드 | 캡처 권장 시점 |
 |---|---|---|
-| `live-ops.png` | APM Live Ops (study-note-ops) | 부하 발생 직후 (호출량/p95 spike 보이게) |
-| `product.png` | Product (study-note-product) | DAU/역할 분포/콘텐츠 누적 값이 채워진 상태 |
-| `cost.png` | Cost (study-note-cost) | R2 storage/object 값 인입 후 |
-| `dashboards-list.png` | Grafana Dashboards 목록 | 4종 모두 보이는 목록 화면 |
+| `study-note_grafana_ops_1.png` | APM Live Ops — 최근 1시간 (실시간) | 부하 발생 직후 (호출량/p95 spike 보이게) |
+| `study-note_grafana_ops2.png` | APM Live Ops — 최근 12시간 | wave 패턴(spike + 평탄) 보이는 구간 |
+| `study-note_grafana_product.png` | Product (study-note-product) | DAU/역할 분포/콘텐츠 누적 값이 채워진 상태 |
+| `study-note_grafana_cost.png` | Cost (study-note-cost) | R2 storage/object 값 인입 후 |
+| `study-note_grafana_slo.png` | SLO (study-note-slo) | availability/latency/sync 값 인입 후 |
+| `study-note_grafana_dashboard_list.png` | Grafana Dashboards 목록 | 4종 모두 보이는 목록 화면 |
 
 ## 갱신 방법
 
