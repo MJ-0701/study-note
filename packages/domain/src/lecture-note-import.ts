@@ -8,6 +8,7 @@ import {
   type SubjectNote,
   type WeekNote
 } from "./lecture-note";
+import { validateWeekNoteImportReferences } from "./lecture-note-references";
 
 export interface WeekNoteImportPayload {
   schemaVersion: "study-note.week-note.v1";
@@ -70,10 +71,17 @@ export function validateWeekNoteImportPayload(
     return { ok: false, errors };
   }
 
+  // F-12 invariant — shape 통과 후 payload 내부 참조 일관성 검증.
+  const payload = input as unknown as WeekNoteImportPayload;
+  const referenceErrors = validateWeekNoteImportReferences(payload);
+  if (referenceErrors.length > 0) {
+    return { ok: false, errors: referenceErrors };
+  }
+
   return {
     ok: true,
     errors: [],
-    payload: input as unknown as WeekNoteImportPayload
+    payload
   };
 }
 
