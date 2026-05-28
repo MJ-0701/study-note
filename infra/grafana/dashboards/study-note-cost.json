@@ -31,7 +31,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_cost_r2_storage_gb)",
+          "expr": "max(last_over_time(study_note_cost_r2_storage_gb[6h30m]))",
           "legendFormat": "R2 GB"
         }
       ],
@@ -46,7 +46,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_cost_r2_object_count)",
+          "expr": "max(last_over_time(study_note_cost_r2_object_count[6h30m]))",
           "legendFormat": "R2 objects"
         }
       ],
@@ -60,7 +60,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_cost_mysql_row_total)",
+          "expr": "max(last_over_time(study_note_cost_mysql_row_total[6h30m]))",
           "legendFormat": "MySQL rows"
         }
       ],
@@ -74,7 +74,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_cost_dd_ingestion_gb)",
+          "expr": "max(last_over_time(study_note_cost_dd_ingestion_gb[6h30m]))",
           "legendFormat": "DD GB/h"
         }
       ],
@@ -89,7 +89,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_cost_r2_storage_gb)",
+          "expr": "max(last_over_time(study_note_cost_r2_storage_gb[6h30m]))",
           "legendFormat": "R2 GB"
         }
       ]
@@ -102,7 +102,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_cost_dd_ingestion_gb)",
+          "expr": "max(last_over_time(study_note_cost_dd_ingestion_gb[6h30m]))",
           "legendFormat": "DD GB/h"
         }
       ]

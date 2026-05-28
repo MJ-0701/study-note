@@ -31,7 +31,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_product_users_daily_active)",
+          "expr": "max(last_over_time(study_note_product_users_daily_active[35m]))",
           "legendFormat": "DAU"
         }
       ],
@@ -49,7 +49,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_product_users_new_today)",
+          "expr": "max(last_over_time(study_note_product_users_new_today[35m]))",
           "legendFormat": "new_today"
         }
       ],
@@ -63,7 +63,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_product_users_new_7d)",
+          "expr": "max(last_over_time(study_note_product_users_new_7d[35m]))",
           "legendFormat": "new_7d"
         }
       ],
@@ -77,7 +77,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_product_content_pdf_upload_24h)",
+          "expr": "max(last_over_time(study_note_product_content_pdf_upload_24h[35m]))",
           "legendFormat": "pdf_upload_24h"
         }
       ],
@@ -122,17 +122,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_product_users_role_master)",
+          "expr": "max(last_over_time(study_note_product_users_role_master[35m]))",
           "legendFormat": "master"
         },
         {
           "refId": "B",
-          "expr": "max(study_note_product_users_role_admin)",
+          "expr": "max(last_over_time(study_note_product_users_role_admin[35m]))",
           "legendFormat": "admin"
         },
         {
           "refId": "C",
-          "expr": "max(study_note_product_users_role_normal)",
+          "expr": "max(last_over_time(study_note_product_users_role_normal[35m]))",
           "legendFormat": "normal"
         }
       ]
@@ -145,32 +145,32 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(study_note_product_users_total)",
+          "expr": "max(last_over_time(study_note_product_users_total[35m]))",
           "legendFormat": "users.total"
         },
         {
           "refId": "B",
-          "expr": "max(study_note_product_content_pdf_total)",
+          "expr": "max(last_over_time(study_note_product_content_pdf_total[35m]))",
           "legendFormat": "pdf.total"
         },
         {
           "refId": "C",
-          "expr": "max(study_note_product_content_annotation_total)",
+          "expr": "max(last_over_time(study_note_product_content_annotation_total[35m]))",
           "legendFormat": "annotation.total"
         },
         {
           "refId": "D",
-          "expr": "max(study_note_product_org_term_active_count)",
+          "expr": "max(last_over_time(study_note_product_org_term_active_count[35m]))",
           "legendFormat": "term.active"
         },
         {
           "refId": "E",
-          "expr": "max(study_note_product_org_subject_avg_per_term)",
+          "expr": "max(last_over_time(study_note_product_org_subject_avg_per_term[35m]))",
           "legendFormat": "subject_avg/term"
         },
         {
           "refId": "F",
-          "expr": "max(study_note_product_org_material_avg_per_subject)",
+          "expr": "max(last_over_time(study_note_product_org_material_avg_per_subject[35m]))",
           "legendFormat": "material_avg/subject"
         }
       ],
