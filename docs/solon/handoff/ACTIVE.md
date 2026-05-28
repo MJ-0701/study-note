@@ -33,11 +33,18 @@
 - **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
 - **iPad 펜 "두 번째 획 누락"**: 간헐 버그, 재현 실패(입력 파이프라인 매번 정상). blind fix 회피, `pen-stroke.cancel`/`pen-stroke.begin-failed` Datadog RUM anomaly emit 만 prod 에 심음 (fe-v0.1.57). 실수업 재발 시 Datadog 누적 먼저 확인.
 
+## DDD 자율 PR run (2026-05-28 저녁, PR-only · 미배포)
+
+> `sfs loop` PROGRESS.md 미부트스트랩 → self-drive 로 PR 생산. 전부 **미머지·미배포** (user 검토 후 merge/배포). prod = be-v0.1.32 / fe-v0.1.57 유지.
+
+- **PR #112** MaterialUploadService 전용 spec (F-3 보강, 11 case) — Codex PASS.
+- **PR #113** F-11 Subject 삭제 불변식 → canDeleteSubject 도메인 policy — Codex PASS.
+- **PR #114** F-12 WeekNote import Concept↔Keyword 참조 일관성 invariant — Codex P2(trim 정규화) 반영, 재검토 중. ⚠ strictness tradeoff (dangling ref hard reject) 머지 전 검토.
+
 ## DDD 잔여 backlog (user 검토 권장 — 큰 변경)
 
+- **F-10** Material DTO mapping — 자율 run 에서 **분석만, 구현 보류** (contract 변경·최고위험). 근거: FE coupling 이 어댑터 `createPdfMaterialFromBackend`(packages/domain/src/pdf-workspace.ts:303) 1곳에 국소화, MaterialPublicDTO 후보 = 11 필드. ⚠ `ownerId`(spec 사용)/`storageKey`/`deletedAt` drop 전 audit 필요. 상세 = `.sfs-local/queue/pending/loopq-*-f-10-*.md`. supervised 진행 권장.
 - **F-4** Anemic StudyNotebook (interface → class). ⚠ StudyNotebook 이 apps/web 전반 + localStorage `JSON.parse` 직렬화 → class 전환 시 plain object method 호출 footgun. 재설계(rehydration) 필요, 위험. 보류 권장.
-- **F-10** Material DTO mapping (controller raw entity → DTO). FE 응답 contract 동시 변경 필요.
-- **F-11/F-12** invariant polish (P3).
 
 ## 운영 대시보드 (Grafana/Prometheus) — 금요일까지 운영
 
@@ -47,10 +54,10 @@
 
 ## 다음 세션 first action 후보
 
-1. iPad 펜 버그 — 실수업 후 Datadog RUM `pen-stroke.cancel`(points 작음)/`begin-failed` 누적 확인. 있으면 root cause 확정 후 fix, 0이면 timing 이슈로 종결.
-2. DDD F-10 (Material DTO mapping, FE contract 동시) 또는 F-11/F-12 (P3 polish). F-4 는 localStorage 직렬화 footgun 으로 보류 권장.
-3. React migration cost 재평가 (별 트랙, `.sfs-local/sprints/` 참고).
-4. CLAUDE.md infra 정정 (FE = Vercel, "Azure SWA" stale — spawn task chip 띄움).
+1. **PR #112/#113/#114 검토 → merge → 배포** (자율 run 산출, 미배포 상태). #114 는 strictness tradeoff + Codex 재검토 확인 후. merge 후 be tag 1회 배포.
+2. DDD F-10 (Material DTO, contract 변경 — `.sfs-local/queue/pending/loopq-*-f-10-*.md` 분석 참고, supervised). F-4 는 localStorage footgun 으로 보류 권장.
+3. iPad 펜 버그 — 실수업 후 Datadog RUM `pen-stroke.cancel`(points 작음)/`begin-failed` 누적 확인. 있으면 root cause 확정 후 fix, 0이면 timing 이슈로 종결.
+4. React migration cost 재평가 (별 트랙). CLAUDE.md infra 정정 (FE = Vercel, "Azure SWA" stale — spawn task chip).
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 
