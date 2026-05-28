@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "@study-note/persistence";
 import { StoragePort } from "@study-note/storage";
 import { MetricsService } from "../observability/metrics.service";
+import { PdfMaterialRepository } from "./pdf-material.repository";
 
 // sprint-2/S1: payload size hard cap.
 const MAX_PAYLOAD_BYTES = 256 * 1024;
@@ -45,7 +46,8 @@ export class PdfAnnotationsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(StoragePort) private readonly storage: StoragePort,
-    @Optional() private readonly metrics?: MetricsService
+    @Optional() private readonly metrics?: MetricsService,
+    @Optional() private readonly materialRepo?: PdfMaterialRepository
   ) {}
 
   /** R2 key — `annotations/{userId}/material-{materialId}.json`. */
@@ -60,7 +62,16 @@ export class PdfAnnotationsService {
    * AnnotationSnapshot row 자체는 (currentUserId, materialId) composite 라 다른 user
    * annotation 노출 위험 X — 본 check 는 material accessibility 만 책임.
    */
+  /**
+   * DDD audit F-1/F-7 Slice 2: Prisma 직접 노출 → PdfMaterialRepository 경유.
+   * materialRepo 가 inject 됐으면 그것 사용 (prod path). 미주입 (legacy spec) 시
+   * 내장 fallback 으로 backward compat. 다음 slice 에서 fallback 제거.
+   */
   private async ownsMaterial(ownerId: string, materialId: string): Promise<boolean> {
+    if (this.materialRepo) {
+      const row = await this.materialRepo.findAccessibleForUser(ownerId, materialId);
+      return row !== null;
+    }
     const material = await this.prisma.pdfMaterial.findFirst({
       where: {
         id: materialId,
