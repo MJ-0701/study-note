@@ -4,7 +4,7 @@
 // 처리하고 gauge 는 emit 하지 않는다. 외부 API 오류 시 warn log (token mask) + 본 라운드
 // 만 미수집, 다음 cycle 에서 자동 복구.
 
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnApplicationBootstrap } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "@study-note/persistence";
 import { MetricsService } from "./metrics.service";
@@ -23,13 +23,24 @@ const SOURCE_TAG = "cost_metrics_cron";
 const SCHEDULE_EVERY_6_HOURS = "0 */6 * * *";
 
 @Injectable()
-export class CostMetricsCronService {
+export class CostMetricsCronService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CostMetricsCronService.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    // ProductMetricsCron 과 동일: 첫 6h tick 까지 빈 cost dashboard 방지.
+    // R2/DD client 호출 (각 fetch ~수백 ms) 이 포함되지만 catch + graceful
+    // 처리되어 boot crash 위험 없음.
+    try {
+      await this.collectAndEmit();
+    } catch (err) {
+      this.logger.warn(`bootstrap collect failed err=${(err as Error).message}`);
+    }
+  }
 
   @Cron(SCHEDULE_EVERY_6_HOURS)
   async runScheduled(): Promise<void> {
