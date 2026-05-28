@@ -321,37 +321,44 @@ export function createPdfMaterialFromBackend(
   };
 }
 
+// DDD audit F-5 partial mitigation: optional `at` 가 주입되면 Date.now() 우회 →
+// reducer 가 deterministic 해진다 (테스트 / replay). 미주입 = 기존 동작 (backward
+// compat). id 와 updatedAt 가 동일 ts 를 공유하도록 단일 capture.
 export function createStickyNote(
   pageNumber: number,
   kind: StickyNoteBlockKind,
-  anchor: NormalizedPoint
+  anchor: NormalizedPoint,
+  at?: number
 ): PdfStickyNote {
+  const t = at ?? Date.now();
   return {
-    id: `note-${Date.now()}-${Math.round(anchor.x * 1000)}-${Math.round(anchor.y * 1000)}`,
+    id: `note-${t}-${Math.round(anchor.x * 1000)}-${Math.round(anchor.y * 1000)}`,
     pageNumber,
     anchor,
     blocks: [
       {
-        id: `block-${Date.now()}`,
+        id: `block-${t}`,
         kind,
         content: getDefaultBlockContent(kind)
       }
     ],
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date(t).toISOString()
   };
 }
 
 export function createInkStroke(
   pageNumber: number,
-  points: PdfInkPoint[]
+  points: PdfInkPoint[],
+  at?: number
 ): PdfInkStroke {
+  const t = at ?? Date.now();
   return {
-    id: `stroke-${Date.now()}-${points.length}`,
+    id: `stroke-${t}-${points.length}`,
     pageNumber,
     color: "#1a1a1a",
     width: 3,
     points,
-    createdAt: new Date().toISOString()
+    createdAt: new Date(t).toISOString()
   };
 }
 
@@ -394,19 +401,28 @@ export function createTextBox(input: {
   subjectId: string;
   page: number;
   position: { x: number; y: number };
+  at?: number;
 }): PdfTextBox {
-  const now = new Date().toISOString();
-  const rand = Math.floor(Math.random() * 10000);
+  const t = input.at ?? Date.now();
+  const iso = new Date(t).toISOString();
+  const normalizedPosition = normalizePdfPoint(input.position.x, input.position.y);
+  // Codex PR #87 P2 round-4: 0..1000 grid rounding 이 sub-grid distinct position
+  // 충돌 (e.g. {0.1001, 0.2} vs {0.1002, 0.2} 같은 id). 6 decimal precision
+  // (sub-micron) 으로 보존. at 미주입 시 random fallback (backward compat).
+  const id =
+    input.at !== undefined
+      ? `textbox-${t}-${normalizedPosition.x.toFixed(6)}-${normalizedPosition.y.toFixed(6)}`
+      : `textbox-${t}-${Math.floor(Math.random() * 10_000)}`;
 
   return {
-    id: `textbox-${Date.now()}-${rand}`,
+    id,
     subjectId: input.subjectId,
     page: input.page,
-    position: normalizePdfPoint(input.position.x, input.position.y),
+    position: normalizedPosition,
     size: { ...TEXT_BOX_DEFAULT_SIZE },
     content: "",
-    createdAt: now,
-    updatedAt: now
+    createdAt: iso,
+    updatedAt: iso
   };
 }
 
