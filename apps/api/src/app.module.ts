@@ -17,6 +17,8 @@ import { TermsModule } from "./terms/terms.module";
 import { SubjectsModule } from "./subjects/subjects.module";
 import { MetricsModule } from "./observability/metrics.module";
 import { TelemetryModule } from "./telemetry/telemetry.module";
+import { PdfMaterialRepository } from "./materials/pdf-material.repository";
+import { AnnotationSnapshotRepository } from "./materials/annotation-snapshot.repository";
 
 @Module({
   imports: [
@@ -41,6 +43,8 @@ import { TelemetryModule } from "./telemetry/telemetry.module";
   ],
   providers: [
     MaterialsService,
+    PdfMaterialRepository,
+    AnnotationSnapshotRepository,
     {
       provide: StoragePort,
       useFactory: createStorageProvider

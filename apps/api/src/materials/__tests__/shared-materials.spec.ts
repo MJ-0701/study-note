@@ -6,6 +6,8 @@ import { NotFoundException } from "@nestjs/common";
 import { ROLES_KEY } from "@study-note/auth";
 import { MaterialsController } from "../materials.controller";
 import { MaterialsService, parseMaterialMetadataBody } from "../materials.service";
+import { PdfMaterialRepository } from "../pdf-material.repository";
+import { AnnotationSnapshotRepository } from "../annotation-snapshot.repository";
 
 interface PdfMaterialRow {
   id: string;
@@ -125,10 +127,13 @@ function makeService(options: {
     readObjectPrefix: async (_key: string, length: number) => Buffer.from("%PDF-").subarray(0, length)
   };
 
+  const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
   return {
     service: new MaterialsService(
-      prisma as unknown as import("@study-note/persistence").PrismaService,
-      storage as unknown as import("@study-note/storage").StoragePort
+      ps,
+      storage as unknown as import("@study-note/storage").StoragePort,
+      new PdfMaterialRepository(ps),
+      new AnnotationSnapshotRepository(ps)
     ),
     annotations,
     queries
