@@ -1168,8 +1168,24 @@ describe("DDD Slice 1b: factory deterministic injection", () => {
       at: 1700000000005
     });
     assert.notEqual(a.id, b.id, "corner position collision 없음");
-    assert.equal(a.id, "textbox-1700000000005-0-0");
-    assert.equal(b.id, "textbox-1700000000005-1000-1000");
+    assert.equal(a.id, "textbox-1700000000005-0.000000-0.000000");
+    assert.equal(b.id, "textbox-1700000000005-1.000000-1.000000");
+  });
+
+  it("createTextBox({ at }) — sub-grid position 도 distinct id (Codex P2 round-4)", () => {
+    const a = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0.1001, y: 0.2 },
+      at: 1700000000006
+    });
+    const b = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0.1002, y: 0.2 },
+      at: 1700000000006
+    });
+    assert.notEqual(a.id, b.id, "sub-grid {.1001} vs {.1002} 같은 id 금지");
   });
 
   it("createTextBox() — at 미주입 시 backward compat", () => {

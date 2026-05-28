@@ -406,14 +406,12 @@ export function createTextBox(input: {
   const t = input.at ?? Date.now();
   const iso = new Date(t).toISOString();
   const normalizedPosition = normalizePdfPoint(input.position.x, input.position.y);
-  // Codex PR #87 P2 round-3: % 10_000 truncation 이 corner position collision
-  // 일으킴 ({0,0} vs {1,1} 같은 suffix). full positionful suffix 로 collision-
-  // free 보장. at 주입 시 `<x_int>-<y_int>` (0..1000 범위), 미주입 시 random.
-  const px = Math.round(normalizedPosition.x * 1000);
-  const py = Math.round(normalizedPosition.y * 1000);
+  // Codex PR #87 P2 round-4: 0..1000 grid rounding 이 sub-grid distinct position
+  // 충돌 (e.g. {0.1001, 0.2} vs {0.1002, 0.2} 같은 id). 6 decimal precision
+  // (sub-micron) 으로 보존. at 미주입 시 random fallback (backward compat).
   const id =
     input.at !== undefined
-      ? `textbox-${t}-${px}-${py}`
+      ? `textbox-${t}-${normalizedPosition.x.toFixed(6)}-${normalizedPosition.y.toFixed(6)}`
       : `textbox-${t}-${Math.floor(Math.random() * 10_000)}`;
 
   return {
