@@ -14,7 +14,6 @@ import {
   Logger,
   NotFoundException
 } from "@nestjs/common";
-import { PrismaService } from "@study-note/persistence";
 import type { Term as PrismaTerm } from "@prisma/client";
 import type { TermCreateInput, TermUpdateInput } from "./terms.dto";
 import { TermRepository } from "./term.repository";
@@ -23,10 +22,8 @@ import { TermRepository } from "./term.repository";
 export class TermsService {
   private readonly logger = new Logger(TermsService.name);
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly termRepo: TermRepository
-  ) {}
+  // DDD Slice 5: TermsService 는 Prisma 직접 의존 0 — TermRepository 만 사용.
+  constructor(private readonly termRepo: TermRepository) {}
 
   async list(): Promise<PrismaTerm[]> {
     return this.termRepo.findAllOrdered();
@@ -110,7 +107,7 @@ export class TermsService {
 
     // Service-level 409 (fast path). DB FK ON DELETE RESTRICT 가 race condition
     // defense-in-depth (Codex Round-3 P1).
-    const childCount = await this.prisma.subject.count({ where: { termId: id } });
+    const childCount = await this.termRepo.countChildSubjects(id);
     if (childCount > 0) {
       throw new ConflictException({
         errorCode: "HAS_CHILDREN",
@@ -141,7 +138,7 @@ export class TermsService {
   ): Promise<{ subjectCount: number }> {
     const term = await this.findOrThrow(id);
     ensureTermHierarchyAllowed(term, actorId, actorRole);
-    const subjectCount = await this.prisma.subject.count({ where: { termId: id } });
+    const subjectCount = await this.termRepo.countChildSubjects(id);
     return { subjectCount };
   }
 

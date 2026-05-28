@@ -59,8 +59,8 @@ interface MockPrisma {
 
 function makeService(prisma: MockPrisma): TermsService {
   const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
-  // DDD Slice 4: TermRepository 가 동일 prisma mock 의 term.* 위임.
-  return new TermsService(ps, new TermRepository(ps));
+  // DDD Slice 5: TermsService 는 TermRepository 만 의존 (Prisma 직접 0).
+  return new TermsService(new TermRepository(ps));
 }
 
 function termRow(overrides: Partial<MockTermRow> = {}): MockTermRow {

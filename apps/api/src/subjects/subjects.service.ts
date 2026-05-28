@@ -88,9 +88,7 @@ export class SubjectsService {
     // deletedAt=null/not-null 구분 없이 모든 referencing row 를 block 하므로
     // preflight 도 동일하게 count all 해야 UI/DB 정합 (Codex Round-4 P1).
     // 살아있는 / soft-deleted 도 모두 count.
-    const materialCount = await this.prisma.pdfMaterial.count({
-      where: { subjectId: id }
-    });
+    const materialCount = await this.subjectRepo.countChildMaterials(id);
     if (materialCount > 0) {
       throw new ConflictException({
         errorCode: "HAS_CHILDREN",
@@ -178,9 +176,7 @@ export class SubjectsService {
     await this.ensureParentTermAllowed(subject.termId, actorId, actorRole);
     // Codex Round-4 P1: delete preflight 과 동일하게 deletedAt 무관 count
     // (FK RESTRICT 가 모든 row block 하므로 preflight 도 정합 필요).
-    const materialCount = await this.prisma.pdfMaterial.count({
-      where: { subjectId: id }
-    });
+    const materialCount = await this.subjectRepo.countChildMaterials(id);
     return { materialCount };
   }
 
