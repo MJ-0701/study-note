@@ -99,6 +99,17 @@ export interface InkStrokeDomainHelpers {
 let activeInkStroke: ActiveInkStroke | undefined;
 let liveStrokeRafId: number | undefined;
 
+// ?inkdebug 진단 전용 sink. ink-debug 를 relative runtime import 하면 node:test
+// --experimental-strip-types 가 extension-less sibling 해결 못 함 (파일 상단
+// invariant 와 동일 사유) → DI 로 주입. main.ts 가 init 때 setInkStrokeDebugSink
+// (inkDebug) 호출. test 는 미주입 → no-op. 측정 종료 후 본 sink + 모든 호출 제거.
+let debugSink: ((line: string) => void) | undefined;
+
+/** setInkStrokeDebugSink — ?inkdebug 진단 로그 sink 주입 (main.ts init). 측정 후 제거. */
+export function setInkStrokeDebugSink(sink: (line: string) => void): void {
+  debugSink = sink;
+}
+
 // ─── Stateless helpers (named export) ─────────────────────────────────
 
 /**
@@ -151,6 +162,12 @@ export function getSurfacePoint(
 
 function updateLiveStroke(): void {
   if (!activeInkStroke) return;
+  // ?inkdebug 진단: polyline 이 DOM 에서 분리됐는데 extend 가 계속 push 중인
+  // 창(window) 감지 — 이 동안 그린 점은 화면에 안 나타남. orphan 일 때만 로그
+  // (정상 attached 는 매 RAF 발생 → flood 방지). 측정 후 제거.
+  if (!activeInkStroke.livePolyline.isConnected) {
+    debugSink?.(`  updateLive ORPHAN pts=${activeInkStroke.points.length}`);
+  }
   activeInkStroke.livePolyline.setAttribute(
     "points",
     activeInkStroke.points.map(formatSvgPoint).join(" ")
@@ -240,7 +257,10 @@ export function beginInkStroke(
   initialPoint: PdfInkPoint
 ): void {
   const liveLayer = surface.querySelector<SVGSVGElement>("[data-live-ink-layer]");
-  if (!liveLayer) return;
+  if (!liveLayer) {
+    debugSink?.("  begin-FAIL layer=null");
+    return;
+  }
 
   event.preventDefault();
   try {
@@ -281,7 +301,10 @@ export function extendInkStroke(
     return;
   }
   const surface = ctx.querySurface(activeInkStroke.subjectId);
-  if (!surface) return;
+  if (!surface) {
+    debugSink?.("  ext-FAIL surface=null");
+    return;
+  }
 
   event.preventDefault();
   const coalesced =
@@ -318,6 +341,7 @@ export function commitInkStroke(
   }
   const { subjectId, pageNumber, points } = activeInkStroke;
   const committed = points.length > 1;
+  debugSink?.(`  commit pts=${points.length} committed=${committed}`);
 
   if (committed) {
     const stroke = helpers.createInkStroke(pageNumber, points);
@@ -340,9 +364,14 @@ export function commitInkStroke(
   }
   requestAnimationFrame(() => {
     const carriedStroke = activeInkStroke;
+    // ?inkdebug 진단: 이 commit RAF 가 발사될 때 이미 다음 stroke 가 진행 중
+    // (carried=Y) 이면 renderApp 이 live ink layer 를 rebuild → 진행 중 stroke
+    // 의 polyline detach. 가설 A(연속-획 race)의 결정 신호. 측정 후 제거.
+    debugSink?.(`  RAF render carried=${carriedStroke ? `Y pts=${carriedStroke.points.length}` : "N"}`);
     callbacks.renderApp();
     if (carriedStroke && activeInkStroke === carriedStroke) {
       reattachLiveInkPolyline(carriedStroke, ctx);
+      debugSink?.(`  RAF reattach pts=${carriedStroke.points.length}`);
     }
     requestAnimationFrame(() => {
       measurePenStrokeNextPaintFromMark(markId, callbacks);
