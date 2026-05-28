@@ -1099,16 +1099,40 @@ describe("DDD Slice 1b: factory deterministic injection", () => {
     assert.equal(stroke.createdAt, new Date(1700000000001).toISOString());
   });
 
-  it("createTextBox({ at }) → id + createdAt + updatedAt 가 동일 ts", () => {
-    const tb = createTextBox({
+  it("createTextBox({ at }) → id + createdAt + updatedAt 가 동일 ts + suffix deterministic (Codex P2)", () => {
+    const tb1 = createTextBox({
       subjectId: "s",
       page: 1,
       position: { x: 0.5, y: 0.5 },
       at: 1700000000002
     });
-    assert.ok(tb.id.startsWith("textbox-1700000000002-"));
-    assert.equal(tb.createdAt, new Date(1700000000002).toISOString());
-    assert.equal(tb.updatedAt, tb.createdAt);
+    const tb2 = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0.5, y: 0.5 },
+      at: 1700000000002
+    });
+    assert.ok(tb1.id.startsWith("textbox-1700000000002-"));
+    // 동일 (at, position) → 동일 id (replay/snapshot).
+    assert.equal(tb1.id, tb2.id, "deterministic id with at+position");
+    assert.equal(tb1.createdAt, new Date(1700000000002).toISOString());
+    assert.equal(tb1.updatedAt, tb1.createdAt);
+  });
+
+  it("createTextBox({ at }) → 다른 position 은 다른 suffix", () => {
+    const a = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0.1, y: 0.2 },
+      at: 1700000000003
+    });
+    const b = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0.7, y: 0.9 },
+      at: 1700000000003
+    });
+    assert.notEqual(a.id, b.id, "position 변경 시 suffix 달라야 함");
   });
 
   it("createTextBox() — at 미주입 시 backward compat", () => {

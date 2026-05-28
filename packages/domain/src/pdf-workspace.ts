@@ -405,7 +405,18 @@ export function createTextBox(input: {
 }): PdfTextBox {
   const t = input.at ?? Date.now();
   const iso = new Date(t).toISOString();
-  const rand = Math.floor(Math.random() * 10000);
+  // Codex PR #87 P2: at 주입 시 id suffix 도 deterministic — position 기반
+  // prime-mix hash (snapshot/replay 호환). x*1000 → 정수 1..1000 영역에서 prime
+  // 곱 (7919, 31) 으로 분산 → mod 10000 시 collision 적음. at 미주입 시
+  // Math.random fallback (backward compat).
+  const rand =
+    input.at !== undefined
+      ? Math.abs(
+          Math.round(input.position.x * 1000) * 7919 +
+            Math.round(input.position.y * 1000) * 31 +
+            17
+        ) % 10_000
+      : Math.floor(Math.random() * 10_000);
 
   return {
     id: `textbox-${t}-${rand}`,
