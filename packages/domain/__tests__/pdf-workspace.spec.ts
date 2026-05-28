@@ -50,6 +50,8 @@ import {
   // Sticky / Ink (DDD Slice 1b deterministic factory)
   createStickyNote,
   createInkStroke,
+  // Slice 1c deterministic factory
+  createPdfMaterialDraft,
   // Hydration
   hydrateSubjectPdfWorkspace,
   createEmptyPdfWorkspace,
@@ -1192,6 +1194,62 @@ describe("DDD Slice 1b: factory deterministic injection", () => {
     const tb = createTextBox({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
     assert.ok(tb.id.startsWith("textbox-"));
     assert.ok(new Date(tb.createdAt).getTime() > 0);
+  });
+});
+
+// DDD Slice 1c — 나머지 factory 5종 deterministic injection.
+describe("DDD Slice 1c: factory deterministic injection (나머지 5종)", () => {
+  it("createPdfMaterialDraft(at) → id + uploadedAt deterministic", () => {
+    const d = createPdfMaterialDraft("sub-x", "lec.pdf", 1000, 3, 1700000000010);
+    assert.equal(d.id, "local-pdf-sub-x-1700000000010");
+    assert.equal(d.uploadedAt, new Date(1700000000010).toISOString());
+  });
+
+  it("createChecklist({ at }) → 동일 (at, position) 동일 id + iso", () => {
+    const a = createChecklist({ subjectId: "s", page: 1, position: { x: 0.3, y: 0.4 }, at: 1700000000011 });
+    const b = createChecklist({ subjectId: "s", page: 1, position: { x: 0.3, y: 0.4 }, at: 1700000000011 });
+    assert.equal(a.id, b.id);
+    assert.ok(a.id.startsWith("checklist-1700000000011-"));
+    assert.equal(a.createdAt, new Date(1700000000011).toISOString());
+    assert.equal(a.items[0]?.id, "clitem-1700000000011-0");
+  });
+
+  it("createChecklist({ at }) → 다른 position 다른 id", () => {
+    const a = createChecklist({ subjectId: "s", page: 1, position: { x: 0.1, y: 0.1 }, at: 1700000000012 });
+    const b = createChecklist({ subjectId: "s", page: 1, position: { x: 0.9, y: 0.9 }, at: 1700000000012 });
+    assert.notEqual(a.id, b.id);
+  });
+
+  it("addChecklistItem(label, at) → itemId deterministic + updatedAt iso", () => {
+    const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 }, at: 1700000000013 });
+    const next = addChecklistItem(cl, "항목", 1700000000014);
+    assert.equal(next.items[1]?.id, "clitem-1700000000014-1");
+    assert.equal(next.updatedAt, new Date(1700000000014).toISOString());
+  });
+
+  it("createTable({ at }) → 동일 (at, position) 동일 id", () => {
+    const a = createTable({ subjectId: "s", page: 1, position: { x: 0.5, y: 0.5 }, at: 1700000000015 });
+    const b = createTable({ subjectId: "s", page: 1, position: { x: 0.5, y: 0.5 }, at: 1700000000015 });
+    assert.equal(a.id, b.id);
+    assert.ok(a.id.startsWith("table-1700000000015-"));
+    assert.equal(a.createdAt, new Date(1700000000015).toISOString());
+  });
+
+  it("createChart({ at }) → 동일 (at, position) 동일 id", () => {
+    const a = createChart({ subjectId: "s", page: 1, position: { x: 0.2, y: 0.8 }, at: 1700000000016 });
+    const b = createChart({ subjectId: "s", page: 1, position: { x: 0.2, y: 0.8 }, at: 1700000000016 });
+    assert.equal(a.id, b.id);
+    assert.ok(a.id.startsWith("chart-1700000000016-"));
+    assert.equal(a.updatedAt, new Date(1700000000016).toISOString());
+  });
+
+  it("at 미주입 → 기존 random/now 동작 (backward compat)", () => {
+    const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const tb = createTable({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    const ch = createChart({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+    assert.ok(cl.id.startsWith("checklist-"));
+    assert.ok(tb.id.startsWith("table-"));
+    assert.ok(ch.id.startsWith("chart-"));
   });
 });
 
