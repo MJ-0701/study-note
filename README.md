@@ -200,7 +200,6 @@ node scripts/playwright-prod-smoke.mjs
 - 운영 대시보드 안내: [docs/monitoring/dashboards.md](docs/monitoring/dashboards.md)
 - API 모듈 개요: [llm-wiki/modules/apps-api.md](llm-wiki/modules/apps-api.md)
 - DDD 컨텍스트 맵: [llm-wiki/ddd/context-map.md](llm-wiki/ddd/context-map.md)
-- DDD 전수조사 보고서: [docs/solon/handoff/20260528-ddd-audit.md](docs/solon/handoff/20260528-ddd-audit.md)
 
 ## 다음 방향
 
@@ -215,4 +214,3 @@ node scripts/playwright-prod-smoke.mjs
 - `local-materials/`는 로컬 강의자료 보관용이며 git에 올리지 않습니다.
 - `.env`와 credential은 git에 올리지 않습니다.
 - 운영 환경 secret(Database URL, S3 키, Datadog 키, Prometheus 토큰 등)은 Azure Container Apps secret으로만 관리합니다.
-- 운영 cutover 절차는 [docs/solon/handoff/20260528-sprint-24-ops-metrics-v2-implement.md](docs/solon/handoff/20260528-sprint-24-ops-metrics-v2-implement.md)에 정리되어 있습니다.
