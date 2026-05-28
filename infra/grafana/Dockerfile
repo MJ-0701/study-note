@@ -9,6 +9,10 @@ COPY provisioning/dashboards/study-note.yml /etc/grafana/provisioning/dashboards
 
 # Dashboard JSON — provisioning provider 가 자동 import.
 COPY dashboards/study-note-ops.json /etc/grafana/dashboards/study-note-ops.json
+# sprint-W22-sprint-24 신규 3 dashboard (Product / Cost / SLO).
+COPY dashboards/study-note-product.json /etc/grafana/dashboards/study-note-product.json
+COPY dashboards/study-note-cost.json /etc/grafana/dashboards/study-note-cost.json
+COPY dashboards/study-note-slo.json /etc/grafana/dashboards/study-note-slo.json
 
 # Anonymous viewer 활성 — 면접관 시연용 (read-only).
 ENV GF_AUTH_ANONYMOUS_ENABLED=true \
