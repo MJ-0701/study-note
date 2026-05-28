@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "graphTooltip": 0,
   "id": null,
@@ -7,17 +9,31 @@
   "version": 1,
   "uid": "study-note-product",
   "title": "study-note Product (사용자 / 콘텐츠 / 역할)",
-  "tags": ["study-note", "product", "prometheus"],
-  "time": { "from": "now-24h", "to": "now" },
+  "tags": [
+    "study-note",
+    "product",
+    "prometheus"
+  ],
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
   "timepicker": {},
   "refresh": "1m",
-  "templating": { "list": [] },
+  "templating": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
       "type": "text",
       "title": "안내",
-      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "options": {
         "mode": "markdown",
         "content": "ProductMetricsCron 이 30분마다 emit. DAU / 가입 / 콘텐츠 / 역할 분포. widget create rate (chart/table/star/drill/eraser) 는 BE log-derived (deferred) — Datadog dashboard 참조."
@@ -27,16 +43,28 @@
       "id": 2,
       "type": "stat",
       "title": "DAU (24h 활동 사용자)",
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 3 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 3
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "max(last_over_time(study_note_product_users_daily_active[35m]))",
-          "legendFormat": "DAU"
+          "legendFormat": "DAU",
+          "instant": true,
+          "range": false
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
         "colorMode": "value",
         "graphMode": "area"
       }
@@ -45,49 +73,96 @@
       "id": 3,
       "type": "stat",
       "title": "신규가입 (24h)",
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 3 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 3
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "max(last_over_time(study_note_product_users_new_today[35m]))",
-          "legendFormat": "new_today"
+          "legendFormat": "new_today",
+          "instant": true,
+          "range": false
         }
       ],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
     },
     {
       "id": 4,
       "type": "stat",
       "title": "신규가입 (7d)",
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 3 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 3
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "max(last_over_time(study_note_product_users_new_7d[35m]))",
-          "legendFormat": "new_7d"
+          "legendFormat": "new_7d",
+          "instant": true,
+          "range": false
         }
       ],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
     },
     {
       "id": 5,
       "type": "stat",
       "title": "PDF 업로드 (24h)",
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 3 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 3
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "max(last_over_time(study_note_product_content_pdf_upload_24h[35m]))",
-          "legendFormat": "pdf_upload_24h"
+          "legendFormat": "pdf_upload_24h",
+          "instant": true,
+          "range": false
         }
       ],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
     },
     {
       "id": 6,
       "type": "timeseries",
       "title": "annotation PUT rate (성공/min)",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 8 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "targets": [
         {
           "refId": "A",
@@ -105,7 +180,12 @@
       "id": 7,
       "type": "timeseries",
       "title": "sync 결과 비율",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 8 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "targets": [
         {
           "refId": "A",
@@ -118,22 +198,33 @@
       "id": 8,
       "type": "piechart",
       "title": "역할 분포",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 15
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "max(last_over_time(study_note_product_users_role_master[35m]))",
-          "legendFormat": "master"
+          "legendFormat": "master",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "B",
           "expr": "max(last_over_time(study_note_product_users_role_admin[35m]))",
-          "legendFormat": "admin"
+          "legendFormat": "admin",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "C",
           "expr": "max(last_over_time(study_note_product_users_role_normal[35m]))",
-          "legendFormat": "normal"
+          "legendFormat": "normal",
+          "instant": true,
+          "range": false
         }
       ]
     },
@@ -141,40 +232,64 @@
       "id": 9,
       "type": "stat",
       "title": "콘텐츠 총량",
-      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 15 },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 15
+      },
       "targets": [
         {
           "refId": "A",
           "expr": "max(last_over_time(study_note_product_users_total[35m]))",
-          "legendFormat": "users.total"
+          "legendFormat": "users.total",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "B",
           "expr": "max(last_over_time(study_note_product_content_pdf_total[35m]))",
-          "legendFormat": "pdf.total"
+          "legendFormat": "pdf.total",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "C",
           "expr": "max(last_over_time(study_note_product_content_annotation_total[35m]))",
-          "legendFormat": "annotation.total"
+          "legendFormat": "annotation.total",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "D",
           "expr": "max(last_over_time(study_note_product_org_term_active_count[35m]))",
-          "legendFormat": "term.active"
+          "legendFormat": "term.active",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "E",
           "expr": "max(last_over_time(study_note_product_org_subject_avg_per_term[35m]))",
-          "legendFormat": "subject_avg/term"
+          "legendFormat": "subject_avg/term",
+          "instant": true,
+          "range": false
         },
         {
           "refId": "F",
           "expr": "max(last_over_time(study_note_product_org_material_avg_per_subject[35m]))",
-          "legendFormat": "material_avg/subject"
+          "legendFormat": "material_avg/subject",
+          "instant": true,
+          "range": false
         }
       ],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
     }
   ]
 }
