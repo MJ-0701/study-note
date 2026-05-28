@@ -38,6 +38,10 @@ export function readR2UsageConfig(env: NodeJS.ProcessEnv = process.env): R2Usage
   };
 }
 
+// Cloudflare R2 Analytics: r2StorageAdaptiveGroups 는 orderBy 가 group dimension
+// 일 때만 허용. datetimeHour 는 filter argument 이지 dimension 이 아니어서 orderBy
+// 사용 시 'cannot order by datetimeHour' 에러. filter 가 6h window 로 좁혀주므로
+// limit 1 로 충분 (max aggregation 반환).
 const R2_QUERY = `
   query R2Storage($accountTag: String!, $bucket: String!, $start: Time!, $end: Time!) {
     viewer {
@@ -45,7 +49,6 @@ const R2_QUERY = `
         r2StorageAdaptiveGroups(
           limit: 1
           filter: { datetimeHour_geq: $start, datetimeHour_leq: $end, bucketName: $bucket }
-          orderBy: [datetimeHour_DESC]
         ) {
           max {
             payloadSize
