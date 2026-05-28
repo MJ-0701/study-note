@@ -1985,6 +1985,21 @@ p {
 .pdf-workspace {
   border-top: 1px solid var(--ds-rule);
   padding-top: var(--ds-space-lg);
+  /* iPad 펜 버그 root cause fix: iOS Safari 가 Apple Pencil 터치를 PDF 본문/툴바 텍스트
+     선택 제스처로 가로채(선택 핸들 + 복사 callout) 펜 stroke 가 방해받던 현상 차단.
+     touch-action 은 scroll/zoom 만 막으므로 user-select + touch-callout 로 selection 차단.
+     workspace 전체(toolbar + stage + content)에 적용; 아래에서 입력 요소만 재허용. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 텍스트박스 등 실제 입력 요소는 selection 재허용 (편집 가능해야 함). */
+.pdf-workspace textarea,
+.pdf-workspace input,
+.pdf-workspace [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .pdf-workspace-header {
@@ -2175,13 +2190,6 @@ p {
   overflow: hidden;
   position: relative;
   width: 100%;
-  /* iPad 펜 버그 fix: Apple Pencil 터치를 iOS Safari 가 PDF 본문 텍스트 선택 제스처로
-     가로채 (선택 핸들 + callout 메뉴) 펜 stroke 가 안 그려지는 현상 차단. touch-action 은
-     scroll/zoom 만 막고 text selection 은 못 막으므로 user-select + touch-callout 필요.
-     textbox 의 textarea/input 은 user-select:text 로 selection 재허용 (더 specific). */
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
 }
 
 .pdf-frame,
