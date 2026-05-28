@@ -32,6 +32,41 @@ study-note는 강의 PDF를 과목 단위로 정리하고, PDF 위에 직접 필
 
 계정은 운영자가 별도로 안내합니다. 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청은 몇 초 늦게 응답할 수 있습니다.
 
+> **라이브 대시보드 운영 상태**: 🟢 **활성** (Grafana + Prometheus 가동 중)
+>
+> Grafana / Prometheus 는 비용 관리를 위해 한시적으로 운영합니다. 비활성화 이후에는 위 Grafana 링크가 응답하지 않으며, 아래 스냅샷으로 동일한 화면을 확인할 수 있습니다. (비활성화 시 위 상태를 🔴 **비활성** 으로 갱신)
+
+<details>
+<summary><b>📊 운영지표 대시보드 스냅샷 펼쳐보기</b> (라이브 대시보드 비활성 시 대체 자료)</summary>
+
+<br/>
+
+study-note 는 자체 호스팅 Prometheus + Grafana 로 4종 운영 대시보드를 운영합니다. 라이브 환경이 비활성일 때를 대비한 캡처입니다.
+
+### 1. APM Live Ops — 시스템 신호
+API 호출량 · 5xx · p95 지연 · CAS 충돌 · route 별 분포 · Node.js heap/event loop.
+
+![APM Live Ops](docs/portfolio/dashboards/live-ops.png)
+
+### 2. Product — 비즈니스 신호
+DAU · 신규가입(24h/7d) · PDF 업로드 · 콘텐츠 누적 · 역할 분포 · annotation/sync rate (30분 cron).
+
+![Product](docs/portfolio/dashboards/product.png)
+
+### 3. Cost — 비용 신호
+R2 storage/object · MySQL row · Datadog ingestion (6시간 cron).
+
+![Cost](docs/portfolio/dashboards/cost.png)
+
+### 4. 대시보드 목록 (Grafana provisioning)
+코드 SoT(`infra/grafana/dashboards/*.json`)에서 자동 provisioning 되는 4종.
+
+![Dashboards](docs/portfolio/dashboards/dashboards-list.png)
+
+> 캡처 일자: 2026-05-28. 대시보드 정의는 `infra/grafana/dashboards/` 에 코드로 버전 관리되므로, Grafana 재기동 시 동일하게 복원됩니다.
+
+</details>
+
 ## 기본 사용 흐름
 
 1. 로그인합니다.
