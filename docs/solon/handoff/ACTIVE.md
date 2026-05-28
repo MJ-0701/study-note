@@ -1,91 +1,58 @@
-# 🎯 ACTIVE SPRINT GOAL — FE DDD 리팩토링 (React 적용은 리팩토링 후)
+# 🎯 ACTIVE — 운영지표 v2 완료 + DDD Repository 리팩토링 진행 중
 
-> 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject.
+> 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 
-## 진행 상황 (2026-05-27) — **🎯 Layer D 분해 완료. 4.45k (4,448 / -59.74%)** + sprint-22 prod deploy (fe-v0.1.25) + **운영지표 dashboard PR #84 open (코드리뷰 대기)**
+## 현재 상태 (2026-05-28) — 운영지표 v2 prod 완료 + DDD 8 slice 완료
 
-| Layer | Sprint | 상태 |
+### 1. 운영지표 v2 (sprint-W22-sprint-24) — ✅ 완료 + prod 배포
+
+- 4 Grafana dashboard (APM / Product / Cost / SLO) + Prometheus 자체호스팅 + Datadog dual-lane.
+- BE: ProductMetricsCron(30min 13 gauge) + CostMetricsCron(6h 4 gauge) + `/api/metrics` Bearer token gate(AC14) + log-derived metric 10 + TelemetryController(widget create).
+- Infra: Prometheus tsdb **Azure Files 영속** + Grafana 4 dashboard provisioning(코드 SoT) + Bearer auth cutover.
+- FE: widget telemetry beacon + admin `#ops` 4-dashboard 링크 + 별표 drag resize + 자동저장 outcome panel.
+- 배포 tag: be-v0.1.22~31, fe-v0.1.52~55, infra-v0.1.4~7. 전부 prod live.
+- PR #85~109 머지 완료.
+
+### 2. DDD 리팩토링 — 8 slice 완료 (audit: docs/solon/handoff/20260528-ddd-audit.md)
+
+| Finding | 상태 | 비고 |
 |---|---|---|
-| **A. routing/shell** | 2026-W21-sprint-2 | ✅ merged (PR #57) |
-| **B/slice-1. annotation sync** | 2026-W22-sprint-1 | ✅ merged (PR #58) |
-| **B/slice-2a. canvas mount** | 2026-W22-sprint-1 | ✅ merged (PR #59) |
-| **B/slice-2b. classDate** | 2026-W22-sprint-2 | ✅ merged (PR #60) |
-| **B/slice-2c. ink stroke** | 2026-W22-sprint-3 | ✅ merged (PR #61) |
-| **B/slice-2d. drill highlight** | 2026-W22-sprint-2 | ✅ merged (PR #62) |
-| **B/slice-2e. star mark** | 2026-W22-sprint-3 | ✅ merged (PR #63) |
-| **B/slice-2f/i. chart-content** | 2026-W22-sprint-4 | ✅ merged (PR #64) |
-| **B/slice-2f/ii. markdown-table** | 2026-W22-sprint-2 | ✅ merged (PR #65) |
-| **B/slice-2g. chart-widget** | 2026-W22-sprint-3 | ✅ merged (PR #66) — **8k 달성** |
-| **B/slice-2g-table. table-widget** | 2026-W22-sprint-5 | ✅ merged (PR #67) |
-| **B/slice-2f/iii. simple-widget** | 2026-W22-sprint-6 | ✅ merged (PR #68) |
-| **B/slice-2f/iv. page-render helper** | 2026-W22-sprint-7 | ✅ merged (PR #69, main=942d81a) — **7k 달성** |
-| **B/slice-2f/iv-bis. renderPdfWorkspacePage** | 2026-W22-sprint-8 | ✅ main 직 push (main=7b5f3cb) — Layer B closed, 6.7k 달성 |
-| **C/slice-1. subject-cards leaves** | 2026-W22-sprint-9 | ✅ merged (PR #70, main=d634ac8) — **6.5k 달성** |
-| **C/slice-2. sidebar** | 2026-W22-sprint-10 | ✅ merged (PR #71, main=2c6ca94) — **6.3k 달성** |
-| **C/slice-3. home + intake** | 2026-W22-sprint-11 | ✅ merged (PR #72, main=ee6f492) — **6k 달성** |
-| **C/slice-4. subject-class** | 2026-W22-sprint-12 | ✅ merged (PR #73, main=9e51fe5) — **5.8k 달성** |
-| **C/slice-5. subject-summaries** | 2026-W22-sprint-13 | ✅ merged (PR #74, main=a034a00) — **5.7k 달성** + safe-url 신규 |
-| **C/slice-6. subject-memorize** | 2026-W22-sprint-14 | ✅ merged (PR #75, main=e7e894c) — **5.6k 달성** |
-| **C/slice-7. subject-mcp** | 2026-W22-sprint-15 | ✅ merged (PR #76, main=930eba4) — **50% 감축 돌파 (5,506)** + Object.freeze + 3-layer href defense |
-| **C/slice-8. subject-week** | 2026-W22-sprint-16 | ✅ merged (PR #77, main=15e70bf) — **5.5k 충분 달성 (5,403)** |
-| **C/slice-9. pdf-library** | 2026-W22-sprint-17 | ✅ merged (PR #78, main=6aff0f5) — **5.1k 인접 (5,161)** |
-| **C/slice-10. quick-note** | 2026-W22-sprint-18 | ✅ merged (PR #79, main=a12d62e) — **🎯 5k 달성 (4,959)** + Layer C closed |
-| **D/slice-1. notebook storage** | 2026-W22-sprint-19 | ✅ merged (PR #80, main=52cb472) — **4.88k (4,877)** + Layer D 진입 |
-| **D/slice-2. auth boot module** | 2026-W22-sprint-20 | ✅ merged (PR #81, main=a5e834a) — **4.79k (4,785)** + cold-start fix |
-| **D/slice-3. sidebar cache + UI ephemeral** | 2026-W22-sprint-21 | ✅ merged (PR #82, main=3b25db4) — **4.71k (4,710)** + Codex bot 👍 PASS |
-| **D/slice-4. user-notes sync caches** | 2026-W22-sprint-22 | ✅ merged (PR #83, main=f62cf3e) — **🎯 4.45k (4,448)** + Codex P2 fix + bot 👍 PASS |
-| D/backlog. session_hint cookie (Codex P2 mitigation) | 2026-W22-sprint-20 | ✅ FE-only mitigation 머지 (`study_note_session_hint` readable cookie) |
-| D/optional. drag states 6 (slice-5 잠재) | TBD | ⏸ ROI 낮음 — React migration 진입 후 결정 |
-| **React migration** | next phase | ⏳ Layer D 분해 완료 → cost 재평가 진입 |
+| F-5/F-6/F-13 domain purity | ✅ | Date.now optional `at` 주입(8 factory) + console.warn 제거. domain side-effect 0. |
+| F-2 SubjectRepository / TermRepository | ✅ | be-v0.1.26/27 |
+| F-9 cross-aggregate child count → repo | ✅ | be-v0.1.28 |
+| F-8 Subjects→Term read → TermRepository | ✅ | be-v0.1.29 |
+| F-1 MaterialsService Repository (PdfMaterial + AnnotationSnapshot) | ✅ | be-v0.1.30 |
+| F-7 PdfAnnotations AnnotationSnapshotRepository | ✅ | be-v0.1.31 |
 
-main.ts: 11,049 → **4,448** (-6,601, **-59.74%**). 🎯 **Layer D 분해 완료 (4 slice)**.
+**결과**: API 4 service (Terms/Subjects/Materials/PdfAnnotations) = **Prisma 직접 의존 0**. (Materials 의 subject 존재검증 1곳만 cross-aggregate prisma 잔존 — 의도.)
 
-## Prod deploy 상태
+### 3. ⚠ 검증 대기 (auth-required, 운영자 수동)
 
-- `fe-v0.1.24` (2026-05-27) — sprint-20 cold-start fix + session_hint cookie live (`main-Cwsm8q7t.js`).
-- `fe-v0.1.25` (2026-05-27) — sprint-21 (sidebar cache + UI ephemeral) + sprint-22 (user-notes-sync + P2 fix) prod deploy.
-- `fe-v0.1.26` (2026-05-27) — **TDZ hotfix**: initial renderApp/revalidate 를 queueMicrotask 로 defer. 이전 bundle (`main-Cciz0Wkp.js`) 의 boot crash + "세션 확인 중" 무한 stuck 해결.
-- `fe-v0.1.27` (2026-05-27) — **home sidebar 학기/과목 hierarchy** 표시. renderSubjectNavItem 의 currentSubject nullable.
-- `be-v0.1.14` (2026-05-27) — **122 commit BE deploy lag 해소**. Term/Subject controller + classDate Date migration + 별표 widget + Subject move + Datadog log-derived metric + PR #84 ops dashboard + backfill default Term migration. last BE = be-v0.1.13 (2026-05-23).
+- **be-v0.1.30 upload E2E**: 실 PDF 업로드 → createUploadIntent → 파일 PUT → completeUpload → 자료실 노출. smoke(health/materials 401)는 green이나 인증 흐름 미검증.
+- **be-v0.1.31 annotation/CAS E2E**: 필기 저장 + 동시 편집 CAS 충돌(409 STALE_REVISION) 동작. smoke green이나 인증 흐름 미검증.
+- 이상 시 즉시 roll-back (직전 be tag 재배포).
 
-## PR #84 — merged + deployed (be-v0.1.14)
+## DDD 잔여 backlog (user 검토 권장 — 큰 변경)
 
-- **PR #84** — 관리자 운영 지표 대시보드 (Datadog server-side 조회). **squash merge → main (d2f9895)**.
-  - `apps/api/src/admin/ops-dashboard.service.ts` (Codex P2/P3 fix 포함 — sub-100ms preserve + 1_000_000 ns boundary).
-  - `GET /v1/admin/ops-dashboard` (master/admin guard). DD key 서버 only. 2026-05-28 기준 FE 에서는 호출하지 않고 legacy/internal snapshot 으로만 보존.
-  - 9 card (APM × 3 + log-derived × 3 + RUM × 3). `not_configured` graceful fallback.
-  - 배포 = `be-v0.1.14` tag (2026-05-27) — 122 commit lag 해소 동반.
-  - ACA env `DD_APP_KEY=secretref:dd-app-key` 적용 완료.
-  - 공개 운영 SoT = Grafana + Prometheus. `/admin.html#ops` 는 Grafana CTA 만 활성화하고 `Datadog 조회 비활성화` 버튼을 표시.
+- **F-3** MaterialsService God Service 책임 분할 (Upload / Annotation / Query service). Repository는 추출 완료, service split만 남음. upload E2E 검증 동반 필요.
+- **F-4** Anemic StudyNotebook (interface → class + behavior 이동). domain only.
+- **F-10** Material DTO mapping (controller raw entity → DTO). FE 응답 contract 동시 변경 필요.
+- **F-11/F-12** invariant polish (P3).
 
-## 코드리뷰 시연 안내 (내일)
+## 운영 대시보드 (Grafana/Prometheus) — 금요일까지 운영
 
-- URL: <https://study-note.910701.xyz>
-- 리뷰어 계정: 이름 `리뷰어` / 학번 `20260000` / role `MASTER`.
-- admin SPA: <https://study-note.910701.xyz/admin.html> (master/admin 로그인 후 표시).
-  - 사용자 관리 + 학기/과목 관리 + 운영지표 panel 통합.
-  - 운영지표 panel 은 Grafana link 만 안내. Datadog 조회는 비활성화.
-- 권장 흐름 = README.md 의 "코드리뷰 · 시연 안내 (live)" 절 참조.
+- 금요일 이후 비활성화 예정. runbook: `docs/runbooks/observability-toggle.md` (min-replicas toggle + README 배지).
+- 비활성 후 fallback = README 드롭다운 스냅샷 6장 (`docs/portfolio/dashboards/`).
+- 지원/이력서 제출 시점 재활성화 (toggle만으로 복원, secret/volume 보존).
 
-## 활성 작업 = ① PR #84 코드리뷰 (내일) + ② React migration cost 재평가
+## 다음 세션 first action 후보
 
-분해 phase 결산:
-- Layer A (routing/shell) — 1 slice
-- Layer B (PDF workspace) — 14 slice (sprint-1~8)
-- Layer C (subject views) — 10 slice (sprint-9~18, 🎯 5k 달성 at slice-10)
-- Layer D (storage + identity + sync) — 4 slice (sprint-19~22, 🎯 분해 phase 완료)
-- 누적 -6,601 line / -59.74%
+1. upload + annotation E2E 검증 (운영자 수동) → 이상 없으면 DDD 잔여 진입.
+2. DDD F-3 (God Service split) 또는 F-4 (Anemic model).
+3. React migration cost 재평가 (별 트랙, `.sfs-local/sprints/` 참고).
 
-다음 결정 candidate:
-1. React migration 진입 (cost 재평가 + provider/component 설계). audit = `.sfs-local/sprints/react-migration-audit.md` (53 data-action site / 13 listener / 9 ambient let / route × action 분포). 권장 = **Option B + 첫 route `subject-mcp`**.
-2. 잠재 slice-5 (drag states 6) — 60 line 추가, ROI 낮음.
-3. ambient identity (authSession/authMode/loginFeedback/notebook/pdfWorkspaceStore) module 화 — React migration 비용 분담.
+## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 
-## SFS 0.6.121 정책 ambient
-
-- Division sub-agent council always-on
-- Bridge profile evidence (Codex `gpt-5.5` xhigh)
-- Executable Action Ownership
-- Review autopilot rework loop
-- Session Continuation Guard ambient
-- 자세히 = `CLAUDE.md`
+- Executable Action Ownership / Runtime Token Firewall / Context Pollution Guard / Review autopilot rework loop / Session Continuation Guard.
+- commit = `sfs commit plan` → `sfs commit apply --group <name>`. push 권한은 세션별 명시.
+- 코드 수정 = Claude main 직접, Codex = cross-review (GitHub @codex bot, post-implementation).
