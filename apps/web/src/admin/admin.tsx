@@ -31,24 +31,25 @@ function readExternalLinks(): ExternalDashboardLink[] {
       base = raw.replace(/\/$/, "").replace(/\/d\/.*$/, "");
     }
   }
+  // 각 dashboard 의 slug + 기본 time range + refresh interval — 운영 SoT 와 일치.
   return [
     {
-      url: `${base}/d/study-note-ops`,
+      url: `${base}/d/study-note-ops/study-note-live-ops-self-host-prometheus?orgId=1&from=now-1h&to=now&timezone=browser&refresh=15s`,
       label: "APM Live Ops",
-      description: "API 호출량 · 5xx · p95 latency · CAS 충돌 · Node.js heap/event loop"
+      description: "API 호출량 · 5xx · p95 latency · CAS 충돌 · Node.js heap/event loop (1h, 15s refresh)"
     },
     {
-      url: `${base}/d/study-note-product`,
+      url: `${base}/d/study-note-product/c476433?orgId=1&from=now-24h&to=now&timezone=browser&refresh=1m`,
       label: "Product",
-      description: "DAU · 신규가입 · 콘텐츠 누적 · 역할 분포 (30min cron)"
+      description: "DAU · 신규가입 · 콘텐츠 누적 · 역할 분포 (24h, 30min cron)"
     },
     {
-      url: `${base}/d/study-note-cost`,
+      url: `${base}/d/study-note-cost/study-note-cost-r2-mysql-dd?orgId=1&from=now-7d&to=now&timezone=browser&refresh=10m`,
       label: "Cost",
-      description: "R2 storage/object · MySQL row · Datadog ingestion (6h cron)"
+      description: "R2 storage/object · MySQL row · Datadog ingestion (7d, 6h cron)"
     },
     {
-      url: `${base}/d/study-note-slo`,
+      url: `${base}/d/study-note-slo/study-note-slo-availability-latency-sync?orgId=1&from=now-7d&to=now&timezone=browser&refresh=1m`,
       label: "SLO",
       description: "Availability 99.5% · p95 latency 800ms · sync success 99.0% (7d)"
     }
