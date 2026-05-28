@@ -37,10 +37,8 @@
 
 > `sfs loop` PROGRESS.md 미부트스트랩 → self-drive 로 PR 생산. 전부 **미머지·미배포** (user 검토 후 merge/배포). prod = be-v0.1.32 / fe-v0.1.57 유지.
 
-- **PR #112** MaterialUploadService 전용 spec (F-3 보강, 11 case) — Codex PASS.
-- **PR #113** F-11 Subject 삭제 불변식 → canDeleteSubject 도메인 policy — Codex PASS.
-- **PR #114** F-12 WeekNote import Concept↔Keyword 참조 일관성 invariant — Codex P2(trim 정규화) 반영, 재검토 중. ⚠ strictness tradeoff (dangling ref hard reject) 머지 전 검토.
-- **PR #115** F-10 Material 응답 DTO 명시 변환 (MaterialPublicResponse + toMaterialPublic, FE 호환·shape 불변) — user 결정으로 구현. ⚠ storageKey 비노출은 보류(R-DTO-storageKey, domain 타입 분리 선행 필요).
+- **PR #112/#113/#115 = merge + 배포 완료** (self+cross+@codex 3계층 green). `be-v0.1.33` prod live (health 200 / materials·subjects 401 검증). #112 spec + #113 F-11(canDeleteSubject) + #115 F-10(MaterialPublicResponse DTO).
+- **PR #114** F-12 WeekNote import Concept↔Keyword invariant — **머지 대기**. self+cross clean, Codex P2(trim) fixed + 재검토 async. ⚠ (1) strictness 결정(dangling ref hard reject — user 확인 중) (2) F-12 = domain→**FE** 라 **fe tag** 배포 (be 아님).
 
 ## DDD backlog — 종료
 
