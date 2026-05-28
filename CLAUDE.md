@@ -16,7 +16,7 @@ Before planning or editing, read:
 - recent files under `.sfs-local/sprints/`
 - recent files under `.sfs-local/decisions/`
 
-## SFS commands — bash adapter SSoT (sfs 0.6.102)
+## SFS commands — bash adapter SSoT (sfs 0.6.138)
 
 Solon Product SFS 슬래시 명령은 모두 `sfs <command>` global runtime 이
 deterministic bash adapter 로 내려보낸다. `.sfs-local/scripts/` 는 vendored

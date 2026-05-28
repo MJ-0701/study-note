@@ -39,6 +39,11 @@ compact Next action after verbatim output. Compact output is quality-preserving 
 never compress evidence, risk warnings, decisions, source links/paths, or
 raw-source traceability. If compactness would weaken quality, use full clarity.
 Never hardcode external private docsets.
+Harness Engineering is structure over pleading: keep active tools narrow,
+project-as-prompt structure coherent, verification automated, and product understanding/design human-owned.
+Domain knowledge assets are first-class: compile expert know-how into source-linked
+glossaries, playbooks, skills, fixtures, tests, review questions, or wiki maps
+with owner/confidence/gaps and human-reviewed publication boundaries.
 DDD/TDD is a product-level engineering floor, not backend-only. All
 product-bearing entrypoints are included: UI bootstraps, routers, root
 components, hooks/stores/effects, controllers, jobs, repositories, DTO mappers,
@@ -117,9 +122,11 @@ not as a justification.
 Session Continuation Guard is also a router contract. `sfs upgrade` cannot
 shrink an already-open LLM conversation. At 30%+ before a new WU/sprint, 50%+
 before a new gate/loop/review handoff, repeated wakeups, or multiple WUs/sprints
-in one chat, fresh-session transfer is autopilot: write compact handoff, use
-host clear/new-session when available, otherwise stop with the exact
-next-session prompt instead of asking same-session vs fresh-session.
+in one chat, fresh-session transfer is lossless autopilot: write a durable
+handoff/transfer capsule first, then invoke host-owned
+transfer/new-session/archive/clear+resume when available and resume immediately.
+Otherwise stop with the exact next-session prompt. Never ask the user to type
+`/clear`, choose same-session vs fresh-session, or call bare clear.
 Division sub-agent council is always-on from brainstorm through Gate 6:
 strategy-pm, dev, QA, design, infra, and taxonomy each records finding/evidence/
 waiver or not-applicable in `division_subagent_ledger`. Actual parallel worker
