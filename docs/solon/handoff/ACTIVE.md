@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 
-## 현재 상태 (2026-05-28) — 운영지표 v2 prod 완료 + DDD 9 slice 완료 + E2E 검증
+## 현재 상태 (2026-05-29) — 운영지표 v2 prod + DDD 9 slice 완료 / 🔴 iPad 펜 연속-획 버그 REOPENED (inkdebug fe-v0.1.60 측정중)
 
 ### 1. 운영지표 v2 (sprint-W22-sprint-24) — ✅ 완료 + prod 배포
 
@@ -31,8 +31,10 @@
 
 - **upload E2E**: 실 PDF 업로드 → 자료실 노출 ✅ (F-3 분할 후 동작 동일 — be-v0.1.32 배포 success + prod health 200 / materials 401).
 - **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
-- **iPad 펜 "두 번째 획 누락"**: ✅ **RESOLVED (2026-05-29)** — 실은 두 버그. (1) **iOS Safari 텍스트선택 hijack** = 진짜 root cause (펜 터치를 PDF 텍스트 선택으로 가로챔) → fix `.pdf-workspace` user-select:none, **fe-v0.1.59 배포**. (2) **annotation 413** (payload 256KB 초과 → 저장실패→소실) → cap 4MB, **be-v0.1.34 배포**. Safari 원격 inspector 로 확정. 상세 = [[project-ipad-pen-second-stroke]].
-  - follow-up: bl-annotation-payload-growth(snapshot 무한증가 → decimation/압축), FE 413 silent return → 사용자 경고, **API 4xx/5xx 를 trackRumError 로 RUM Error emit** (413 이 RUM Actions/Error 에 안 보여 디버깅 오래 걸림 — resources 엔 있었음).
+- **iPad 펜 "두 번째 획 누락"**: 🔴 **REOPENED (2026-05-29)** — 이전 "RESOLVED" 는 틀림. user-select(fe-v0.1.59) + 413 cap(be-v0.1.34) 픽스는 real 이었으나 **실제 증상(연속으로 이어 쓸 때 일부 획 소실)은 못 잡음**. 펜 자체·단일 획은 정상. **이제 안정 재현됨** (전엔 간헐 → inkdebug 로도 못 잡았음).
+  - 코드상 소실 경로 3개: **(A) points≤1 silent discard** (commitInkStroke ink-stroke.ts:320,333) — 가장 유력, 매 pointerup 의 deferred renderApp(ink-stroke.ts:343)이 다음 획 pointermove 전달 방해 추정. (B) begin 시 liveLayer 부재(begin-failed telemetry). (C) selectedTool≠pen silent return(telemetry 0). (A)/(C)는 DD telemetry 0 = Datadog 으로 disprove 불가.
+  - **진단 진행**: `?inkdebug=1` 화면 오버레이 재도입(a8dee7e) + move 수신 카운터 → **fe-v0.1.60 배포**. 다음 = prod`?inkdebug=1` 로 "4" 쓰고 우상단 로그 판독 (`UP pts=1 moves=0`=capture 손실/renderApp race · `pts=1 moves=많음`=state reset · `layer=N`=B · `tool=read`=C). 그 신호로 targeted fix. 상세 = [[project-ipad-pen-second-stroke]].
+  - 별개 follow-up(보존): bl-annotation-payload-growth(snapshot 무한증가 → decimation/압축), FE 413 silent return → 사용자 경고, API 4xx/5xx 를 trackRumError 로 RUM Error emit.
 
 ## DDD 자율 PR run (2026-05-28 저녁, PR-only · 미배포)
 
@@ -58,8 +60,8 @@
 
 ## 다음 세션 first action 후보
 
-1. 🔴 **iPad 펜 버그 — Datadog RUM 확인 (집에서, DD key 필요)**: 2026-05-28 실수업 재현됨. RUM `@action.name:pen-stroke.cancel`(points 작음 = pointercancel root cause 확정)/`pen-stroke.begin-failed`(live_layer:false) 조회 → 그 signal 로 fix 작성. 둘 다 0이면 제3경로 계측 보강.
-2. (완료) DDD F-3/F-10/F-11/F-12 + 펜버그(텍스트선택+413) 전부 배포 (be-v0.1.33/34, fe-v0.1.59). 펜버그 follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
+1. 🔴 **iPad 펜 연속-획 버그 — `?inkdebug=1` 로 측정 (fe-v0.1.60 배포됨)**: prod `study-note.910701.xyz/...?inkdebug=1` 열고 PDF 에 "4" 한 번 쓰기 → 우상단 녹색 오버레이 맨 위 몇 줄 판독. `UP pts=1 moves=0`=capture 손실(renderApp race) · `pts=1 moves=많음`=state reset · `DOWN layer=N`=live layer 부재 · `DOWN tool=read`=tool flip. 그 신호로 ink-stroke.ts targeted fix. 측정 끝나면 inkdebug 오버레이 제거(a8dee7e revert). 상세 = [[project-ipad-pen-second-stroke]].
+2. (완료) DDD F-3/F-10/F-11/F-12 전부 배포 (be-v0.1.33/34). ⚠ 펜버그는 **미해결**(위 1번) — user-select(fe-v0.1.59)+413(be-v0.1.34)은 별개 2버그 픽스였고 연속-획 증상은 못 잡음. follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
 3. Vercel 대시보드 Git auto-deploy OFF 확인 (push-당 배포 한도소진 방지, b202f63 보완).
 4. R-DTO-storageKey (P3 supervised) / React migration 재평가 / CLAUDE.md infra Vercel 정정(chip).
 
