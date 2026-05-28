@@ -17,30 +17,30 @@ import {
 import { PrismaService } from "@study-note/persistence";
 import type { Term as PrismaTerm } from "@prisma/client";
 import type { TermCreateInput, TermUpdateInput } from "./terms.dto";
+import { TermRepository } from "./term.repository";
 
 @Injectable()
 export class TermsService {
   private readonly logger = new Logger(TermsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly termRepo: TermRepository
+  ) {}
 
   async list(): Promise<PrismaTerm[]> {
-    return this.prisma.term.findMany({
-      orderBy: [{ grade: "asc" }, { semester: "asc" }, { title: "asc" }]
-    });
+    return this.termRepo.findAllOrdered();
   }
 
   async create(input: TermCreateInput, actorId: string): Promise<PrismaTerm> {
     try {
-      const created = await this.prisma.term.create({
-        data: {
-          grade: input.grade,
-          semester: input.semester,
-          title: input.title,
-          startDate: input.startDate ?? null,
-          endDate: input.endDate ?? null,
-          createdById: actorId
-        }
+      const created = await this.termRepo.create({
+        grade: input.grade,
+        semester: input.semester,
+        title: input.title,
+        startDate: input.startDate ?? null,
+        endDate: input.endDate ?? null,
+        createdById: actorId
       });
       this.logger.warn(
         `[Term] action=create id=${created.id} actor=${actorId} grade=${created.grade} semester=${created.semester} title=${created.title}`
@@ -78,15 +78,12 @@ export class TermsService {
     }
 
     try {
-      const updated = await this.prisma.term.update({
-        where: { id },
-        data: {
-          grade: input.grade ?? undefined,
-          semester: input.semester ?? undefined,
-          title: input.title ?? undefined,
-          startDate: input.startDate === undefined ? undefined : input.startDate,
-          endDate: input.endDate === undefined ? undefined : input.endDate
-        }
+      const updated = await this.termRepo.update(id, {
+        grade: input.grade ?? undefined,
+        semester: input.semester ?? undefined,
+        title: input.title ?? undefined,
+        startDate: input.startDate === undefined ? undefined : input.startDate,
+        endDate: input.endDate === undefined ? undefined : input.endDate
       });
       this.logger.warn(
         `[Term] action=update id=${id} actor=${actorId} before=${termSummary(before)} after=${termSummary(updated)}`
@@ -122,7 +119,7 @@ export class TermsService {
     }
 
     try {
-      await this.prisma.term.delete({ where: { id } });
+      await this.termRepo.deleteById(id);
     } catch (err) {
       // P2003 = FK constraint failed. concurrent Subject INSERT 가 count-after-check
       // 사이에 끼면 여기서 잡혀서 동일한 409 응답 (race window 보호).
@@ -149,7 +146,7 @@ export class TermsService {
   }
 
   private async findOrThrow(id: string): Promise<PrismaTerm> {
-    const row = await this.prisma.term.findUnique({ where: { id } });
+    const row = await this.termRepo.findById(id);
     if (!row) {
       throw new NotFoundException({
         errorCode: "TERM_NOT_FOUND",
