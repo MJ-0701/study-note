@@ -24,14 +24,11 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ["error", "warn", "log"]
   });
-  // sprint-2/S1 fix (codex P1+P2): raise JSON body parser limit so the
-  // documented 256KB payload contract is reachable in all escape forms.
-  // Parser limits raw request bytes; a 256KB content with heavy JSON escaping
-  // (`\"`, `\\`, `\n`, UTF-8 multi-byte) can exceed 256KB raw. We allow
-  // **640KB** at the parser layer = 256KB content × ~2.5 worst-case escape
-  // overhead × wrapper. The per-endpoint controller still enforces the strict
-  // 256KB *decoded* content cap so the 413 emission stays accurate.
-  app.useBodyParser("json", { limit: "640kb" });
+  // JSON body parser limit. 2026-05-28: 640kb → 10mb. annotation snapshot 의
+  // MAX_PAYLOAD_BYTES(=4MB content)를 heavy JSON escape(`\"`,`\\`,UTF-8 multi-byte)
+  // 포함해 raw 로 수용하려면 parser 한도 = content × ~2.5 = 10mb. 실제 content cap 은
+  // pdf-annotations.service 의 MAX_PAYLOAD_BYTES 가 정확히 enforce (413 emission).
+  app.useBodyParser("json", { limit: "10mb" });
   // slice-2: global exception filter — maps all HttpExceptions to {errorCode, errorMessage}
   // per CLAUDE.md API convention.
   app.useGlobalFilters(new ApiExceptionFilter());
