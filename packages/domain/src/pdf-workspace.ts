@@ -405,15 +405,17 @@ export function createTextBox(input: {
 }): PdfTextBox {
   const t = input.at ?? Date.now();
   const iso = new Date(t).toISOString();
-  // Codex PR #87 P2: at 주입 시 id suffix 도 deterministic — position 기반
-  // prime-mix hash (snapshot/replay 호환). x*1000 → 정수 1..1000 영역에서 prime
-  // 곱 (7919, 31) 으로 분산 → mod 10000 시 collision 적음. at 미주입 시
-  // Math.random fallback (backward compat).
+  // Codex PR #87 P2 round-2: hash 는 clamp 후 normalizedPosition 사용. 같은
+  // normalized position 의 different raw input (out-of-range) 가 다른 id 를
+  // 만들지 않도록.
+  const normalizedPosition = normalizePdfPoint(input.position.x, input.position.y);
+  // at 주입 시 deterministic prime-mix hash (snapshot/replay). 미주입 시 random
+  // fallback (backward compat).
   const rand =
     input.at !== undefined
       ? Math.abs(
-          Math.round(input.position.x * 1000) * 7919 +
-            Math.round(input.position.y * 1000) * 31 +
+          Math.round(normalizedPosition.x * 1000) * 7919 +
+            Math.round(normalizedPosition.y * 1000) * 31 +
             17
         ) % 10_000
       : Math.floor(Math.random() * 10_000);
@@ -422,7 +424,7 @@ export function createTextBox(input: {
     id: `textbox-${t}-${rand}`,
     subjectId: input.subjectId,
     page: input.page,
-    position: normalizePdfPoint(input.position.x, input.position.y),
+    position: normalizedPosition,
     size: { ...TEXT_BOX_DEFAULT_SIZE },
     content: "",
     createdAt: iso,

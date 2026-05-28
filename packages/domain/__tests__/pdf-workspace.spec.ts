@@ -1119,6 +1119,25 @@ describe("DDD Slice 1b: factory deterministic injection", () => {
     assert.equal(tb1.updatedAt, tb1.createdAt);
   });
 
+  it("createTextBox({ at }) → out-of-range position 도 normalized hash (Codex P2 round-2)", () => {
+    // raw {-0.5, 1.8} → normalized {0, 1} 후 hash. 동일 normalized 결과 input 과 동일 id.
+    const oor = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: -0.5, y: 1.8 },
+      at: 1700000000004
+    });
+    const normalized = createTextBox({
+      subjectId: "s",
+      page: 1,
+      position: { x: 0, y: 1 },
+      at: 1700000000004
+    });
+    assert.equal(oor.id, normalized.id, "normalized position 일치 → 동일 id");
+    assert.equal(oor.position.x, 0);
+    assert.equal(oor.position.y, 1);
+  });
+
   it("createTextBox({ at }) → 다른 position 은 다른 suffix", () => {
     const a = createTextBox({
       subjectId: "s",
