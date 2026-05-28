@@ -18,6 +18,7 @@ import type { UserProfile } from "@study-note/domain";
 import { RoleGuard, Roles, SessionAuthGuard } from "@study-note/auth";
 import { MaterialsService, parseMaterialMetadataBody } from "./materials.service";
 import { MaterialUploadService, parseUploadIntentBody } from "./material-upload.service";
+import { toMaterialPublic } from "./material-public.dto";
 
 interface AuthenticatedRequest {
   user: UserProfile;
@@ -43,10 +44,11 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown
   ) {
-    return this.uploads.createUploadIntent(
+    const { material, upload } = await this.uploads.createUploadIntent(
       request.user.id,
       parseUploadIntentBody(body)
     );
+    return { material: toMaterialPublic(material), upload };
   }
 
   @Put(":materialId/file")
@@ -57,11 +59,13 @@ export class MaterialsController {
     @Param("materialId") materialId: string
   ) {
     return {
-      material: await this.uploads.uploadFile(request.user.id, materialId, {
-        body: request,
-        contentType: readSingleHeader(request.headers["content-type"], "content-type"),
-        contentLength: readContentLength(request.headers["content-length"])
-      })
+      material: toMaterialPublic(
+        await this.uploads.uploadFile(request.user.id, materialId, {
+          body: request,
+          contentType: readSingleHeader(request.headers["content-type"], "content-type"),
+          contentLength: readContentLength(request.headers["content-length"])
+        })
+      )
     };
   }
 
@@ -76,13 +80,16 @@ export class MaterialsController {
     // sprint-W22-sprint-24 / AC4 — log emit 은 service 의 transition 분기 안에서.
     // controller 에서 emit 시 idempotent retry / duplicate callback 가 metric 부풀림
     // (Codex PR #85 round-2 P2 finding).
-    return this.uploads.completeUpload(request.user.id, materialId);
+    return toMaterialPublic(
+      await this.uploads.completeUpload(request.user.id, materialId)
+    );
   }
 
   @Get()
   async listMaterials(@Req() request: AuthenticatedRequest) {
+    const materials = await this.materials.listMaterials(request.user.id);
     return {
-      materials: await this.materials.listMaterials(request.user.id)
+      materials: materials.map(toMaterialPublic)
     };
   }
 
@@ -92,7 +99,9 @@ export class MaterialsController {
     @Param("materialId") materialId: string
   ) {
     return {
-      material: await this.materials.getMaterial(request.user.id, materialId)
+      material: toMaterialPublic(
+        await this.materials.getMaterial(request.user.id, materialId)
+      )
     };
   }
 
@@ -104,10 +113,12 @@ export class MaterialsController {
     @Param("materialId") materialId: string,
     @Body() body: unknown
   ) {
-    return this.materials.updateMaterialMetadata(
-      request.user.id,
-      materialId,
-      parseMaterialMetadataBody(body)
+    return toMaterialPublic(
+      await this.materials.updateMaterialMetadata(
+        request.user.id,
+        materialId,
+        parseMaterialMetadataBody(body)
+      )
     );
   }
 
@@ -132,7 +143,8 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Param("materialId") materialId: string
   ) {
-    return this.materials.getDownload(request.user.id, materialId);
+    const { material, download } = await this.materials.getDownload(request.user.id, materialId);
+    return { material: toMaterialPublic(material), download };
   }
 
   // sprint-W21-sprint-2/S2 R6: legacy annotation endpoints deprecated.
