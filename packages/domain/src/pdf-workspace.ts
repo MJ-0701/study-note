@@ -266,10 +266,14 @@ export function createPdfMaterialDraft(
   subjectId: string,
   fileName: string,
   fileSize: number,
-  pageCount: number
+  pageCount: number,
+  at?: number
 ): PdfMaterialDraft {
+  // DDD audit F-5: optional at 주입 시 deterministic. subjectId 가 id 에 이미
+  // 포함되어 (subjectId, at) 쌍이 고유 식별자.
+  const t = at ?? Date.now();
   return {
-    id: `local-pdf-${subjectId}-${Date.now()}`,
+    id: `local-pdf-${subjectId}-${t}`,
     subjectId,
     fileName,
     fileSize,
@@ -278,7 +282,7 @@ export function createPdfMaterialDraft(
     uploadStatus: "local",
     selectedPage: 1,
     selectedTool: "read",
-    uploadedAt: new Date().toISOString()
+    uploadedAt: new Date(t).toISOString()
   };
 }
 
@@ -467,24 +471,38 @@ export function deleteTextBox(
 const CHECKLIST_ITEMS_CAP = 100;
 const CHECKLIST_LABEL_CAP = 500;
 
+// DDD audit F-5: at 주입 시 deterministic suffix (position 기반 toFixed(6)) —
+// snapshot/replay 호환. 미주입 시 Math.random fallback (backward compat).
+// createTextBox 와 동일한 정책 (Codex PR #87 P2 라운드 lineage).
+function widgetIdSuffix(
+  at: number | undefined,
+  normalized: { x: number; y: number }
+): string {
+  return at !== undefined
+    ? `${normalized.x.toFixed(6)}-${normalized.y.toFixed(6)}`
+    : String(Math.floor(Math.random() * 10000));
+}
+
 export function createChecklist(input: {
   subjectId: string;
   page: number;
   position: { x: number; y: number };
+  at?: number;
 }): PdfChecklist {
-  const now = new Date().toISOString();
-  const rand = Math.floor(Math.random() * 10000);
-  const itemId = `clitem-${Date.now()}-0`;
+  const t = input.at ?? Date.now();
+  const iso = new Date(t).toISOString();
+  const normalizedPosition = normalizePdfPoint(input.position.x, input.position.y);
+  const itemId = `clitem-${t}-0`;
 
   return {
-    id: `checklist-${Date.now()}-${rand}`,
+    id: `checklist-${t}-${widgetIdSuffix(input.at, normalizedPosition)}`,
     subjectId: input.subjectId,
     page: input.page,
-    position: normalizePdfPoint(input.position.x, input.position.y),
+    position: normalizedPosition,
     items: [{ id: itemId, label: "", checked: false }],
     collapsed: true, // R11: 기본 접힘 (PDF 본문 가림 최소화)
-    createdAt: now,
-    updatedAt: now
+    createdAt: iso,
+    updatedAt: iso
   };
 }
 
@@ -502,7 +520,8 @@ export function toggleChecklistCollapsed(checklist: PdfChecklist): PdfChecklist 
 
 export function addChecklistItem(
   checklist: PdfChecklist,
-  label?: string
+  label?: string,
+  at?: number
 ): PdfChecklist {
   if (checklist.items.length >= CHECKLIST_ITEMS_CAP) {
     // DDD audit F-13: console.warn 제거 (domain pure). cap 초과 = silent no-op.
@@ -510,7 +529,9 @@ export function addChecklistItem(
     return checklist;
   }
 
-  const itemId = `clitem-${Date.now()}-${checklist.items.length}`;
+  // items.length 가 이미 항목별 고유 index 를 제공 → at 만 주입되면 deterministic.
+  const t = at ?? Date.now();
+  const itemId = `clitem-${t}-${checklist.items.length}`;
   const safeLabel = (label ?? "").slice(0, CHECKLIST_LABEL_CAP);
 
   return {
@@ -519,7 +540,7 @@ export function addChecklistItem(
       ...checklist.items,
       { id: itemId, label: safeLabel, checked: false }
     ],
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date(t).toISOString()
   };
 }
 
@@ -599,18 +620,21 @@ export function createTable(input: {
   subjectId: string;
   page: number;
   position: { x: number; y: number };
+  at?: number;
 }): PdfTable {
-  const now = new Date().toISOString();
+  const t = input.at ?? Date.now();
+  const iso = new Date(t).toISOString();
+  const normalizedPosition = normalizePdfPoint(input.position.x, input.position.y);
 
   return {
-    id: `table-${Date.now()}-${randomFourHex()}`,
+    id: `table-${t}-${input.at !== undefined ? widgetIdSuffix(input.at, normalizedPosition) : randomFourHex()}`,
     subjectId: input.subjectId,
     page: input.page,
-    position: normalizePdfPoint(input.position.x, input.position.y),
+    position: normalizedPosition,
     content: "",
     collapsed: true,
-    createdAt: now,
-    updatedAt: now
+    createdAt: iso,
+    updatedAt: iso
   };
 }
 
@@ -664,19 +688,22 @@ export function createChart(input: {
   subjectId: string;
   page: number;
   position: { x: number; y: number };
+  at?: number;
 }): PdfChart {
-  const now = new Date().toISOString();
+  const t = input.at ?? Date.now();
+  const iso = new Date(t).toISOString();
+  const normalizedPosition = normalizePdfPoint(input.position.x, input.position.y);
 
   return {
-    id: `chart-${Date.now()}-${randomFourHex()}`,
+    id: `chart-${t}-${input.at !== undefined ? widgetIdSuffix(input.at, normalizedPosition) : randomFourHex()}`,
     subjectId: input.subjectId,
     page: input.page,
-    position: normalizePdfPoint(input.position.x, input.position.y),
+    position: normalizedPosition,
     content: "",
     chartType: DEFAULT_CHART_TYPE,
     collapsed: true,
-    createdAt: now,
-    updatedAt: now
+    createdAt: iso,
+    updatedAt: iso
   };
 }
 
