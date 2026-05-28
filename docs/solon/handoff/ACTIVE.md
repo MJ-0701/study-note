@@ -38,7 +38,8 @@
 > `sfs loop` PROGRESS.md 미부트스트랩 → self-drive 로 PR 생산. 전부 **미머지·미배포** (user 검토 후 merge/배포). prod = be-v0.1.32 / fe-v0.1.57 유지.
 
 - **PR #112/#113/#115 = merge + 배포 완료** (self+cross+@codex 3계층 green). `be-v0.1.33` prod live (health 200 / materials·subjects 401 검증). #112 spec + #113 F-11(canDeleteSubject) + #115 F-10(MaterialPublicResponse DTO).
-- **PR #114** F-12 WeekNote import Concept↔Keyword invariant — **머지 대기**. self+cross clean, Codex P2(trim) fixed + 재검토 async. ⚠ (1) strictness 결정(dangling ref hard reject — user 확인 중) (2) F-12 = domain→**FE** 라 **fe tag** 배포 (be 아님).
+- **PR #114** F-12 WeekNote import Concept↔Keyword invariant — **merge 완료** (main e9bcab3). self+cross+@codex 전부 green. Codex 가 trim(P2) + **XSS(P2)** 2건 발견 → 둘 다 fix (XSS = renderIntakeFeedback detail/title escapeHtml, 잠재 file.name XSS 도 동시 차단). strictness=Reject(user 승인). domain spec 6 + web build green.
+  - ⚠ **fe 배포만 미완**: `fe-v0.1.58` 이 Vercel **일일 배포 한도(100/day) 초과** 로 실패 (`api-deployments-free-per-day`). 코드/빌드 정상, 외부 rate-limit. **~24h 후 재배포 필요** = `git push origin fe-v0.1.58 --force` 또는 새 fe tag 재푸시 (limit 리셋 후). prod FE 는 현재 fe-v0.1.57 (F-12/XSS escape 미반영 — XSS 는 admin 악성 import JSON 한정이라 임시 위험 낮음).
 
 ## DDD backlog — 종료
 
