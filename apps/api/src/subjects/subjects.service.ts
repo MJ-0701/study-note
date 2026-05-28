@@ -13,6 +13,7 @@ import type { Subject as PrismaSubject } from "@prisma/client";
 import { ensureTermHierarchyAllowed } from "../terms/terms.service";
 import { TermRepository } from "../terms/term.repository";
 import { SubjectRepository } from "./subject.repository";
+import { canDeleteSubject } from "./subject-deletion.policy";
 
 function isForeignKeyViolation(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -90,9 +91,9 @@ export class SubjectsService {
     // Service-level 409. DB FK (PdfMaterial.subjectId = default RESTRICT) 는
     // deletedAt=null/not-null 구분 없이 모든 referencing row 를 block 하므로
     // preflight 도 동일하게 count all 해야 UI/DB 정합 (Codex Round-4 P1).
-    // 살아있는 / soft-deleted 도 모두 count.
+    // 살아있는 / soft-deleted 도 모두 count. 삭제 가능 판단 불변식은 canDeleteSubject 도메인 policy.
     const materialCount = await this.subjectRepo.countChildMaterials(id);
-    if (materialCount > 0) {
+    if (!canDeleteSubject(materialCount)) {
       throw new ConflictException({
         errorCode: "HAS_CHILDREN",
         errorMessage: "cannot delete subject that contains materials (including soft-deleted)"
