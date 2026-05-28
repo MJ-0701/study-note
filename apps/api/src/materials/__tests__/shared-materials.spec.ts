@@ -6,6 +6,7 @@ import { NotFoundException } from "@nestjs/common";
 import { ROLES_KEY } from "@study-note/auth";
 import { MaterialsController } from "../materials.controller";
 import { MaterialsService, parseMaterialMetadataBody } from "../materials.service";
+import { MaterialUploadService } from "../material-upload.service";
 import { PdfMaterialRepository } from "../pdf-material.repository";
 import { AnnotationSnapshotRepository } from "../annotation-snapshot.repository";
 
@@ -128,13 +129,15 @@ function makeService(options: {
   };
 
   const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
+  const storagePort = storage as unknown as import("@study-note/storage").StoragePort;
+  const materialRepo = new PdfMaterialRepository(ps);
   return {
     service: new MaterialsService(
-      ps,
-      storage as unknown as import("@study-note/storage").StoragePort,
-      new PdfMaterialRepository(ps),
+      storagePort,
+      materialRepo,
       new AnnotationSnapshotRepository(ps)
     ),
+    uploadService: new MaterialUploadService(ps, storagePort, materialRepo),
     annotations,
     queries
   };
@@ -280,8 +283,8 @@ describe("Materials shared-read contract", () => {
   });
 
   it("returns 200-compatible empty materials array when no shared material exists", async () => {
-    const { service } = makeService({ materials: [] });
-    const controller = new MaterialsController(service);
+    const { service, uploadService } = makeService({ materials: [] });
+    const controller = new MaterialsController(uploadService, service);
 
     const result = await controller.listMaterials({
       user: {

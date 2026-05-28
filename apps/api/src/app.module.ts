@@ -7,6 +7,7 @@ import { AuthModule } from "@study-note/auth";
 import { HealthController } from "./health.controller";
 import { MaterialsController } from "./materials/materials.controller";
 import { MaterialsService } from "./materials/materials.service";
+import { MaterialUploadService } from "./materials/material-upload.service";
 import { ConversationController } from "./persona/conversation.controller";
 import { PersonaTurnController } from "./persona/persona-turn.controller";
 import { PrismaModule } from "@study-note/persistence";
@@ -42,6 +43,7 @@ import { AnnotationSnapshotRepository } from "./materials/annotation-snapshot.re
     ConversationController
   ],
   providers: [
+    MaterialUploadService,
     MaterialsService,
     PdfMaterialRepository,
     AnnotationSnapshotRepository,

@@ -16,7 +16,8 @@ import {
 } from "@nestjs/common";
 import type { UserProfile } from "@study-note/domain";
 import { RoleGuard, Roles, SessionAuthGuard } from "@study-note/auth";
-import { MaterialsService, parseMaterialMetadataBody, parseUploadIntentBody } from "./materials.service";
+import { MaterialsService, parseMaterialMetadataBody } from "./materials.service";
+import { MaterialUploadService, parseUploadIntentBody } from "./material-upload.service";
 
 interface AuthenticatedRequest {
   user: UserProfile;
@@ -30,7 +31,10 @@ interface AuthenticatedUploadRequest extends IncomingMessage {
 @Controller("materials")
 @UseGuards(SessionAuthGuard)
 export class MaterialsController {
-  constructor(private readonly materials: MaterialsService) {}
+  constructor(
+    private readonly uploads: MaterialUploadService,
+    private readonly materials: MaterialsService
+  ) {}
 
   @Post("upload-intent")
   @UseGuards(SessionAuthGuard, RoleGuard)
@@ -39,7 +43,7 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Body() body: unknown
   ) {
-    return this.materials.createUploadIntent(
+    return this.uploads.createUploadIntent(
       request.user.id,
       parseUploadIntentBody(body)
     );
@@ -53,7 +57,7 @@ export class MaterialsController {
     @Param("materialId") materialId: string
   ) {
     return {
-      material: await this.materials.uploadFile(request.user.id, materialId, {
+      material: await this.uploads.uploadFile(request.user.id, materialId, {
         body: request,
         contentType: readSingleHeader(request.headers["content-type"], "content-type"),
         contentLength: readContentLength(request.headers["content-length"])
@@ -72,7 +76,7 @@ export class MaterialsController {
     // sprint-W22-sprint-24 / AC4 — log emit 은 service 의 transition 분기 안에서.
     // controller 에서 emit 시 idempotent retry / duplicate callback 가 metric 부풀림
     // (Codex PR #85 round-2 P2 finding).
-    return this.materials.completeUpload(request.user.id, materialId);
+    return this.uploads.completeUpload(request.user.id, materialId);
   }
 
   @Get()
