@@ -41,29 +41,37 @@ study-note는 강의 PDF를 과목 단위로 정리하고, PDF 위에 직접 필
 
 <br/>
 
-study-note 는 자체 호스팅 Prometheus + Grafana 로 4종 운영 대시보드를 운영합니다. 라이브 환경이 비활성일 때를 대비한 캡처입니다.
+study-note 는 자체 호스팅 Prometheus + Grafana 로 4종 운영 대시보드를 운영합니다. 청중과 응답 주기가 다른 신호를 한 화면에 섞지 않도록 **시스템 / 비즈니스 / 비용 / 신뢰성** 으로 분리했습니다. 라이브 환경이 비활성일 때를 대비한 캡처입니다.
 
 ### 1. APM Live Ops — 시스템 신호
 API 호출량 · 5xx · p95 지연 · CAS 충돌 · route 별 분포 · Node.js heap/event loop.
+
+**왜 보나**: 장애와 성능 저하를 가장 먼저 드러내는 1차 신호입니다. 5xx 가 튀면 배포 롤백 판단, p95 가 임계(800ms)를 넘으면 cold-start·쿼리·외부 IO 병목 추적, heap/event-loop lag 로 메모리 누수와 이벤트 루프 blocking 을 조기 발견합니다. 배포 직후 가장 먼저 확인하는 화면입니다.
 
 ![APM Live Ops](docs/portfolio/dashboards/live-ops.png)
 
 ### 2. Product — 비즈니스 신호
 DAU · 신규가입(24h/7d) · PDF 업로드 · 콘텐츠 누적 · 역할 분포 · annotation/sync rate (30분 cron).
 
+**왜 보나**: 시스템이 살아있는 것과 "사람이 실제로 쓰는 것"은 다릅니다. DAU·신규가입으로 성장 추이를, PDF 업로드·annotation rate 로 핵심 기능의 실사용을, 역할 분포로 운영자/일반 사용자 비율을 봅니다. 기능 우선순위와 온보딩 개선 여부를 데이터로 판단하는 근거입니다.
+
 ![Product](docs/portfolio/dashboards/product.png)
 
 ### 3. Cost — 비용 신호
 R2 storage/object · MySQL row · Datadog ingestion (6시간 cron).
+
+**왜 보나**: 개인 운영 프로젝트는 비용이 곧 지속 가능성입니다. R2 저장량·객체 수 증가율로 스토리지 비용을, Datadog ingestion 으로 관측 비용(이중 emit 영향)을, MySQL row 로 DB 증가를 추적합니다. "사용자당 비용(cost/DAU)" 이 임계를 넘기 전에 정리·아카이빙·요금제 전환을 결정합니다.
 
 ![Cost](docs/portfolio/dashboards/cost.png)
 
 ### 4. 대시보드 목록 (Grafana provisioning)
 코드 SoT(`infra/grafana/dashboards/*.json`)에서 자동 provisioning 되는 4종.
 
+**왜 보나**: 대시보드를 UI 에서 손으로 만들지 않고 JSON 으로 버전 관리한다는 증빙입니다. Grafana 컨테이너를 재기동하거나 새 환경에 띄워도 provisioning 으로 동일하게 복원되어, 관측 환경 자체가 재현 가능(IaC)함을 보여줍니다.
+
 ![Dashboards](docs/portfolio/dashboards/dashboards-list.png)
 
-> 캡처 일자: 2026-05-28. 대시보드 정의는 `infra/grafana/dashboards/` 에 코드로 버전 관리되므로, Grafana 재기동 시 동일하게 복원됩니다.
+> 캡처 일자: 2026-05-28. 대시보드 정의는 `infra/grafana/dashboards/` 에 코드로 버전 관리되므로, Grafana 재기동 시 동일하게 복원됩니다. 운영 lane 구성 근거는 위 [구성 결정과 근거](#구성-결정과-근거) 표의 "관측 SoT" / "운영 지표 v2" 행을 참고하세요.
 
 </details>
 
@@ -249,3 +257,4 @@ node scripts/playwright-prod-smoke.mjs
 - `local-materials/`는 로컬 강의자료 보관용이며 git에 올리지 않습니다.
 - `.env`와 credential은 git에 올리지 않습니다.
 - 운영 환경 secret(Database URL, S3 키, Datadog 키, Prometheus 토큰 등)은 Azure Container Apps secret으로만 관리합니다.
+- 운영 대시보드(Grafana/Prometheus) 비활성화·재활성화 절차는 [docs/runbooks/observability-toggle.md](docs/runbooks/observability-toggle.md)에 정리되어 있습니다.
