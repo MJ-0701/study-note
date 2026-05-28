@@ -4594,8 +4594,8 @@ function renderIntakeFeedback(
 
   return `
     <div class="import-feedback is-${intakeFeedback.kind}">
-      <strong>${intakeFeedback.title}</strong>
-      <p>${intakeFeedback.detail}</p>
+      <strong>${escapeHtml(intakeFeedback.title)}</strong>
+      <p>${escapeHtml(intakeFeedback.detail)}</p>
       ${intakeFeedback.href ? `<a href="${intakeFeedback.href}">반영된 수업일 노트 보기</a>` : ""}
       ${retryButton}
     </div>
