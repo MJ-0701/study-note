@@ -12,6 +12,7 @@ import {
 import { PrismaService } from "@study-note/persistence";
 import type { Subject as PrismaSubject } from "@prisma/client";
 import { ensureTermHierarchyAllowed } from "../terms/terms.service";
+import { SubjectRepository } from "./subject.repository";
 
 function isForeignKeyViolation(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
@@ -30,12 +31,13 @@ import type { SubjectCreateInput, SubjectUpdateInput } from "./subjects.dto";
 export class SubjectsService {
   private readonly logger = new Logger(SubjectsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subjectRepo: SubjectRepository
+  ) {}
 
   async list(): Promise<PrismaSubject[]> {
-    return this.prisma.subject.findMany({
-      orderBy: [{ termId: "asc" }, { title: "asc" }]
-    });
+    return this.subjectRepo.findAllOrdered();
   }
 
   async create(
@@ -52,12 +54,7 @@ export class SubjectsService {
       });
     }
     ensureTermHierarchyAllowed(term, actorId, actorRole);
-    const created = await this.prisma.subject.create({
-      data: {
-        title: input.title,
-        termId
-      }
-    });
+    const created = await this.subjectRepo.create(termId, input.title);
     this.logger.warn(
       `[Subject] action=create id=${created.id} termId=${termId} actor=${actorId} title=${created.title}`
     );
@@ -72,12 +69,7 @@ export class SubjectsService {
   ): Promise<PrismaSubject> {
     const before = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
-    const updated = await this.prisma.subject.update({
-      where: { id },
-      data: {
-        title: input.title
-      }
-    });
+    const updated = await this.subjectRepo.updateTitle(id, input.title);
     this.logger.warn(
       `[Subject] action=update id=${id} actor=${actorId} before=t=${before.title}/term=${before.termId ?? "null"} after=t=${updated.title}/term=${updated.termId ?? "null"}`
     );
@@ -107,7 +99,7 @@ export class SubjectsService {
     }
 
     try {
-      await this.prisma.subject.delete({ where: { id } });
+      await this.subjectRepo.deleteById(id);
     } catch (err) {
       if (isForeignKeyViolation(err)) {
         throw new ConflictException({
@@ -150,10 +142,7 @@ export class SubjectsService {
 
     let updated: PrismaSubject;
     try {
-      updated = await this.prisma.subject.update({
-        where: { id },
-        data: { termId: targetTermId }
-      });
+      updated = await this.subjectRepo.updateTermId(id, targetTermId);
     } catch (err) {
       // PR #50 codex Round-1 P2: targetTerm findUnique 와 update 사이에 target
       // term 이 concurrent delete 되면 FK violation. delete 분기 패턴 일관
@@ -196,7 +185,7 @@ export class SubjectsService {
   }
 
   private async findOrThrow(id: string): Promise<PrismaSubject> {
-    const row = await this.prisma.subject.findUnique({ where: { id } });
+    const row = await this.subjectRepo.findById(id);
     if (!row) {
       throw new NotFoundException({
         errorCode: "SUBJECT_NOT_FOUND",
