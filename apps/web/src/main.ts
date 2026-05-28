@@ -214,6 +214,7 @@ import {
   commitInkStroke,
   extendInkStroke,
   getSurfacePoint as getSurfacePointModule,
+  peekActiveInkStroke,
   type InkStrokeCallbacks,
   type InkStrokeContext,
   type InkStrokeDomainHelpers
@@ -2787,7 +2788,17 @@ function handleDocumentPointerDown(event: PointerEvent): void {
   }
 
   // sprint-W22-sprint-3 / slice-2c — ink stroke begin (pdf-workspace/ink-stroke.ts).
+  const liveInkLayerPresent = surface.querySelector("[data-live-ink-layer]") !== null;
   beginInkStroke(event, surface, subjectId, material, point);
+
+  // 관측: 펜 pointerdown 이 들어왔으나 stroke 가 시작되지 못한 anomaly (live ink
+  // layer 누락 등) 를 Datadog 으로 기록. 실수업 중 "획 누락" 재발 시 root cause 추적용.
+  if (!peekActiveInkStroke()) {
+    trackRumAction("pen-stroke.begin-failed", {
+      pointer_type: event.pointerType,
+      live_layer: liveInkLayerPresent
+    });
+  }
 }
 
 function closeOpenPdfClassDatePickers(target: Element): void {
@@ -3110,6 +3121,17 @@ function handleDocumentPointerUp(event: PointerEvent): void {
   // sprint-W22-sprint-3 / slice-2c — ink stroke commit (pdf-workspace/ink-stroke.ts).
   // points>1 → workspace push + RAF (renderApp + reattach + measure RUM emit).
   // points<=1 → skip metric + state reset.
+  // 관측: 진행 중인 펜 stroke 가 pointercancel 로 중단된 anomaly (iPad Safari palm/
+  // hover 판정 등) 를 Datadog 으로 기록. points 수가 작으면 "획 누락" 증상과 직결.
+  if (event.type === "pointercancel") {
+    const active = peekActiveInkStroke();
+    if (active && active.pointerId === event.pointerId) {
+      trackRumAction("pen-stroke.cancel", {
+        points: active.points.length,
+        pointer_type: event.pointerType
+      });
+    }
+  }
   commitInkStroke(event, inkStrokeCtx, inkStrokeCallbacks, inkStrokeDomainHelpers);
 }
 
