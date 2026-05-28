@@ -27,6 +27,7 @@ import {
   TermsService,
   ensureTermHierarchyAllowed
 } from "../terms.service";
+import { TermRepository } from "../term.repository";
 import { termCreateSchema } from "../terms.dto";
 
 // ─── Mock prisma factory ──────────────────────────────────────────────────────
@@ -57,7 +58,9 @@ interface MockPrisma {
 }
 
 function makeService(prisma: MockPrisma): TermsService {
-  return new TermsService(prisma as unknown as import("@study-note/persistence").PrismaService);
+  const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
+  // DDD Slice 4: TermRepository 가 동일 prisma mock 의 term.* 위임.
+  return new TermsService(ps, new TermRepository(ps));
 }
 
 function termRow(overrides: Partial<MockTermRow> = {}): MockTermRow {
