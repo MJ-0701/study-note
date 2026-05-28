@@ -19,18 +19,18 @@ study-note는 강의 PDF를 과목 단위로 정리하고, PDF 위에 직접 필
 - **관리자 화면**: 사용자 승인, 권한 변경, 학기/과목 관리, 운영 지표 진입을 한곳에서 제공합니다.
 - **운영 지표 v2**: APM, Product, Cost, SLO 네 종의 Grafana 대시보드로 시스템과 사용 추이를 분리해 살펴봅니다.
 
-## 시연 경로
+## 운영 환경
 
 - 서비스: <https://study-note.910701.xyz>
-- 관리자 화면: <https://study-note.910701.xyz/admin.html>
-- 운영 지표 진입: <https://study-note.910701.xyz/admin.html#ops>
+- 관리자 콘솔: <https://study-note.910701.xyz/admin.html>
+- 운영 지표 진입점: <https://study-note.910701.xyz/admin.html#ops>
 - Grafana 대시보드 (4종, 용도별 분리)
   - APM Live Ops: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-ops/study-note-live-ops-self-host-prometheus?orgId=1&from=now-1h&to=now&timezone=browser&refresh=15s>
   - Product: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-product/c476433?orgId=1&from=now-24h&to=now&timezone=browser&refresh=1m>
   - Cost: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-cost/study-note-cost-r2-mysql-dd?orgId=1&from=now-7d&to=now&timezone=browser&refresh=10m>
   - SLO: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-slo/study-note-slo-availability-latency-sync?orgId=1&from=now-7d&to=now&timezone=browser&refresh=1m>
 
-시연 계정은 운영자가 별도로 안내합니다. 백엔드는 사용량이 없으면 절전 상태가 될 수 있어 첫 요청이 몇 초 정도 늦게 응답할 수 있습니다.
+계정은 운영자가 별도로 안내합니다. 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청은 몇 초 늦게 응답할 수 있습니다.
 
 ## 기본 사용 흐름
 
@@ -78,7 +78,7 @@ flowchart LR
 | Backend 호스팅 | Azure Container Apps (min-replicas=0) | 운영 비용을 0에 가깝게 유지하면서 NestJS 컨테이너 그대로 배포합니다. 절전 cold start는 GitHub Actions와 UptimeRobot의 1분 핑으로 완화합니다. |
 | 관계형 데이터베이스 | Azure MySQL Flex | 사용자, 학기/과목 계층, 자료/스냅샷 메타데이터처럼 일관성이 중요한 데이터를 보관합니다. Flex 구성은 비용·운영 부담이 가장 가벼웠습니다. |
 | 객체 스토리지 | Cloudflare R2 (S3 호환) | PDF 원본과 필기 페이로드처럼 큰 객체는 egress 비용이 부담입니다. R2는 egress가 0이라 강의자료 다운로드/동기화에 유리합니다. |
-| 관측 SoT (이중 lane) | Prometheus + Datadog | Prometheus는 코드 SoT 대시보드로 면접/시연·재현성에 강하고, Datadog은 APM/Logs/RUM 한 화면에서 trace 추적이 빠릅니다. 둘을 분리해 책임을 나눴습니다. |
+| 관측 SoT (이중 lane) | Prometheus + Datadog | Prometheus는 대시보드 정의가 코드 저장소에 함께 버전 관리되어 재현성과 변경 이력 추적이 용이하고, Datadog은 APM·Logs·RUM을 한 화면에서 묶어 trace 단위 디버깅이 빠릅니다. 둘의 책임을 분리해 운영합니다. |
 | 운영 지표 v2 (4 dashboard) | APM · Product · Cost · SLO | 시스템 신호(APM), 비즈니스 신호(Product), 비용 신호(Cost), 신뢰성 신호(SLO)는 청중과 응답 주기가 달라 한 화면에 모으면 가독성이 떨어집니다. 용도별로 분리했습니다. |
 | /api/metrics 보호 | `MetricsScrapeGuard` (Bearer / x-prometheus-token) | Product/Cost gauge에 비즈니스 지표가 포함되어 공개 노출은 부적절합니다. 토큰 미주입 시 fail-closed 403로 막습니다. |
 | Prometheus tsdb 보관 | Azure Files persistent volume | 컨테이너 revision 교체 시 ephemeral 디스크가 비워지지 않도록 외부 볼륨에 영속화했습니다. |
