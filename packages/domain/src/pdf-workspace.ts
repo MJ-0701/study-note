@@ -442,7 +442,9 @@ export function deleteTextBox(
 // ---------------------------------------------------------------------------
 // sprint-12 — PdfChecklist reducers (R4)
 // Algorithm: O(N) immutable spread. label cap = 500 chars. items cap = 100.
-// addChecklistItem: items 100 초과 시 no-op + console.warn (동작명 + count 만).
+// addChecklistItem: items 100 초과 시 no-op (Result-pure, side-effect 없음).
+// 이전 console.warn 제거 (DDD audit F-13) — domain pure. 호출자가 cap 처리
+// 필요하면 length 비교로 사전 판정.
 // moveChecklist: 범위 외 좌표 → normalizePdfPoint 로 clamp.
 // ---------------------------------------------------------------------------
 
@@ -487,11 +489,8 @@ export function addChecklistItem(
   label?: string
 ): PdfChecklist {
   if (checklist.items.length >= CHECKLIST_ITEMS_CAP) {
-    console.warn(
-      "pdf-workspace: checklist items cap exceeded; ignoring add",
-      { count: checklist.items.length, cap: CHECKLIST_ITEMS_CAP }
-    );
-
+    // DDD audit F-13: console.warn 제거 (domain pure). cap 초과 = silent no-op.
+    // 호출자가 reporting 필요하면 length 비교로 사전 판정 + UI feedback.
     return checklist;
   }
 

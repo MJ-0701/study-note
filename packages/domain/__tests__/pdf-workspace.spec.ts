@@ -243,6 +243,31 @@ describe("R4: PdfChecklist reducers", () => {
     assert.strictEqual(result, cl); // 동일 참조 (no-op)
   });
 
+  it("addChecklistItem: cap 초과 시 console.* side-effect 0 (DDD audit F-13)", () => {
+    const original = { warn: console.warn, error: console.error, log: console.log };
+    const calls: Array<{ kind: string; args: unknown[] }> = [];
+    console.warn = (...args) => calls.push({ kind: "warn", args });
+    console.error = (...args) => calls.push({ kind: "error", args });
+    console.log = (...args) => calls.push({ kind: "log", args });
+    try {
+      let cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
+      for (let i = 0; i < 99; i++) {
+        cl = addChecklistItem(cl, `item-${i}`);
+      }
+      addChecklistItem(cl, "over-cap");
+      // domain reducer 는 pure — console 호출 0건이어야 한다.
+      assert.equal(
+        calls.length,
+        0,
+        `console called ${calls.length} times: ${JSON.stringify(calls)}`
+      );
+    } finally {
+      console.warn = original.warn;
+      console.error = original.error;
+      console.log = original.log;
+    }
+  });
+
   it("toggleChecklistItem: false → true", () => {
     const cl = createChecklist({ subjectId: "s", page: 1, position: { x: 0, y: 0 } });
     const firstItem = cl.items[0];
