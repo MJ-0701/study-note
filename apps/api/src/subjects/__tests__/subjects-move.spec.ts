@@ -25,6 +25,7 @@ import {
 import { ROLES_KEY, RoleGuard, SessionAuthGuard } from "@study-note/auth";
 import { SubjectsController } from "../subjects.controller";
 import { SubjectsService } from "../subjects.service";
+import { SubjectRepository } from "../subject.repository";
 import { subjectMoveSchema } from "../subjects.dto";
 
 interface MockTermRow {
@@ -63,7 +64,10 @@ interface MockPrisma {
 }
 
 function makeService(prisma: MockPrisma): SubjectsService {
-  return new SubjectsService(prisma as unknown as import("@study-note/persistence").PrismaService);
+  const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
+  // DDD Slice 3: SubjectRepository 는 같은 prisma mock 의 subject.* 에 위임 →
+  // spec mock 그대로 투명하게 동작.
+  return new SubjectsService(ps, new SubjectRepository(ps));
 }
 
 function term(overrides: Partial<MockTermRow> = {}): MockTermRow {
