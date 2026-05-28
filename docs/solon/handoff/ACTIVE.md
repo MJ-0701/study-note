@@ -31,7 +31,7 @@
 
 - **upload E2E**: 실 PDF 업로드 → 자료실 노출 ✅ (F-3 분할 후 동작 동일 — be-v0.1.32 배포 success + prod health 200 / materials 401).
 - **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
-- **iPad 펜 "두 번째 획 누락"**: 간헐 버그, 재현 실패(입력 파이프라인 매번 정상). blind fix 회피, `pen-stroke.cancel`/`pen-stroke.begin-failed` Datadog RUM anomaly emit 만 prod 에 심음 (fe-v0.1.57). 실수업 재발 시 Datadog 누적 먼저 확인.
+- **iPad 펜 "두 번째 획 누락"**: 🔴 **2026-05-28 실수업 중 실제 재현됨** (user 보고). telemetry(fe-v0.1.57 RUM emit) prod live 상태라 그 순간 RUM 에 찍혔을 것. **다음 first action (집에서, DD key 필요) = Datadog RUM 확인** — app.us5.datadoghq.com → RUM → `@action.name:pen-stroke.cancel`(`@context.points` 작으면 root cause 확정) / `pen-stroke.begin-failed`(`live_layer:false`). 둘 다 0이면 제3경로 = 계측 보강. RUM emit = main.ts:2797(begin-failed)/3129(cancel). 로컬엔 DD key 없음 (ACA secret 한정).
 
 ## DDD 자율 PR run (2026-05-28 저녁, PR-only · 미배포)
 
@@ -56,10 +56,10 @@
 
 ## 다음 세션 first action 후보
 
-1. **PR #112/#113/#114/#115 검토 → merge → 배포** (자율 run 산출, 전부 미배포). #114 strictness tradeoff + #112~115 Codex 확인 후. backend 4 PR 머지 후 be tag 1회로 묶음 배포 (#115 는 FE shape 불변이라 fe 재배포 불요).
-2. iPad 펜 버그 — 실수업 후 Datadog RUM `pen-stroke.cancel`(points 작음)/`begin-failed` 누적 확인. 있으면 root cause 확정 후 fix, 0이면 timing 이슈로 종결.
-3. React migration cost 재평가 (별 트랙). R-DTO-storageKey (P3, supervised).
-4. CLAUDE.md infra 정정 (FE = Vercel, "Azure SWA" stale — spawn task chip).
+1. 🔴 **iPad 펜 버그 — Datadog RUM 확인 (집에서, DD key 필요)**: 2026-05-28 실수업 재현됨. RUM `@action.name:pen-stroke.cancel`(points 작음 = pointercancel root cause 확정)/`pen-stroke.begin-failed`(live_layer:false) 조회 → 그 signal 로 fix 작성. 둘 다 0이면 제3경로 계측 보강.
+2. **fe-v0.1.58 재배포** (F-12 + import XSS escape) — Vercel 일일한도 리셋(~24h) 후 `git push origin fe-v0.1.58 --force` 또는 새 fe tag. **+ Vercel 대시보드 Git auto-deploy OFF 확인** (vercel.json git.deploymentEnabled=false 보완, b202f63). 단 fe 배포 1번은 vercel.json 발효 위해 필요.
+3. (완료) PR #112/#113/#115 = be-v0.1.33 prod live. #114 = merge 완료, fe 배포만 한도 대기.
+4. R-DTO-storageKey (P3 supervised) / React migration 재평가 / CLAUDE.md infra Vercel 정정(chip).
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 
