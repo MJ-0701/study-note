@@ -9,9 +9,9 @@ import {
   Logger,
   NotFoundException
 } from "@nestjs/common";
-import { PrismaService } from "@study-note/persistence";
 import type { Subject as PrismaSubject } from "@prisma/client";
 import { ensureTermHierarchyAllowed } from "../terms/terms.service";
+import { TermRepository } from "../terms/term.repository";
 import { SubjectRepository } from "./subject.repository";
 
 function isForeignKeyViolation(err: unknown): boolean {
@@ -31,9 +31,12 @@ import type { SubjectCreateInput, SubjectUpdateInput } from "./subjects.dto";
 export class SubjectsService {
   private readonly logger = new Logger(SubjectsService.name);
 
+  // DDD Slice 6: SubjectsService 는 Prisma 직접 의존 0 — SubjectRepository +
+  // TermRepository (cross-aggregate Term read) 만 사용. Term 위계 검증은
+  // ensureTermHierarchyAllowed 도메인 policy.
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly subjectRepo: SubjectRepository
+    private readonly subjectRepo: SubjectRepository,
+    private readonly termRepo: TermRepository
   ) {}
 
   async list(): Promise<PrismaSubject[]> {
@@ -46,7 +49,7 @@ export class SubjectsService {
     actorId: string,
     actorRole: "master" | "admin" | "normal"
   ): Promise<PrismaSubject> {
-    const term = await this.prisma.term.findUnique({ where: { id: termId } });
+    const term = await this.termRepo.findById(termId);
     if (!term) {
       throw new NotFoundException({
         errorCode: "TERM_NOT_FOUND",
@@ -129,7 +132,7 @@ export class SubjectsService {
       return before;
     }
     // 도착지 Term 존재 + 위계 검사.
-    const targetTerm = await this.prisma.term.findUnique({ where: { id: targetTermId } });
+    const targetTerm = await this.termRepo.findById(targetTermId);
     if (!targetTerm) {
       throw new NotFoundException({
         errorCode: "TERM_NOT_FOUND",
@@ -205,7 +208,7 @@ export class SubjectsService {
       }
       return;
     }
-    const term = await this.prisma.term.findUnique({ where: { id: termId } });
+    const term = await this.termRepo.findById(termId);
     if (!term) {
       throw new NotFoundException({
         errorCode: "TERM_NOT_FOUND",

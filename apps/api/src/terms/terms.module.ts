@@ -8,6 +8,6 @@ import { TermRepository } from "./term.repository";
   imports: [AuthModule],
   controllers: [TermsController],
   providers: [TermsService, TermRepository],
-  exports: [TermsService]
+  exports: [TermsService, TermRepository]
 })
 export class TermsModule {}
