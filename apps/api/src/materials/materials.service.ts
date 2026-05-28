@@ -16,6 +16,8 @@ import type {
 } from "@study-note/domain";
 import { PrismaService, toAnnotationPayload, toAnnotationSnapshotRecord, toPdfMaterialRecord } from "@study-note/persistence";
 import { ObjectNotFoundError, StoragePort } from "@study-note/storage";
+import { PdfMaterialRepository } from "./pdf-material.repository";
+import { AnnotationSnapshotRepository } from "./annotation-snapshot.repository";
 
 interface CreateUploadIntentInput {
   subjectId: string;
@@ -49,9 +51,13 @@ export class MaterialsService {
   // emit (controller 에서 emit 시 idempotent retry → 인플레이션. Codex PR #85 P2).
   private readonly metricsLogger = new Logger("study-note.metric-event");
 
+  // DDD Slice 7: PdfMaterial / AnnotationSnapshot query 는 repository 위임.
+  // prisma 는 subject.findUnique (cross-aggregate 존재 검증) 한 곳에만 잔존 (F-8 패턴).
   constructor(
     private readonly prisma: PrismaService,
-    private readonly storage: StoragePort
+    private readonly storage: StoragePort,
+    private readonly materialRepo: PdfMaterialRepository,
+    private readonly annotationRepo: AnnotationSnapshotRepository
   ) {}
 
   async createUploadIntent(ownerId: string, input: CreateUploadIntentInput) {
@@ -60,25 +66,23 @@ export class MaterialsService {
     const subjectId = await this.requireExistingSubjectId(input.subjectId);
     const fileName = requirePdfFileName(input.fileName);
     const fileSize = requirePdfUploadFileSize(input.fileSize);
-    const material = await this.prisma.pdfMaterial.create({
-      data: {
-        id: materialId,
-        ownerId,
-        subjectId,
-        // S3 AC12: input.classDate (YYYY-MM-DD string) → canonical Date.
-        classDate: parseIsoDateOrThrow(input.classDate, "classDate"),
-        fileName,
-        fileSize,
-        pageCount: Math.max(
-          1,
-          Math.trunc(requirePositiveNumber(input.pageCount, "pageCount"))
-        ),
-        contentType: requirePdfContentType(input.contentType),
-        storageKey: `users/${ownerId}/materials/${materialId}/${sanitizeFileName(fileName)}`,
-        uploadStatus: "pending",
-        createdAt: now,
-        updatedAt: now
-      }
+    const material = await this.materialRepo.create({
+      id: materialId,
+      ownerId,
+      subjectId,
+      // S3 AC12: input.classDate (YYYY-MM-DD string) → canonical Date.
+      classDate: parseIsoDateOrThrow(input.classDate, "classDate"),
+      fileName,
+      fileSize,
+      pageCount: Math.max(
+        1,
+        Math.trunc(requirePositiveNumber(input.pageCount, "pageCount"))
+      ),
+      contentType: requirePdfContentType(input.contentType),
+      storageKey: `users/${ownerId}/materials/${materialId}/${sanitizeFileName(fileName)}`,
+      uploadStatus: "pending",
+      createdAt: now,
+      updatedAt: now
     });
     const materialRecord = toPdfMaterialRecord(material);
 
@@ -121,23 +125,14 @@ export class MaterialsService {
       maxBytes
     });
 
-    const saved = await this.prisma.pdfMaterial.update({
-      where: {
-        id: material.id
-      },
-      data: {
-        uploadStatus: "uploaded"
-      }
-    });
+    const saved = await this.materialRepo.markUploaded(material.id);
 
     return toPdfMaterialRecord(saved);
   }
 
   async completeUpload(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
     // Step 1: load material (owner scoping + soft-delete guard)
-    const material = await this.prisma.pdfMaterial.findFirst({
-      where: { id: materialId, ownerId, deletedAt: null }
-    });
+    const material = await this.materialRepo.findOwned(ownerId, materialId);
 
     if (!material) {
       throw materialNotFound();
@@ -222,10 +217,7 @@ export class MaterialsService {
 
     // Step 4: race-safe conditional update (updateMany where uploadStatus=pending)
     // Returns {count: 0|1}. count=0 means another concurrent call already transitioned.
-    const { count } = await this.prisma.pdfMaterial.updateMany({
-      where: { id: materialId, uploadStatus: "pending", deletedAt: null },
-      data: { uploadStatus: "uploaded" }
-    });
+    const { count } = await this.materialRepo.markUploadedIfPending(materialId);
 
     if (count === 0) {
       // Another concurrent call already transitioned → re-fetch and return current state
@@ -241,9 +233,7 @@ export class MaterialsService {
       this.metricsLogger.log("event=study_note.event.pdf_upload");
     }
 
-    const updated = await this.prisma.pdfMaterial.findFirst({
-      where: { id: materialId, ownerId, deletedAt: null }
-    });
+    const updated = await this.materialRepo.findOwned(ownerId, materialId);
 
     if (!updated) {
       throw materialNotFound();
@@ -253,47 +243,13 @@ export class MaterialsService {
   }
 
   async listMaterials(ownerId: string): Promise<PdfMaterialRecord[]> {
-    const materials = await this.prisma.pdfMaterial.findMany({
-      where: {
-        deletedAt: null,
-        OR: [
-          { ownerId },
-          {
-            uploadStatus: "uploaded",
-            owner: {
-              role: {
-                in: ["MASTER", "ADMIN"]
-              }
-            }
-          }
-        ]
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
+    const materials = await this.materialRepo.findAccessibleList(ownerId);
 
     return materials.map(toPdfMaterialRecord);
   }
 
   async getMaterial(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
-    const material = await this.prisma.pdfMaterial.findFirst({
-      where: {
-        id: materialId,
-        deletedAt: null,
-        OR: [
-          { ownerId },
-          {
-            uploadStatus: "uploaded",
-            owner: {
-              role: {
-                in: ["MASTER", "ADMIN"]
-              }
-            }
-          }
-        ]
-      }
-    });
+    const material = await this.materialRepo.findAccessible(ownerId, materialId);
 
     if (!material) {
       throw materialNotFound();
@@ -317,12 +273,10 @@ export class MaterialsService {
     input: UpdateMaterialMetadataInput
   ): Promise<PdfMaterialRecord> {
     const material = await this.getManageableMaterial(ownerId, materialId);
-    const saved = await this.prisma.pdfMaterial.update({
-      where: { id: material.id },
-      data: {
-        classDate: parseIsoDateOrThrow(input.classDate, "classDate")
-      }
-    });
+    const saved = await this.materialRepo.updateClassDate(
+      material.id,
+      parseIsoDateOrThrow(input.classDate, "classDate")
+    );
 
     return toPdfMaterialRecord(saved);
   }
@@ -344,29 +298,19 @@ export class MaterialsService {
   ): Promise<AnnotationSnapshotRecord> {
     const material = await this.getUploadedMaterial(ownerId, materialId);
     const savedAt = new Date();
-    const existing = await this.prisma.annotationSnapshot.findFirst({
-      where: {
-        materialId: material.id,
-        ownerId
-      }
-    });
+    const existing = await this.annotationRepo.findByMaterialOwner(material.id, ownerId);
     const snapshot = existing
-      ? await this.prisma.annotationSnapshot.update({
-          where: { id: existing.id },
-          data: {
-            schemaVersion: input.schemaVersion,
-            payload: toAnnotationPayload(input),
-            savedAt
-          }
+      ? await this.annotationRepo.update(existing.id, {
+          schemaVersion: input.schemaVersion,
+          payload: toAnnotationPayload(input),
+          savedAt
         })
-      : await this.prisma.annotationSnapshot.create({
-          data: {
-            materialId: material.id,
-            ownerId,
-            schemaVersion: input.schemaVersion,
-            payload: toAnnotationPayload(input),
-            savedAt
-          }
+      : await this.annotationRepo.create({
+          materialId: material.id,
+          ownerId,
+          schemaVersion: input.schemaVersion,
+          payload: toAnnotationPayload(input),
+          savedAt
         });
 
     return toAnnotationSnapshotRecord(snapshot);
@@ -377,12 +321,7 @@ export class MaterialsService {
     materialId: string
   ): Promise<AnnotationSnapshotRecord> {
     const material = await this.getUploadedMaterial(ownerId, materialId);
-    const snapshot = await this.prisma.annotationSnapshot.findFirst({
-      where: {
-        materialId: material.id,
-        ownerId
-      }
-    });
+    const snapshot = await this.annotationRepo.findByMaterialOwner(material.id, ownerId);
 
     return snapshot
       ? toAnnotationSnapshotRecord(snapshot)
@@ -429,13 +368,7 @@ export class MaterialsService {
   }
 
   private async getOwnedMaterial(ownerId: string, materialId: string): Promise<PdfMaterialRecord> {
-    const material = await this.prisma.pdfMaterial.findFirst({
-      where: {
-        id: materialId,
-        ownerId,
-        deletedAt: null
-      }
-    });
+    const material = await this.materialRepo.findOwned(ownerId, materialId);
 
     if (!material) {
       throw materialNotFound();
@@ -448,23 +381,7 @@ export class MaterialsService {
     ownerId: string,
     materialId: string
   ): Promise<PdfMaterialRecord> {
-    const material = await this.prisma.pdfMaterial.findFirst({
-      where: {
-        id: materialId,
-        deletedAt: null,
-        OR: [
-          { ownerId },
-          {
-            uploadStatus: "uploaded",
-            owner: {
-              role: {
-                in: ["MASTER", "ADMIN"]
-              }
-            }
-          }
-        ]
-      }
-    });
+    const material = await this.materialRepo.findAccessible(ownerId, materialId);
 
     if (!material) {
       throw materialNotFound();
