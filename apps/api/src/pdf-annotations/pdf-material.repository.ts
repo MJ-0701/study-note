@@ -42,4 +42,33 @@ export class PdfMaterialRepository {
       select: { id: true }
     });
   }
+
+  /**
+   * subject 안 접근 가능 material 의 id 목록 (createdAt asc) — batchGetBySubject 용.
+   * 접근 정책 = findAccessibleForUser 와 동일 (owner OR uploaded master/admin).
+   */
+  async findAccessibleIdsBySubject(
+    userId: string,
+    subjectId: string
+  ): Promise<PdfMaterialAccessibilityRow[]> {
+    return this.prisma.pdfMaterial.findMany({
+      where: {
+        subjectId,
+        deletedAt: null,
+        OR: [
+          { ownerId: userId },
+          {
+            uploadStatus: "uploaded",
+            owner: {
+              role: {
+                in: ["MASTER", "ADMIN"]
+              }
+            }
+          }
+        ]
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" }
+    });
+  }
 }

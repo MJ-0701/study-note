@@ -26,6 +26,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PdfAnnotationsService } from "../pdf-annotations.service";
+import { PdfMaterialRepository } from "../pdf-material.repository";
+import { AnnotationSnapshotRepository } from "../annotation-snapshot.repository";
 
 // ─── Mock factories ───────────────────────────────────────────────────────────
 
@@ -75,9 +77,13 @@ function makeService(
   storage: MockStorage,
   metrics?: { observeSyncPut: (outcome: "success" | "failure" | "stale") => void }
 ): PdfAnnotationsService {
+  // DDD Slice 8: service 는 Prisma 직접 의존 0 — material/annotation repository 가
+  // 동일 mock prisma 위임 (spec mock 그대로 투명 동작).
+  const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
   return new PdfAnnotationsService(
-    prisma as unknown as import("@study-note/persistence").PrismaService,
     storage as unknown as import("@study-note/storage").StoragePort,
+    new PdfMaterialRepository(ps),
+    new AnnotationSnapshotRepository(ps),
     metrics as unknown as import("../../observability/metrics.service").MetricsService
   );
 }

@@ -10,10 +10,10 @@ import {
   ServiceUnavailableException
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { PrismaService } from "@study-note/persistence";
 import { StoragePort } from "@study-note/storage";
 import { MetricsService } from "../observability/metrics.service";
 import { PdfMaterialRepository } from "./pdf-material.repository";
+import { AnnotationSnapshotRepository } from "./annotation-snapshot.repository";
 
 // sprint-2/S1: payload size hard cap.
 const MAX_PAYLOAD_BYTES = 256 * 1024;
@@ -43,11 +43,13 @@ export class PdfAnnotationsService {
   // 사용자 식별자/콘텐츠/토큰을 일절 포함하지 않는다.
   private readonly metricsLogger = new Logger("study-note.metric-event");
 
+  // DDD Slice 8: PdfAnnotationsService 는 Prisma 직접 의존 0 — material/annotation
+  // repository + storage 만 사용. CAS 의사결정/보상/에러 분기는 service 에 유지.
   constructor(
-    private readonly prisma: PrismaService,
     @Inject(StoragePort) private readonly storage: StoragePort,
-    @Optional() private readonly metrics?: MetricsService,
-    @Optional() private readonly materialRepo?: PdfMaterialRepository
+    private readonly materialRepo: PdfMaterialRepository,
+    private readonly annotationRepo: AnnotationSnapshotRepository,
+    @Optional() private readonly metrics?: MetricsService
   ) {}
 
   /** R2 key — `annotations/{userId}/material-{materialId}.json`. */
@@ -62,35 +64,10 @@ export class PdfAnnotationsService {
    * AnnotationSnapshot row 자체는 (currentUserId, materialId) composite 라 다른 user
    * annotation 노출 위험 X — 본 check 는 material accessibility 만 책임.
    */
-  /**
-   * DDD audit F-1/F-7 Slice 2: Prisma 직접 노출 → PdfMaterialRepository 경유.
-   * materialRepo 가 inject 됐으면 그것 사용 (prod path). 미주입 (legacy spec) 시
-   * 내장 fallback 으로 backward compat. 다음 slice 에서 fallback 제거.
-   */
+  /** R6 material accessibility — PdfMaterialRepository 위임 (Slice 8: fallback 제거). */
   private async ownsMaterial(ownerId: string, materialId: string): Promise<boolean> {
-    if (this.materialRepo) {
-      const row = await this.materialRepo.findAccessibleForUser(ownerId, materialId);
-      return row !== null;
-    }
-    const material = await this.prisma.pdfMaterial.findFirst({
-      where: {
-        id: materialId,
-        deletedAt: null,
-        OR: [
-          { ownerId },
-          {
-            uploadStatus: "uploaded",
-            owner: {
-              role: {
-                in: ["MASTER", "ADMIN"]
-              }
-            }
-          }
-        ]
-      },
-      select: { id: true }
-    });
-    return material !== null;
+    const row = await this.materialRepo.findAccessibleForUser(ownerId, materialId);
+    return row !== null;
   }
 
   /** plan §R6: foreign / nonexistent material 모두 동일 404. */
@@ -144,13 +121,7 @@ export class PdfAnnotationsService {
     cursor?: string
   ): Promise<{ items: Array<{ materialId: string; payload: unknown; updatedAt: string }>; nextCursor: string | null }> {
     const pageSize = 50;
-    const snapshots = await this.prisma.annotationSnapshot.findMany({
-      where: { ownerId },
-      select: { id: true, materialId: true, savedAt: true },
-      orderBy: { id: "asc" },
-      take: pageSize + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
-    });
+    const snapshots = await this.annotationRepo.listByOwnerPaged(ownerId, pageSize, cursor);
 
     const hasNext = snapshots.length > pageSize;
     const page = hasNext ? snapshots.slice(0, pageSize) : snapshots;
@@ -180,10 +151,7 @@ export class PdfAnnotationsService {
       this.throwMaterialNotFound();
     }
 
-    const snapshot = await this.prisma.annotationSnapshot.findUnique({
-      where: { materialId_ownerId: { materialId, ownerId } },
-      select: { savedAt: true }
-    });
+    const snapshot = await this.annotationRepo.findSavedAt(materialId, ownerId);
 
     if (!snapshot) {
       return this.emptyResponse();
@@ -206,35 +174,14 @@ export class PdfAnnotationsService {
     // 위에서도 본인 annotation 가능하므로 batch 도 share 적용.
     // AnnotationSnapshot lookup 은 (currentUserId, materialId) composite 라
     // 다른 user annotation 노출 위험 X.
-    const materials = await this.prisma.pdfMaterial.findMany({
-      where: {
-        subjectId,
-        deletedAt: null,
-        OR: [
-          { ownerId },
-          {
-            uploadStatus: "uploaded",
-            owner: {
-              role: {
-                in: ["MASTER", "ADMIN"]
-              }
-            }
-          }
-        ]
-      },
-      select: { id: true },
-      orderBy: { createdAt: "asc" }
-    });
+    const materials = await this.materialRepo.findAccessibleIdsBySubject(ownerId, subjectId);
 
     if (materials.length === 0) {
       return this.emptyResponse();
     }
 
     const materialIds = materials.map((m) => m.id);
-    const snapshots = await this.prisma.annotationSnapshot.findMany({
-      where: { materialId: { in: materialIds }, ownerId },
-      select: { materialId: true, savedAt: true }
-    });
+    const snapshots = await this.annotationRepo.findManyByMaterialsOwner(materialIds, ownerId);
 
     const snapshotByMaterial = new Map<string, Date>(
       snapshots.map((s) => [s.materialId, s.savedAt])
@@ -339,10 +286,12 @@ export class PdfAnnotationsService {
 
     if (clientRevision !== undefined) {
       // R9 step 2: atomic CAS on Prisma metadata.
-      const cas = await this.prisma.annotationSnapshot.updateMany({
-        where: { materialId, ownerId, savedAt: clientRevision },
-        data: { savedAt: newSavedAt }
-      });
+      const cas = await this.annotationRepo.casUpdateSavedAt(
+        materialId,
+        ownerId,
+        clientRevision,
+        newSavedAt
+      );
 
       if (cas.count === 1) {
         return this.writePayloadOrRollbackUpdate(
@@ -355,10 +304,7 @@ export class PdfAnnotationsService {
       }
 
       // R9 step 4: count === 0 → stale or missing.
-      const existing = await this.prisma.annotationSnapshot.findUnique({
-        where: { materialId_ownerId: { materialId, ownerId } },
-        select: { savedAt: true }
-      });
+      const existing = await this.annotationRepo.findSavedAt(materialId, ownerId);
       if (existing) {
         const obj = await this.storage.getJsonObject<{ payload: unknown }>(
           this.key(ownerId, materialId)
@@ -416,11 +362,8 @@ export class PdfAnnotationsService {
       });
     } catch (err) {
       // compensating: rollback Prisma row.savedAt to previous.
-      await this.prisma.annotationSnapshot
-        .updateMany({
-          where: { materialId, ownerId, savedAt: newSavedAt },
-          data: { savedAt: previousSavedAt }
-        })
+      await this.annotationRepo
+        .rollbackSavedAt(materialId, ownerId, newSavedAt, previousSavedAt)
         .catch(() => undefined);
       this.logger.warn(
         `pdf-annotations.put.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back metric=sync.put.failure reason=r2_write_failed`
@@ -448,24 +391,12 @@ export class PdfAnnotationsService {
   ): Promise<AnnotationBatchResponse> {
     let created: { savedAt: Date };
     try {
-      created = await this.prisma.annotationSnapshot.create({
-        data: {
-          materialId,
-          ownerId,
-          schemaVersion: 1,
-          payload: Prisma.JsonNull,
-          savedAt: newSavedAt
-        },
-        select: { savedAt: true }
-      });
+      created = await this.annotationRepo.create(materialId, ownerId, newSavedAt);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === "P2002") {
           // R9: unique violation = another concurrent create won.
-          const existing = await this.prisma.annotationSnapshot.findUnique({
-            where: { materialId_ownerId: { materialId, ownerId } },
-            select: { savedAt: true }
-          });
+          const existing = await this.annotationRepo.findSavedAt(materialId, ownerId);
           const obj = existing
             ? await this.storage.getJsonObject<{ payload: unknown }>(
                 this.key(ownerId, materialId)
@@ -511,10 +442,8 @@ export class PdfAnnotationsService {
       // Restrict the compensating delete to the exact revision we created so
       // it rolls back only our own attempt and no-ops if someone else has
       // since taken ownership of the row.
-      await this.prisma.annotationSnapshot
-        .deleteMany({
-          where: { materialId, ownerId, savedAt: created.savedAt }
-        })
+      await this.annotationRepo
+        .deleteByRevision(materialId, ownerId, created.savedAt)
         .catch(() => undefined);
       this.logger.warn(
         `pdf-annotations.create.r2-failed ownerId=${ownerId} materialId=${materialId} rolled-back metric=sync.put.failure reason=r2_write_failed`
