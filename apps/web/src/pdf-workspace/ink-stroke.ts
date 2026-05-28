@@ -368,7 +368,16 @@ export function commitInkStroke(
     // (carried=Y) 이면 renderApp 이 live ink layer 를 rebuild → 진행 중 stroke
     // 의 polyline detach. 가설 A(연속-획 race)의 결정 신호. 측정 후 제거.
     debugSink?.(`  RAF render carried=${carriedStroke ? `Y pts=${carriedStroke.points.length}` : "N"}`);
+    // ?inkdebug 진단: renderApp 동기 소요시간 측정 — 빠른 다음 획의 pointerdown
+    // 을 iOS 가 drop 하는 게 main-thread block 때문인지 검증. ≥50ms 면 block 가설
+    // ○, ≤16ms 면 ✗(Pencil hover/OS). 측정 후 제거.
+    const __now = () =>
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : 0;
+    const __renderT0 = __now();
     callbacks.renderApp();
+    debugSink?.(`  renderApp ${(__now() - __renderT0).toFixed(1)}ms`);
     if (carriedStroke && activeInkStroke === carriedStroke) {
       reattachLiveInkPolyline(carriedStroke, ctx);
       debugSink?.(`  RAF reattach pts=${carriedStroke.points.length}`);
