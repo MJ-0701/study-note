@@ -9,11 +9,24 @@ export const subjects = [
 ];
 
 export async function seedSubjects(prisma) {
+  const term = await prisma.term.upsert({
+    where: {
+      grade_semester_title: { grade: 1, semester: 1, title: "기본 학기" }
+    },
+    update: {},
+    create: {
+      grade: 1,
+      semester: 1,
+      title: "기본 학기",
+      createdById: "user-dev-1"
+    }
+  });
+
   for (const subject of subjects) {
     await prisma.subject.upsert({
       where: { id: subject.id },
       update: { title: subject.title },
-      create: subject
+      create: { id: subject.id, title: subject.title, termId: term.id }
     });
   }
 
