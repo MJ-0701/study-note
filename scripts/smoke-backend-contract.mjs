@@ -19,6 +19,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
 import { join } from "node:path";
+import os from "node:os";
 import { PrismaClient } from "@prisma/client";
 import { prepareSmokeDatabase } from "./smoke-db.mjs";
 import { createCookieJar } from "./smoke-cookie-jar.mjs";
@@ -39,6 +40,8 @@ let restartServer;
 let smokeDb;
 let prisma;
 const backendLogs = [];
+// Per-run storage dir shared across both backend spawns so manifest survives restart.
+const smokeStorageDir = fs.mkdtempSync(join(os.tmpdir(), "study-note-smoke-storage-"));
 
 try {
   smokeDb = await prepareSmokeDatabase("backend");
@@ -628,6 +631,7 @@ function startBackend(port, db) {
       DATABASE_URL: db.databaseUrl,
       SESSION_TOKEN_PEPPER: db.sessionTokenPepper,
       STORAGE_PROVIDER: process.env.STORAGE_PROVIDER ?? "local",
+      STORAGE_LOCAL_DIR: smokeStorageDir,
       PDF_UPLOAD_MAX_BYTES: "4096"
     },
     stdio: ["ignore", "pipe", "pipe"]

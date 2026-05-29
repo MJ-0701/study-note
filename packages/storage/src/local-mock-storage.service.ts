@@ -1,4 +1,7 @@
 import { Injectable } from "@nestjs/common";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { Readable } from "node:stream";
 import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
 import type {
@@ -13,6 +16,9 @@ import type {
 } from "./storage.port";
 import { ObjectNotFoundError, StoragePort } from "./storage.port";
 
+type ManifestEntry = { body: string; contentType: string };
+type Manifest = Record<string, ManifestEntry>;
+
 @Injectable()
 export class LocalMockStorageService extends StoragePort {
   private readonly objects = new Map<
@@ -22,6 +28,45 @@ export class LocalMockStorageService extends StoragePort {
       contentType: string;
     }
   >();
+
+  private readonly baseDir: string;
+  private readonly manifestPath: string;
+
+  constructor() {
+    super();
+    this.baseDir =
+      process.env["STORAGE_LOCAL_DIR"]?.trim() ??
+      path.join(os.tmpdir(), "study-note-local-mock");
+    this.manifestPath = path.join(this.baseDir, "objects.json");
+    mkdirSync(this.baseDir, { recursive: true });
+    this.loadManifest();
+  }
+
+  private loadManifest(): void {
+    try {
+      const raw = readFileSync(this.manifestPath, "utf-8");
+      const manifest = JSON.parse(raw) as Manifest;
+      for (const [key, entry] of Object.entries(manifest)) {
+        this.objects.set(key, {
+          body: Buffer.from(entry.body, "base64"),
+          contentType: entry.contentType
+        });
+      }
+    } catch {
+      // No manifest yet — start with empty map.
+    }
+  }
+
+  private saveManifest(): void {
+    const manifest: Manifest = {};
+    for (const [key, entry] of this.objects.entries()) {
+      manifest[key] = {
+        body: entry.body.toString("base64"),
+        contentType: entry.contentType
+      };
+    }
+    writeFileSync(this.manifestPath, JSON.stringify(manifest), "utf-8");
+  }
 
   async createUploadIntent(material: PdfMaterialRecord): Promise<UploadIntent> {
     return {
@@ -51,6 +96,7 @@ export class LocalMockStorageService extends StoragePort {
       body,
       contentType: input.contentType
     });
+    this.saveManifest();
   }
 
   async getObject(material: PdfMaterialRecord): Promise<StorageObjectOutput> {
@@ -95,6 +141,7 @@ export class LocalMockStorageService extends StoragePort {
 
   async deleteObject(storageKey: string): Promise<void> {
     this.objects.delete(storageKey);
+    this.saveManifest();
   }
 
   async readObjectPrefix(storageKey: string, length: number): Promise<Buffer> {
@@ -111,6 +158,7 @@ export class LocalMockStorageService extends StoragePort {
       body: Buffer.from(json, "utf-8"),
       contentType: "application/json; charset=utf-8"
     });
+    this.saveManifest();
   }
 
   async getJsonObject<T>(key: string): Promise<T | null> {
