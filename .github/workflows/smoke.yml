@@ -1,0 +1,73 @@
+# Solon SFS — Backend Contract Smoke Gate
+#
+# 목적: PR 및 main push 마다 백엔드 계약 smoke 를 자동 실행해
+#       smoke rot (silent 실패 누적) 을 방지한다.
+#       이 워크플로우 이전에는 smoke 가 한 번도 자동 실행되지 않아
+#       5개의 rot issue 가 쌓였었다.
+#
+# 트리거:
+#   - pull_request: 모든 브랜치 → main (PR 열기/업데이트/reopen)
+#   - push: main 브랜치 직접 push
+#
+# 흐름:
+#   1. Checkout
+#   2. corepack 으로 pnpm@11.0.9 고정 (packageManager 필드와 일치)
+#   3. setup-node (Node 22, .nvmrc 기준) + pnpm cache
+#   4. pnpm install --frozen-lockfile
+#   5. pnpm smoke:backend
+#      = pnpm --filter @study-note/api build
+#        && node scripts/smoke-backend-contract.mjs
+#      smoke-db.mjs 가 내부에서 docker compose 로 MySQL 8.0 을 자체 스핀업
+#      (tmpfs + healthcheck) 하므로 services: mysql 블록 불필요.
+#      ubuntu-latest runner 에 docker + docker compose 가 사전 설치되어 있음.
+#
+# 환경 변수 / 시크릿:
+#   없음. SESSION_TOKEN_PEPPER 기본값, STORAGE_PROVIDER=local, 랜덤 포트 등
+#   모두 스크립트 내부에서 처리된다.
+#
+# ⚠ NOTE: main 에 #121/#122/#123 (smoke 인프라 복구 PR wave) 가 머지되기 전까지는
+#   main/PR smoke 가 red 일 수 있음 — 이 워크플로우는 그 wave 와 함께/이후 효력 발생.
+
+name: Smoke (Backend Contract)
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Backend Contract Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Enable corepack and pin pnpm
+        run: corepack enable && corepack prepare pnpm@11.0.9 --activate
+
+      - name: Setup Node.js (from .nvmrc) with pnpm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run backend contract smoke
+        # smoke-db.mjs 가 docker compose 로 MySQL 을 자체 기동하고
+        # migrate deploy + seed 까지 수행한다.
+        # 별도 services 블록 없이 스크립트가 전부 처리.
+        run: pnpm smoke:backend
