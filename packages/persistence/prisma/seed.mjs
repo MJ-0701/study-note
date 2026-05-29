@@ -17,7 +17,7 @@ const users = [
     displayName: process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer",
     studentNumber: process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002",
     email: process.env.STUDY_NOTE_SECOND_USER_EMAIL ?? "reviewer@example.com",
-    role: "ADMIN",
+    role: "REVIEWER",
     devUserFlag: true
   },
   {

@@ -6,7 +6,7 @@ export interface AdminUserRecord {
   id: string;
   studentNumber: string;
   displayName: string;
-  role: "master" | "admin" | "normal";
+  role: "master" | "admin" | "reviewer" | "normal";
   devUserFlag: boolean;
   reviewedAt: string | null;
   createdAt: string;
@@ -16,7 +16,7 @@ type PrismaUserRow = {
   id: string;
   displayName: string;
   studentNumber: string;
-  role: "MASTER" | "ADMIN" | "NORMAL";
+  role: "MASTER" | "ADMIN" | "REVIEWER" | "NORMAL";
   devUserFlag: boolean;
   reviewedAt: Date | null;
   createdAt: Date;
@@ -55,7 +55,7 @@ export class AdminService {
    */
   async updateRole(
     id: string,
-    newRole: "MASTER" | "ADMIN" | "NORMAL",
+    newRole: "MASTER" | "ADMIN" | "REVIEWER" | "NORMAL",
     actorId: string,
     actorRole: string
   ): Promise<AdminUserRecord> {

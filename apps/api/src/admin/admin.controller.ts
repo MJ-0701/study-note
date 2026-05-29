@@ -45,7 +45,7 @@ function toWebResponse(record: AdminUserRecord): UserAdminWebResponse {
 }
 
 /** Accepted role values for the PUT /role body — uppercase per §5.3. */
-const VALID_ROLES = new Set<string>(["MASTER", "ADMIN", "NORMAL"]);
+const VALID_ROLES = new Set<string>(["MASTER", "ADMIN", "REVIEWER", "NORMAL"]);
 
 @Controller("v1/admin")
 export class AdminController {
@@ -64,9 +64,11 @@ export class AdminController {
   }
 
   // ── GET /v1/admin/ops-dashboard ───────────────────────────────────────────
+  // reviewer role 은 운영지표만 접근 허용 (사용자 관리/콘텐츠 관리 제외) — 포트폴리오
+  // 검토용 제한 권한. 나머지 admin endpoint 는 master/admin 만 유지.
   @Get("ops-dashboard")
   @UseGuards(SessionAuthGuard, RoleGuard)
-  @Roles("master", "admin")
+  @Roles("master", "admin", "reviewer")
   async getOpsDashboard(): Promise<OpsDashboardResponse> {
     return this.opsDashboardService.getSnapshot();
   }
@@ -146,7 +148,7 @@ export class AdminController {
 
 // ── Shield Pattern validators (CLAUDE.md) ─────────────────────────────────
 
-function parseRoleBody(body: unknown): { role: "MASTER" | "ADMIN" | "NORMAL" } {
+function parseRoleBody(body: unknown): { role: "MASTER" | "ADMIN" | "REVIEWER" | "NORMAL" } {
   if (!body || typeof body !== "object") {
     throw new BadRequestException({
       errorCode: "INVALID_INPUT",
@@ -160,11 +162,11 @@ function parseRoleBody(body: unknown): { role: "MASTER" | "ADMIN" | "NORMAL" } {
   if (typeof role !== "string" || !VALID_ROLES.has(role)) {
     throw new BadRequestException({
       errorCode: "INVALID_INPUT",
-      errorMessage: "role must be one of MASTER, ADMIN, NORMAL"
+      errorMessage: "role must be one of MASTER, ADMIN, REVIEWER, NORMAL"
     });
   }
 
-  return { role: role as "MASTER" | "ADMIN" | "NORMAL" };
+  return { role: role as "MASTER" | "ADMIN" | "REVIEWER" | "NORMAL" };
 }
 
 function parseDevUserFlagBody(body: unknown): { devUserFlag: boolean } {

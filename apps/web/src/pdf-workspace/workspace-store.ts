@@ -230,6 +230,25 @@ export function upsertPdfWorkspaceMaterial(
   };
 }
 
+// material 전환 시 호출 — flat annotation 배열 7종을 비운다. material 별로
+// scope 돼야 하는 annotation 이 subject 단일 버킷에 평평하게 저장되므로, 전환
+// 시 초기화해야 이전 material 의 annotation 이 새 material 로 새지 않는다.
+// 비-annotation 설정(eraserShape/eraserSize 등)은 보존한다.
+export function clearWorkspaceAnnotations(
+  workspace: SubjectPdfWorkspace
+): SubjectPdfWorkspace {
+  return {
+    ...workspace,
+    stickyNotes: [],
+    inkStrokes: [],
+    textBoxes: [],
+    checklists: [],
+    tables: [],
+    charts: [],
+    starMarks: []
+  };
+}
+
 export function replacePdfWorkspaceMaterials(
   workspace: SubjectPdfWorkspace,
   backendMaterials: BackendPdfMaterialInput[],
@@ -375,13 +394,28 @@ export function selectPdfWorkspaceMaterial(
     return false;
   }
 
+  const materialChanged =
+    !current.material || getPdfMaterialKey(current.material) !== materialId;
+
   if (current.material && getPdfMaterialKey(current.material) !== materialId) {
     callbacks.clearActivePdfObjectUrl(subjectId);
   }
 
   updatePdfWorkspace(
     subjectId,
-    (workspace) => upsertPdfWorkspaceMaterial(workspace, target),
+    (workspace) => {
+      const next = upsertPdfWorkspaceMaterial(workspace, target);
+      // material 전환 시 flat annotation 배열을 비운다. 이 배열들은 *활성
+      // material* 의 annotation 만 담아야 한다 (저장 PUT /pdf-annotations/{materialId}
+      // 와 hydration 모두 materialId 기준). 전환 시 비우지 않으면 이전 material 의
+      // 필기/포스트잇/위젯이 새 material 위에 그대로 잔존한다(특히 새 material 의 BE
+      // snapshot 이 비어 hydration 이 current 배열을 유지하는 경우). 비운 뒤
+      // fetchAnnotationIfMissing(새 material) 가 BE snapshot 으로 채운다(없으면 빈
+      // 상태 유지 = 정상). PUT 은 material 변경 시 skip 되므로(아래 updatePdfWorkspace
+      // 의 previousId===nextId guard) 빈 배열이 BE 로 새어나가지 않는다. 직전
+      // material 의 미저장분은 edit 시점마다 PUT 이 예약돼(payload 캡처) 보존된다.
+      return materialChanged ? clearWorkspaceAnnotations(next) : next;
+    },
     context,
     callbacks
   );

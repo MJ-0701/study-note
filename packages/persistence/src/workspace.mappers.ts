@@ -12,7 +12,7 @@ type UserRow = {
   displayName: string;
   studentNumber: string;
   email: string | null;
-  role: "NORMAL" | "ADMIN" | "MASTER";
+  role: "NORMAL" | "ADMIN" | "REVIEWER" | "MASTER";
 };
 
 type PdfMaterialRow = {

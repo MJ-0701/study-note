@@ -35,6 +35,7 @@ import {
   replacePdfWorkspaceMaterials,
   savePdfWorkspaceStore,
   selectPdfWorkspaceMaterial,
+  clearWorkspaceAnnotations,
   sortPdfMaterialsNewestFirst,
   syncCurrentPdfMaterial,
   updatePdfWorkspace,
@@ -456,6 +457,81 @@ describe("AC6 (9) — selectPdfWorkspaceMaterial", () => {
     assert.equal(ok, false);
     assert.deepEqual(h.clearedSubjectIds, []);
     assert.equal(h.setStoreCalls.length, 0);
+  });
+
+  it("material 전환 (m1→m2) → 직전 material 의 annotation 초기화 (display bleed 차단)", () => {
+    const m1 = makeMaterial("m1");
+    const m2 = makeMaterial("m2");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({
+            material: m1,
+            materials: [m1, m2],
+            stickyNotes: [{ id: "n1" } as never]
+          })
+        }
+      }
+    });
+    selectPdfWorkspaceMaterial("s1", "m2", h.ctx, h.cb);
+    const ws = h.store.workspaces.s1;
+    assert.equal(ws.material?.id, "m2");
+    assert.deepEqual(ws.stickyNotes, [], "전환 시 직전 material 의 stickyNotes 초기화");
+  });
+
+  it("clearWorkspaceAnnotations → 7종 annotation 배열 전부 비움 (비-annotation 설정 보존)", () => {
+    const ws = makeWorkspace({
+      stickyNotes: [{ id: "n1" } as never],
+      inkStrokes: [{ id: "k1" } as never],
+      textBoxes: [{ id: "t1" } as never],
+      checklists: [{ id: "c1" } as never],
+      tables: [{ id: "tb1" } as never],
+      charts: [{ id: "ch1" } as never],
+      starMarks: [{ id: "sm1" } as never],
+      eraserShape: "circle" as never,
+      eraserSize: 12 as never
+    });
+    const cleared = clearWorkspaceAnnotations(ws);
+    assert.deepEqual(cleared.stickyNotes, []);
+    assert.deepEqual(cleared.inkStrokes, []);
+    assert.deepEqual(cleared.textBoxes, []);
+    assert.deepEqual(cleared.checklists, []);
+    assert.deepEqual(cleared.tables, []);
+    assert.deepEqual(cleared.charts, []);
+    assert.deepEqual(cleared.starMarks, []);
+    // 비-annotation 설정은 보존
+    assert.equal((cleared as never as { eraserShape: string }).eraserShape, "circle");
+    assert.equal((cleared as never as { eraserSize: number }).eraserSize, 12);
+  });
+
+  it("material 전환 시 빈 annotation 이 BE 로 PUT 되지 않음 (material 변경 guard)", () => {
+    const m1 = makeMaterial("m1");
+    const m2 = makeMaterial("m2");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({ material: m1, materials: [m1, m2], stickyNotes: [{ id: "n1" } as never] })
+        }
+      }
+    });
+    selectPdfWorkspaceMaterial("s1", "m2", h.ctx, h.cb);
+    assert.equal(h.putCalls.length, 0, "material 변경 시 PUT skip → 빈 배열 BE 누출 0");
+  });
+
+  it("동일 materialId 재선택 → annotation 보존 (초기화 X)", () => {
+    const m1 = makeMaterial("m1");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({ material: m1, materials: [m1], stickyNotes: [{ id: "n1" } as never] })
+        }
+      }
+    });
+    selectPdfWorkspaceMaterial("s1", "m1", h.ctx, h.cb);
+    assert.equal(h.store.workspaces.s1.stickyNotes.length, 1, "동일 material 재선택 시 annotation 보존");
   });
 });
 

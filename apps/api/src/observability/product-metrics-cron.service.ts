@@ -11,7 +11,7 @@ import { MetricsService } from "./metrics.service";
 const SOURCE_TAG = "product_metrics_cron";
 const SCHEDULE_EVERY_30_MIN = "*/30 * * * *";
 
-type RoleKey = "MASTER" | "ADMIN" | "NORMAL";
+type RoleKey = "MASTER" | "ADMIN" | "REVIEWER" | "NORMAL";
 
 interface RoleGroup {
   role: RoleKey;
@@ -111,6 +111,7 @@ export class ProductMetricsCronService implements OnApplicationBootstrap {
       ["study_note.product.content.pdf_upload_24h", pdfUpload24h],
       ["study_note.product.users.role_master", roleCounts.MASTER],
       ["study_note.product.users.role_admin", roleCounts.ADMIN],
+      ["study_note.product.users.role_reviewer", roleCounts.REVIEWER],
       ["study_note.product.users.role_normal", roleCounts.NORMAL],
       ["study_note.product.org.term_active_count", termActiveCount],
       ["study_note.product.org.subject_avg_per_term", subjectAvgPerTerm],
@@ -132,7 +133,7 @@ function readCount(rows: Array<{ c: unknown }>): number {
 }
 
 function countRoles(groups: RoleGroup[]): Record<RoleKey, number> {
-  const out: Record<RoleKey, number> = { MASTER: 0, ADMIN: 0, NORMAL: 0 };
+  const out: Record<RoleKey, number> = { MASTER: 0, ADMIN: 0, REVIEWER: 0, NORMAL: 0 };
   for (const g of groups) {
     out[g.role] = g._count._all;
   }

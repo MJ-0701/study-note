@@ -199,6 +199,17 @@ code,
   top: 0;
 }
 
+/* 사이드바가 접히거나 콘텐츠가 짧을 때 grid row(.app-shell min-height:100vh)
+   아래로 흰 공백이 보이던 문제 수정 — 데스크톱 grid 레이아웃에서 사이드바를
+   뷰포트 풀하이트로 채워 전용 영역(배경)이 끊기지 않게 한다. align-self:start
+   는 콘텐츠 높이만큼만 차지해 공백을 남겼으므로 min-height 로 강제한다.
+   ≤1100px 는 사이드바가 가로 bar(position:static)로 전환되므로 적용 제외. */
+@media (min-width: 1101px) {
+  .sidebar {
+    min-height: 100vh;
+  }
+}
+
 .wordmark {
   color: var(--ds-fg);
   display: block;

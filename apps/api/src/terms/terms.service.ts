@@ -58,7 +58,7 @@ export class TermsService {
     id: string,
     input: TermUpdateInput,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<PrismaTerm> {
     const before = await this.findOrThrow(id);
     ensureTermHierarchyAllowed(before, actorId, actorRole);
@@ -100,7 +100,7 @@ export class TermsService {
   async delete(
     id: string,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<void> {
     const before = await this.findOrThrow(id);
     ensureTermHierarchyAllowed(before, actorId, actorRole);
@@ -134,7 +134,7 @@ export class TermsService {
   async getChildCount(
     id: string,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<{ subjectCount: number }> {
     const term = await this.findOrThrow(id);
     ensureTermHierarchyAllowed(term, actorId, actorRole);
@@ -157,7 +157,7 @@ export class TermsService {
 export function ensureTermHierarchyAllowed(
   term: { createdById: string },
   actorId: string,
-  actorRole: "master" | "admin" | "normal"
+  actorRole: "master" | "admin" | "reviewer" | "normal"
 ): void {
   if (actorRole === "master") return;
   if (actorRole !== "admin") {

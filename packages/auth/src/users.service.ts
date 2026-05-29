@@ -63,7 +63,7 @@ export class UsersService {
   async createUser(input: {
     name: string;
     studentNumber: string;
-    role: "NORMAL" | "ADMIN" | "MASTER";
+    role: "NORMAL" | "ADMIN" | "REVIEWER" | "MASTER";
     devUserFlag: boolean;
   }): Promise<UserProfile> {
     const user = await this.prisma.user.create({

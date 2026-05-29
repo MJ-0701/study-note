@@ -125,12 +125,19 @@ export function renderSubjectNavItem(
  */
 export function renderAdminLink(ctx: SidebarContext): string {
   const role = ctx.getAdminRole();
-  if (role !== "master" && role !== "admin") return "";
+  const isAdmin = role === "master" || role === "admin";
+  const isReviewer = role === "reviewer";
+  if (!isAdmin && !isReviewer) return "";
+  // reviewer = 운영지표만 (사용자 관리 숨김). BE 도 사용자관리 endpoint 를 reviewer
+  // 거부하므로 FE 숨김은 UX 보강이고 실제 enforcement 는 서버다.
+  const userMgmtLink = isAdmin
+    ? `<a href="/admin.html#users" aria-label="사용자 관리">사용자 관리</a>`
+    : "";
   return `
     <div class="sidebar-group sidebar-group--admin">
       <p class="group-label">🛡️ 관리자</p>
       <nav>
-        <a href="/admin.html#users" aria-label="사용자 관리">사용자 관리</a>
+        ${userMgmtLink}
         <a href="/admin.html#ops" aria-label="운영 지표">운영 지표</a>
       </nav>
     </div>

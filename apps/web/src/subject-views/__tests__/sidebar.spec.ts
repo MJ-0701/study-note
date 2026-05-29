@@ -198,6 +198,24 @@ describe("sidebar — (e) renderAdminLink (AC7(d) denylist negative UI)", () => 
     const c = parseContainer(html);
     assert.equal(c.querySelectorAll(".sidebar-group--admin").length, 1);
   });
+
+  test("case 13: role='reviewer' → admin block 운영 지표만 (사용자 관리 숨김)", () => {
+    const ctx = makeCtx({ adminRole: "reviewer" });
+    const html = sidebar.renderAdminLink(ctx);
+    const c = parseContainer(html);
+    assert.equal(c.querySelectorAll(".sidebar-group--admin").length, 1);
+    assert.ok(html.includes("운영 지표"), "reviewer 는 운영 지표 링크 노출");
+    assert.ok(!html.includes("사용자 관리"), "reviewer 는 사용자 관리 링크 숨김");
+    assert.ok(!html.includes("admin.html#users"), "reviewer 는 #users 링크 없음");
+  });
+
+  test("case 14: role='master'/'admin' → 사용자 관리 + 운영 지표 모두 노출", () => {
+    for (const role of ["master", "admin"]) {
+      const html = sidebar.renderAdminLink(makeCtx({ adminRole: role }));
+      assert.ok(html.includes("사용자 관리"), `${role} 는 사용자 관리 노출`);
+      assert.ok(html.includes("운영 지표"), `${role} 는 운영 지표 노출`);
+    }
+  });
 });
 
 // ─── (f) renderSidebarTermGroups — terms cache null/loaded ──────────────
