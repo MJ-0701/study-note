@@ -56,5 +56,17 @@ export function LegacyView({
     registry.renderApp();
   }, [routeKey, registry]);
 
-  return <div id="legacy-app-root" style={{ display: "contents" }} ref={containerRef} />;
+  // dangerouslySetInnerHTML={{ __html: "" }} = "이 subtree 는 외부(morphdom)가
+  // 소유한다"는 React 명시 신호. React 는 children 재조정을 건너뛰고, __html 값이
+  // 안 바뀌면(항상 "") 재커밋 시 DOM 을 건드리지 않는다 → morphdom 이 채운
+  // canvas/ink/scroll 이 route 변경 re-render 에도 보존된다 (INV-2 contract-level
+  // 보장. empty-children 보다 명시적 — Gemini cross-review P1 반영).
+  return (
+    <div
+      id="legacy-app-root"
+      style={{ display: "contents" }}
+      ref={containerRef}
+      dangerouslySetInnerHTML={{ __html: "" }}
+    />
+  );
 }
