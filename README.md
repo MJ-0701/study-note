@@ -167,6 +167,93 @@ flowchart LR
 | `infra/prometheus` | `study-note-prometheus` 컨테이너 이미지와 scrape 설정 |
 | `infra/grafana` | `study-note-grafana` 컨테이너 이미지, 대시보드 JSON, provisioning |
 
+## 핵심 엔지니어링 결정 (How & Why)
+
+이 프로젝트가 "무엇을 하는가"는 위에서, "어떻게 만들었는가"는 여기서 다룹니다. 아래는 실제 코드에 근거한 백엔드 설계 결정들입니다.
+
+### 1. 멀티기기 동기화의 동시성 제어 — 락 없는 Hybrid CAS + 보상
+
+같은 계정을 노트북·태블릿에서 동시에 열면 한 PDF의 필기 스냅샷에 **동시 쓰기(write-write)** 가 발생합니다. 이를 비관적 락 없이, 메타데이터(MySQL)와 페이로드(R2)를 나눠 다루는 낙관적 동시성(Compare-And-Swap)으로 해결했습니다.
+
+핵심은 `savedAt`(리비전)을 `WHERE` 절에 넣어 갱신 자체를 락으로 쓰는 것입니다. 클라이언트가 보낸 리비전이 DB의 현재 리비전과 일치할 때만 `updateMany`가 1행을 갱신하고, 그 1행을 잡은 요청만 R2에 페이로드를 씁니다.
+
+```ts
+// apps/api/src/pdf-annotations/annotation-snapshot.repository.ts
+// savedAt 이 expectedSavedAt 인 row 만 갱신. count=1 → 본 호출이 lock 획득.
+async casUpdateSavedAt(materialId, ownerId, expectedSavedAt, newSavedAt) {
+  return this.prisma.annotationSnapshot.updateMany({
+    where: { materialId, ownerId, savedAt: expectedSavedAt }, // ← where 절이 곧 lock
+    data: { savedAt: newSavedAt }
+  });
+}
+```
+
+CAS 결과에 따라 서비스가 분기합니다 (`pdf-annotations.service.ts`):
+
+- `count === 1` (선점 성공): R2에 페이로드를 쓰고, **R2 쓰기가 실패하면 `savedAt`을 이전 값으로 되돌려(rollback)** MySQL과 R2의 정합성을 맞춥니다. 메타데이터와 객체 스토리지에 걸친 쓰기를 보상 트랜잭션으로 묶은 것입니다.
+- `count === 0` (리비전 불일치): `409 STALE_REVISION`을 반환하되, **응답 본문에 서버의 최신 정본(canonical) 스냅샷을 함께 실어** 클라이언트가 곧바로 재조정(replay)할 수 있게 합니다.
+- 보상 삭제는 "정확히 내가 만든 리비전인 row만" 지우는 compare-and-delete로, 그 사이 다른 CAS가 가져간 row를 지워 데이터가 유실되는 일을 막습니다.
+
+> 이 충돌은 막연히 추정하는 값이 아니라 **APM 대시보드의 `CAS 충돌` 지표**로 실시간 관측되며(`MetricsService.observeSyncPut("stale")`), 동시성 설계가 실제로 동작하는지를 운영 데이터로 확인합니다.
+
+### 2. 횡단 관심사 분리 — Guard로 fail-closed 보호
+
+인증·권한·메트릭 보호 같은 횡단 관심사는 비즈니스 로직에서 들어내 NestJS Guard로 분리했습니다. 권한은 데코레이터로 선언하고 Guard가 강제합니다.
+
+```ts
+// packages/auth/src/role.guard.ts — 선언적 RBAC (MASTER / ADMIN / NORMAL)
+export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
+```
+
+`/api/metrics`는 Product·Cost gauge에 비즈니스 지표가 포함되어 공개 노출이 곧 정보 유출입니다. 그래서 토큰이 **설정되지 않았거나 틀리면 기본값이 차단(fail-closed)** 이고, 토큰 비교는 타이밍 공격을 막는 상수 시간 비교를 씁니다.
+
+```ts
+// apps/api/src/observability/metrics-scrape.guard.ts
+if (!expected) throw new ForbiddenException({ errorCode: "METRICS_NOT_CONFIGURED" });
+if (!constantTimeEqual(presented, expected))      // timingSafeEqual 기반
+  throw new ForbiddenException({ errorCode: "METRICS_FORBIDDEN" });
+```
+
+### 3. 세션 보안 — 평문 미저장 + fail-closed
+
+세션 토큰은 발급 시 32바이트 난수로 만들고, **DB에는 원본이 아닌 HMAC-SHA256 해시만** 저장합니다. 원본 토큰은 클라이언트에만 전달되어, DB가 유출돼도 세션을 위조할 수 없습니다. pepper가 없으면 정적 fallback 없이 즉시 throw 하는 fail-closed 정책입니다.
+
+```ts
+// packages/auth/src/sessions.service.ts
+const token = randomBytes(32).toString("base64url");      // 원본은 클라이언트에만
+await this.prisma.session.create({ data: { tokenHash: hashSessionToken(token), ... } });
+// pepper 미설정 시 fail-closed (정적 fallback 제거)
+if (!pepper) throw new Error("SESSION_TOKEN_PEPPER missing — fail-closed");
+return createHmac("sha256", pepper).update(token).digest("hex");
+```
+
+### 4. 도메인 모델링 — setter 배제, 순수 reducer
+
+`packages/domain`은 외부 의존이 없는 순수 타입과 함수만 둡니다. 모든 상태 변경은 setter가 아니라 **의미 있는 reducer 함수**를 거치며, 입력을 변형하지 않고 불변 스프레드로 새 값을 반환합니다. side-effect가 없어 테스트와 재현(replay)이 쉽습니다.
+
+```ts
+// packages/domain/src/pdf-workspace.ts — 입력 불변, 의미 있는 메서드로만 상태 전이
+export function updateTextBoxContent(textBox: PdfTextBox, content: string): PdfTextBox {
+  return { ...textBox, content: content.slice(0, TEXT_BOX_CONTENT_CAP),
+           updatedAt: new Date().toISOString() };
+}
+```
+
+타임스탬프를 선택 인자(`at?`)로 주입할 수 있어, 같은 입력이면 같은 id가 나오는 결정론적 테스트가 가능합니다(미주입 시 기존 동작 유지).
+
+### 5. 포트/어댑터로 외부 시스템 격리
+
+서비스는 구체 SDK가 아니라 추상 포트에만 의존합니다. 스토리지의 경우 서비스가 `StoragePort`만 주입받고, R2/S3 구현(`S3StorageService`)은 어댑터로 갈아끼웁니다. 덕분에 테스트는 목(mock)을, 운영은 R2를 쓰며 서비스 코드에는 AWS SDK 결합이 0입니다.
+
+```ts
+// apps/api/src/pdf-annotations/pdf-annotations.service.ts
+constructor(@Inject(StoragePort) private readonly storage: StoragePort, /* ... */) {}
+```
+
+### 6. 테스트 전략 — 명세 기반 + 실연결 스모크
+
+핵심 로직은 Node.js 내장 test 러너로 단위 검증하고(외부 프레임워크 의존 없음), 인수 기준(AC) 단위로 명세화된 스펙(예: CAS 선점/stale/롤백 경로, 권한 분기)을 검증합니다. 그 위에 `scripts/smoke-*.mjs`로 빌드된 백엔드를 띄워 인증·관리자 권한·S3 저장·MCP 등을 계약(contract) 수준에서 점검하며, 실제 R2 버킷을 쓰는 스모크는 credential이 있을 때만 opt-in으로 돕니다.
+
 ## 운영 관측
 
 운영 지표는 Prometheus와 Datadog 두 lane으로 분리되어 있습니다.

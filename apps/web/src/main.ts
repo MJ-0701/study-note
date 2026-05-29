@@ -18,7 +18,6 @@ import {
   listPdfMaterials,
   updatePdfMaterialMetadata,
   uploadMaterialFile,
-  type MaterialUploadIntent,
   type PdfMaterialRecord
 } from "./api/materials";
 import { signIn, signOut, signUp } from "./auth/authApi";
@@ -52,9 +51,7 @@ import {
 } from "./ui/ephemeral-state";
 import {
   meResponseToSession,
-  type AuthMode,
-  type AuthSession,
-  type LoginFeedback
+  type AuthSession
 } from "./auth/authSession";
 import {
   clearAuthSessionHint,
@@ -78,7 +75,6 @@ import {
 } from "./auth/authViews";
 import {
   getKeywordById,
-  type StudyNotebook,
   type SubjectNote,
   type WeekNote
 } from "@study-note/domain";
@@ -330,7 +326,6 @@ import {
   buildSubjectQuickNote,
   buildWeekQuickNote,
   renderQuickNotePanel,
-  type QuickNote,
   type QuickNoteContext
 } from "./subject-views/quick-note";
 import {
@@ -343,21 +338,38 @@ import {
 } from "./app/notebook-storage";
 import { createInkStroke as createInkStrokeDomain } from "@study-note/domain";
 import { emitWidgetCreate } from "./telemetry/widget-create";
+// React 마이그레이션 S0 (sprint 2026-W22-sprint-3) — mutable singleton →
+// Zustand store accessor shim. legacy 는 get*/set*, 후속 slice 의 React 는
+// useStore(...). 도메인 로직은 store 가 아니라 `@study-note/domain` 유지.
+import {
+  getNotebook,
+  setNotebook,
+  getQuickNote,
+  setQuickNote,
+  getIntakeFeedback,
+  setIntakeFeedback,
+  getPendingPdfRetry,
+  setPendingPdfRetry
+} from "./stores/notebookStore.ts";
+import {
+  getAuthSession,
+  setAuthSession,
+  getAuthMode,
+  setAuthMode,
+  getLoginFeedback,
+  setLoginFeedback
+} from "./stores/authStore.ts";
+import { getPdfWorkspaceStore, setPdfWorkspaceStore } from "./stores/pdfWorkspaceStore.ts";
+import { getInspectorOpen, setInspectorOpen } from "./stores/uiStore.ts";
+// React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
+// LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
+// 순환 없음).
+import { mountReactShell } from "./app/react-shell/root.tsx";
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
 const isBrowserRuntime = typeof window !== "undefined" && typeof document !== "undefined" && !isNodeRuntime;
 initializeDatadogRum();
-
-type IntakeFeedback =
-  | {
-      kind: "success" | "error";
-      title: string;
-      detail: string;
-      href?: string;
-      retrySubjectId?: string;
-    }
-  | undefined;
 
 const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 // sprint-3/S1 (codex P1 backlog): notebook is no longer loaded at module init —
@@ -366,9 +378,10 @@ const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? "/api";
 // call `loadStoredNotebook(session.user.id)` and render the user's data once
 // the session attaches. See applySessionTransitionForUser refactor for the
 // load wiring.
-let notebook: StudyNotebook = sampleLectureNote;
-// sprint-3/S2: pdfWorkspaceStore — userId-namespaced lazy load (sprint-3/S1 패턴).
-let pdfWorkspaceStore: PdfWorkspaceStore = { workspaces: {} };
+// React 마이그레이션 S0: notebook / pdfWorkspaceStore singleton → Zustand
+// store (notebookStore / pdfWorkspaceStore). 초기값(sampleLectureNote /
+// { workspaces: {} })은 store default 로 이전. read = getNotebook() /
+// getPdfWorkspaceStore(), write = setNotebook() / setPdfWorkspaceStore().
 // sprint-4/S1: in-memory tracker for the last session userId attached during
 // this page lifetime. Used by applySessionTransitionForUser to distinguish
 // "first attach" (no sync state to reset) from "different user transition"
@@ -377,13 +390,17 @@ let pdfWorkspaceStore: PdfWorkspaceStore = { workspaces: {} };
 let lastSessionUserId: string | undefined;
 // sprint-11/slice-1: inspector toggle state (localStorage persistence §9.4).
 // Default = false (접힘). Restored from localStorage on page load.
-let inspectorOpen = isBrowserRuntime ? readInspectorOpen() : false;
+// React 마이그레이션 S0: inspectorOpen singleton → uiStore. read =
+// getInspectorOpen(), write = setInspectorOpen(). localStorage 복원은 여기서
+// store 초기화.
 if (isBrowserRuntime) {
+  setInspectorOpen(readInspectorOpen());
   setInspectorDrill(readInspectorDrill());
 }
 // slice-2: auth state is in-memory only (F2 — no localStorage for session).
 // Rehydrated on app boot via GET /v1/auth/me with cookie.
-let authSession: AuthSession | undefined;
+// React 마이그레이션 S0: authSession singleton → authStore. read =
+// getAuthSession(), write = setAuthSession().
 
 // sprint-W22-sprint-21 / layer D/slice-3: sidebar term grouping cache (3 state)
 // + 3 lifecycle fn (loadSidebarTermsCache / refreshSidebarOpenTermIds /
@@ -394,7 +411,7 @@ let authSession: AuthSession | undefined;
 // main.ts 잔류 (각 37 / 7 read site). render gate (L4427/L4429) 는
 // `getAuthBootStateValue()` / `getAuthBootNoticeValue()` 로 read.
 // slice-3 (sign-up UX): current auth form tab ("login" | "signup").
-let authMode: AuthMode = "login";
+// React 마이그레이션 S0: authMode singleton → authStore (default "login").
 // sprint-W22-sprint-1 layer B/slice-2a: 4 module-state Map/Set
 // (activePdfObjectUrls, activePdfObjectUrlMaterialIds, activePdfPreviewLoads,
 // failedPdfPreviewLoadKeys) → `./pdf-workspace/canvas-mount.ts` 로 이관.
@@ -483,11 +500,9 @@ let activeStarMarkResize: {
   startClientX: number;
   startSizeRatio: number;
 } | undefined;
-let intakeFeedback: IntakeFeedback;
-let loginFeedback: LoginFeedback;
-// slice-2: stash last pending upload for retry CTA
-let pendingPdfRetry: { file: File; subjectId: string; intent: MaterialUploadIntent } | undefined;
-let quickNote: QuickNote | undefined;
+// React 마이그레이션 S0: intakeFeedback / loginFeedback / pendingPdfRetry /
+// quickNote singleton → notebookStore (intakeFeedback / pendingPdfRetry /
+// quickNote) + authStore (loginFeedback). read = get*(), write = set*().
 const app = isBrowserRuntime ? document.querySelector<HTMLDivElement>("#app") : null;
 
 if (isBrowserRuntime && !app) {
@@ -495,6 +510,13 @@ if (isBrowserRuntime && !app) {
 }
 
 const appRoot = app;
+
+// React 마이그레이션 S0: React 가 #app(appRoot)을 createRoot 로 소유하고,
+// legacy morphdom 렌더는 LegacyView 컨테이너로 재지정된다. bind 전(또는 node
+// 런타임)에는 #app fallback. setLegacyRenderTarget(아래 boot registry)으로 React
+// mount 시점에 컨테이너로 교체된다. renderInto 가 매 호출마다 sink.appRoot 를
+// fresh 하게 읽으므로 getter 로 충분하다.
+let legacyRenderTarget: HTMLElement | null = appRoot;
 
 // sprint-12/slice-7: morphdom DOM diff 도입. renderInto = app/appShell.ts.
 // sprint-2026-W21-sprint-2 / layer A: module state 의존 (appRoot + widget
@@ -508,7 +530,11 @@ const drillHighlightContext: DrillHighlightContext = {
 // drill-highlight 가 chart-content / markdown-table 를 직접 import 한다.
 const mainRenderSink: RenderSink | null = appRoot
   ? {
-      appRoot,
+      // React 마이그레이션 S0: legacy 렌더 대상 = LegacyView 컨테이너(bind 후) /
+      // #app(bind 전). appRoot 는 이 분기에서 non-null (L504 throw guard).
+      get appRoot(): HTMLElement {
+        return legacyRenderTarget ?? (appRoot as HTMLElement);
+      },
       postMountEffects: [
         () => refreshTableWidgets(),
         () => refreshChartWidgets(),
@@ -575,28 +601,36 @@ if (isBrowserRuntime) {
       });
     }
   });
-  window.addEventListener("hashchange", () => {
-    // sprint-1/S2: close transient overlays on route change so they do not
-    // bleed across pages (the hotkey help modal is only meaningful on the PDF
-    // workspace).
-    closeHotkeyHelpModal();
-    renderApp();
-  });
-  // sprint-W22-hotfix: defer initial render + revalidate to a microtask so all
-  // module-level const (특히 tableWidgetContext / chartWidgetContext / starMarkContext
-  // 등 L3793+ 의 widget ctx) 가 init 된 후 renderApp → mountRender → postMountEffects
-  // → refreshTableWidgets/refreshChartWidgets 가 실행되도록 한다. 동기 호출 시
-  // TDZ ReferenceError ("Cannot access 'tableWidgetContext' before initialization")
-  // 가 boot 마다 throw 되고 revalidate catch 가 무한 retry → UI "세션 확인 중" stuck.
-  queueMicrotask(() => {
-    renderApp();
-    // Only browsers with a prior sign-in hint should wake the backend for
-    // `/v1/auth/me`. Anonymous first visits must stay static so ACA can remain
-    // scaled to zero until the user actually signs in.
-    if (readAuthSessionHint()) {
-      void revalidateStoredSession({ blocking: true });
-    }
-  });
+  // React 마이그레이션 S0: hashchange→routing 은 이제 React hash router(router.tsx)
+  // 가 소유한다. transient overlay 정리 + 재렌더는 LegacyView 의 route-change
+  // effect 가 closeTransientOverlays + renderApp 으로 수행 (아래 registry).
+  // NOTE: document-level 위임 8 + touch 4 핸들러(L552~)는 S0 에서 document 유지.
+  // React 콘텐츠가 0 (전 route LegacyView)이라 이중처리가 구조적으로 불가능 →
+  // 위임 범위축소는 첫 React route 가 등장하는 S1 으로 이연 (roadmap §3, Q1).
+  //
+  // 초기 렌더 + boot revalidate 는 LegacyView mount effect(useEffect)가 호출한다.
+  // useEffect 는 commit 이후 = main.ts 모듈 eval 완료 후 실행되므로 기존
+  // queueMicrotask 가 회피하던 TDZ ("Cannot access 'tableWidgetContext'…")를
+  // 동일하게 회피한다.
+  if (appRoot) {
+    mountReactShell(appRoot, {
+      renderApp,
+      setLegacyRenderTarget: (el) => {
+        legacyRenderTarget = el;
+      },
+      revalidateOnBoot: () => {
+        // Only browsers with a prior sign-in hint should wake the backend for
+        // `/v1/auth/me`. Anonymous first visits must stay static so ACA can
+        // remain scaled to zero until the user actually signs in.
+        if (readAuthSessionHint()) {
+          void revalidateStoredSession({ blocking: true });
+        }
+      },
+      closeTransientOverlays: () => {
+        closeHotkeyHelpModal();
+      }
+    });
+  }
 }
 
 // sprint-11/slice-1 §9.4: localStorage helper — hard signature per plan.
@@ -639,20 +673,20 @@ function writeInspectorOpen(value: boolean): void {
 function getAuthSessionStateContext(): AuthSessionStateContext {
   return {
     apiBaseUrl,
-    getAuthSession: () => authSession
+    getAuthSession: () => getAuthSession()
   };
 }
 
 function getAuthSessionStateCallbacks(): AuthSessionStateCallbacks {
   return {
     setAuthSession: (session) => {
-      authSession = session;
+      setAuthSession(session);
     },
     setAuthMode: (mode) => {
-      authMode = mode;
+      setAuthMode(mode);
     },
     setLoginFeedback: (feedback) => {
-      loginFeedback = feedback;
+      setLoginFeedback(feedback);
     },
     clearCrossDomainSession: () => {
       clearAuthSession();
@@ -695,10 +729,10 @@ function handleAuthExpiredFromSync(): void {
 function getAnnotationSyncContext(): AnnotationSyncContext {
   return {
     apiBaseUrl,
-    getSessionUserId: () => authSession?.user.id,
+    getSessionUserId: () => getAuthSession()?.user.id,
     getSyncBackendPaused: () => isSyncBackendPaused(),
     readSubjectWorkspace: (subjectId) =>
-      pdfWorkspaceStore.workspaces[subjectId]
+      getPdfWorkspaceStore().workspaces[subjectId]
   };
 }
 
@@ -723,7 +757,7 @@ function getAnnotationSyncCallbacks(): AnnotationSyncCallbacks {
       // material 찾기.
       if (subjectId === "") {
         for (const entry of hydration) {
-          for (const [sid, ws] of Object.entries(pdfWorkspaceStore.workspaces)) {
+          for (const [sid, ws] of Object.entries(getPdfWorkspaceStore().workspaces)) {
             const active = ws.material?.backendMaterialId ?? ws.material?.id;
             if (active === entry.materialId) {
               applyAnnotationHydrationToStore(sid, entry);
@@ -756,7 +790,7 @@ function applyAnnotationHydrationToStore(
   subjectId: string,
   entry: AnnotationHydrationEntry
 ): void {
-  const current = pdfWorkspaceStore.workspaces[subjectId];
+  const current = getPdfWorkspaceStore().workspaces[subjectId];
   if (!current) {
     return;
   }
@@ -787,12 +821,12 @@ function applyAnnotationHydrationToStore(
     charts: Array.isArray(incoming.charts) ? incoming.charts : current.charts,
     updatedAt: new Date().toISOString()
   };
-  pdfWorkspaceStore = {
+  setPdfWorkspaceStore({
     workspaces: {
-      ...pdfWorkspaceStore.workspaces,
+      ...getPdfWorkspaceStore().workspaces,
       [subjectId]: merged
     }
-  };
+  });
   savePdfWorkspaceStore();
 }
 
@@ -802,11 +836,11 @@ function applyAnnotationHydrationToStore(
 // module 안. cross-domain reset 6 step 은 `clearUserNotesSync(ctx)` 1 호출.
 const userNotesSyncCtx: UserNotesSyncContext = {
   apiBaseUrl,
-  getAuthSession: () => authSession,
-  getNotebook: () => notebook
+  getAuthSession: () => getAuthSession(),
+  getNotebook: () => getNotebook()
 };
 const userNotesSyncCb: UserNotesSyncCallbacks = {
-  setNotebook: (next) => { notebook = next; },
+  setNotebook: (next) => { setNotebook(next); },
   persistNotebook: () => { persistNotebook(); },
   triggerRender: () => { try { renderApp(); } catch { /* ignore */ } },
   handleAuthExpired: () => { handleAuthExpiredFromSync(); }
@@ -844,8 +878,8 @@ function applySessionTransitionForUser(newUserId: string): void {
   // different user attaching gets their own — neither sees the other's
   // notebook or workspace. Module init left both as their empty defaults;
   // this is the first read.
-  notebook = loadStoredNotebook(newUserId);
-  pdfWorkspaceStore = loadPdfWorkspaceStore(newUserId);
+  setNotebook(loadStoredNotebook(newUserId));
+  setPdfWorkspaceStore(loadPdfWorkspaceStore(newUserId));
 
   if (lastSessionUserId === newUserId) {
     // Same user as last attach within this page lifetime — namespaced loads
@@ -882,7 +916,7 @@ function clearAuthSession(): void {
   // `./auth/sessionState.ts`.markSignOut(ctx). cross-domain reset 은 본 함수가
   // 계속 책임 (sidebar/userNotes sync/annotation cache/hotkey modal/PDF blob URL).
   markSignOutModule(getAuthSessionStateContext());
-  authSession = undefined;
+  setAuthSession(undefined);
   clearDatadogRumUser();
   revokeAllPdfObjectUrls();
   // sprint-W21-sprint-1/S2 — clear sidebar term cache on session reset so the
@@ -942,15 +976,15 @@ const workspaceDomainHelpers: WorkspaceDomainHelpers = {
 };
 function getWorkspaceStoreContext(): WorkspaceStoreContext {
   return {
-    getStore: () => pdfWorkspaceStore,
-    getActiveUserId: () => authSession?.user.id,
+    getStore: () => getPdfWorkspaceStore(),
+    getActiveUserId: () => getAuthSession()?.user.id,
     domain: workspaceDomainHelpers
   };
 }
 function getWorkspaceStoreCallbacks(): WorkspaceStoreCallbacks {
   return {
     setStore: (next) => {
-      pdfWorkspaceStore = next;
+      setPdfWorkspaceStore(next);
     },
     scheduleAnnotationPut: scheduleAnnotationPutSync,
     getAnnotationSyncContext,
@@ -964,7 +998,7 @@ function buildPdfWorkspaceKey(userId: string): string {
 function loadPdfWorkspaceStore(userId: string): PdfWorkspaceStore {
   return loadPdfWorkspaceStoreModule(userId, workspaceDomainHelpers);
 }
-function savePdfWorkspaceStore(userId: string | undefined = authSession?.user.id): void {
+function savePdfWorkspaceStore(userId: string | undefined = getAuthSession()?.user.id): void {
   savePdfWorkspaceStoreModule(getWorkspaceStoreContext(), userId);
 }
 function updatePdfWorkspace(
@@ -1034,14 +1068,14 @@ function addSubjectClassDate(formData: FormData): void {
   const subjectId = String(formData.get("subjectId") ?? "").trim();
   const classDate = String(formData.get("classDate") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
-  const subject = notebook.subjects.find((item) => item.id === subjectId);
+  const subject = getNotebook().subjects.find((item) => item.id === subjectId);
 
   if (!subject) {
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "과목을 찾을 수 없습니다.",
       detail: "수업일을 추가할 과목을 다시 선택하세요."
-    };
+    });
     renderApp();
     return;
   }
@@ -1049,21 +1083,21 @@ function addSubjectClassDate(formData: FormData): void {
   // S3 AC11/AC15: ISO YYYY-MM-DD 만 허용 (date input native). 비ISO/calendar
   // overflow reject.
   if (!isCanonicalIsoDate(classDate)) {
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "수업일 형식이 잘못되었습니다.",
       detail: "YYYY-MM-DD (예: 2026-05-14) 형식만 사용할 수 있습니다."
-    };
+    });
     renderApp();
     return;
   }
 
   if (subject.weekNotes.some((week) => week.label === classDate)) {
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "이미 있는 수업일입니다.",
       detail: `${classDate} 수업일 카드가 이미 있습니다. 기존 카드를 열어 PDF를 연결하세요.`
-    };
+    });
     renderApp();
     return;
   }
@@ -1080,17 +1114,17 @@ function addSubjectClassDate(formData: FormData): void {
     reviewStatus: "needs-fill"
   };
 
-  notebook = {
-    ...notebook,
+  setNotebook({
+    ...getNotebook(),
     updatedAt: new Date().toISOString().slice(0, 10),
-    subjects: notebook.subjects.map((item) =>
+    subjects: getNotebook().subjects.map((item) =>
       item.id === subject.id
         ? { ...item, weekNotes: sortWeekNotesByClassDate([...item.weekNotes, newWeek]) }
         : item
     )
-  };
+  });
   const saved = persistNotebook();
-  intakeFeedback = saved
+  setIntakeFeedback(saved
     ? {
         kind: "success",
         title: "수업일을 추가했습니다.",
@@ -1100,7 +1134,7 @@ function addSubjectClassDate(formData: FormData): void {
         kind: "error",
         title: "수업일을 추가했지만 저장에 실패했습니다.",
         detail: "브라우저 저장공간 문제로 변경 내용이 새로고침 시 사라질 수 있습니다. 상단 알림을 확인하세요."
-      };
+      });
   renderApp();
 }
 
@@ -1115,14 +1149,14 @@ const classDateDomainHelpers: ClassDateDomainHelpers = {
 function getClassDateContext(): ClassDateContext {
   return {
     apiBaseUrl,
-    getSubject: (subjectId) => notebook.subjects.find((item) => item.id === subjectId),
+    getSubject: (subjectId) => getNotebook().subjects.find((item) => item.id === subjectId),
     getSubjectMaterials: getSubjectPdfMaterials
   };
 }
 function getClassDateCallbacks(): ClassDateCallbacks {
   return {
     setFeedback: (feedback) => {
-      intakeFeedback = feedback;
+      setIntakeFeedback(feedback);
     },
     renderApp,
     updatePdfWorkspace,
@@ -1139,7 +1173,7 @@ const assignPdfMaterialClassDate = (subjectId: string, materialId: string, class
 function getDocumentChangeContext(): DocumentChangeContext {
   return {
     getSubjectWorkspace: (subjectId) =>
-      getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId)
+      getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId)
   };
 }
 function getDocumentChangeCallbacks(): DocumentChangeCallbacks {
@@ -1233,15 +1267,15 @@ function handleDocumentClick(event: MouseEvent): void {
 
   // slice-3: auth tab switch — clears fields (re-render rebuilds inputs) + feedback.
   if (quickNoteButton?.dataset.action === "auth-tab-login") {
-    authMode = "login";
-    loginFeedback = undefined;
+    setAuthMode("login");
+    setLoginFeedback(undefined);
     renderApp();
     return;
   }
 
   if (quickNoteButton?.dataset.action === "auth-tab-signup") {
-    authMode = "signup";
-    loginFeedback = undefined;
+    setAuthMode("signup");
+    setLoginFeedback(undefined);
     trackRumAction("sign_up_started");
     renderApp();
     return;
@@ -1312,12 +1346,12 @@ function handleDocumentClick(event: MouseEvent): void {
     void signOut(apiBaseUrl);
     clearAuthSessionHint();
     clearAuthSession();
-    authMode = "login";
-    loginFeedback = {
+    setAuthMode("login");
+    setLoginFeedback({
       kind: "success",
       title: "로그아웃했습니다.",
       detail: "다시 학습공간에 들어가려면 로그인하세요."
-    };
+    });
     renderApp();
     return;
   }
@@ -1347,7 +1381,7 @@ function handleDocumentClick(event: MouseEvent): void {
     const subjectId = quickNoteButton.dataset.subjectId;
     const materialId = quickNoteButton.dataset.materialId;
     const subject = subjectId
-      ? notebook.subjects.find((item) => item.id === subjectId)
+      ? getNotebook().subjects.find((item) => item.id === subjectId)
       : undefined;
 
     if (subject && materialId && selectPdfWorkspaceMaterial(subject.id, materialId)) {
@@ -1364,7 +1398,7 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "clear-quick-note") {
-    quickNote = undefined;
+    setQuickNote(undefined);
     renderApp();
     return;
   }
@@ -1373,7 +1407,7 @@ function handleDocumentClick(event: MouseEvent): void {
     const subject = getSubjectFromDataset(quickNoteButton);
 
     if (subject) {
-      quickNote = buildSubjectQuickNote(subject);
+      setQuickNote(buildSubjectQuickNote(subject));
       renderApp();
       scrollToQuickNote();
     }
@@ -1388,7 +1422,7 @@ function handleDocumentClick(event: MouseEvent): void {
       : undefined;
 
     if (subject && keyword) {
-      quickNote = buildKeywordQuickNote(subject, keyword);
+      setQuickNote(buildKeywordQuickNote(subject, keyword));
       renderApp();
       scrollToQuickNote();
     }
@@ -1403,7 +1437,7 @@ function handleDocumentClick(event: MouseEvent): void {
       : undefined;
 
     if (subject && week) {
-      quickNote = buildWeekQuickNote(subject, week);
+      setQuickNote(buildWeekQuickNote(subject, week));
       renderApp();
       scrollToQuickNote();
     }
@@ -1426,8 +1460,8 @@ function handleDocumentClick(event: MouseEvent): void {
   }
 
   if (quickNoteButton?.dataset.action === "toggle-pdf-inspector") {
-    inspectorOpen = !inspectorOpen;
-    writeInspectorOpen(inspectorOpen);
+    setInspectorOpen(!getInspectorOpen());
+    writeInspectorOpen(getInspectorOpen());
     renderApp();
     return;
   }
@@ -1736,6 +1770,7 @@ function handleDocumentClick(event: MouseEvent): void {
   // slice-2: retry PDF upload after S3 PUT / completion failure
   if (quickNoteButton?.dataset.action === "retry-pdf-upload") {
     const subjectId = quickNoteButton.dataset.subjectId;
+    const pendingPdfRetry = getPendingPdfRetry();
 
     if (!subjectId || !pendingPdfRetry || pendingPdfRetry.subjectId !== subjectId) {
       return;
@@ -1747,34 +1782,34 @@ function handleDocumentClick(event: MouseEvent): void {
 
     if (now < intentExpiry) {
       // Intent still valid — retry from S3 PUT step (skip re-creating intent)
-      intakeFeedback = {
+      setIntakeFeedback({
         kind: "success",
         title: "업로드를 재시도합니다.",
         detail: "S3 PUT 단계부터 다시 시도합니다."
-      };
+      });
       renderApp();
 
       void (async () => {
         try {
           const uploadedMaterial = await uploadMaterialFile(apiBaseUrl, intent, file);
-          pendingPdfRetry = undefined;
+          setPendingPdfRetry(undefined);
           updatePdfWorkspace(subjectId, (workspace) => ({
             ...workspace,
             material: createPdfMaterialFromBackend(uploadedMaterial, workspace.material)
           }));
           await loadPdfPreviewFromBackend(subjectId, uploadedMaterial, { force: true, silent: true });
-          intakeFeedback = {
+          setIntakeFeedback({
             kind: "success",
             title: "PDF를 backend에 저장했습니다.",
             detail: `${uploadedMaterial.fileName} · ${formatPdfFileSize(uploadedMaterial.fileSize)} · 재시도 성공`
-          };
+          });
         } catch (retryError) {
-          intakeFeedback = {
+          setIntakeFeedback({
             kind: "error",
             title: "재시도 중에도 업로드를 완료하지 못했습니다.",
             detail: formatMaterialError(retryError),
             retrySubjectId: subjectId
-          };
+          });
         }
         renderApp();
       })();
@@ -1796,7 +1831,7 @@ function handleDocumentClick(event: MouseEvent): void {
   // addition to the legacy unscoped keys so the reset action does what it
   // advertises for userId-namespaced storage. Falls through cleanly when no
   // session is active.
-  const resetUserId = authSession?.user.id;
+  const resetUserId = getAuthSession()?.user.id;
   if (resetUserId) {
     try {
       window.localStorage.removeItem(buildNotebookKey(resetUserId));
@@ -1819,13 +1854,13 @@ function handleDocumentClick(event: MouseEvent): void {
   } catch {
     /* ignore */
   }
-  notebook = sampleLectureNote;
-  pdfWorkspaceStore = { workspaces: {} };
-  intakeFeedback = {
+  setNotebook(sampleLectureNote);
+  setPdfWorkspaceStore({ workspaces: {} });
+  setIntakeFeedback({
     kind: "success",
     title: "로컬 import 데이터를 초기화했습니다.",
     detail: "샘플 fixture 기준으로 다시 렌더링합니다."
-  };
+  });
   renderApp();
 }
 
@@ -1867,13 +1902,13 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
   const studentNumber = String(formData.get("studentNumber") ?? "").trim();
 
   if (!name || !studentNumber) {
-    loginFeedback = {
+    setLoginFeedback({
       kind: "error",
       title: "이름과 학번을 입력하세요.",
       detail: action === "login"
         ? "시험 대비 자료는 로그인 후 볼 수 있습니다."
         : "이름과 학번을 모두 입력해야 가입할 수 있습니다."
-    };
+    });
     renderApp();
     return;
   }
@@ -1883,7 +1918,7 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     try {
       const payload = await signIn(apiBaseUrl, { name, studentNumber });
       const session = meResponseToSession(payload);
-      authSession = session;
+      setAuthSession(session);
       writeAuthSessionHint();
       setDatadogRumUser({
         id: session.user.id,
@@ -1901,22 +1936,22 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
       applySessionTransitionForUser(session.user.id);
       // F2: no localStorage — session lives in httpOnly cookie + in-memory only
       await restoreUploadedPdfMaterialsForSession(session);
-      if (authSession !== session) {
+      if (getAuthSession() !== session) {
         return;
       }
-      loginFeedback = undefined;
+      setLoginFeedback(undefined);
       // sprint-W21-sprint-1/S2 — sidebar term cache after login.
       void loadSidebarTermsCache().then(() => renderApp());
       renderApp();
     } catch (error) {
-      loginFeedback = {
+      setLoginFeedback({
         kind: "error",
         title: "로그인하지 못했습니다.",
         detail:
           error instanceof Error
             ? error.message
             : "백엔드 서버 상태와 계정을 확인하세요."
-      };
+      });
       renderApp();
     }
     return;
@@ -1930,19 +1965,19 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     await signUp(apiBaseUrl, { name, studentNumber });
 
     // Server sets cookie on 200. Re-validate via /me to populate session + PDF restore.
-    loginFeedback = undefined;
-    authMode = "login";
+    setLoginFeedback(undefined);
+    setAuthMode("login");
     trackRumAction("sign_up_completed");
     await revalidateStoredSession({ blocking: true });
   } catch (error) {
-    loginFeedback = {
+    setLoginFeedback({
       kind: "error",
       title: "회원가입에 실패했습니다.",
       detail:
         error instanceof Error
           ? error.message
           : "백엔드 서버 상태를 확인하세요."
-    };
+    });
     renderApp();
   }
 }
@@ -2002,9 +2037,9 @@ function handleDocumentInput(event: Event): void {
     }
 
     const value = (target as HTMLTextAreaElement).value;
-    notebook = {
-      ...notebook,
-      subjects: notebook.subjects.map((subject) =>
+    setNotebook({
+      ...getNotebook(),
+      subjects: getNotebook().subjects.map((subject) =>
         subject.id !== subjectId
           ? subject
           : {
@@ -2014,7 +2049,7 @@ function handleDocumentInput(event: Event): void {
               )
             }
       )
-    };
+    });
     persistNotebook();
     // sprint-2/S2: BE sync (debounced PUT). localStorage 가 primary, BE 가 cross-device 백업.
     scheduleUserNotePut(subjectId, weekId, value);
@@ -2208,7 +2243,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function getViewStateContext(): ViewStateContext {
   return {
-    getStore: () => pdfWorkspaceStore,
+    getStore: () => getPdfWorkspaceStore(),
     getRoute: () => parseRoute(window.location.hash),
     domain: { getSubjectWorkspace: getSubjectPdfWorkspace }
   };
@@ -2236,7 +2271,7 @@ function handleDocumentKeyDown(event: KeyboardEvent): void {
   //   3. passthrough → browser default (전체화면 종료 등)
   // 도구 선택 상태에서 ESC 가 곧장 fullscreen 을 끄는 회기 방지 + 2-step UX.
   if (event.code === "Escape") {
-    const workspaceForEsc = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+    const workspaceForEsc = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
     const escAction = resolveEscapeAction({
       modalOpen: getHotkeyHelpModalOpen(),
       selectedTool: (workspaceForEsc.material?.selectedTool ?? "read") as string
@@ -2445,7 +2480,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const textBoxIdForDrag = dragHandle.dataset.textboxId;
 
     if (subjectIdForDrag && textBoxIdForDrag) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForDrag);
       const tb = workspace.textBoxes.find((t) => t.id === textBoxIdForDrag);
 
       if (tb) {
@@ -2479,7 +2514,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const noteIdForDrag = stickyDragHandle.dataset.noteId;
 
     if (subjectIdForDrag && noteIdForDrag) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForDrag);
       const note = workspace.stickyNotes.find((n) => n.id === noteIdForDrag);
 
       if (note) {
@@ -2513,7 +2548,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const checklistIdForDrag = checklistDragHandle.dataset.checklistId;
 
     if (subjectIdForDrag && checklistIdForDrag) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForDrag);
       const cl = workspace.checklists.find((c) => c.id === checklistIdForDrag);
 
       if (cl) {
@@ -2547,7 +2582,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const tableIdForDrag = tableDragHandle.dataset.tableId;
 
     if (subjectIdForDrag && tableIdForDrag) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForDrag);
       const table = workspace.tables.find((item) => item.id === tableIdForDrag);
 
       if (table) {
@@ -2580,7 +2615,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const chartIdForDrag = chartDragHandle.dataset.chartId;
 
     if (subjectIdForDrag && chartIdForDrag) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForDrag);
       const chart = workspace.charts.find((item) => item.id === chartIdForDrag);
 
       if (chart) {
@@ -2615,7 +2650,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const markIdForResize = starMarkResizeHandle.dataset.starMarkId;
 
     if (subjectIdForResize && markIdForResize) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForResize);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForResize);
       const mark = (workspace.starMarks ?? []).find((m) => m.id === markIdForResize);
 
       if (mark) {
@@ -2646,7 +2681,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     const markIdForDrag = starMarkDragHandle.dataset.starMarkId;
 
     if (subjectIdForDrag && markIdForDrag) {
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectIdForDrag);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectIdForDrag);
       const mark = (workspace.starMarks ?? []).find((item) => item.id === markIdForDrag);
 
       if (mark) {
@@ -2681,7 +2716,7 @@ function handleDocumentPointerDown(event: PointerEvent): void {
     return;
   }
 
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
   const material = workspace.material;
 
   if (!material) {
@@ -2837,7 +2872,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-textbox-id="${textBoxId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const tb = workspace.textBoxes.find((t) => t.id === textBoxId);
 
         if (tb) {
@@ -2867,7 +2902,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-note-id="${noteId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const note = workspace.stickyNotes.find((n) => n.id === noteId);
 
         if (note) {
@@ -2897,7 +2932,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-checklist-id="${checklistId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const cl = workspace.checklists.find((c) => c.id === checklistId);
 
         if (cl) {
@@ -2926,7 +2961,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-table-id="${tableId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const table = workspace.tables.find((item) => item.id === tableId);
 
         if (table) {
@@ -2955,7 +2990,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-chart-id="${chartId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const chart = workspace.charts.find((item) => item.id === chartId);
 
         if (chart) {
@@ -2983,7 +3018,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-star-mark-id="${markId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const mark = (workspace.starMarks ?? []).find((item) => item.id === markId);
 
         if (mark) {
@@ -3011,7 +3046,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
       const el = document.querySelector<HTMLElement>(`[data-star-mark-id="${markId}"]`);
 
       if (el) {
-        const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+        const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
         const mark = (workspace.starMarks ?? []).find((item) => item.id === markId);
 
         if (mark) {
@@ -3043,7 +3078,7 @@ function handleDocumentPointerMove(event: PointerEvent): void {
         );
       }
 
-      const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+      const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
       applyEraserAtPoint(
         subjectId,
         pageNumber,
@@ -3142,33 +3177,33 @@ function handleDocumentPointerUp(event: PointerEvent): void {
 }
 
 async function importPdfMaterialFile(file: File, subjectId: string): Promise<void> {
-  const session = authSession;
+  const session = getAuthSession();
 
   if (!session) {
-    loginFeedback = {
+    setLoginFeedback({
       kind: "error",
       title: "로그인이 필요합니다.",
       detail: "PDF 업로드와 다운로드는 사용자 세션 확인 후 진행합니다."
-    };
+    });
     renderApp();
     return;
   }
 
   if (file.type && file.type !== "application/pdf") {
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "PDF 파일만 선택할 수 있습니다.",
       detail: `${file.name}의 파일 형식을 확인하세요.`
-    };
+    });
     renderApp();
     return;
   }
 
-  intakeFeedback = {
+  setIntakeFeedback({
     kind: "success",
     title: "PDF 업로드를 시작했습니다.",
     detail: `${file.name}을 backend material storage로 보내는 중입니다.`
-  };
+  });
   trackRumAction("pdf_upload_started", {
     file_size_bucket: bucketFileSize(file.size)
   });
@@ -3192,7 +3227,7 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     });
 
     // Stash intent for retry CTA (resume at S3 PUT step if intent still valid)
-    pendingPdfRetry = { file, subjectId, intent };
+    setPendingPdfRetry({ file, subjectId, intent });
 
     clearActivePdfObjectUrl(subjectId);
     const pendingMaterial = createPdfMaterialFromBackend(intent.material, undefined);
@@ -3213,7 +3248,7 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
     const uploadedMaterial = await uploadMaterialFile(apiBaseUrl, intent, file);
 
     // Upload success — clear retry state
-    pendingPdfRetry = undefined;
+    setPendingPdfRetry(undefined);
 
     const completedMaterial = createPdfMaterialFromBackend(uploadedMaterial, undefined);
     // PR #51 R2 P1: 동일 sentinel 유지 — uploadMaterialFile 후 BE 가 다시
@@ -3232,11 +3267,11 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       silent: true
     });
 
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "success",
       title: "PDF를 backend에 저장했습니다.",
       detail: `${uploadedMaterial.fileName} · ${formatPdfFileSize(uploadedMaterial.fileSize)} · ${uploadedMaterial.pageCount}페이지 추정 · 새로고침 후에도 복원됩니다.`
-    };
+    });
     trackRumAction("pdf_upload_completed", {
       file_size_bucket: bucketFileSize(uploadedMaterial.fileSize),
       page_count_bucket: bucketPageCount(uploadedMaterial.pageCount)
@@ -3246,12 +3281,12 @@ async function importPdfMaterialFile(file: File, subjectId: string): Promise<voi
       return;
     }
 
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "PDF 업로드를 완료하지 못했습니다.",
       detail: formatMaterialError(error),
       retrySubjectId: subjectId
-    };
+    });
     trackRumAction("pdf_upload_failed", {
       reason: error instanceof MaterialApiError ? `http_${error.status}` : "unknown"
     });
@@ -3284,17 +3319,17 @@ async function restoreUploadedPdfMaterialsForSession(
       return;
     }
 
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "저장된 PDF 목록을 불러오지 못했습니다.",
       detail: formatMaterialError(error)
-    };
+    });
   }
 }
 
 function ensurePdfPreviewForWorkspace(subjectId: string): void {
-  const session = authSession;
-  const material = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId).material;
+  const session = getAuthSession();
+  const material = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId).material;
 
   if (!session || material?.uploadStatus !== "uploaded" || !material.backendMaterialId) {
     return;
@@ -3352,11 +3387,11 @@ async function loadPdfPreviewFromBackend(
     markFailedPdfPreviewLoad(loadKey);
 
     if (!options.silent) {
-      intakeFeedback = {
+      setIntakeFeedback({
         kind: "error",
         title: "저장된 PDF 미리보기를 불러오지 못했습니다.",
         detail: `${material.fileName}: ${formatMaterialError(error)}`
-      };
+      });
     }
   } finally {
     finishPdfPreviewLoad(loadKey);
@@ -3371,11 +3406,11 @@ function handleMaterialAuthError(error: unknown): boolean {
 
   clearAuthSessionHint();
   clearAuthSession();
-  loginFeedback = {
+  setLoginFeedback({
     kind: "error",
     title: "세션이 만료되었습니다.",
     detail: "PDF 저장소 요청이 거부되었습니다. 이름과 학번으로 다시 로그인하세요."
-  };
+  });
   renderApp();
   return true;
 }
@@ -3897,7 +3932,7 @@ function addTextBox(
   subjectId: string,
   position: { x: number; y: number }
 ): void {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
   const page = workspace.material?.selectedPage ?? 1;
   const textBox = createTextBox({ subjectId, page, position });
 
@@ -3959,7 +3994,7 @@ function addChecklistWidget(
   subjectId: string,
   position: { x: number; y: number }
 ): void {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
   const page = workspace.material?.selectedPage ?? 1;
   const checklist = createChecklist({ subjectId, page, position });
 
@@ -4023,7 +4058,7 @@ function applyChecklistMove(
 
 // table-widget context/callbacks (slice-2g-table — table-widget.ts).
 const tableWidgetContext: TableWidgetContext = {
-  getWorkspace: (subjectId) => getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId)
+  getWorkspace: (subjectId) => getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId)
 };
 const tableWidgetCallbacks: TableWidgetCallbacks = {
   updateWorkspace: (subjectId, updater) => updatePdfWorkspace(subjectId, updater)
@@ -4063,7 +4098,7 @@ function applyDeleteTableColumn(subjectId: string, tableId: string, colIndex: nu
 
 // chart-widget context/callbacks (slice-2g — chart-widget.ts).
 const chartWidgetContext: ChartWidgetContext = {
-  getWorkspace: (subjectId) => getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId)
+  getWorkspace: (subjectId) => getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId)
 };
 const chartWidgetCallbacks: ChartWidgetCallbacks = {
   updateWorkspace: (subjectId, updater) => updatePdfWorkspace(subjectId, updater)
@@ -4077,7 +4112,7 @@ function refreshChartWidgets(): void {
 // sprint-W21-sprint-1 / S6 / AC27+AC29+AC30 — 별표 add / delete.
 // Default size 0.06 (page width 의 6%). cuid-ish id (browser crypto.randomUUID
 const starMarkContext: StarMarkContext = {
-  getWorkspace: (subjectId) => getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId)
+  getWorkspace: (subjectId) => getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId)
 };
 const starMarkCallbacks: StarMarkCallbacks = {
   updateWorkspace: (subjectId, updater) => updatePdfWorkspace(subjectId, updater)
@@ -4176,7 +4211,7 @@ function addStickyNote(
   kind: StickyNoteBlockKind,
   anchor = getNextStickyAnchor(subjectId)
 ): void {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
   const pageNumber = workspace.material?.selectedPage ?? 1;
   const note = createStickyNote(pageNumber, kind, normalizePdfPoint(anchor.x, anchor.y));
 
@@ -4206,7 +4241,7 @@ function clearPdfAnnotations(subjectId: string): void {
 }
 
 function getNextStickyAnchor(subjectId: string): { x: number; y: number } {
-  const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subjectId);
+  const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subjectId);
   const pageNumber = workspace.material?.selectedPage ?? 1;
   const noteCount = workspace.stickyNotes.filter(
     (note) => note.pageNumber === pageNumber
@@ -4225,7 +4260,7 @@ function getSubjectFromDataset(button: HTMLButtonElement): SubjectNote | undefin
     return undefined;
   }
 
-  return notebook.subjects.find((subject) => subject.id === subjectId);
+  return getNotebook().subjects.find((subject) => subject.id === subjectId);
 }
 
 function scrollToQuickNote(): void {
@@ -4246,45 +4281,45 @@ async function importWeekNoteFile(
     const validation = validateWeekNoteImportPayload(raw);
 
     if (!validation.ok || !validation.payload) {
-      intakeFeedback = {
+      setIntakeFeedback({
         kind: "error",
         title: "JSON 구조가 맞지 않습니다.",
         detail: validation.errors.slice(0, 6).join(" / ")
-      };
+      });
       renderApp();
       return;
     }
 
     if (validation.payload.subjectId.trim() !== expectedSubjectId) {
-      const expectedSubject = notebook.subjects.find(
+      const expectedSubject = getNotebook().subjects.find(
         (subject) => subject.id === expectedSubjectId
       );
 
-      intakeFeedback = {
+      setIntakeFeedback({
         kind: "error",
         title: "선택한 과목과 JSON 과목이 다릅니다.",
         detail: `현재 화면은 ${expectedSubject?.title ?? expectedSubjectId} 전용입니다. JSON subjectId는 ${validation.payload.subjectId}입니다.`
-      };
+      });
       renderApp();
       return;
     }
 
     const payload = sanitizeWeekNoteImportPayload(validation.payload);
-    const result = applyWeekNoteImport(notebook, payload);
+    const result = applyWeekNoteImport(getNotebook(), payload);
 
     if (result.warnings.length > 0) {
-      intakeFeedback = {
+      setIntakeFeedback({
         kind: "error",
         title: "연결되지 않은 id가 있습니다.",
         detail: result.warnings.slice(0, 6).join(" / ")
-      };
+      });
       renderApp();
       return;
     }
 
-    notebook = result.notebook;
+    setNotebook(result.notebook);
     const saved = persistNotebook();
-    intakeFeedback = saved
+    setIntakeFeedback(saved
       ? {
           kind: "success",
           title: `${result.subject.title} ${result.weekNote.label} 노트를 반영했습니다.`,
@@ -4295,14 +4330,14 @@ async function importWeekNoteFile(
           kind: "error",
           title: `${result.subject.title} ${result.weekNote.label} 노트가 저장에 실패했습니다.`,
           detail: "브라우저 저장공간 문제로 변경 내용이 새로고침 시 사라질 수 있습니다. 상단 알림을 확인하세요."
-        };
+        });
     renderApp();
   } catch (error) {
-    intakeFeedback = {
+    setIntakeFeedback({
       kind: "error",
       title: "JSON 파일을 읽지 못했습니다.",
       detail: error instanceof Error ? error.message : "파일 내용을 확인하세요."
-    };
+    });
     renderApp();
   }
 }
@@ -4314,9 +4349,9 @@ function renderApp(): void {
     return;
   }
 
-  if (!authSession) {
+  if (!getAuthSession()) {
     document.body.removeAttribute("data-route");
-    mountRender(renderAuthLoginPage(authMode, loginFeedback));
+    mountRender(renderAuthLoginPage(getAuthMode(), getLoginFeedback()));
     return;
   }
 
@@ -4333,7 +4368,7 @@ function renderApp(): void {
     route.name === "subject-intake" ||
     route.name === "pdf-workspace" ||
     route.name === "week"
-      ? notebook.subjects.find((item) => item.id === route.subjectId)
+      ? getNotebook().subjects.find((item) => item.id === route.subjectId)
       : undefined;
   const week =
     (route.name === "week" || route.name === "subject-summary-detail") && subject
@@ -4347,7 +4382,7 @@ function renderApp(): void {
     !subject
   ) {
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, notebook, { name: "home" }),
+      renderHomeSidebar(sidebarContext, getNotebook(), { name: "home" }),
       renderNotFound(),
       "study-note / 찾을 수 없음"
     ));
@@ -4365,27 +4400,27 @@ function renderApp(): void {
 
   if (route.name === "home") {
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, notebook, route),
-      renderHome(notebook),
-      `${notebook.title} / 홈`
+      renderHomeSidebar(sidebarContext, getNotebook(), route),
+      renderHome(getNotebook()),
+      `${getNotebook().title} / 홈`
     ));
     return;
   }
 
   if (route.name === "intake") {
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, notebook, route),
-      renderIntakeGuide(notebook),
-      `${notebook.title} / 자료 투입`
+      renderHomeSidebar(sidebarContext, getNotebook(), route),
+      renderIntakeGuide(getNotebook()),
+      `${getNotebook().title} / 자료 투입`
     ));
     return;
   }
 
   if (route.name === "pdf-workspaces") {
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, notebook, route),
-      renderPdfWorkspaceIndex(pdfLibraryContext, notebook, getSubjectPdfMaterials),
-      `${notebook.title} / PDF 작업공간`
+      renderHomeSidebar(sidebarContext, getNotebook(), route),
+      renderPdfWorkspaceIndex(pdfLibraryContext, getNotebook(), getSubjectPdfMaterials),
+      `${getNotebook().title} / PDF 작업공간`
     ));
     return;
   }
@@ -4412,7 +4447,7 @@ function renderApp(): void {
     // (annotation-sync 가 중복 fetch 차단). batch 가 truncated/실패 시 자체
     // fallback 으로 active material single-GET 발사. material 전환 시 single
     // 직접 호출도 안전 (dedup).
-    const workspace = getSubjectPdfWorkspace(pdfWorkspaceStore, subject.id);
+    const workspace = getSubjectPdfWorkspace(getPdfWorkspaceStore(), subject.id);
     const material = workspace.material;
     void fetchAnnotationsForSubjectSync(
       subject.id,
@@ -4497,15 +4532,15 @@ function renderApp(): void {
 // sprint-19: notebook-storage slice. saveNotebook 호출은 userId + onErrorChanged
 // 를 직접 전달해야 하므로 main.ts 안 helper 로 묶음. caller 4 site 가 동일 패턴.
 function persistNotebook(): boolean {
-  return saveNotebook(notebook, authSession?.user.id, () => {
+  return saveNotebook(getNotebook(), getAuthSession()?.user.id, () => {
     try { renderApp(); } catch { /* ignore */ }
   });
 }
 
 function getAppShellContext(): AppShellContext {
   return {
-    displayName: authSession?.user.displayName ?? null,
-    notebookUpdatedAt: notebook.updatedAt,
+    displayName: getAuthSession()?.user.displayName ?? null,
+    notebookUpdatedAt: getNotebook().updatedAt,
     notebookStorageError: getNotebookStorageError() ?? null,
     syncBackendError: getSyncBackendError() ?? null,
     hotkeyHelpModalOpen: getHotkeyHelpModalOpen(),
@@ -4515,18 +4550,18 @@ function getAppShellContext(): AppShellContext {
 
 // Pdf-library context (slice-9 — pdf-library.ts). 1 field (auth lazy).
 const pdfLibraryContext: PdfLibraryContext = {
-  getAuthSession: () => authSession
+  getAuthSession: () => getAuthSession()
 };
 
 // Quick-note context (slice-10 — quick-note.ts). 1 field (lazy getQuickNote).
 const quickNoteContext: QuickNoteContext = {
-  getQuickNote: () => quickNote
+  getQuickNote: () => getQuickNote()
 };
 
 // Sidebar context (slice-2 — sidebar.ts). lazy getter only.
 const sidebarContext: SidebarContext = {
-  getNotebook: () => notebook,
-  getAdminRole: () => authSession?.user.role,
+  getNotebook: () => getNotebook(),
+  getAdminRole: () => getAuthSession()?.user.role,
   getSidebarTermsCache,
   getSidebarSubjectsCache,
   getSidebarOpenTermIds
@@ -4572,7 +4607,7 @@ function composeShell(sidebar: string, mainContent: string, crumb: string): stri
 // `./sidebar/sidebar-cache.ts`. main.ts 잔여 = ctx/cb const + thin wrapper.
 const sidebarCacheCtx: SidebarCacheContext = {
   apiBaseUrl,
-  getAuthSession: () => authSession,
+  getAuthSession: () => getAuthSession(),
   isBrowserRuntime
 };
 const sidebarCacheCb: SidebarCacheCallbacks = {
@@ -4589,12 +4624,13 @@ function toggleSidebarTermOpen(termId: string): void {
 function renderIntakeFeedback(
   emptyText = "아직 반영한 JSON 파일이 없습니다."
 ): string {
+  const intakeFeedback = getIntakeFeedback();
   if (!intakeFeedback) {
     return `<div class="import-feedback">${emptyText}</div>`;
   }
 
   const retryButton =
-    intakeFeedback.kind === "error" && intakeFeedback.retrySubjectId && pendingPdfRetry
+    intakeFeedback.kind === "error" && intakeFeedback.retrySubjectId && getPendingPdfRetry()
       ? `<button class="secondary-action" type="button" data-action="retry-pdf-upload" data-subject-id="${escapeHtml(intakeFeedback.retrySubjectId)}">재시도</button>`
       : "";
 
@@ -4624,9 +4660,9 @@ const pdfToolbarContext: PdfToolbarContext = {
 // renderTableMount / renderStarMark / renderInspectorStatRow) 는 workspace-page.ts
 // 가 자체 module 에서 직접 import (bucket-1 Direct imports).
 const workspacePageContext: WorkspacePageContext = {
-  getWorkspaceStore: () => pdfWorkspaceStore,
-  getInspectorOpen: () => inspectorOpen,
-  hasIntakeFeedback: () => Boolean(intakeFeedback),
+  getWorkspaceStore: () => getPdfWorkspaceStore(),
+  getInspectorOpen: () => getInspectorOpen(),
+  hasIntakeFeedback: () => Boolean(getIntakeFeedback()),
   getActivePdfObjectUrl,
   getActivePdfObjectUrlMaterialId,
   hasActivePdfPreviewLoad,
