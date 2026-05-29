@@ -4,7 +4,7 @@
 
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { PdfMaterialRepository } from "../pdf-material.repository";
+import { PdfMaterialRepository } from "../../materials/pdf-material.repository";
 
 interface CapturedFindFirstArg {
   where?: Record<string, unknown>;

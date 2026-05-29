@@ -1,28 +1,16 @@
 // PDF 자료 조회/메타데이터/필기 스냅샷 서비스 (DDD F-3: 업로드 상태머신은 MaterialUploadService 로 분리, 본 서비스는 read/query 책임).
 import {
   BadGatewayException,
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException
 } from "@nestjs/common";
-import type {
-  AnnotationSnapshotRecord,
-  PdfInkStroke,
-  PdfMaterialRecord,
-  PdfStickyNote
-} from "@study-note/domain";
-import { toAnnotationPayload, toAnnotationSnapshotRecord, toPdfMaterialRecord } from "@study-note/persistence";
+import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
+import { toAnnotationSnapshotRecord, toPdfMaterialRecord } from "@study-note/persistence";
 import { StoragePort } from "@study-note/storage";
 import { PdfMaterialRepository } from "./pdf-material.repository";
-import { AnnotationSnapshotRepository } from "./annotation-snapshot.repository";
+import { AnnotationSnapshotRepository } from "../pdf-annotations/annotation-snapshot.repository";
 import { materialNotFound, parseIsoDateOrThrow, requireObject } from "./material-shared";
-
-interface SaveAnnotationInput {
-  schemaVersion: 1;
-  stickyNotes: PdfStickyNote[];
-  inkStrokes: PdfInkStroke[];
-}
 
 interface UpdateMaterialMetadataInput {
   classDate: string;
@@ -86,37 +74,12 @@ export class MaterialsService {
     };
   }
 
-  async saveAnnotation(
-    ownerId: string,
-    materialId: string,
-    input: SaveAnnotationInput
-  ): Promise<AnnotationSnapshotRecord> {
-    const material = await this.getUploadedMaterial(ownerId, materialId);
-    const savedAt = new Date();
-    const existing = await this.annotationRepo.findByMaterialOwner(material.id, ownerId);
-    const snapshot = existing
-      ? await this.annotationRepo.update(existing.id, {
-          schemaVersion: input.schemaVersion,
-          payload: toAnnotationPayload(input),
-          savedAt
-        })
-      : await this.annotationRepo.create({
-          materialId: material.id,
-          ownerId,
-          schemaVersion: input.schemaVersion,
-          payload: toAnnotationPayload(input),
-          savedAt
-        });
-
-    return toAnnotationSnapshotRecord(snapshot);
-  }
-
   async getAnnotation(
     ownerId: string,
     materialId: string
   ): Promise<AnnotationSnapshotRecord> {
     const material = await this.getUploadedMaterial(ownerId, materialId);
-    const snapshot = await this.annotationRepo.findByMaterialOwner(material.id, ownerId);
+    const snapshot = await this.annotationRepo.findFull(material.id, ownerId);
 
     return snapshot
       ? toAnnotationSnapshotRecord(snapshot)
@@ -181,21 +144,6 @@ export function parseMaterialMetadataBody(body: unknown): UpdateMaterialMetadata
 
   return {
     classDate: String(input.classDate ?? "")
-  };
-}
-
-export function parseAnnotationBody(body: unknown): SaveAnnotationInput {
-  const input = requireObject(body);
-  const schemaVersion = Number(input.schemaVersion ?? 1);
-
-  if (schemaVersion !== 1) {
-    throw new BadRequestException("Only annotation schemaVersion 1 is supported");
-  }
-
-  return {
-    schemaVersion,
-    stickyNotes: Array.isArray(input.stickyNotes) ? (input.stickyNotes as PdfStickyNote[]) : [],
-    inkStrokes: Array.isArray(input.inkStrokes) ? (input.inkStrokes as PdfInkStroke[]) : []
   };
 }
 

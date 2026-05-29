@@ -13,7 +13,8 @@ import {
 } from "@nestjs/common";
 import { SessionAuthGuard } from "@study-note/auth";
 import type { UserProfile } from "@study-note/domain";
-import { PdfAnnotationsService } from "./pdf-annotations.service";
+import { PdfAnnotationQueryService } from "./pdf-annotation-query.service";
+import { PdfAnnotationCommandService } from "./pdf-annotation-command.service";
 
 interface AuthenticatedRequest {
   user: UserProfile;
@@ -27,7 +28,10 @@ interface PutBody {
 @Controller({ path: "v1/pdf-annotations" })
 @UseGuards(SessionAuthGuard)
 export class PdfAnnotationsController {
-  constructor(private readonly annotations: PdfAnnotationsService) {}
+  constructor(
+    private readonly query: PdfAnnotationQueryService,
+    private readonly command: PdfAnnotationCommandService
+  ) {}
 
   /** GET /api/v1/pdf-annotations — opt-in cursor listing (admin/export). */
   @Get()
@@ -35,7 +39,7 @@ export class PdfAnnotationsController {
     @Req() request: AuthenticatedRequest,
     @Query("cursor") cursor?: string
   ) {
-    return this.annotations.listAnnotations(request.user.id, cursor ?? undefined);
+    return this.query.listAnnotations(request.user.id, cursor ?? undefined);
   }
 
   /**
@@ -55,7 +59,7 @@ export class PdfAnnotationsController {
         errorMessage: "subjectId is required"
       });
     }
-    return this.annotations.batchGetBySubject(request.user.id, subjectId);
+    return this.query.batchGetBySubject(request.user.id, subjectId);
   }
 
   /**
@@ -74,7 +78,7 @@ export class PdfAnnotationsController {
         errorMessage: "materialId is required"
       });
     }
-    return this.annotations.getSingleAnnotation(request.user.id, materialId);
+    return this.query.getSingleAnnotation(request.user.id, materialId);
   }
 
   /**
@@ -125,7 +129,7 @@ export class PdfAnnotationsController {
         errorMessage: err instanceof Error ? err.message : "invalid starMark payload"
       });
     }
-    return this.annotations.putAnnotation(
+    return this.command.putAnnotation(
       request.user.id,
       materialId,
       body.payload,

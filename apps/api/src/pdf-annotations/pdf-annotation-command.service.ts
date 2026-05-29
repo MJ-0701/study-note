@@ -1,10 +1,13 @@
+// S3 (경량 CQRS) — PdfAnnotation 쓰기(Command) 책임 = Hybrid CAS + 보상 트랜잭션.
+// mutation-owner 이지만 read-free 가 아니다: 409 STALE 응답에 canonical 본문을 싣기
+// 위해 findSavedAt/getJsonObject 를 읽는다. CAS 의사결정/rollback/compare-and-delete
+// 로직은 본 service 가 SoT. 조회 전용 경로는 PdfAnnotationQueryService.
+
 import {
-  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
   Logger,
-  NotFoundException,
   Optional,
   PayloadTooLargeException,
   ServiceUnavailableException
@@ -12,225 +15,34 @@ import {
 import { Prisma } from "@prisma/client";
 import { StoragePort } from "@study-note/storage";
 import { MetricsService } from "../observability/metrics.service";
-import { PdfMaterialRepository } from "./pdf-material.repository";
+import { PdfMaterialRepository } from "../materials/pdf-material.repository";
 import { AnnotationSnapshotRepository } from "./annotation-snapshot.repository";
-
-// payload size hard cap. 2026-05-28: 256KB → 4MB. annotation snapshot 은 material 의
-// 전체 ink stroke 를 매 저장마다 PUT 하는 모델이라 필기가 쌓이면 256KB(=약 50획)를 쉽게
-// 넘겨 413 으로 저장 실패 → 필기 소실. 페이로드는 R2 object storage 에 저장되므로 size 여유.
-// (장기 fix = snapshot 대신 delta/압축 — bl-annotation-payload-growth backlog.)
-const MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
-// sprint-W21-sprint-2/S2 (R7): batch response cap. 단일 cap 상향에 맞춰 batch 도 비례 상향.
-const BATCH_MAX_MATERIALS = 50;
-const BATCH_MAX_BYTES = 8 * 1024 * 1024;
-
-/** canonical wire entry — plan §R2. */
-export interface AnnotationEntry {
-  payload: unknown;
-  updatedAt: string;
-}
-
-/** canonical wire response (single / batch / 409 모두 같은 schema) — plan §R2. */
-export interface AnnotationBatchResponse {
-  annotations: Record<string, AnnotationEntry>;
-  truncated: boolean;
-  total: number;
-  returned: number;
-}
+import {
+  type AnnotationBatchResponse,
+  annotationKey,
+  isMaterialAccessible,
+  MAX_PAYLOAD_BYTES,
+  parseClientRevision,
+  singleEntryResponse,
+  throwMaterialNotFound
+} from "./annotation-shared";
 
 @Injectable()
-export class PdfAnnotationsService {
+export class PdfAnnotationCommandService {
   private readonly logger = new Logger("pdf-annotations");
   // sprint-W22-sprint-24 / AC4 + AC15 — log-derived metric source 전용 logger
   // (별도 context 로 Datadog pipeline 분리). 이 logger 경로로 emit 되는 줄은
   // 사용자 식별자/콘텐츠/토큰을 일절 포함하지 않는다.
   private readonly metricsLogger = new Logger("study-note.metric-event");
 
-  // DDD Slice 8: PdfAnnotationsService 는 Prisma 직접 의존 0 — material/annotation
-  // repository + storage 만 사용. CAS 의사결정/보상/에러 분기는 service 에 유지.
+  // DDD: Command service 는 Prisma 직접 의존 0 — material/annotation repository +
+  // storage 만 사용. CAS 의사결정/보상/에러 분기는 service 에 유지.
   constructor(
     @Inject(StoragePort) private readonly storage: StoragePort,
     private readonly materialRepo: PdfMaterialRepository,
     private readonly annotationRepo: AnnotationSnapshotRepository,
     @Optional() private readonly metrics?: MetricsService
   ) {}
-
-  /** R2 key — `annotations/{userId}/material-{materialId}.json`. */
-  private key(userId: string, materialId: string): string {
-    return `annotations/${encodeURIComponent(userId)}/material-${encodeURIComponent(materialId)}.json`;
-  }
-
-  /**
-   * R6 material accessibility pre-check.
-   * 본인 material 또는 master/admin uploader 의 shared material 이면 true.
-   * = listMaterials 의 share 정책과 동일 (`OR: [{ownerId}, {uploaded master/admin}]`).
-   * AnnotationSnapshot row 자체는 (currentUserId, materialId) composite 라 다른 user
-   * annotation 노출 위험 X — 본 check 는 material accessibility 만 책임.
-   */
-  /** R6 material accessibility — PdfMaterialRepository 위임 (Slice 8: fallback 제거). */
-  private async ownsMaterial(ownerId: string, materialId: string): Promise<boolean> {
-    const row = await this.materialRepo.findAccessibleForUser(ownerId, materialId);
-    return row !== null;
-  }
-
-  /** plan §R6: foreign / nonexistent material 모두 동일 404. */
-  private throwMaterialNotFound(): never {
-    throw new NotFoundException({
-      errorCode: "MATERIAL_NOT_FOUND",
-      errorMessage: "annotation target not accessible"
-    });
-  }
-
-  /** plan §R4: clientRevision 형식 검증 + ISO 8601 Date 로 파싱. */
-  private parseClientRevision(raw: string): Date {
-    const date = new Date(raw);
-    if (Number.isNaN(date.getTime())) {
-      throw new BadRequestException({
-        errorCode: "INVALID_REVISION",
-        errorMessage: "clientRevision must be a valid ISO 8601 timestamp"
-      });
-    }
-    return date;
-  }
-
-  /** canonical schema 의 단일 entry 응답. */
-  private singleEntryResponse(
-    materialId: string,
-    payload: unknown,
-    savedAt: Date
-  ): AnnotationBatchResponse {
-    return {
-      annotations: {
-        [materialId]: { payload, updatedAt: savedAt.toISOString() }
-      },
-      truncated: false,
-      total: 1,
-      returned: 1
-    };
-  }
-
-  /** canonical empty response — plan §R2 fail-closed. */
-  private emptyResponse(): AnnotationBatchResponse {
-    return { annotations: {}, truncated: false, total: 0, returned: 0 };
-  }
-
-  /**
-   * GET /api/v1/pdf-annotations — cursor 기반 listing (admin/export 용).
-   * sprint-2/S1 의 R2 prefix-list 패턴을 Hybrid 로 이식. cursor = base64 의
-   * Prisma snapshot id (cuid). page size = 50 고정.
-   */
-  async listAnnotations(
-    ownerId: string,
-    cursor?: string
-  ): Promise<{ items: Array<{ materialId: string; payload: unknown; updatedAt: string }>; nextCursor: string | null }> {
-    const pageSize = 50;
-    const snapshots = await this.annotationRepo.listByOwnerPaged(ownerId, pageSize, cursor);
-
-    const hasNext = snapshots.length > pageSize;
-    const page = hasNext ? snapshots.slice(0, pageSize) : snapshots;
-    const items = [];
-    for (const snap of page) {
-      const obj = await this.storage.getJsonObject<{ payload: unknown }>(
-        this.key(ownerId, snap.materialId)
-      );
-      items.push({
-        materialId: snap.materialId,
-        payload: obj?.payload ?? null,
-        updatedAt: snap.savedAt.toISOString()
-      });
-    }
-    return {
-      items,
-      nextCursor: hasNext && page.length > 0 ? page[page.length - 1]!.id : null
-    };
-  }
-
-  /** GET /api/v1/pdf-annotations/:materialId — plan §R6. */
-  async getSingleAnnotation(
-    ownerId: string,
-    materialId: string
-  ): Promise<AnnotationBatchResponse> {
-    if (!(await this.ownsMaterial(ownerId, materialId))) {
-      this.throwMaterialNotFound();
-    }
-
-    const snapshot = await this.annotationRepo.findSavedAt(materialId, ownerId);
-
-    if (!snapshot) {
-      return this.emptyResponse();
-    }
-
-    const obj = await this.storage.getJsonObject<{ payload: unknown }>(
-      this.key(ownerId, materialId)
-    );
-
-    return this.singleEntryResponse(materialId, obj?.payload ?? null, snapshot.savedAt);
-  }
-
-  /** GET /api/v1/pdf-annotations/by-subject/:subjectId — plan §R2 + §R7. */
-  async batchGetBySubject(
-    ownerId: string,
-    subjectId: string
-  ): Promise<AnnotationBatchResponse> {
-    // R2: server-side material enumeration. share 정책 = listMaterials 와 동일
-    // (본인 material + uploaded master/admin material). 다른 user 의 material
-    // 위에서도 본인 annotation 가능하므로 batch 도 share 적용.
-    // AnnotationSnapshot lookup 은 (currentUserId, materialId) composite 라
-    // 다른 user annotation 노출 위험 X.
-    const materials = await this.materialRepo.findAccessibleIdsBySubject(ownerId, subjectId);
-
-    if (materials.length === 0) {
-      return this.emptyResponse();
-    }
-
-    const materialIds = materials.map((m) => m.id);
-    const snapshots = await this.annotationRepo.findManyByMaterialsOwner(materialIds, ownerId);
-
-    const snapshotByMaterial = new Map<string, Date>(
-      snapshots.map((s) => [s.materialId, s.savedAt])
-    );
-
-    const annotations: Record<string, AnnotationEntry> = {};
-    let totalBytes = 0;
-    let truncated = false;
-    let returned = 0;
-    const total = snapshots.length;
-
-    // ordered iteration by material createdAt asc, R7 cap (50 material / 1MB).
-    for (const { id: materialId } of materials) {
-      const savedAt = snapshotByMaterial.get(materialId);
-      if (!savedAt) {
-        continue;
-      }
-      if (returned >= BATCH_MAX_MATERIALS) {
-        truncated = true;
-        break;
-      }
-
-      const obj = await this.storage.getJsonObject<{ payload: unknown }>(
-        this.key(ownerId, materialId)
-      );
-      const entry: AnnotationEntry = {
-        payload: obj?.payload ?? null,
-        updatedAt: savedAt.toISOString()
-      };
-      const entrySize = Buffer.byteLength(JSON.stringify(entry), "utf-8");
-      if (totalBytes + entrySize > BATCH_MAX_BYTES) {
-        truncated = true;
-        break;
-      }
-
-      annotations[materialId] = entry;
-      totalBytes += entrySize;
-      returned += 1;
-    }
-
-    // Datadog metric — batch shape distribution (truncated 비율, returned 분포).
-    this.logger.log(
-      `pdf-annotations.batch.size ownerId=${ownerId} total=${total} returned=${returned} truncated=${truncated} metric=annotation.batch.size`
-    );
-    return { annotations, truncated, total, returned };
-  }
 
   /** PUT /api/v1/pdf-annotations/:materialId — plan §R4 + §R9 (Hybrid CAS). */
   async putAnnotation(
@@ -262,8 +74,8 @@ export class PdfAnnotationsService {
     payload: unknown,
     rawClientRevision?: string
   ): Promise<AnnotationBatchResponse> {
-    if (!(await this.ownsMaterial(ownerId, materialId))) {
-      this.throwMaterialNotFound();
+    if (!(await isMaterialAccessible(this.materialRepo, ownerId, materialId))) {
+      throwMaterialNotFound();
     }
 
     // sprint-2/S1: payload size hard cap (unchanged).
@@ -283,7 +95,7 @@ export class PdfAnnotationsService {
     // an Invalid Date and surfaces the documented 400 INVALID_REVISION.
     const clientRevision =
       rawClientRevision !== undefined
-        ? this.parseClientRevision(rawClientRevision)
+        ? parseClientRevision(rawClientRevision)
         : undefined;
     const newSavedAt = new Date();
 
@@ -310,7 +122,7 @@ export class PdfAnnotationsService {
       const existing = await this.annotationRepo.findSavedAt(materialId, ownerId);
       if (existing) {
         const obj = await this.storage.getJsonObject<{ payload: unknown }>(
-          this.key(ownerId, materialId)
+          annotationKey(ownerId, materialId)
         );
         this.logger.warn(
           `pdf-annotations.cas.stale ownerId=${ownerId} materialId=${materialId} metric=annotation.cas.stale`
@@ -332,8 +144,8 @@ export class PdfAnnotationsService {
       // 만 삭제되어 client 가 stale revision 을 보낸 경우, 또는 (b) ownsMaterial
       // pre-check 와 CAS 사이에 material 자체가 삭제된 race.
       // (b) 의 의도는 R6 의 404. ownership 재확인으로 두 case 를 분기.
-      if (!(await this.ownsMaterial(ownerId, materialId))) {
-        this.throwMaterialNotFound();
+      if (!(await isMaterialAccessible(this.materialRepo, ownerId, materialId))) {
+        throwMaterialNotFound();
       }
       // sprint-W22-be-sync: shared material 의 본인 row 첫 PUT 시 clientRevision
       // 가 정의되지만 DB row 없음 (다른 user 의 annotation row 의 savedAt 을 FE 가
@@ -359,7 +171,7 @@ export class PdfAnnotationsService {
     previousSavedAt: Date
   ): Promise<AnnotationBatchResponse> {
     try {
-      await this.storage.putJsonObject(this.key(ownerId, materialId), {
+      await this.storage.putJsonObject(annotationKey(ownerId, materialId), {
         payload,
         updatedAt: newSavedAt.toISOString()
       });
@@ -382,7 +194,7 @@ export class PdfAnnotationsService {
     this.logger.log(
       `pdf-annotations.put.success ownerId=${ownerId} materialId=${materialId} metric=sync.put.success type=update`
     );
-    return this.singleEntryResponse(materialId, payload, newSavedAt);
+    return singleEntryResponse(materialId, payload, newSavedAt);
   }
 
   /** R9 step 4 (create path): atomic create via unique constraint + R2 write + rollback. */
@@ -402,7 +214,7 @@ export class PdfAnnotationsService {
           const existing = await this.annotationRepo.findSavedAt(materialId, ownerId);
           const obj = existing
             ? await this.storage.getJsonObject<{ payload: unknown }>(
-                this.key(ownerId, materialId)
+                annotationKey(ownerId, materialId)
               )
             : null;
           throw new ConflictException({
@@ -425,14 +237,14 @@ export class PdfAnnotationsService {
           // FK violation (P2003) 또는 RecordNotFound (P2025) 발생. ownership
           // pre-check 가 보장하던 invariant 가 사이에 무너졌으므로 R6 의
           // foreign/nonexistent 와 동일 응답 (404). 5xx 로 leak 차단.
-          this.throwMaterialNotFound();
+          throwMaterialNotFound();
         }
       }
       throw err;
     }
 
     try {
-      await this.storage.putJsonObject(this.key(ownerId, materialId), {
+      await this.storage.putJsonObject(annotationKey(ownerId, materialId), {
         payload,
         updatedAt: created.savedAt.toISOString()
       });
@@ -459,6 +271,6 @@ export class PdfAnnotationsService {
     this.logger.log(
       `pdf-annotations.put.success ownerId=${ownerId} materialId=${materialId} metric=sync.put.success type=create`
     );
-    return this.singleEntryResponse(materialId, payload, created.savedAt);
+    return singleEntryResponse(materialId, payload, created.savedAt);
   }
 }
