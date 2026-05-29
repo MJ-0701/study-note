@@ -72,6 +72,12 @@ const SYNC_FAILURE_PAUSE_WINDOW_MS = 5 * 60 * 1000;
 const PAUSE_BANNER_MESSAGE =
   "메모/필기 BE 저장에 연속 실패했습니다. 자동 동기화를 잠시 멈춥니다. 네트워크/세션 상태를 확인한 뒤 닫기를 눌러 재시작하세요.";
 
+// 413 = annotation payload 가 서버 cap(4MB)을 초과. retry 해도 동일하게 실패하므로
+// pause/재시도 대상이 아니다. 로컬 필기는 이미 보존돼 있으니(workspace store +
+// localStorage) 데이터 손실은 없고, "서버 동기화만 중단"됐음을 사용자에게 경고한다.
+const PAYLOAD_TOO_LARGE_MESSAGE =
+  "이 자료의 필기/메모가 너무 커서 서버 자동 저장에 실패했습니다. 작성한 내용은 이 기기에 보존돼 있지만 다른 기기로 동기화되지 않습니다. 필기 일부를 지우면 다시 저장됩니다.";
+
 // ─── Module-private state (annotation 영역만, user-notes 측은 main.ts 잔류) ─
 
 interface SyncFailureTracker {
@@ -251,6 +257,9 @@ export async function putAnnotationToBE(
         );
         if (response.status === 413) {
           logScrubbed("annotation PUT 413", { httpStatus: 413 });
+          // 로컬 필기는 그대로 보존(clear 안 함). 사용자에게 "서버 동기화 중단"만 경고.
+          cb.setSyncBackendError(PAYLOAD_TOO_LARGE_MESSAGE);
+          cb.triggerRenderApp();
           return;
         }
         if (response.status === 400) {

@@ -1,4 +1,20 @@
+import { trackRumError } from "../observability/datadogRum";
+
 export type PdfMaterialUploadStatus = "pending" | "uploaded";
+
+// 401/403 = 인증 경계(boot revalidate 등)에서 정상적으로 발생 → Error Tracking
+// 노이즈가 되므로 RUM Error emit 제외. 그 외 4xx(404/409/413 등) + 5xx 만 emit.
+function emitApiRumError(
+  error: Error,
+  status: number,
+  statusText: string,
+  source: string
+): void {
+  if (status === 401 || status === 403) {
+    return;
+  }
+  trackRumError(error, { source, httpStatus: status, statusText });
+}
 
 export interface PdfMaterialRecord {
   id: string;
@@ -122,11 +138,13 @@ export async function uploadMaterialFile(
 
       // 4xx — do not retry
       if (response.status >= 400 && response.status < 500) {
-        throw new MaterialApiError(
+        const s3Error = new MaterialApiError(
           `S3 PUT failed with status ${response.status}`,
           response.status,
           response.statusText
         );
+        emitApiRumError(s3Error, response.status, response.statusText, "materials-s3-put");
+        throw s3Error;
       }
 
       // 5xx — retry
@@ -154,7 +172,9 @@ export async function uploadMaterialFile(
   }
 
   if (lastError) {
-    // All retries exhausted
+    // All retries exhausted — S3 5xx/network. status 미상이면 0 으로 표기.
+    const status = lastError instanceof MaterialApiError ? lastError.status : 0;
+    emitApiRumError(lastError, status, "S3 PUT retries exhausted", "materials-s3-put");
     throw lastError;
   }
 
@@ -284,5 +304,7 @@ async function createMaterialApiError(response: Response): Promise<MaterialApiEr
     }
   }
 
-  return new MaterialApiError(message, response.status, response.statusText);
+  const apiError = new MaterialApiError(message, response.status, response.statusText);
+  emitApiRumError(apiError, response.status, response.statusText, "materials-api");
+  return apiError;
 }

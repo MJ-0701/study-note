@@ -157,6 +157,38 @@ describe("AC2 (a) — happy path PUT", () => {
   });
 });
 
+// ─── 413 PAYLOAD_TOO_LARGE → 사용자 경고 + 로컬 보존 ─────────────────────
+
+describe("413 PAYLOAD_TOO_LARGE", () => {
+  it("413 → setSyncBackendError 경고 + render, recordSyncFailure(pause) 미발생", async () => {
+    const harness = makeHarness({
+      sessionUserId: "u1",
+      workspace: makeWorkspace("m1"),
+      fetchImpl: async () => new Response(null, { status: 413 })
+    });
+    try {
+      const before = harness.getRenderCount();
+      await putAnnotationToBE("m1", { hello: "world" }, harness.ctx, harness.cb);
+      // 사용자 경고 배너 메시지가 set 됨 (silent return 아님)
+      const warning = harness.errorMessages.find(
+        (m) => typeof m === "string" && m.includes("자동 저장에 실패")
+      );
+      assert.ok(warning, "413 은 사용자 경고 메시지를 set 해야 함");
+      assert.ok(harness.getRenderCount() > before, "경고 표시 위해 render 트리거");
+      // 413 은 retry 무의미 → pause/실패 카운트 대상 아님
+      assert.equal(
+        harness.metricCalls.some((m) => m.event === "put.failure"),
+        false,
+        "413 은 put.failure(pause) 를 발생시키면 안 됨"
+      );
+      // 단일 PUT — retry 없음 (로컬 payload 는 clear 안 됨 = 보존)
+      assert.equal(harness.fetchCalls.length, 1);
+    } finally {
+      harness.restore();
+    }
+  });
+});
+
 // ─── (b) STALE_REVISION 복원 ─────────────────────────────────────────────
 
 describe("AC2 (b) — STALE_REVISION 복원", () => {

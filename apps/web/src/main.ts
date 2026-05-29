@@ -738,10 +738,16 @@ function getAnnotationSyncCallbacks(): AnnotationSyncCallbacks {
       }
     },
     handleAuthExpired: () => handleAuthExpiredFromSync(),
-    onSyncMetricEvent: () => {
-      // sprint-2026-W22-sprint-1 backlog: Datadog RUM emit 자리. 본 sprint
-      // 는 callback hook 만 노출 (no-op). 후속 sprint 의 ops monitoring
-      // sprint 에서 trackRumAction 결선.
+    onSyncMetricEvent: (event, context) => {
+      // failure(5xx/429) 만 Error Tracking 가시화 → trackRumError. success 는
+      // 매 자동저장마다 발생 → RUM action 노이즈/비용이므로 emit 안 함.
+      // context 는 annotation-sync 의 scrubbed allowlist 라 그대로 전달하되,
+      // SyncMetricContext 가 index signature 없는 의도적 allowlist 라 cast.
+      if (event !== "put.failure" && event !== "fetch.failure") {
+        return;
+      }
+      const rumContext = context as Record<string, string | number | boolean | undefined> | undefined;
+      trackRumError(new Error(`annotation-sync ${event}`), rumContext);
     }
   };
 }
