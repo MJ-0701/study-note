@@ -63,6 +63,20 @@ main 앱이 React-shell strangler 로 전환됨. `createRoot(#app)` + 얇은 has
 - cross-device sync (INV-4) — S1c 본격 검증이나 S0 회귀 없는지 1회 확인 권장.
 - Gate 6 cross(@codex) — usage-limit 복구(2026-05-31 06:13) 후.
 
+## Gate 6 cross — Gemini 임시 대체 (Codex 5/31 재리뷰)
+
+Codex usage-limit 로 cross 를 **Gemini(gemini-cli 0.41.2)** 로 임시 수행 (PR #118
+코멘트에 전문). verdict = FAIL(P1×1/P2×2/P3×2) → disposition 후 **임시 PASS**:
+- **P1** (LegacyView re-render 시 morphdom canvas wipe, INV-2): premise 부정확
+  (smoke 가 보존 실증) but 수정 채택 — `dangerouslySetInnerHTML={{__html:""}}`
+  로 INV-2 contract-level 보장 (commit 665d5ec, 2회 hashchange 재검증 PASS).
+- **P2** transformer `;`-의존: script-robustness 지적, committed 출력 무영향
+  (tsc/build/spec/`pending:[]` 실증). **P2** render-target race: 이론적·
+  self-correcting (pre-mount #app empty + createRoot clear). 
+- **P3** morphdom sink-only ✅ 검증 / StrictMode waiver ✅ 기재.
+- ⚠ **임시 PASS** — Codex 복구(2026-05-31 06:13) 후 `@codex review` 정식 cross 가
+  최종 merge 게이트. operator QA(체크리스트 §A~F)도 별도 blocker.
+
 ## 커밋 경계 주의
 - 본 작업 = `apps/web` (stores/react-shell/main.ts/package.json/scripts) + 본 문서.
 - git status 의 CLAUDE.md/AGENTS.md/SFS.md/.claude/GEMINI.md/.gitignore 변경 = 이전 sfs
