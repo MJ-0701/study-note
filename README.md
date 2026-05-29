@@ -30,7 +30,13 @@ study-note는 강의 PDF를 과목 단위로 정리하고, PDF 위에 직접 필
   - Cost: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-cost/study-note-cost-r2-mysql-dd?orgId=1&from=now-7d&to=now&timezone=browser&refresh=10m>
   - SLO: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-slo/study-note-slo-availability-latency-sync?orgId=1&from=now-7d&to=now&timezone=browser&refresh=1m>
 
-계정은 운영자가 별도로 안내합니다. 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청은 몇 초 늦게 응답할 수 있습니다.
+**리뷰어 접속 계정** (포트폴리오 검토용 데모 계정 — 일반 사용자 권한):
+
+| 이름 | 학번 |
+|---|---|
+| `리뷰어` | `20260000` |
+
+[서비스](https://study-note.910701.xyz)에 접속해 위 이름·학번으로 로그인하면 됩니다(별도 비밀번호 없음). 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청(로그인 포함)은 몇 초 늦게 응답할 수 있습니다.
 
 > **라이브 대시보드 운영 상태**: 🟢 **활성** (Grafana + Prometheus 가동 중)
 >
