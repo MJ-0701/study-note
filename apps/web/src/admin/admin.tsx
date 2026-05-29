@@ -57,15 +57,15 @@ function readExternalLinks(): ExternalDashboardLink[] {
 }
 const EXTERNAL_DASHBOARD_LINKS: ExternalDashboardLink[] = readExternalLinks();
 
-type UserRole = "master" | "admin" | "normal";
+type UserRole = "master" | "admin" | "reviewer" | "normal";
 
-type RoleFilter = "all" | "master" | "admin" | "normal";
+type RoleFilter = "all" | "master" | "admin" | "reviewer" | "normal";
 type FlagFilter = "all" | "active" | "rejected";
 type ReviewFilter = "all" | "reviewed" | "unreviewed";
 type PageSize = 10 | 20 | 50;
 
 function asRoleFilter(v: string): RoleFilter {
-  if (v === "master" || v === "admin" || v === "normal") return v;
+  if (v === "master" || v === "admin" || v === "reviewer" || v === "normal") return v;
   return "all";
 }
 
@@ -105,7 +105,7 @@ interface AdminUser {
 type BootState = "checking" | "unauth" | "forbidden" | "ready" | "error";
 
 function isUserRole(r: string): r is UserRole {
-  return r === "master" || r === "admin" || r === "normal";
+  return r === "master" || r === "admin" || r === "reviewer" || r === "normal";
 }
 
 function formatDate(iso: string | null): string {
@@ -124,7 +124,8 @@ function formatDate(iso: string | null): string {
 }
 
 function RoleBadge({ role }: { role: string }) {
-  const cls = role === "master" ? "master" : role === "admin" ? "admin" : "normal";
+  const cls =
+    role === "master" ? "master" : role === "admin" ? "admin" : role === "reviewer" ? "reviewer" : "normal";
   return <span className={`role-badge ${cls}`}>{role}</span>;
 }
 
@@ -149,12 +150,14 @@ function roleOptions(viewerRole: UserRole): { value: string; label: string }[] {
     return [
       { value: "MASTER", label: "MASTER" },
       { value: "ADMIN", label: "ADMIN" },
+      { value: "REVIEWER", label: "REVIEWER" },
       { value: "NORMAL", label: "NORMAL" }
     ];
   }
-  // admin: no MASTER option
+  // admin: no MASTER option (admin 은 reviewer/normal 까지만 부여 가능)
   return [
     { value: "ADMIN", label: "ADMIN" },
+    { value: "REVIEWER", label: "REVIEWER" },
     { value: "NORMAL", label: "NORMAL" }
   ];
 }
@@ -261,11 +264,13 @@ function AdminApp() {
 
   useEffect(() => {
     if (bootState !== "ready") return;
+    // reviewer 는 사용자 목록 접근 불가 (BE 403). users API 호출 자체를 막는다.
+    if (viewer?.role === "reviewer") return;
     // 운영 지표는 Grafana 외부 대시보드로 안내한다. admin SPA 는 users API 만 직접 조회한다.
     if (activeTab === "users") {
       fetchUsers();
     }
-  }, [bootState, activeTab, fetchUsers]);
+  }, [bootState, activeTab, fetchUsers, viewer]);
 
   // Reset currentPage to 1 when filters/search/pageSize change
   useEffect(() => {
@@ -402,6 +407,10 @@ function AdminApp() {
   // unreviewedCount always computed from raw users (filter-independent)
   const unreviewedCount = users.filter((u) => u.reviewedAt === null).length;
   const viewerRole = viewer!.role;
+  // reviewer = 운영지표 전용. 사용자 관리 탭/콘텐츠는 숨기고 항상 ops 로 강제한다
+  // (#users 로 직접 진입해도 ops 렌더). 실제 enforcement 는 BE @Roles.
+  const isReviewer = viewerRole === "reviewer";
+  const effectiveTab: AdminTab = isReviewer ? "ops" : activeTab;
 
   return (
     <div className="admin-page">
@@ -415,42 +424,44 @@ function AdminApp() {
         </header>
 
         <nav className="admin-tabs" role="tablist" aria-label="관리자 탭">
-          <a
-            href="#users"
-            role="tab"
-            aria-selected={activeTab === "users"}
-            className={`admin-tab ${activeTab === "users" ? "is-active" : ""}`}
-          >
-            사용자 관리
-          </a>
+          {!isReviewer && (
+            <a
+              href="#users"
+              role="tab"
+              aria-selected={effectiveTab === "users"}
+              className={`admin-tab ${effectiveTab === "users" ? "is-active" : ""}`}
+            >
+              사용자 관리
+            </a>
+          )}
           <a
             href="#ops"
             role="tab"
-            aria-selected={activeTab === "ops"}
-            className={`admin-tab ${activeTab === "ops" ? "is-active" : ""}`}
+            aria-selected={effectiveTab === "ops"}
+            className={`admin-tab ${effectiveTab === "ops" ? "is-active" : ""}`}
           >
             운영 지표
           </a>
         </nav>
 
-        {activeTab === "ops" && (
+        {effectiveTab === "ops" && (
           <OpsDashboardPanel />
         )}
 
-        {activeTab === "users" && unreviewedCount > 0 && (
+        {effectiveTab === "users" && unreviewedCount > 0 && (
           <div className="unreviewed-badge" role="status" aria-label={`신규 가입 미review ${unreviewedCount}명`}>
             <span className="unreviewed-badge-count">{unreviewedCount}</span>
             신규 가입 (미review)
           </div>
         )}
 
-        {activeTab === "users" && listError && (
+        {effectiveTab === "users" && listError && (
           <div className="admin-error-banner" role="alert">
             {listError}
           </div>
         )}
 
-        {activeTab === "users" && (
+        {effectiveTab === "users" && (
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <button
               type="button"
@@ -464,7 +475,7 @@ function AdminApp() {
           </div>
         )}
 
-        {activeTab === "users" && (<>
+        {effectiveTab === "users" && (<>
         {/* Toolbar */}
         <div className="admin-toolbar" role="search" aria-label="사용자 필터 및 검색">
           <label className="admin-toolbar-item">
@@ -477,6 +488,7 @@ function AdminApp() {
               <option value="all">all</option>
               <option value="master">master</option>
               <option value="admin">admin</option>
+              <option value="reviewer">reviewer</option>
               <option value="normal">normal</option>
             </select>
           </label>

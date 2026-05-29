@@ -48,7 +48,7 @@ export class SubjectsService {
     termId: string,
     input: SubjectCreateInput,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<PrismaSubject> {
     const term = await this.termRepo.findById(termId);
     if (!term) {
@@ -69,7 +69,7 @@ export class SubjectsService {
     id: string,
     input: SubjectUpdateInput,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<PrismaSubject> {
     const before = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
@@ -83,7 +83,7 @@ export class SubjectsService {
   async delete(
     id: string,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<void> {
     const before = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
@@ -124,7 +124,7 @@ export class SubjectsService {
     id: string,
     targetTermId: string,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<PrismaSubject> {
     const before = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(before.termId, actorId, actorRole);
@@ -174,7 +174,7 @@ export class SubjectsService {
   async getChildCount(
     id: string,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<{ materialCount: number }> {
     const subject = await this.findOrThrow(id);
     await this.ensureParentTermAllowed(subject.termId, actorId, actorRole);
@@ -198,7 +198,7 @@ export class SubjectsService {
   private async ensureParentTermAllowed(
     termId: string | null,
     actorId: string,
-    actorRole: "master" | "admin" | "normal"
+    actorRole: "master" | "admin" | "reviewer" | "normal"
   ): Promise<void> {
     if (!termId) {
       if (actorRole !== "master") {

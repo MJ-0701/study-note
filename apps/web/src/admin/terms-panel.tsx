@@ -24,7 +24,7 @@ import {
   type TermAdminResponse
 } from "../api/terms";
 
-type UserRole = "master" | "admin" | "normal";
+type UserRole = "master" | "admin" | "reviewer" | "normal";
 
 export interface TermsPanelProps {
   viewerId: string;
