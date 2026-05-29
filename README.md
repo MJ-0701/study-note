@@ -30,7 +30,13 @@ study-note는 강의 PDF를 과목 단위로 정리하고, PDF 위에 직접 필
   - Cost: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-cost/study-note-cost-r2-mysql-dd?orgId=1&from=now-7d&to=now&timezone=browser&refresh=10m>
   - SLO: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-slo/study-note-slo-availability-latency-sync?orgId=1&from=now-7d&to=now&timezone=browser&refresh=1m>
 
-계정은 운영자가 별도로 안내합니다. 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청은 몇 초 늦게 응답할 수 있습니다.
+**리뷰어 접속 계정** (포트폴리오 검토용 데모 계정 — `REVIEWER` 권한):
+
+| 이름 | 학번 |
+|---|---|
+| `리뷰어` | `20260000` |
+
+[서비스](https://study-note.910701.xyz)에 접속해 위 이름·학번으로 로그인하면 됩니다(별도 비밀번호 없음). 이 계정은 일반 사용자 기능에 더해 **운영 지표(Grafana 대시보드 진입점)만** 열람할 수 있는 제한 권한이며, 사용자 관리·콘텐츠 관리 등 관리자 기능은 서버 단에서 차단됩니다. 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청(로그인 포함)은 몇 초 늦게 응답할 수 있습니다.
 
 > **라이브 대시보드 운영 상태**: 🟢 **활성** (Grafana + Prometheus 가동 중)
 >
@@ -140,6 +146,8 @@ flowchart LR
 | Prometheus tsdb 보관 | Azure Files persistent volume | 컨테이너 revision 교체 시 ephemeral 디스크가 비워지지 않도록 외부 볼륨에 영속화했습니다. |
 | Monorepo 구조 | pnpm workspaces | `apps/*`와 `packages/*`가 같은 도메인 타입을 공유합니다. 패키지 간 빌드/타입 검사 동시 진행을 단일 명령으로 끝낼 수 있습니다. |
 
+> **왜 AWS가 아니라 Azure인가 (그리고 Datadog).** 클라우드는 AWS가 사실상 업계 표준이고, 저 역시 AWS 환경이 더 익숙합니다. 그럼에도 Backend/DB를 Azure(Container Apps + MySQL Flexible Server)로 택한 결정적 이유는 **비용**입니다. 숭실대학교 컴퓨터학부 재학생으로 **학생 개발자 혜택(GitHub Student Developer Pack · Azure for Students)** 을 통해 Azure 크레딧을 지원받아, 개인 운영 프로젝트의 인프라 비용을 0에 가깝게 유지할 수 있었습니다. 관측 스택도 같은 맥락입니다 — APM 시장의 메이저 도구는 **Datadog**이며, 학생 혜택으로 Datadog을 지원받아 production급 APM·Logs·RUM을 비용 부담 없이 운영합니다. 즉 "더 익숙하고 메이저한 스택(AWS)"보다 **"학생 혜택으로 production급 스택을 0원에 가깝게 운영한다"** 를 우선한 의도적 선택입니다. 단, egress 비용이 핵심인 객체 스토리지만은 학생 크레딧과 무관하게 **egress 0**인 Cloudflare R2를 별도로 골랐습니다(위 표 참고). 학생 혜택 종료 시 AWS(ECS/Fargate + RDS)로의 이전도 포트/어댑터 경계 덕분에 비교적 낮은 비용으로 가능하도록 설계했습니다.
+
 ### 디렉토리와 책임 경계
 
 - `apps/web`은 사용자가 만나는 UI를 담당합니다. 메인 작업공간은 `apps/web/src/main.ts`를 중심으로 모듈을 분리하고, 관리자 화면은 React 기반 별도 SPA(`apps/web/src/admin/`)로 운영합니다.
@@ -166,6 +174,93 @@ flowchart LR
 | `packages/persona-engine` | 과목별 튜터 응답 흐름의 실험 구현 |
 | `infra/prometheus` | `study-note-prometheus` 컨테이너 이미지와 scrape 설정 |
 | `infra/grafana` | `study-note-grafana` 컨테이너 이미지, 대시보드 JSON, provisioning |
+
+## 핵심 엔지니어링 결정 (How & Why)
+
+이 프로젝트가 "무엇을 하는가"는 위에서, "어떻게 만들었는가"는 여기서 다룹니다. 아래는 실제 코드에 근거한 백엔드 설계 결정들입니다.
+
+### 1. 멀티기기 동기화의 동시성 제어 — 락 없는 Hybrid CAS + 보상
+
+같은 계정을 노트북·태블릿에서 동시에 열면 한 PDF의 필기 스냅샷에 **동시 쓰기(write-write)** 가 발생합니다. 이를 비관적 락 없이, 메타데이터(MySQL)와 페이로드(R2)를 나눠 다루는 낙관적 동시성(Compare-And-Swap)으로 해결했습니다.
+
+핵심은 `savedAt`(리비전)을 `WHERE` 절에 넣어 갱신 자체를 락으로 쓰는 것입니다. 클라이언트가 보낸 리비전이 DB의 현재 리비전과 일치할 때만 `updateMany`가 1행을 갱신하고, 그 1행을 잡은 요청만 R2에 페이로드를 씁니다.
+
+```ts
+// apps/api/src/pdf-annotations/annotation-snapshot.repository.ts
+// savedAt 이 expectedSavedAt 인 row 만 갱신. count=1 → 본 호출이 lock 획득.
+async casUpdateSavedAt(materialId, ownerId, expectedSavedAt, newSavedAt) {
+  return this.prisma.annotationSnapshot.updateMany({
+    where: { materialId, ownerId, savedAt: expectedSavedAt }, // ← where 절이 곧 lock
+    data: { savedAt: newSavedAt }
+  });
+}
+```
+
+CAS 결과에 따라 서비스가 분기합니다 (`pdf-annotations.service.ts`):
+
+- `count === 1` (선점 성공): R2에 페이로드를 쓰고, **R2 쓰기가 실패하면 `savedAt`을 이전 값으로 되돌려(rollback)** MySQL과 R2의 정합성을 맞춥니다. 메타데이터와 객체 스토리지에 걸친 쓰기를 보상 트랜잭션으로 묶은 것입니다.
+- `count === 0` (리비전 불일치): `409 STALE_REVISION`을 반환하되, **응답 본문에 서버의 최신 정본(canonical) 스냅샷을 함께 실어** 클라이언트가 곧바로 재조정(replay)할 수 있게 합니다.
+- 보상 삭제는 "정확히 내가 만든 리비전인 row만" 지우는 compare-and-delete로, 그 사이 다른 CAS가 가져간 row를 지워 데이터가 유실되는 일을 막습니다.
+
+> 이 충돌은 막연히 추정하는 값이 아니라 **APM 대시보드의 `CAS 충돌` 지표**로 실시간 관측되며(`MetricsService.observeSyncPut("stale")`), 동시성 설계가 실제로 동작하는지를 운영 데이터로 확인합니다.
+
+### 2. 횡단 관심사 분리 — Guard로 fail-closed 보호
+
+인증·권한·메트릭 보호 같은 횡단 관심사는 비즈니스 로직에서 들어내 NestJS Guard로 분리했습니다. 권한은 데코레이터로 선언하고 Guard가 강제합니다.
+
+```ts
+// packages/auth/src/role.guard.ts — 선언적 RBAC (MASTER / ADMIN / NORMAL)
+export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
+```
+
+`/api/metrics`는 Product·Cost gauge에 비즈니스 지표가 포함되어 공개 노출이 곧 정보 유출입니다. 그래서 토큰이 **설정되지 않았거나 틀리면 기본값이 차단(fail-closed)** 이고, 토큰 비교는 타이밍 공격을 막는 상수 시간 비교를 씁니다.
+
+```ts
+// apps/api/src/observability/metrics-scrape.guard.ts
+if (!expected) throw new ForbiddenException({ errorCode: "METRICS_NOT_CONFIGURED" });
+if (!constantTimeEqual(presented, expected))      // timingSafeEqual 기반
+  throw new ForbiddenException({ errorCode: "METRICS_FORBIDDEN" });
+```
+
+### 3. 세션 보안 — 평문 미저장 + fail-closed
+
+세션 토큰은 발급 시 32바이트 난수로 만들고, **DB에는 원본이 아닌 HMAC-SHA256 해시만** 저장합니다. 원본 토큰은 클라이언트에만 전달되어, DB가 유출돼도 세션을 위조할 수 없습니다. pepper가 없으면 정적 fallback 없이 즉시 throw 하는 fail-closed 정책입니다.
+
+```ts
+// packages/auth/src/sessions.service.ts
+const token = randomBytes(32).toString("base64url");      // 원본은 클라이언트에만
+await this.prisma.session.create({ data: { tokenHash: hashSessionToken(token), ... } });
+// pepper 미설정 시 fail-closed (정적 fallback 제거)
+if (!pepper) throw new Error("SESSION_TOKEN_PEPPER missing — fail-closed");
+return createHmac("sha256", pepper).update(token).digest("hex");
+```
+
+### 4. 도메인 모델링 — setter 배제, 순수 reducer
+
+`packages/domain`은 외부 의존이 없는 순수 타입과 함수만 둡니다. 모든 상태 변경은 setter가 아니라 **의미 있는 reducer 함수**를 거치며, 입력을 변형하지 않고 불변 스프레드로 새 값을 반환합니다. side-effect가 없어 테스트와 재현(replay)이 쉽습니다.
+
+```ts
+// packages/domain/src/pdf-workspace.ts — 입력 불변, 의미 있는 메서드로만 상태 전이
+export function updateTextBoxContent(textBox: PdfTextBox, content: string): PdfTextBox {
+  return { ...textBox, content: content.slice(0, TEXT_BOX_CONTENT_CAP),
+           updatedAt: new Date().toISOString() };
+}
+```
+
+타임스탬프를 선택 인자(`at?`)로 주입할 수 있어, 같은 입력이면 같은 id가 나오는 결정론적 테스트가 가능합니다(미주입 시 기존 동작 유지).
+
+### 5. 포트/어댑터로 외부 시스템 격리
+
+서비스는 구체 SDK가 아니라 추상 포트에만 의존합니다. 스토리지의 경우 서비스가 `StoragePort`만 주입받고, R2/S3 구현(`S3StorageService`)은 어댑터로 갈아끼웁니다. 덕분에 테스트는 목(mock)을, 운영은 R2를 쓰며 서비스 코드에는 AWS SDK 결합이 0입니다.
+
+```ts
+// apps/api/src/pdf-annotations/pdf-annotations.service.ts
+constructor(@Inject(StoragePort) private readonly storage: StoragePort, /* ... */) {}
+```
+
+### 6. 테스트 전략 — 명세 기반 + 실연결 스모크
+
+핵심 로직은 Node.js 내장 test 러너로 단위 검증하고(외부 프레임워크 의존 없음), 인수 기준(AC) 단위로 명세화된 스펙(예: CAS 선점/stale/롤백 경로, 권한 분기)을 검증합니다. 그 위에 `scripts/smoke-*.mjs`로 빌드된 백엔드를 띄워 인증·관리자 권한·S3 저장·MCP 등을 계약(contract) 수준에서 점검하며, 실제 R2 버킷을 쓰는 스모크는 credential이 있을 때만 opt-in으로 돕니다.
 
 ## 운영 관측
 
