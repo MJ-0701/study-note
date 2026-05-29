@@ -27,6 +27,7 @@ import type {
   AnnotationSyncCallbacks,
   AnnotationSyncContext
 } from "./annotation-sync";
+import { decimateInkStrokes } from "./ink-decimate.ts";
 
 // ─── Domain helper injection (annotation-sync 패턴 일치 — runtime import 차단) ─
 
@@ -98,7 +99,9 @@ type AnnotationPayload = Parameters<WorkspaceStoreCallbacks["scheduleAnnotationP
 function buildAnnotationPayload(workspace: SubjectPdfWorkspace): AnnotationPayload {
   return {
     stickyNotes: workspace.stickyNotes,
-    inkStrokes: workspace.inkStrokes,
+    // 저장-직전 점 솎기 (RDP). live workspace.inkStrokes 는 full-fidelity
+    // 유지, BE 로 PUT 되는 사본만 단순화 → payload 4MB cap 완화.
+    inkStrokes: decimateInkStrokes(workspace.inkStrokes),
     textBoxes: workspace.textBoxes,
     checklists: workspace.checklists,
     tables: workspace.tables,
