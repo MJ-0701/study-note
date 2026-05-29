@@ -48,9 +48,9 @@
 ## DDD backlog — 종료
 
 - **F-4** Anemic StudyNotebook (interface → class) — **user 결정으로 skip/closed**. StudyNotebook 이 apps/web 전반 + localStorage `JSON.parse` 직렬화 → class 전환 시 plain object method 호출 footgun + 전 호출부 rehydration = 큰 변경·낮은 가치. 재진입 X.
-- **R-DTO-storageKey** (신규, P3) — material 응답에서 storageKey(R2 key) 비노출. domain PdfMaterialRecord 가 storage port 에 storageKey 를 넘겨야 해 BE/FE 공용 도메인 타입 분리 선행 필요. supervised.
+- **R-DTO-storageKey** — ✅ **완료 + 배포** (PR #117 squash merge, main 6ed4c94, be-v0.1.35 deploy). storageKey(R2 object key) client 노출 4 surface 차단: MaterialPublicResponse DTO + controller getExportBundle 응답 + UploadIntent/DownloadIntent port + FE api/materials.ts 타입. "도메인 타입 분리 선행" 가정은 오판이었음 — domain `PdfMaterialRecord` 는 그대로 두고 FE workspace-store/class-date 가 소비하던 타입만 storageKey 없는 `BackendPdfMaterialInput` 로 retype (domain logic 은 storageKey 미사용). self+local Codex CPO PASS, web/api/storage tsc green, api material spec 48 pass.
 
-> **DDD 13 finding 전부 처리됨**: 9 배포완료 + PR #112~115 (F-3 보강/F-11/F-12/F-10, 머지 대기) + F-4 skip. 잔여 = R-DTO-storageKey(P3 신규) 뿐.
+> **DDD 13 finding 전부 처리됨**: 9 배포완료 + PR #112~117 + F-4 skip. R-DTO-storageKey = 완료/배포. **backlog clear.**
 
 ## 운영 대시보드 (Grafana/Prometheus) — 금요일까지 운영
 
@@ -64,8 +64,8 @@
 2. (✅ 완료) **CLAUDE.md infra Vercel 정정** — SWA→Vercel + `docs/infra.md` 분리 + @import. 지침서 = agent 지침 전용 원칙([[feedback-instruction-file-purity]]). 로컬 커밋 bdd24dc/bbdbebd (fe-v0.1.63 tag 와 함께 push 됨).
 3. (✅ 확인) Vercel git auto-deploy = `vercel.json git.deploymentEnabled=false`(b202f63) 이미 적용. push 트리거 안 함. 대시보드 토글은 redundant(원하면 확인).
 4. **다음 세션 작업 순서 (user 합의 2026-05-29) = DTO → follow-up → migration**:
-   - **(1) R-DTO-storageKey** (P3, supervised) — material 응답에서 storageKey(R2 key) 비노출. domain `PdfMaterialRecord` 가 storage port 에 storageKey 를 넘겨야 해 **BE/FE 공용 도메인 타입 분리 선행 필요**. 시작점 = MaterialsService 조회 응답 DTO + `MaterialPublicResponse`(F-10, PR #115) 확인 후 storageKey 노출 면 차단.
-   - **(2) follow-up (관측성 3건)** — ① API 4xx/5xx → `trackRumError` 로 RUM Error emit (Error Tracking 가시화), ② annotation snapshot payload 무한증가 → decimation/압축 (be-v0.1.34 가 cap 만 4MB 로 올림, 근본 미해결), ③ FE 413 silent return → 사용자 경고+로컬 보존 ([[project-ipad-pen-second-stroke]] follow-up).
+   - **(1) R-DTO-storageKey** — ✅ **완료/배포** (PR #117, be-v0.1.35). 상세 = §DDD backlog.
+   - **(2) follow-up (관측성 3건)** ← **현재 next** — ① API 4xx/5xx → `trackRumError` 로 RUM Error emit (Error Tracking 가시화), ② annotation snapshot payload 무한증가 → decimation/압축 (be-v0.1.34 가 cap 만 4MB 로 올림, 근본 미해결), ③ FE 413 silent return → 사용자 경고+로컬 보존 ([[project-ipad-pen-second-stroke]] follow-up).
    - **(3) React migration 재평가** ([[project-react-migration-backlog]]) — 분해 A~D 후 재검토 조건. main.ts 현재 ~6.9k line.
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
