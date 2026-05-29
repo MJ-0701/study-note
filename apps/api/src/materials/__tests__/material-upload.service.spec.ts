@@ -82,7 +82,6 @@ function makeService(options: {
       return {
         method: "PUT" as const,
         uploadUrl: "/api/materials/mat-1/file",
-        storageKey: "key",
         expiresAt: new Date().toISOString(),
         requiredHeaders: {}
       };
@@ -93,7 +92,6 @@ function makeService(options: {
     createDownloadIntent: () => ({
       method: "GET" as const,
       downloadUrl: "/x",
-      storageKey: "key",
       expiresAt: new Date().toISOString()
     }),
     getObject: async () => ({ body: null as unknown as Readable, contentType: "application/pdf" }),

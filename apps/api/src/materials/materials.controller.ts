@@ -176,7 +176,8 @@ export class MaterialsController {
     @Req() request: AuthenticatedRequest,
     @Param("materialId") materialId: string
   ) {
-    return this.materials.getExportBundle(request.user.id, materialId);
+    const bundle = await this.materials.getExportBundle(request.user.id, materialId);
+    return { ...bundle, material: toMaterialPublic(bundle.material) };
   }
 }
 

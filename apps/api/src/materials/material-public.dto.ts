@@ -3,9 +3,9 @@
 // PdfMaterialRecord 에 향후 내부 필드가 추가돼도 명시 등록 전까지 응답에 새지 않게 한다.
 // subjects 의 toSubjectPublic 패턴.
 //
-// 현재 필드 = PdfMaterialRecord 와 동일(FE 호환 유지). storageKey(R2 object key) 비노출은
-// domain PdfMaterialRecord 가 storage port(getObject/createDownloadIntent)에 storageKey 를
-// 넘겨야 해 타입 분리가 선행돼야 하므로 별도 backlog (R-DTO-storageKey).
+// storageKey(R2 object key)는 응답에서 제외한다 (R-DTO-storageKey). domain PdfMaterialRecord 는
+// 내부 R2 접근(getObject/createUploadIntent 등)에 storageKey 를 계속 보유하지만, 이 DTO 경계가
+// 영속 타입과 응답 contract 를 분리하므로 도메인 타입 변경 없이 노출만 차단한다.
 import type { PdfMaterialRecord } from "@study-note/domain";
 
 export interface MaterialPublicResponse {
@@ -19,7 +19,6 @@ export interface MaterialPublicResponse {
   fileSize: number;
   pageCount: number;
   contentType: string;
-  storageKey: string;
   uploadStatus: "pending" | "uploaded";
   createdAt: string;
   updatedAt: string;
@@ -36,7 +35,6 @@ export function toMaterialPublic(record: PdfMaterialRecord): MaterialPublicRespo
     fileSize: record.fileSize,
     pageCount: record.pageCount,
     contentType: record.contentType,
-    storageKey: record.storageKey,
     uploadStatus: record.uploadStatus,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt

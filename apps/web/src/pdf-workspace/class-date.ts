@@ -16,8 +16,8 @@
 //     local 변경만 알린다.
 
 import type {
+  BackendPdfMaterialInput,
   PdfMaterialDraft,
-  PdfMaterialRecord,
   SubjectNote,
   SubjectPdfWorkspace
 } from "@study-note/domain";
@@ -58,7 +58,7 @@ export interface ClassDateCallbacks {
     apiBaseUrl: string,
     backendMaterialId: string,
     payload: { classDate: string }
-  ) => Promise<PdfMaterialRecord>;
+  ) => Promise<BackendPdfMaterialInput>;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface ClassDateDomainHelpers {
     workspace: SubjectPdfWorkspace
   ) => PdfMaterialDraft[];
   createPdfMaterialFromBackend: (
-    record: PdfMaterialRecord,
+    record: BackendPdfMaterialInput,
     previous?: Pick<PdfMaterialDraft, "selectedPage" | "selectedTool">
   ) => PdfMaterialDraft;
   formatMaterialError: (error: unknown) => string;

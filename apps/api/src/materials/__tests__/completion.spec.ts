@@ -100,14 +100,12 @@ function makeStorage(
     createUploadIntent: async () => ({
       method: "PUT" as const,
       uploadUrl: "/api/materials/mat-001/file",
-      storageKey: "key",
       expiresAt: new Date().toISOString(),
       requiredHeaders: {}
     }),
     createDownloadIntent: () => ({
       method: "GET" as const,
       downloadUrl: "/api/materials/mat-001/file",
-      storageKey: "key",
       expiresAt: new Date().toISOString()
     }),
     putObject: async () => {},

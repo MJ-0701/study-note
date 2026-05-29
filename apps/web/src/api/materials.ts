@@ -11,7 +11,6 @@ export interface PdfMaterialRecord {
   fileSize: number;
   pageCount: number;
   contentType: string;
-  storageKey: string;
   uploadStatus: PdfMaterialUploadStatus;
   createdAt: string;
   updatedAt: string;
@@ -31,7 +30,6 @@ export interface MaterialUploadIntent {
   upload: {
     method: "PUT";
     uploadUrl: string;
-    storageKey: string;
     expiresAt: string;
     requiredHeaders: Record<string, string>;
   };

@@ -18,8 +18,8 @@
 //     호출 (object URL lifecycle 일관성).
 
 import type {
+  BackendPdfMaterialInput,
   PdfMaterialDraft,
-  PdfMaterialRecord,
   PdfWorkspaceStore,
   SubjectPdfWorkspace
 } from "@study-note/domain";
@@ -43,7 +43,7 @@ export interface WorkspaceDomainHelpers {
   ) => SubjectPdfWorkspace;
   hydrateSubjectWorkspace: (entry: unknown) => SubjectPdfWorkspace;
   createMaterialFromBackend: (
-    record: PdfMaterialRecord,
+    record: BackendPdfMaterialInput,
     previous?: PdfMaterialDraft
   ) => PdfMaterialDraft;
 }
@@ -229,7 +229,7 @@ export function upsertPdfWorkspaceMaterial(
 
 export function replacePdfWorkspaceMaterials(
   workspace: SubjectPdfWorkspace,
-  backendMaterials: PdfMaterialRecord[],
+  backendMaterials: BackendPdfMaterialInput[],
   domain: WorkspaceDomainHelpers
 ): SubjectPdfWorkspace {
   const existingMaterials = getPdfWorkspaceMaterials(workspace);

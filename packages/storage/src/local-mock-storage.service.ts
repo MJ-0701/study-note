@@ -27,7 +27,6 @@ export class LocalMockStorageService extends StoragePort {
     return {
       method: "PUT",
       uploadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
-      storageKey: material.storageKey,
       expiresAt: getExpiry(),
       requiredHeaders: {
         "content-type": material.contentType
@@ -39,7 +38,6 @@ export class LocalMockStorageService extends StoragePort {
     return {
       method: "GET",
       downloadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
-      storageKey: material.storageKey,
       expiresAt: getExpiry()
     };
   }

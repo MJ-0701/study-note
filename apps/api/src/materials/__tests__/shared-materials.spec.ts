@@ -110,14 +110,12 @@ function makeService(options: {
     createUploadIntent: async () => ({
       method: "PUT" as const,
       uploadUrl: "/api/materials/mat-shared/file",
-      storageKey: "key",
       expiresAt: new Date().toISOString(),
       requiredHeaders: {}
     }),
     createDownloadIntent: () => ({
       method: "GET" as const,
       downloadUrl: "/api/materials/mat-shared/file",
-      storageKey: "key",
       expiresAt: new Date().toISOString()
     }),
     putObject: async () => {},

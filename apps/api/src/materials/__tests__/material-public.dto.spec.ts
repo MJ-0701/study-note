@@ -35,11 +35,15 @@ describe("toMaterialPublic (F-10 DTO)", () => {
       fileSize: 1024,
       pageCount: 5,
       contentType: "application/pdf",
-      storageKey: "users/admin-1/materials/mat-1/lecture.pdf",
       uploadStatus: "uploaded",
       createdAt: "2026-05-20T00:00:00.000Z",
       updatedAt: "2026-05-20T00:00:00.000Z"
     });
+  });
+
+  it("excludes storageKey (R-DTO-storageKey) — R2 object key must not leak", () => {
+    const dto = toMaterialPublic(record());
+    assert.equal("storageKey" in dto, false, "storageKey must not be exposed to clients");
   });
 
   it("is an explicit allow-list — an unknown internal field on the entity does not leak", () => {
