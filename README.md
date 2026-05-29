@@ -148,6 +148,10 @@ flowchart LR
 
 > **왜 AWS가 아니라 Azure인가 (그리고 Datadog).** 클라우드는 AWS가 사실상 업계 표준이고, 저 역시 AWS 환경이 더 익숙합니다. 그럼에도 Backend/DB를 Azure(Container Apps + MySQL Flexible Server)로 택한 결정적 이유는 **비용**입니다. 숭실대학교 컴퓨터학부 재학생으로 **학생 개발자 혜택(GitHub Student Developer Pack · Azure for Students)** 을 통해 Azure 크레딧을 지원받아, 개인 운영 프로젝트의 인프라 비용을 0에 가깝게 유지할 수 있었습니다. 관측 스택의 **Datadog**도 같은 원리입니다. Datadog은 APM·Logs·RUM 분야의 업계 표준이지만 개인 프로젝트가 정가로 감당하기엔 부담스러운 유료 도구입니다 — 학생 혜택으로 무상 지원받은 덕분에, 원래라면 비용 때문에 선택하기 어려웠을 production급 관측 도구를 그대로 구성할 수 있었습니다. 즉 "더 익숙하고 메이저한 스택(AWS)"보다 **"학생 혜택으로 production급 스택을 0원에 가깝게 운영한다"** 를 우선한 의도적 선택입니다. 단, egress 비용이 핵심인 객체 스토리지만은 학생 크레딧과 무관하게 **egress 0**인 Cloudflare R2를 별도로 골랐습니다(위 표 참고). 학생 혜택 종료 시 AWS(ECS/Fargate + RDS)로의 이전도 포트/어댑터 경계 덕분에 비교적 낮은 비용으로 가능하도록 설계했습니다.
 
+> **왜 Spring Boot가 아니라 NestJS인가.** 저의 주력 스택은 **Spring Boot + Kotlin** 백엔드입니다. 그럼에도 이 프로젝트의 API를 NestJS로 구성한 이유는 세 가지입니다. ① **스터디** — 익숙한 Spring 대신 새 런타임/생태계를 직접 운영까지 경험. ② **서버 비용** — Azure Container Apps의 min-replicas=0 절전 모델에서 JVM 컨테이너는 cold start가 느리고 메모리 상주가 무거운 반면, Node 런타임은 기동이 가볍고 메모리 풋프린트가 작아 절전·과금에 유리. ③ **풀스택 속도** — FE와 BE를 모두 TypeScript로 통일해 도메인 타입을 한 패키지(`packages/domain`)에서 공유하고 컨텍스트 스위칭 없이 빠르게 반복.
+>
+> 핵심은 **Spring에서의 설계 개념을 NestJS에 1:1로 매핑**해 옮겼다는 점입니다. NestJS 자체가 Spring/Angular의 DI·모듈·데코레이터 사상을 계승했기에 이식이 자연스러웠습니다 — Spring의 `@Service`/`@Repository`/생성자 주입 ↔ Nest `@Injectable` + 모듈 provider, `@RestController` ↔ `@Controller`, Spring Security 필터 체인 ↔ `SessionAuthGuard`/`RoleGuard`(`@Roles`), `@ControllerAdvice`+`@ExceptionHandler` ↔ 전역 `ApiExceptionFilter`(4xx warn / 5xx error 로깅), Bean Validation ↔ `ValidationPipe`+`@Valid`(Shield 패턴), 포트/어댑터(헥사고날) ↔ `StoragePort`/`*Repository` 추상화. 즉 "새 언어를 처음 배우며 만든 결과물"이 아니라 **숙련된 백엔드 설계 원칙을 새 런타임으로 빠르게 이식한 결과물**입니다.
+
 ### 디렉토리와 책임 경계
 
 - `apps/web`은 사용자가 만나는 UI를 담당합니다. 메인 작업공간은 `apps/web/src/main.ts`를 중심으로 모듈을 분리하고, 관리자 화면은 React 기반 별도 SPA(`apps/web/src/admin/`)로 운영합니다.
