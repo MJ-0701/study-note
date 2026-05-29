@@ -63,7 +63,10 @@
 1. (✅ 완료) **iPad 펜 연속-획 버그 = 진단완료** — WebKit/Pencil OS 한계, 웹 fix 불가(위 §3). inkdebug 제거 fe-v0.1.63 prod. 재진입 X. 잔여 follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
 2. (✅ 완료) **CLAUDE.md infra Vercel 정정** — SWA→Vercel + `docs/infra.md` 분리 + @import. 지침서 = agent 지침 전용 원칙([[feedback-instruction-file-purity]]). 로컬 커밋 bdd24dc/bbdbebd (fe-v0.1.63 tag 와 함께 push 됨).
 3. (✅ 확인) Vercel git auto-deploy = `vercel.json git.deploymentEnabled=false`(b202f63) 이미 적용. push 트리거 안 함. 대시보드 토글은 redundant(원하면 확인).
-4. R-DTO-storageKey (P3 supervised) / React migration 재평가.
+4. **다음 세션 작업 순서 (user 합의 2026-05-29) = DTO → follow-up → migration**:
+   - **(1) R-DTO-storageKey** (P3, supervised) — material 응답에서 storageKey(R2 key) 비노출. domain `PdfMaterialRecord` 가 storage port 에 storageKey 를 넘겨야 해 **BE/FE 공용 도메인 타입 분리 선행 필요**. 시작점 = MaterialsService 조회 응답 DTO + `MaterialPublicResponse`(F-10, PR #115) 확인 후 storageKey 노출 면 차단.
+   - **(2) follow-up (관측성 3건)** — ① API 4xx/5xx → `trackRumError` 로 RUM Error emit (Error Tracking 가시화), ② annotation snapshot payload 무한증가 → decimation/압축 (be-v0.1.34 가 cap 만 4MB 로 올림, 근본 미해결), ③ FE 413 silent return → 사용자 경고+로컬 보존 ([[project-ipad-pen-second-stroke]] follow-up).
+   - **(3) React migration 재평가** ([[project-react-migration-backlog]]) — 분해 A~D 후 재검토 조건. main.ts 현재 ~6.9k line.
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 
