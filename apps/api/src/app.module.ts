@@ -15,11 +15,13 @@ import { TermsModule } from "./terms/terms.module";
 import { SubjectsModule } from "./subjects/subjects.module";
 import { MetricsModule } from "./observability/metrics.module";
 import { TelemetryModule } from "./telemetry/telemetry.module";
+import { StorageModule } from "./storage/storage.module";
 
 @Module({
   imports: [
     PrismaModule,
     AuthModule,
+    StorageModule,
     CorpusModule,
     PersonaModule,
     AdminModule,
