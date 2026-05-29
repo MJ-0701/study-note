@@ -1,24 +1,15 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "@study-note/auth";
-import { createStorageProvider, StoragePort } from "@study-note/storage";
 import { UserNotesController } from "./user-notes.controller";
 import { UserNotesService } from "./user-notes.service";
 
-// sprint-2/S1 fix (codex P1): StoragePort is a per-module token. Without
-// providing it here Nest cannot resolve UserNotesService's dependency, so the
-// feature module must register the storage factory itself.
-// sprint-2/S1 fix-2 (codex P1): UserNotesController applies SessionAuthGuard,
-// which lives in @study-note/auth. AuthModule export is required for the guard
+// sprint-2/S1 fix (codex P1): AuthModule export is required for the guard
 // + UserProfile request decoration to resolve at bootstrap.
+// StoragePort 는 @Global StorageModule 에서 단일 인스턴스로 제공됨 (app.module 등록).
+// 이전엔 모듈별 useFactory 가 인스턴스를 분리시켜 cross-module read 가 깨졌음.
 @Module({
   imports: [AuthModule],
   controllers: [UserNotesController],
-  providers: [
-    UserNotesService,
-    {
-      provide: StoragePort,
-      useFactory: createStorageProvider
-    }
-  ]
+  providers: [UserNotesService]
 })
 export class UserNotesModule {}
