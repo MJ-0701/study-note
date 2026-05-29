@@ -398,13 +398,14 @@ try {
       }
     ]
   };
-  await requestJson(`/materials/${materialId}/annotation`, {
+  await requestJson(`/v1/pdf-annotations/${materialId}`, {
     method: "PUT",
     jar: masterJar,
-    body: annotationPayload
+    body: { payload: annotationPayload }
   });
-  const annotation = await requestJson(`/materials/${materialId}/annotation`, { jar: masterJar });
-  if (annotation.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !== "backend smoke") {
+  const annotationRes = await requestJson(`/v1/pdf-annotations/${materialId}`, { jar: masterJar });
+  const annotationGot = annotationRes.annotations?.[materialId]?.payload;
+  if (annotationGot?.stickyNotes?.[0]?.blocks?.[0]?.content !== "backend smoke") {
     throw new Error("annotation snapshot did not persist");
   }
 
@@ -435,39 +436,37 @@ try {
   if (!normalDownloadedBody.equals(samplePdf)) {
     throw new Error("normal shared PDF bytes did not match uploaded bytes");
   }
-  const emptyNormalAnnotation = await requestJson(`/materials/${materialId}/annotation`, { jar: normalJar });
-  if (
-    emptyNormalAnnotation.annotation?.ownerId !== normalLogin.userId ||
-    emptyNormalAnnotation.annotation?.stickyNotes?.length !== 0
-  ) {
+  const emptyNormalAnnotationRes = await requestJson(`/v1/pdf-annotations/${materialId}`, { jar: normalJar });
+  if (emptyNormalAnnotationRes.annotations?.[materialId] !== undefined) {
     throw new Error("normal user annotation was not an empty current-user snapshot");
   }
-  await requestJson(`/materials/${materialId}/annotation`, {
+  await requestJson(`/v1/pdf-annotations/${materialId}`, {
     method: "PUT",
     jar: normalJar,
     body: {
-      schemaVersion: 1,
-      stickyNotes: [
-        {
-          id: "note-normal-smoke",
-          pageNumber: 1,
-          anchor: { x: 0.45, y: 0.2 },
-          blocks: [{ id: "block-normal-smoke", kind: "text", content: "normal smoke" }],
-          updatedAt: new Date().toISOString()
-        }
-      ],
-      inkStrokes: []
+      payload: {
+        schemaVersion: 1,
+        stickyNotes: [
+          {
+            id: "note-normal-smoke",
+            pageNumber: 1,
+            anchor: { x: 0.45, y: 0.2 },
+            blocks: [{ id: "block-normal-smoke", kind: "text", content: "normal smoke" }],
+            updatedAt: new Date().toISOString()
+          }
+        ],
+        inkStrokes: []
+      }
     }
   });
-  const normalAnnotation = await requestJson(`/materials/${materialId}/annotation`, { jar: normalJar });
-  const masterAnnotationAfterNormalSave = await requestJson(`/materials/${materialId}/annotation`, { jar: masterJar });
-  if (normalAnnotation.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !== "normal smoke") {
+  const normalAnnotationRes = await requestJson(`/v1/pdf-annotations/${materialId}`, { jar: normalJar });
+  const masterAnnotationAfterNormalSaveRes = await requestJson(`/v1/pdf-annotations/${materialId}`, { jar: masterJar });
+  const normalAnnotationGot = normalAnnotationRes.annotations?.[materialId]?.payload;
+  const masterAnnotationAfterNormalSaveGot = masterAnnotationAfterNormalSaveRes.annotations?.[materialId]?.payload;
+  if (normalAnnotationGot?.stickyNotes?.[0]?.blocks?.[0]?.content !== "normal smoke") {
     throw new Error("normal user annotation snapshot did not persist independently");
   }
-  if (
-    masterAnnotationAfterNormalSave.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !==
-    "backend smoke"
-  ) {
+  if (masterAnnotationAfterNormalSaveGot?.stickyNotes?.[0]?.blocks?.[0]?.content !== "backend smoke") {
     throw new Error("normal user annotation overwrote master annotation");
   }
   console.log("- normal user reads shared master PDF and keeps independent annotation");
@@ -511,11 +510,9 @@ try {
   if (restartedMaterials.materials?.[0]?.id !== materialId) {
     throw new Error("material metadata did not survive backend process restart");
   }
-  const restartedAnnotation = await requestJson(`/materials/${materialId}/annotation`, { jar: masterJar });
-  if (
-    restartedAnnotation.annotation?.stickyNotes?.[0]?.blocks?.[0]?.content !==
-    "backend smoke"
-  ) {
+  const restartedAnnotationRes = await requestJson(`/v1/pdf-annotations/${materialId}`, { jar: masterJar });
+  const restartedAnnotationGot = restartedAnnotationRes.annotations?.[materialId]?.payload;
+  if (restartedAnnotationGot?.stickyNotes?.[0]?.blocks?.[0]?.content !== "backend smoke") {
     throw new Error("annotation snapshot did not survive backend process restart");
   }
 
