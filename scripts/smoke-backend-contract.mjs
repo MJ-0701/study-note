@@ -555,7 +555,7 @@ try {
     401
   );
 
-  // Second user sign-in (ADMIN role) — admin route and cross-user upload denial tests.
+  // Second user sign-in (REVIEWER role) — reviewer route checks.
   const secondJar = createCookieJar();
   await requestJson("/v1/auth/sign-in", {
     method: "POST",
@@ -575,16 +575,58 @@ try {
     throw new Error("master role did not receive users list array");
   }
   console.log("admin route accepts master user");
-  const adminUsers = await requestJson("/v1/admin/users", { jar: secondJar });
+
+  // reviewer는 /v1/admin/users 에 접근 불가 (403 정당).
+  await assertStatus("admin/users rejects reviewer role (403)", () =>
+    request("/v1/admin/users", { jar: secondJar }),
+    403
+  );
+  console.log("admin route rejects reviewer (403 confirmed)");
+
+  // reviewer는 ops-dashboard 열람 가능 (포트폴리오 데모 계정 전용 권한).
+  const reviewerOpsDashboard = await requestJson("/v1/admin/ops-dashboard", { jar: secondJar });
+  if (typeof reviewerOpsDashboard.generatedAt !== "string") {
+    throw new Error("reviewer ops-dashboard response missing generatedAt");
+  }
+  console.log("reviewer can access ops-dashboard (role-limited read)");
+
+  // Ephemeral admin user — tests admin-positive /v1/admin/users AND owner-scoped upload denial.
+  const ADMIN_USER_STUDENT_NUMBER = "20269999";
+  const ADMIN_USER_NAME = "Smoke Admin User";
+  const ADMIN_USER_EMAIL = "smoke-admin-user@example.com";
+  await prisma.user.upsert({
+    where: { studentNumber: ADMIN_USER_STUDENT_NUMBER },
+    update: {
+      displayName: ADMIN_USER_NAME,
+      email: ADMIN_USER_EMAIL,
+      role: "ADMIN",
+      devUserFlag: true
+    },
+    create: {
+      id: "user-smoke-admin-1",
+      displayName: ADMIN_USER_NAME,
+      studentNumber: ADMIN_USER_STUDENT_NUMBER,
+      email: ADMIN_USER_EMAIL,
+      role: "ADMIN",
+      devUserFlag: true
+    }
+  });
+  const adminJar = createCookieJar();
+  await requestJson("/v1/auth/sign-in", {
+    method: "POST",
+    jar: adminJar,
+    body: { name: ADMIN_USER_NAME, studentNumber: ADMIN_USER_STUDENT_NUMBER }
+  });
+  const adminUsers = await requestJson("/v1/admin/users", { jar: adminJar });
   if (!Array.isArray(adminUsers)) {
     throw new Error("admin role did not receive users list array");
   }
   console.log("admin route accepts admin user");
 
-  await assertStatus("cross-user file upload access is denied", () =>
+  await assertStatus("cross-user file upload access is denied (non-owner admin)", () =>
     requestBinary(`/materials/${materialId}/file`, {
       method: "PUT",
-      jar: secondJar,
+      jar: adminJar,
       body: samplePdf,
       contentType: "application/pdf"
     }),
@@ -609,6 +651,7 @@ try {
   console.log("- local mock backend-proxy upload/download stores and returns PDF bytes");
   console.log("- material upload status transitions from pending to uploaded");
   console.log("- normal user reads shared master/admin PDF materials");
+  console.log("- reviewer role denied admin/users but allowed ops-dashboard");
   console.log("- upload endpoints are limited to master/admin and still owner-scoped for object writes");
   console.log("- annotation snapshots are isolated per current user");
   console.log("- material metadata and annotation snapshot persist across backend process restart");
