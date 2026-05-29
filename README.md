@@ -266,6 +266,24 @@ constructor(@Inject(StoragePort) private readonly storage: StoragePort, /* ... *
 
 핵심 로직은 Node.js 내장 test 러너로 단위 검증하고(외부 프레임워크 의존 없음), 인수 기준(AC) 단위로 명세화된 스펙(예: CAS 선점/stale/롤백 경로, 권한 분기)을 검증합니다. 그 위에 `scripts/smoke-*.mjs`로 빌드된 백엔드를 띄워 인증·관리자 권한·S3 저장·MCP 등을 계약(contract) 수준에서 점검하며, 실제 R2 버킷을 쓰는 스모크는 credential이 있을 때만 opt-in으로 돕니다.
 
+### 7. DI 싱글톤 — provider scope로 공유 인스턴스 보장
+
+NestJS provider는 기본 Scope.DEFAULT(singleton scope)로 등록되어 IoC 컨테이너가 앱 전체에서 인스턴스를 1개만 유지합니다. Spring의 `@Service`/`@Component` bean이 기본 singleton scope로 관리되는 것과 동일한 원리입니다.
+
+`StoragePort`(외부 어댑터)와 `PrismaClient`(DB 클라이언트)처럼 연결·상태를 공유해야 하는 인프라는 `@Global` 모듈에서 한 번만 등록하고 export합니다. 이전 구현은 materials·pdf-annotations·user-notes 세 모듈이 `StoragePort` provider를 각자 등록해 인스턴스가 3개 생겼고, in-memory 상태를 가진 local-mock 환경에서 cross-module 읽기가 깨졌습니다. `@Global` 단일 등록으로 이를 수정하면서 `PrismaModule`과 동일한 패턴으로 통일했습니다.
+
+```ts
+// apps/api/src/storage/storage.module.ts
+@Global()   // 1회 등록 → app-wide 단일 인스턴스
+@Module({
+  providers: [{ provide: StoragePort, useFactory: createStorageProvider }],
+  exports: [StoragePort]
+})
+export class StorageModule {}
+```
+
+모듈 스코프 변수나 static 필드로 인스턴스를 직접 공유하는 방식은 DI 컨테이너를 우회해 테스트에서 mock 교체가 불가능해집니다. `StoragePort`는 unit spec에서 교체 대상이므로 DI 관리 싱글톤이 적합합니다.
+
 ## 운영 관측
 
 운영 지표는 Prometheus와 Datadog 두 lane으로 분리되어 있습니다.
