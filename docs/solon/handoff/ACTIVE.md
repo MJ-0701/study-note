@@ -60,13 +60,13 @@
 
 ## 다음 세션 first action 후보
 
-1. (✅ 완료) **iPad 펜 연속-획 버그 = 진단완료** — WebKit/Pencil OS 한계, 웹 fix 불가(위 §3). inkdebug 제거 fe-v0.1.63 prod. 재진입 X. 잔여 follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
+1. (✅ 완료) **iPad 펜 연속-획 버그 = 진단완료** — WebKit/Pencil OS 한계, 웹 fix 불가(위 §3). inkdebug 제거 fe-v0.1.63 prod. 재진입 X. 잔여 follow-up 3건 = ✅ **전부 처리** (fe-v0.1.64+65, 아래 §4-(2)) ([[project-ipad-pen-second-stroke]]).
 2. (✅ 완료) **CLAUDE.md infra Vercel 정정** — SWA→Vercel + `docs/infra.md` 분리 + @import. 지침서 = agent 지침 전용 원칙([[feedback-instruction-file-purity]]). 로컬 커밋 bdd24dc/bbdbebd (fe-v0.1.63 tag 와 함께 push 됨).
 3. (✅ 확인) Vercel git auto-deploy = `vercel.json git.deploymentEnabled=false`(b202f63) 이미 적용. push 트리거 안 함. 대시보드 토글은 redundant(원하면 확인).
 4. **다음 세션 작업 순서 (user 합의 2026-05-29) = DTO → follow-up → migration**:
    - **(1) R-DTO-storageKey** — ✅ **완료/배포** (PR #117, be-v0.1.35). 상세 = §DDD backlog.
-   - **(2) follow-up (관측성 3건)** ← **현재 next** — ① API 4xx/5xx → `trackRumError` 로 RUM Error emit (Error Tracking 가시화), ② annotation snapshot payload 무한증가 → decimation/압축 (be-v0.1.34 가 cap 만 4MB 로 올림, 근본 미해결), ③ FE 413 silent return → 사용자 경고+로컬 보존 ([[project-ipad-pen-second-stroke]] follow-up).
-   - **(3) React migration 재평가** ([[project-react-migration-backlog]]) — 분해 A~D 후 재검토 조건. main.ts 현재 ~6.9k line.
+   - **(2) follow-up (관측성 3건)** — ✅ **전부 완료/배포**. ① API 4xx/5xx → `trackRumError` RUM Error emit (materials.ts + onSyncMetricEvent failure-only) **fe-v0.1.64**. ② annotation payload 무한증가 → **RDP 점 솎기 (FE-only)** — `pdf-workspace/ink-decimate.ts` (simplifyPoints/decimateInkStrokes, epsilon 0.0015 육안 무손실). buildAnnotationPayload 에서 BE PUT 사본 inkStrokes 만 단순화, live workspace·localStorage 는 full-fidelity. spec 11 case + 전 pdf-workspace spec 17 PASS, web tsc green. **fe-v0.1.65 prod (커밋 0068632, FE 200)**. ③ FE 413 silent → `PAYLOAD_TOO_LARGE_MESSAGE` 경고 banner(shared syncBackendError 재사용, escapeHtml, 닫기 가능) + 로컬 보존(local strokes 미삭제) **fe-v0.1.64**.
+   - **(3) React migration 재평가** ([[project-react-migration-backlog]]) ← **현재 next** — 분해 A~D 후 재검토 조건. main.ts 현재 ~6.9k line.
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 
