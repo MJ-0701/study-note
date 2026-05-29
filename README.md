@@ -146,7 +146,7 @@ flowchart LR
 | Prometheus tsdb 보관 | Azure Files persistent volume | 컨테이너 revision 교체 시 ephemeral 디스크가 비워지지 않도록 외부 볼륨에 영속화했습니다. |
 | Monorepo 구조 | pnpm workspaces | `apps/*`와 `packages/*`가 같은 도메인 타입을 공유합니다. 패키지 간 빌드/타입 검사 동시 진행을 단일 명령으로 끝낼 수 있습니다. |
 
-> **왜 AWS가 아니라 Azure인가 (그리고 Datadog).** 클라우드는 AWS가 사실상 업계 표준이고, 저 역시 AWS 환경이 더 익숙합니다. 그럼에도 Backend/DB를 Azure(Container Apps + MySQL Flexible Server)로 택한 결정적 이유는 **비용**입니다. 숭실대학교 컴퓨터학부 재학생으로 **학생 개발자 혜택(GitHub Student Developer Pack · Azure for Students)** 을 통해 Azure 크레딧을 지원받아, 개인 운영 프로젝트의 인프라 비용을 0에 가깝게 유지할 수 있었습니다. 관측 스택도 같은 맥락입니다 — APM 시장의 메이저 도구는 **Datadog**이며, 학생 혜택으로 Datadog을 지원받아 production급 APM·Logs·RUM을 비용 부담 없이 운영합니다. 즉 "더 익숙하고 메이저한 스택(AWS)"보다 **"학생 혜택으로 production급 스택을 0원에 가깝게 운영한다"** 를 우선한 의도적 선택입니다. 단, egress 비용이 핵심인 객체 스토리지만은 학생 크레딧과 무관하게 **egress 0**인 Cloudflare R2를 별도로 골랐습니다(위 표 참고). 학생 혜택 종료 시 AWS(ECS/Fargate + RDS)로의 이전도 포트/어댑터 경계 덕분에 비교적 낮은 비용으로 가능하도록 설계했습니다.
+> **왜 AWS가 아니라 Azure인가 (그리고 Datadog).** 클라우드는 AWS가 사실상 업계 표준이고, 저 역시 AWS 환경이 더 익숙합니다. 그럼에도 Backend/DB를 Azure(Container Apps + MySQL Flexible Server)로 택한 결정적 이유는 **비용**입니다. 숭실대학교 컴퓨터학부 재학생으로 **학생 개발자 혜택(GitHub Student Developer Pack · Azure for Students)** 을 통해 Azure 크레딧을 지원받아, 개인 운영 프로젝트의 인프라 비용을 0에 가깝게 유지할 수 있었습니다. 관측 스택의 **Datadog**도 같은 원리입니다. Datadog은 APM·Logs·RUM 분야의 업계 표준이지만 개인 프로젝트가 정가로 감당하기엔 부담스러운 유료 도구입니다 — 학생 혜택으로 무상 지원받은 덕분에, 원래라면 비용 때문에 선택하기 어려웠을 production급 관측 도구를 그대로 구성할 수 있었습니다. 즉 "더 익숙하고 메이저한 스택(AWS)"보다 **"학생 혜택으로 production급 스택을 0원에 가깝게 운영한다"** 를 우선한 의도적 선택입니다. 단, egress 비용이 핵심인 객체 스토리지만은 학생 크레딧과 무관하게 **egress 0**인 Cloudflare R2를 별도로 골랐습니다(위 표 참고). 학생 혜택 종료 시 AWS(ECS/Fargate + RDS)로의 이전도 포트/어댑터 경계 덕분에 비교적 낮은 비용으로 가능하도록 설계했습니다.
 
 ### 디렉토리와 책임 경계
 
