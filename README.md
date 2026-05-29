@@ -30,13 +30,13 @@ study-note는 강의 PDF를 과목 단위로 정리하고, PDF 위에 직접 필
   - Cost: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-cost/study-note-cost-r2-mysql-dd?orgId=1&from=now-7d&to=now&timezone=browser&refresh=10m>
   - SLO: <https://study-note-grafana.bluesea-474361c6.koreacentral.azurecontainerapps.io/d/study-note-slo/study-note-slo-availability-latency-sync?orgId=1&from=now-7d&to=now&timezone=browser&refresh=1m>
 
-**리뷰어 접속 계정** (포트폴리오 검토용 데모 계정 — 일반 사용자 권한):
+**리뷰어 접속 계정** (포트폴리오 검토용 데모 계정 — `REVIEWER` 권한):
 
 | 이름 | 학번 |
 |---|---|
 | `리뷰어` | `20260000` |
 
-[서비스](https://study-note.910701.xyz)에 접속해 위 이름·학번으로 로그인하면 됩니다(별도 비밀번호 없음). 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청(로그인 포함)은 몇 초 늦게 응답할 수 있습니다.
+[서비스](https://study-note.910701.xyz)에 접속해 위 이름·학번으로 로그인하면 됩니다(별도 비밀번호 없음). 이 계정은 일반 사용자 기능에 더해 **운영 지표(Grafana 대시보드 진입점)만** 열람할 수 있는 제한 권한이며, 사용자 관리·콘텐츠 관리 등 관리자 기능은 서버 단에서 차단됩니다. 백엔드는 트래픽이 일정 시간 없으면 절전 상태로 들어가므로, 절전 후 첫 요청(로그인 포함)은 몇 초 늦게 응답할 수 있습니다.
 
 > **라이브 대시보드 운영 상태**: 🟢 **활성** (Grafana + Prometheus 가동 중)
 >
