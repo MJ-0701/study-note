@@ -47,11 +47,24 @@ const browser = await chromium.launch(
 const context = await browser.newContext(); // clean = first-visit anonymous
 const page = await context.newPage();
 
+// favicon.ico 404 는 pre-existing (index.html 에 favicon link 없음, S0 무관) →
+// 무시. JS pageerror + favicon 외 resource 오류만 회귀로 카운트.
 const consoleErrors = [];
 page.on("console", (m) => {
-  if (m.type() === "error") consoleErrors.push(m.text());
+  if (m.type() !== "error") return;
+  const t = m.text();
+  if (/Failed to load resource.*\b404\b/i.test(t)) return; // 대부분 favicon (아래 4xx 리스너가 실 자원 404 별도 포착)
+  consoleErrors.push(t);
 });
 page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+
+// favicon 외 4xx/5xx 네트워크 응답 = 실 회귀(누락 chunk/asset/api).
+const badResponses = [];
+page.on("response", (r) => {
+  if (r.status() >= 400 && !/\/favicon\.ico(\?|$)/.test(r.url())) {
+    badResponses.push(`${r.status()} ${r.request().method()} ${r.url()}`);
+  }
+});
 
 const authMeCalls = [];
 page.on("request", (r) => {
@@ -102,7 +115,8 @@ try {
   check(afterNav.legacyChildCount >= 1, `hashchange 후 legacy 콘텐츠 유지 — got ${afterNav.legacyChildCount}`);
   check(afterNav.rendered, "hashchange 후 렌더 유지");
 
-  check(consoleErrors.length === 0, `console error 0 — got ${consoleErrors.length}${consoleErrors.length ? ": " + consoleErrors.slice(0, 3).join(" | ") : ""}`);
+  check(badResponses.length === 0, `favicon 외 4xx/5xx 0 — got ${badResponses.length}${badResponses.length ? ": " + badResponses.slice(0, 3).join(" | ") : ""}`);
+  check(consoleErrors.length === 0, `JS console error 0 (favicon 404 제외) — got ${consoleErrors.length}${consoleErrors.length ? ": " + consoleErrors.slice(0, 3).join(" | ") : ""}`);
 } catch (err) {
   failures.push(`예외: ${err?.message ?? err}`);
   console.log(`❌ 예외: ${err?.message ?? err}`);
