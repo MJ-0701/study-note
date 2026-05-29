@@ -11,6 +11,7 @@ import { StoragePort } from "@study-note/storage";
 import { PdfMaterialRepository } from "./pdf-material.repository";
 import { AnnotationSnapshotRepository } from "../pdf-annotations/annotation-snapshot.repository";
 import { materialNotFound, parseIsoDateOrThrow, requireObject } from "./material-shared";
+import { annotationKey } from "../pdf-annotations/annotation-shared";
 
 interface UpdateMaterialMetadataInput {
   classDate: string;
@@ -81,16 +82,28 @@ export class MaterialsService {
     const material = await this.getUploadedMaterial(ownerId, materialId);
     const snapshot = await this.annotationRepo.findFull(material.id, ownerId);
 
-    return snapshot
-      ? toAnnotationSnapshotRecord(snapshot)
-      : {
-          materialId: material.id,
-          ownerId,
-          schemaVersion: 1,
-          stickyNotes: [],
-          inkStrokes: [],
-          savedAt: material.updatedAt
-        };
+    if (!snapshot) {
+      return {
+        materialId: material.id,
+        ownerId,
+        schemaVersion: 1,
+        stickyNotes: [],
+        inkStrokes: [],
+        savedAt: material.updatedAt
+      };
+    }
+
+    // payload SoT = R2 (DB row.payload 는 Hybrid CAS 가 JsonNull 기록). R2 에서 읽어 매핑.
+    const obj = await this.storage.getJsonObject<{ payload: unknown }>(
+      annotationKey(ownerId, material.id)
+    );
+
+    return toAnnotationSnapshotRecord({
+      materialId: material.id,
+      ownerId,
+      payload: obj?.payload ?? null,
+      savedAt: snapshot.savedAt
+    });
   }
 
   async getExportBundle(ownerId: string, materialId: string) {
