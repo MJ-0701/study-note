@@ -205,18 +205,11 @@ CLAUDE.md (Claude Code adapter) 와 짝이 되는 AGENTS.md (Codex) / GEMINI.md 
 
 ## 인프라 현황 (운영)
 
-- **Storage = Cloudflare R2** (S3-compatible API). 코드 베이스의 `S3StorageService`,
-  `S3_*` 환경변수, `STORAGE_PROVIDER=s3` 는 모두 **R2 endpoint** 를 가리키는 legacy
-  명칭이다. 실제 ACA env: `S3_ENDPOINT=https://...r2.cloudflarestorage.com`,
-  `S3_REGION=auto`, `S3_BUCKET=study-note-prod`. AWS S3 를 사용하지 않는다.
-- DB = Azure MySQL Flex (user / session). 새 영속화 시 우선 R2 object storage 검토,
-  관계형이 필요한 경우만 MySQL 신규 테이블.
-- 호스팅: Azure SWA (frontend) + Azure Container Apps (backend, min-replicas=0
-  → cold start 가능, sprint-15 의 keep-alive workflow 가 완화).
-- 도메인: Porkbun `910701.xyz` (운영 = `study-note.910701.xyz`).
-- 신규 storage 작업은 새 R2 provider 도입 불필요. 기존 `StoragePort` /
-  `S3StorageService` 의 `putObject`/`getObject` 재사용 + key prefix 분리
-  (예: `materials/`, `notes/`, `annotations/`).
+운영 인프라 **사실**(storage / DB / 호스팅·배포 / 도메인)은 `docs/infra.md` 가
+단일 출처다. 배포·storage·DB 작업 전 참조하고, 사실이 바뀌면 본 지침서가 아니라
+`docs/infra.md` 만 갱신한다. (지침서에는 프로젝트 내부 사실을 인라인하지 않는다.)
+
+@docs/infra.md
 
 ## 운영 규율
 

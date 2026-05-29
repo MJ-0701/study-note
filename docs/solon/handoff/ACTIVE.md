@@ -2,7 +2,7 @@
 
 > 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 
-## 현재 상태 (2026-05-29) — 운영지표 v2 prod + DDD 9 slice 완료 / 🔴 iPad 펜 연속-획 버그 REOPENED (inkdebug fe-v0.1.60 측정중)
+## 현재 상태 (2026-05-29) — 운영지표 v2 prod + DDD 9 slice 완료 / ✅ iPad 펜 연속-획 버그 진단완료 (WebKit/Pencil OS 한계, 웹 fix 불가 · inkdebug 제거 fe-v0.1.63)
 
 ### 1. 운영지표 v2 (sprint-W22-sprint-24) — ✅ 완료 + prod 배포
 
@@ -31,9 +31,9 @@
 
 - **upload E2E**: 실 PDF 업로드 → 자료실 노출 ✅ (F-3 분할 후 동작 동일 — be-v0.1.32 배포 success + prod health 200 / materials 401).
 - **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
-- **iPad 펜 "두 번째 획 누락"**: 🔴 **REOPENED (2026-05-29)** — 이전 "RESOLVED" 는 틀림. user-select(fe-v0.1.59) + 413 cap(be-v0.1.34) 픽스는 real 이었으나 **실제 증상(연속으로 이어 쓸 때 일부 획 소실)은 못 잡음**. 펜 자체·단일 획은 정상. **이제 안정 재현됨** (전엔 간헐 → inkdebug 로도 못 잡았음).
-  - 코드상 소실 경로 3개: **(A) points≤1 silent discard** (commitInkStroke ink-stroke.ts:320,333) — 가장 유력, 매 pointerup 의 deferred renderApp(ink-stroke.ts:343)이 다음 획 pointermove 전달 방해 추정. (B) begin 시 liveLayer 부재(begin-failed telemetry). (C) selectedTool≠pen silent return(telemetry 0). (A)/(C)는 DD telemetry 0 = Datadog 으로 disprove 불가.
-  - **진단 진행**: `?inkdebug=1` 화면 오버레이 재도입(a8dee7e) + move 수신 카운터 → **fe-v0.1.60 배포**. 다음 = prod`?inkdebug=1` 로 "4" 쓰고 우상단 로그 판독 (`UP pts=1 moves=0`=capture 손실/renderApp race · `pts=1 moves=많음`=state reset · `layer=N`=B · `tool=read`=C). 그 신호로 targeted fix. 상세 = [[project-ipad-pen-second-stroke]].
+- **iPad 펜 "두 번째 획 누락"**: ✅ **진단 완료 (2026-05-29 새벽, Mac↔iPad Safari 원격 인스펙트)** — root cause = **WebKit/Apple Pencil OS 레벨 입력 suppression**. 빠르게 이어 그린 다음 획(예 "4"=ㄴ+ㅣ 연결)은 `pointerdown`·`touchstart(stylus)` **둘 다 미발생** = 앱이 훅 걸 이벤트 0 → **웹 코드로 수정 불가.** 천천히/획 사이 텀 두면 정상(user 확인).
+  - 측정 배제: renderApp 동기 7~8ms(<16ms, main-thread block ❌) · touch 핸들러 passive(억제 ❌) · 그려진 획 전부 `begin active=Y`/`committed=true`(begin·commit·discard 경로 ❌). 실패 획은 begin 도달조차 안 함(이벤트 0). 상세 = [[project-ipad-pen-second-stroke]].
+  - **대응**: 웹앱 한계 수용 + 워크어라운드(연속획 사이 짧은 텀). native(PencilKit)는 다른 입력경로라 안 겪음. inkdebug 임시계측(fe-v0.1.60/61/62) 전부 revert → **clean fe-v0.1.63 prod live**.
   - 별개 follow-up(보존): bl-annotation-payload-growth(snapshot 무한증가 → decimation/압축), FE 413 silent return → 사용자 경고, API 4xx/5xx 를 trackRumError 로 RUM Error emit.
 
 ## DDD 자율 PR run (2026-05-28 저녁, PR-only · 미배포)
@@ -60,10 +60,13 @@
 
 ## 다음 세션 first action 후보
 
-1. 🔴 **iPad 펜 연속-획 버그 — `?inkdebug=1` 로 측정 (fe-v0.1.60 배포됨)**: prod `study-note.910701.xyz/...?inkdebug=1` 열고 PDF 에 "4" 한 번 쓰기 → 우상단 녹색 오버레이 맨 위 몇 줄 판독. `UP pts=1 moves=0`=capture 손실(renderApp race) · `pts=1 moves=많음`=state reset · `DOWN layer=N`=live layer 부재 · `DOWN tool=read`=tool flip. 그 신호로 ink-stroke.ts targeted fix. 측정 끝나면 inkdebug 오버레이 제거(a8dee7e revert). 상세 = [[project-ipad-pen-second-stroke]].
-2. (완료) DDD F-3/F-10/F-11/F-12 전부 배포 (be-v0.1.33/34). ⚠ 펜버그는 **미해결**(위 1번) — user-select(fe-v0.1.59)+413(be-v0.1.34)은 별개 2버그 픽스였고 연속-획 증상은 못 잡음. follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
-3. Vercel 대시보드 Git auto-deploy OFF 확인 (push-당 배포 한도소진 방지, b202f63 보완).
-4. R-DTO-storageKey (P3 supervised) / React migration 재평가 / CLAUDE.md infra Vercel 정정(chip).
+1. (✅ 완료) **iPad 펜 연속-획 버그 = 진단완료** — WebKit/Pencil OS 한계, 웹 fix 불가(위 §3). inkdebug 제거 fe-v0.1.63 prod. 재진입 X. 잔여 follow-up = API 4xx/5xx RUM Error emit / annotation payload decimation / FE 413 경고 ([[project-ipad-pen-second-stroke]]).
+2. (✅ 완료) **CLAUDE.md infra Vercel 정정** — SWA→Vercel + `docs/infra.md` 분리 + @import. 지침서 = agent 지침 전용 원칙([[feedback-instruction-file-purity]]). 로컬 커밋 bdd24dc/bbdbebd (fe-v0.1.63 tag 와 함께 push 됨).
+3. (✅ 확인) Vercel git auto-deploy = `vercel.json git.deploymentEnabled=false`(b202f63) 이미 적용. push 트리거 안 함. 대시보드 토글은 redundant(원하면 확인).
+4. **다음 세션 작업 순서 (user 합의 2026-05-29) = DTO → follow-up → migration**:
+   - **(1) R-DTO-storageKey** (P3, supervised) — material 응답에서 storageKey(R2 key) 비노출. domain `PdfMaterialRecord` 가 storage port 에 storageKey 를 넘겨야 해 **BE/FE 공용 도메인 타입 분리 선행 필요**. 시작점 = MaterialsService 조회 응답 DTO + `MaterialPublicResponse`(F-10, PR #115) 확인 후 storageKey 노출 면 차단.
+   - **(2) follow-up (관측성 3건)** — ① API 4xx/5xx → `trackRumError` 로 RUM Error emit (Error Tracking 가시화), ② annotation snapshot payload 무한증가 → decimation/압축 (be-v0.1.34 가 cap 만 4MB 로 올림, 근본 미해결), ③ FE 413 silent return → 사용자 경고+로컬 보존 ([[project-ipad-pen-second-stroke]] follow-up).
+   - **(3) React migration 재평가** ([[project-react-migration-backlog]]) — 분해 A~D 후 재검토 조건. main.ts 현재 ~6.9k line.
 
 ## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
 

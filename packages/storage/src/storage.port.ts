@@ -16,7 +16,6 @@ export class ObjectNotFoundError extends Error {
 export interface UploadIntent {
   method: "PUT";
   uploadUrl: string;
-  storageKey: string;
   expiresAt: string;
   requiredHeaders: Record<string, string>;
 }
@@ -24,7 +23,6 @@ export interface UploadIntent {
 export interface DownloadIntent {
   method: "GET";
   downloadUrl: string;
-  storageKey: string;
   expiresAt: string;
 }
 

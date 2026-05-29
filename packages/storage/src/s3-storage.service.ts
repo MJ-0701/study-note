@@ -152,7 +152,6 @@ export class S3StorageService extends StoragePort {
       return {
         method: "PUT",
         uploadUrl,
-        storageKey: material.storageKey,
         expiresAt,
         requiredHeaders: {
           "content-type": material.contentType
@@ -164,7 +163,6 @@ export class S3StorageService extends StoragePort {
     return {
       method: "PUT",
       uploadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
-      storageKey: material.storageKey,
       expiresAt: new Date(Date.now() + TTL_SECONDS * 1000).toISOString(),
       requiredHeaders: {
         "content-type": material.contentType
@@ -176,7 +174,6 @@ export class S3StorageService extends StoragePort {
     return {
       method: "GET",
       downloadUrl: `/api/materials/${encodeURIComponent(material.id)}/file`,
-      storageKey: material.storageKey,
       expiresAt: new Date(Date.now() + TTL_SECONDS * 1000).toISOString()
     };
   }
