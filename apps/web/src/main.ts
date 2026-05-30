@@ -51,6 +51,7 @@ import {
 } from "./ui/ephemeral-state";
 import {
   meResponseToSession,
+  type AuthMode,
   type AuthSession
 } from "./auth/authSession";
 import {
@@ -69,10 +70,8 @@ import {
   type AuthSessionStateCallbacks,
   type AuthSessionStateContext
 } from "./auth/sessionState";
-import {
-  renderLoginPage as renderAuthLoginPage,
-  renderSessionCheckPage as renderAuthSessionCheckPage
-} from "./auth/authViews";
+import { type AuthGateCallbacks } from "./auth/AuthGate.tsx";
+import { renderAuthGate } from "./auth/authGateMount.tsx";
 import {
   getKeywordById,
   type SubjectNote,
@@ -365,6 +364,15 @@ import { getInspectorOpen, setInspectorOpen, getPdfToolbarSlot, setPdfToolbarSlo
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
 // 순환 없음).
 import { mountReactShell } from "./app/react-shell/root.tsx";
+
+// React 마이그레이션 S2: AuthGate callbacks — 안정 ref (매 renderApp 재생성 X).
+// renderApp / submitAuth 는 hoisted function 선언이라 TDZ 없음.
+const authGateCallbacks: AuthGateCallbacks = {
+  onTabLogin: () => { setAuthMode("login"); setLoginFeedback(undefined); renderApp(); },
+  onTabSignup: () => { setAuthMode("signup"); setLoginFeedback(undefined); trackRumAction("sign_up_started"); renderApp(); },
+  onRetrySession: () => { void revalidateStoredSession({ blocking: true }); },
+  onSubmitAuth: (mode: AuthMode, name: string, studentNumber: string) => { void submitAuth(mode, name, studentNumber); }
+};
 
 const isNodeRuntime =
   typeof (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node === "string";
@@ -1917,48 +1925,17 @@ function handleDocumentClick(event: MouseEvent): void {
   renderApp();
 }
 
-async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
-  const target = event.target;
-
-  if (!(target instanceof HTMLFormElement)) {
-    return;
-  }
-
-  const action = target.dataset.action;
-
-  if (action === "add-class-date") {
-    event.preventDefault();
-    addSubjectClassDate(new FormData(target));
-    return;
-  }
-
-  if (action === "attach-pdf-to-week") {
-    event.preventDefault();
-    const formData = new FormData(target);
-    const subjectId = target.dataset.subjectId ?? "";
-    const weekLabel = target.dataset.weekLabel ?? "";
-    const materialId = String(formData.get("materialId") ?? "").trim();
-    if (subjectId && weekLabel && materialId) {
-      void assignPdfMaterialClassDate(subjectId, materialId, weekLabel);
-    }
-    return;
-  }
-
-  if (action !== "login" && action !== "signup") {
-    return;
-  }
-
-  event.preventDefault();
-
-  const formData = new FormData(target);
-  const name = String(formData.get("name") ?? "").trim();
-  const studentNumber = String(formData.get("studentNumber") ?? "").trim();
+// React 마이그레이션 S2: AuthGate onSubmitAuth 콜백에서도 호출. handleDocumentSubmit
+// legacy auth 분기(inert)도 이 함수를 경유해 DRY 유지.
+async function submitAuth(mode: AuthMode, rawName: string, rawStudentNumber: string): Promise<void> {
+  const name = rawName.trim();
+  const studentNumber = rawStudentNumber.trim();
 
   if (!name || !studentNumber) {
     setLoginFeedback({
       kind: "error",
       title: "이름과 학번을 입력하세요.",
-      detail: action === "login"
+      detail: mode === "login"
         ? "시험 대비 자료는 로그인 후 볼 수 있습니다."
         : "이름과 학번을 모두 입력해야 가입할 수 있습니다."
     });
@@ -1966,7 +1943,7 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     return;
   }
 
-  if (action === "login") {
+  if (mode === "login") {
     cancelAuthBootRequest();
     try {
       const payload = await signIn(apiBaseUrl, { name, studentNumber });
@@ -2010,7 +1987,7 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     return;
   }
 
-  // action === "signup"
+  // mode === "signup"
   // slice-3: sign-up from lecture-reader home. On success, re-call /me to populate
   // full session (including PDF restore) via revalidateStoredSession().
   cancelAuthBootRequest();
@@ -2033,6 +2010,43 @@ async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
     });
     renderApp();
   }
+}
+
+async function handleDocumentSubmit(event: SubmitEvent): Promise<void> {
+  const target = event.target;
+
+  if (!(target instanceof HTMLFormElement)) {
+    return;
+  }
+
+  const action = target.dataset.action;
+
+  if (action === "add-class-date") {
+    event.preventDefault();
+    addSubjectClassDate(new FormData(target));
+    return;
+  }
+
+  if (action === "attach-pdf-to-week") {
+    event.preventDefault();
+    const formData = new FormData(target);
+    const subjectId = target.dataset.subjectId ?? "";
+    const weekLabel = target.dataset.weekLabel ?? "";
+    const materialId = String(formData.get("materialId") ?? "").trim();
+    if (subjectId && weekLabel && materialId) {
+      void assignPdfMaterialClassDate(subjectId, materialId, weekLabel);
+    }
+    return;
+  }
+
+  // D2: legacy auth 분기 — AuthGate 가 React onClick/onSubmit 직접 바인딩으로
+  // data-action="login/signup" 을 미emit 하므로 inert. submitAuth 경유로 DRY 유지.
+  if (action !== "login" && action !== "signup") {
+    return;
+  }
+  event.preventDefault();
+  const formData = new FormData(target);
+  await submitAuth(action, String(formData.get("name") ?? ""), String(formData.get("studentNumber") ?? ""));
 }
 
 function handleDocumentInput(event: Event): void {
@@ -4396,18 +4410,31 @@ async function importWeekNoteFile(
   }
 }
 
+// React 마이그레이션 S2: #app 가시성 토글 — auth 화면 활성 시 #legacy-app-root
+// 잔여 콘텐츠가 .login-screen 뒤로 비치는 것을 차단한다.
+function setAuthScreenActive(active: boolean): void {
+  if (typeof document === "undefined") return;
+  const appEl = document.querySelector<HTMLElement>("#app");
+  if (appEl) { appEl.hidden = active; }
+}
+
 function renderApp(): void {
   if (getAuthBootStateValue() === "checking") {
     document.body.removeAttribute("data-route");
-    mountRender(renderAuthSessionCheckPage(getAuthBootNoticeValue()));
+    renderAuthGate({ view: "sessionCheck", authMode: getAuthMode(), loginFeedback: getLoginFeedback(), authBootNotice: getAuthBootNoticeValue(), callbacks: authGateCallbacks });
+    setAuthScreenActive(true);
     return;
   }
 
   if (!getAuthSession()) {
     document.body.removeAttribute("data-route");
-    mountRender(renderAuthLoginPage(getAuthMode(), getLoginFeedback()));
+    renderAuthGate({ view: "login", authMode: getAuthMode(), loginFeedback: getLoginFeedback(), authBootNotice: getAuthBootNoticeValue(), callbacks: authGateCallbacks });
+    setAuthScreenActive(true);
     return;
   }
+
+  renderAuthGate(null);
+  setAuthScreenActive(false);
 
   const route = parseRoute(window.location.hash);
   // sprint-11/slice-1 R3-b: body data-route for CSS scope (.content max-width).
