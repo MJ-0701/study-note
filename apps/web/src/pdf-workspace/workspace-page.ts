@@ -27,7 +27,6 @@ import {
   getPdfPreviewPlaceholderTitle,
   renderPdfFrameStack,
   renderPdfMaterialStatus,
-  renderPdfToolbar,
   type LocalPdfTool,
   type PdfToolbarContext
 } from "./page-render";
@@ -214,16 +213,6 @@ export function renderPdfWorkspacePage(
         </div>
         <div class="pdf-toolbar-row">
           <div id="pdf-toolbar-island" data-react-island="pdf-toolbar"></div>
-          ${renderPdfToolbar(
-            ctx.pdfToolbarContext,
-            subject.id,
-            selectedTool,
-            material?.pageCount ?? 1,
-            selectedPage,
-            Boolean(material),
-            workspace.eraserShape,
-            workspace.eraserSize
-          )}
           <button
             class="pdf-inspector-toggle secondary-action"
             type="button"
