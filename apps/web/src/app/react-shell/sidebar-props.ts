@@ -75,6 +75,8 @@ export interface IntakeDetailsProps {
   // subject variant 전용 extras
   subjectPdfWorkspaceHref?: string;
   subjectTitle?: string;
+  // subject variant: route.name === "pdf-workspace" → true (sidebar.ts:301 parity)
+  subjectPdfWorkspaceActive?: boolean;
 }
 
 // ── variant home ────────────────────────────────────────────────────────
@@ -355,7 +357,9 @@ function buildSubjectSidebarProps(
         }))
     ],
     subjectPdfWorkspaceHref: subjectPdfWorkspacePath(subject),
-    subjectTitle: subject.title
+    subjectTitle: subject.title,
+    // sidebar.ts:301 parity: pdf-workspace route → PDF workspace link active
+    subjectPdfWorkspaceActive: route.name === "pdf-workspace"
   };
 
   return {

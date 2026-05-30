@@ -308,6 +308,30 @@ describe("sidebar-props — parity (§9 rich fixtures)", () => {
     assert.ok(props.intakeDetails.subjectPdfWorkspaceHref!.includes("s1"), "href 에 subject id 포함");
   });
 
+  test("subject variant: pdf-workspace route → subjectPdfWorkspaceActive true (sidebar.ts:301 parity)", () => {
+    // sidebar.ts:301: <a class="${route.name === "pdf-workspace" ? "active" : ""}" ...>
+    // SidebarView 에서 className={intakeDetails.subjectPdfWorkspaceActive ? "active" : ""} 로 사용.
+    const subject = makeSubject("s1", "수학");
+    const notebook = makeNotebook([{id:"s1",title:"수학"}]);
+    const ctx = makeCtx({ notebook });
+    const propsActive = buildSidebarProps({
+      variant: "subject",
+      subject,
+      route: { name: "pdf-workspace", subjectId: "s1" }
+    }, ctx);
+    if (propsActive.variant !== "subject") throw new Error();
+    assert.equal(propsActive.intakeDetails.subjectPdfWorkspaceActive, true, "pdf-workspace → active true");
+
+    __resetSidebarPropsMemoForTesting__();
+    const propsInactive = buildSidebarProps({
+      variant: "subject",
+      subject,
+      route: { name: "subject", subjectId: "s1" }
+    }, ctx);
+    if (propsInactive.variant !== "subject") throw new Error();
+    assert.equal(propsInactive.intakeDetails.subjectPdfWorkspaceActive, false, "subject route → active false");
+  });
+
   test("home variant: pdfWorkspacesActive — pdf-workspaces route → true", () => {
     const notebook = makeNotebook([{id:"s1",title:"수학"}]);
     const ctx = makeCtx({ notebook });

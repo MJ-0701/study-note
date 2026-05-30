@@ -55,7 +55,7 @@ function resolveChromePath() {
 }
 
 /**
- * pnpm build 실행.
+ * pnpm build 실행. dist/assets 를 먼저 삭제해 이전 빌드 파일 오염 방지.
  * negA=true → S3B_LOOP_NEG_CTRL_A=1 (mount-time loop RED).
  * negB=true → S3B_LOOP_NEG_CTRL_B=1 (click-time loop RED).
  * 메인 entry JS 크기 반환(bytes).
@@ -63,6 +63,8 @@ function resolveChromePath() {
 function build(negA, negB) {
   const label = negA ? "RED/A(mount-loop)" : negB ? "RED/B(click-loop)" : "GREEN";
   console.log(`\n--- build(${label}) ---`);
+  // 이전 빌드 파일이 dist/assets 에 남아 크기 집계를 오염시키지 않게 clean.
+  spawnSync("rm", ["-rf", resolve(WEB_ROOT, "dist", "assets")], { stdio: "ignore" });
   const result = spawnSync("pnpm", ["build"], {
     cwd: WEB_ROOT,
     stdio: "inherit",
@@ -79,7 +81,7 @@ function build(negA, negB) {
   }
   const assetsDir = resolve(WEB_ROOT, "dist", "assets");
   try {
-    const files = readdirSync(assetsDir).filter((f) => /^main-[^-]+\.js$/.test(f));
+    const files = readdirSync(assetsDir).filter((f) => /^main-.+\.js$/.test(f));
     if (files.length === 0) return 0;
     return files.reduce((sum, f) => sum + statSync(resolve(assetsDir, f)).size, 0);
   } catch {

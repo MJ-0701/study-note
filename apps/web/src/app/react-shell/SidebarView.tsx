@@ -260,7 +260,7 @@ function IntakeDetailsBlock({
         )}
         {intakeDetails.subjectPdfWorkspaceHref && currentItem && (
           <a
-            className={""}
+            className={intakeDetails.subjectPdfWorkspaceActive ? "active" : ""}
             href={intakeDetails.subjectPdfWorkspaceHref}
           >
             {currentItem.title} PDF 작업공간
