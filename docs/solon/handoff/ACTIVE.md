@@ -1,69 +1,62 @@
-# 🎯 ACTIVE — S1a merged(prod live) / 다음 슬라이스 = S2(auth) — S1b widget 연기 결정
+# 🎯 ACTIVE — S3b(sidebar) Gate 6 PASS + prod 배포 완료 / 다음 세션 goal = React 마이그레이션 남은 슬라이스 완주
 
 > SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 > entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note`.
 
-## 상태 (정정 — 이전 핸드오프 stale 였음)
+## 상태 (2026-05-31)
 
-- **S1a = 머지 완료 + prod live.** `#129`(41371bd) 머지 → 무한루프 incident → 롤백 →
-  **fix-forward `#130`(d990f5d) 머지 → fe-v0.1.73 prod success**. main = `d990f5d`.
-  남은 것 = operator QA(툴바 실렌더 시각 diff, 자동화 불가) 1회뿐. **S1a 재논의 X.**
-- 작업트리 clean (untracked `apps/web/.claude/` worker 아티팩트만).
+- **S3b(sidebar) = 완전 종료.** Gate 6 (Review) PASS(self-CPO Opus + Gemini cross) →
+  PR [#133](https://github.com/MJ-0701/study-note/pull/133) squash 머지 → main = `189727d`
+  → docs commit `dc72f4a` → **fe-v0.1.77 prod live**(HTTP 200, 번들 `main-CSiAkLOm.js`).
+  sprint `2026-W22-sprint-6` closed. retro/report = `docs/solon/s3b-...-12-route/20260531/`.
+- 누적 완료 슬라이스: **S1a(toolbar) · S2(auth) · S3(home+intake) · S3b(sidebar)** 전부 prod.
+- 작업트리 = main `dc72f4a`, clean (untracked `llm-wiki/.obsidian/graph.json` 로컬 artifact 만).
 
-## 🚀 다음 세션 FIRST ACTION = S2(auth) brainstorm (fresh session 에서)
+## 🚀 다음 세션 GOAL = React 마이그레이션 남은 슬라이스 **완주** (한 슬라이스 아님)
 
-사용자가 "S1b 시작" 했으나 **조사 후 슬라이스 재배치 결정 → 다음 = S2(auth views)**.
-S1b(widget 컴포넌트화)는 연기. 결정·근거 필독:
-- `docs/solon/web/react-migration/20260530/s1b-decision-reroute-to-s2.md` (결정)
-- `docs/solon/web/react-migration/20260530/s1b-prebrainstorm-findings.md` (조사)
+사용자 지시 = "남은 슬라이스 끝날 때까지 계속 작업". 단발 슬라이스가 아니라 roadmap §4
+잔여를 **연속**으로 진행. 매 슬라이스 = brainstorm→plan→Gate3→implement→Gate6→배포.
 
-### 왜 S1b 연기 (false safety)
-PDF 위젯 5종(chart/table/star/sticky/textbox·checklist) **전부** drag/resize 가 main.ts
-공유 pointer dispatcher(pointerdown ~2530–2761, pointermove ~2822)로 동작 — 사용자가 뺀
-ink/pen 과 **동일 표면**. markup-only JSX 화 = 이득 0, drag/resize React 이전 = 연기한
-native-pointer 본체 + data-action 역방향 이중처리 + pen second-stroke 버그(REOPENED)와
-같은 dispatcher → 회귀 구분 불가. widget 작업 미래 자리 = pen-fix + native-pointer
-직결(roadmap §3.3) 묶음 슬라이스.
+- roadmap = `docs/solon/web/react-migration/20260529/react-migration-roadmap.md`
+  (§4 슬라이스 표 + §5 INV ledger). **먼저 읽어 잔여 슬라이스 확정.**
+- 알려진 잔여: **S1b(widget)** = 연기 상태(pen-fix + native-pointer 직결 묶음, roadmap §3.3).
+  결정 근거 = `docs/solon/web/react-migration/20260530/s1b-decision-reroute-to-s2.md`.
+  재진입 시 widget drag/resize = main.ts 공유 pointer dispatcher + pen second-stroke 버그
+  (REOPENED) 같은 표면 주의.
+- Session Continuation Guard → 슬라이스 사이 token 누적 시 fresh session handoff.
 
-### 왜 S2 가 적합 (코드 실독)
-- auth 뷰 = `src/auth/authViews.ts` 순수 string render fn 2개:
-  `renderLoginPage(authMode, loginFeedback)`(L4) + `renderSessionCheckPage(authBootNotice)`(L56).
-  drag/resize 0. INV-2/3/4 무관, INV-8(XSS form escape)만 주의.
-- `authStore`(S0) 에 authSession/authMode/loginFeedback 이미 완성 → store 분해 거의 불필요.
-- **⚠️ auth = route 아님**: `renderApp`(main.ts:4399) early-return guard 2단
-  (authBootState==="checking" → sessionCheck / !authSession → login, 둘 다 parseRoute 전).
-  → roadmap "route LegacyView 치환" 전제와 다름. S2 = router 위 조건부 React mount(authGate)
-  vs island(S1a 패턴) 택일 = brainstorm 결정.
-- 탭 전환 `data-action="auth-tab-login/signup"`(authViews.ts:19/26) = document click 위임.
-  React 화 시 R2b(data-action 미emit) + roadmap §3 이벤트 경계 적용.
-- **로그인 *전* 화면 = headless playwright mount 가능**(auth-gated 아님) → S1a 의 loop-gate
-  함정 회피, prod-build playwright 실 게이트 박기 가능.
-- **⚠️ "저위험" ≠ freebie**: S1a 는 툴바만 위임 경계를 풀었음 → S2 는 "React auth form vs
-  document submit/input 위임" 을 새로 풀어야 함(실 작업). 회귀 위험은 낮으나 작업량 0 아님.
-- **재배치 성격**: strictly-better 아닌 risk-based reorder. roadmap 은 S1b(pdf, forcing
-  function)를 앞에 둔 게 의도적. 우리는 pen 버그 미해결 + widget pointer 전략 미설계라
-  "지금은 타이밍 나쁨" 으로 연기한 것. "S1b 무가치" 아님.
+## ⏰ 7시(07:00 KST) 이후 = codex CPO cross review (필수 obligation)
 
-## 🔑 직전 사고 교훈 (S1a, 재발 방지 — S2 에도 적용)
-- **visible React slice = prod-build playwright GREEN 후에만 deploy 태그 push.** unit(jsdom
-  단발 render)+정적 cross 는 런타임 effect 루프 못 잡음(self-CPO+Gemini 2run PASS 했으나 누락).
-- **finding 기각 시 라인 실독 필수** — Gemini cross 의 re-entrancy 경고(focus #4)를 코드
-  미실독으로 dismiss 한 것이 incident 실제 root cause.
+- 사용자 지시 = "7시가 되면 여태까지 구현한 거 codex CPO cross review".
+- codex usage-limit reset = **06:13 KST** → 07:00 시점 사용 가능.
+- 대상 = 여태 구현분(S1a~S3b, 필요시 그 시점까지 추가분) 외부 evidence 보강.
+- 실행 = `/sfs auth probe --executor codex` 로 복구 확인 후
+  `sfs review --gate 6 --stage cross --executor codex` 또는 PR `@codex` (post-implementation).
+- ⚠️ codex = **로컬 CLI auth** → 이 review 는 codex CLI 붙은 interactive 세션에서 실행
+  (원격 cron 부적합). S3b Gate 6 waiver(`20260530T175927Z-96631`)에 codex 보강 예정 기록됨.
+
+## 🔑 직전 교훈 (S3b — 다음 슬라이스에도 적용)
+
+- **island 마이그레이션 acceptance = render-half + dispatch-half 둘 다 실독.** S3b self-review
+  가 leaf/producer 만 읽고 seam diff(main.ts call site)를 미실독한 채 AC wiring 을
+  "implemented" 단언 → advisor 가 잡음. producer 완벽해도 call site 가 틀린 descriptor 넘기면
+  parity 깨지는데 producer spec/unit 은 구조적으로 못 봄. **call site/seam diff 실독 후에만
+  "verified".**
+- **finding 기각 시 라인 실독 필수**(S1a incident root cause 재확인).
+- **visible React slice = loop-gate(prod-build playwright) GREEN 후에만 deploy.** unit(jsdom
+  단발)+정적 cross 는 런타임 effect 루프 못 잡음. negative control A/B 분리 의무.
 - deploy 태그와 게이트 검증을 같은 batch 에 넣지 말 것.
-- loop-gate 에 **negative control**(value-equality guard 누락 setState 신호 심어 red 확인)
-  의무 — 게이트가 실제로 루프를 잡는지 증명.
 
-## 자산 (보존)
-- React island 패턴(createPortal → morphdom-preserved 슬롯 + uiStore signal +
-  shouldPreserveReactIsland) = S2~S4 재사용. fix 완료(값-동일성 guard + useShallow).
+## 자산 (보존, S4+ 재사용)
+
+- React island 패턴 = createPortal → morphdom-preserved div-slot(`data-react-island`,
+  display:contents) + uiStore signal + postMountEffect value-eq guard + pure-props leaf
+  (hook 구독 0 / effect-setState 0) + producer 전체 view-model JSON memoize(loop-immunity).
+- loop-gate = negative control A(mount #185) + B(click-armed §5-C) 분리 + 실 toggle round-trip.
+- old renderer 보존 = parity oracle (제거 = 후속 정리).
 
 ## 정책 ambient (SFS 0.6.138, 자세히 CLAUDE.md)
-- 구현 = Sonnet worker. main(Opus)=plan/아키텍처/review/INV 판단.
-- commit=branch, push=명시 승인(user 터미널). cross = codex 복구 후 @codex, down 시 Gemini.
 
-## 잔여 / 주의
-- sprint = `2026-W22-sprint-24`(계획). docs = `docs/solon/web/react-migration/20260530/`.
-- roadmap = `docs/solon/web/react-migration/20260529/react-migration-roadmap.md` (§4 슬라이스,
-  §5 INV ledger). S2 는 roadmap §4 표상 S0 만 선행 → 재배치 가능.
-- **세션 채널 손상 가능성**(직전 incident §"세션 채널 노이즈" 재현 증상) → deterministic
-  명령 교차검증한 결론만 신뢰. 실 S2 brainstorm/plan/implement = **fresh session 권장**.
+- 구현 = Sonnet worker. main(Opus) = plan/아키텍처/review/INV 판단.
+- commit = branch, push = 명시 승인. deploy = 명시 승인 시 release 프로세스 쭉(push→PR→
+  머지→tag→verify). cross = codex 복구 후 @codex, down 시 Gemini + waiver.
