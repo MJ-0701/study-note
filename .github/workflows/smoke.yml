@@ -66,6 +66,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 워크스페이스 의존 패키지(@study-note/{auth,storage,persistence,corpus,...})는
+      # install-time build hook 이 없어 fresh CI 에 dist 가 없다. smoke:backend 는
+      # api 만 build 하므로, 의존 dist 를 먼저 topological 순서로 빌드해야 tsc 가
+      # `Cannot find module '@study-note/*'` 없이 통과한다.
+      - name: Build workspace packages
+        run: pnpm -r build
+
       - name: Run backend contract smoke
         # smoke-db.mjs 가 docker compose 로 MySQL 을 자체 기동하고
         # migrate deploy + seed 까지 수행한다.
