@@ -15,10 +15,16 @@
 // homeProps / intakeProps: vanilla renderApp 이 계산한 view props 를 plain
 // object 로 발행. portal wrapper 가 useShallow 로 구독해 leaf 에 주입.
 //
+// sidebarSlot / sidebarProps (S3b): sidebar route 렌더 후 postMount effect 가
+// slot placeholder DOM 노드를 signal. SidebarIslandPortal 이 구독해 portal
+// target 으로 사용. sidebarProps = buildSidebarProps memoize 객체 ref (value-equal
+// 재발행 시 동일 ref → zustand ref 비교로 재렌더 차단, AC6).
+//
 // 주의: drag/resize 등 다른 ephemeral 상태는 S1 (PDF 컴포넌트화)에서 흡수.
 import { createStore } from "zustand/vanilla";
 import type { HomeViewProps } from "../subject-views/HomeView.tsx";
 import type { IntakeViewProps } from "../subject-views/IntakeView.tsx";
+import type { SidebarViewProps } from "../app/react-shell/sidebar-props";
 
 interface UiStoreState {
   inspectorOpen: boolean;
@@ -27,6 +33,8 @@ interface UiStoreState {
   homeProps: HomeViewProps | null;
   intakeSlot: HTMLElement | null;
   intakeProps: IntakeViewProps | null;
+  sidebarSlot: HTMLElement | null;
+  sidebarProps: SidebarViewProps | null;
 }
 
 export const uiStore = createStore<UiStoreState>(() => ({
@@ -36,6 +44,8 @@ export const uiStore = createStore<UiStoreState>(() => ({
   homeProps: null,
   intakeSlot: null,
   intakeProps: null,
+  sidebarSlot: null,
+  sidebarProps: null,
 }));
 
 export const getInspectorOpen = (): boolean => uiStore.getState().inspectorOpen;
@@ -66,4 +76,14 @@ export const setIntakeSlot = (el: HTMLElement | null): void => {
 export const getIntakeProps = (): IntakeViewProps | null => uiStore.getState().intakeProps;
 export const setIntakeProps = (props: IntakeViewProps | null): void => {
   uiStore.setState({ intakeProps: props });
+};
+
+export const getSidebarSlot = (): HTMLElement | null => uiStore.getState().sidebarSlot;
+export const setSidebarSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ sidebarSlot: el });
+};
+
+export const getSidebarProps = (): SidebarViewProps | null => uiStore.getState().sidebarProps;
+export const setSidebarProps = (props: SidebarViewProps | null): void => {
+  uiStore.setState({ sidebarProps: props });
 };

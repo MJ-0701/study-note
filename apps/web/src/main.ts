@@ -289,10 +289,12 @@ import {
   type WorkspacePageContext
 } from "./pdf-workspace/workspace-page";
 import {
-  renderHomeSidebar,
-  renderSubjectSidebar,
   type SidebarContext
 } from "./subject-views/sidebar";
+import {
+  buildSidebarProps,
+  type SidebarDescriptor
+} from "./app/react-shell/sidebar-props";
 import {
   renderHome,
   renderIntakeGuide,
@@ -375,6 +377,9 @@ import {
   getIntakeSlot,
   setIntakeSlot,
   setIntakeProps,
+  getSidebarSlot,
+  setSidebarSlot,
+  setSidebarProps,
 } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
@@ -588,6 +593,14 @@ const mainRenderSink: RenderSink | null = appRoot
           const intakeEl = root.querySelector<HTMLElement>('[data-react-island="intake"]');
           if (getIntakeSlot() !== intakeEl) {
             setIntakeSlot(intakeEl);
+          }
+        },
+        // S3b: morphdom 재렌더 후 sidebar island slot 을 찾아 signal.
+        // 모든 route 에 sidebar-island placeholder 존재 → slot 항상 유효.
+        (root) => {
+          const sidebarEl = root.querySelector<HTMLElement>('[data-react-island="sidebar"]');
+          if (getSidebarSlot() !== sidebarEl) {
+            setSidebarSlot(sidebarEl);
           }
         }
       ]
@@ -4495,7 +4508,7 @@ function renderApp(): void {
     setHomeProps(null);
     setIntakeProps(null);
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, getNotebook(), { name: "home" }),
+      { variant: "home", notebook: getNotebook(), route: { name: "home" } },
       renderNotFound(),
       "study-note / 찾을 수 없음"
     ));
@@ -4506,7 +4519,7 @@ function renderApp(): void {
     setHomeProps(null);
     setIntakeProps(null);
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderNotFound(),
       `${subject.title} / 찾을 수 없음`
     ));
@@ -4542,7 +4555,7 @@ function renderApp(): void {
     setHomeProps(homeProps);
     setIntakeProps(null);
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, homeNotebook, route),
+      { variant: "home", notebook: homeNotebook, route },
       renderHome(homeNotebook),
       `${homeNotebook.title} / 홈`
     ));
@@ -4563,7 +4576,7 @@ function renderApp(): void {
     });
     setHomeProps(null);
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, intakeNotebook, route),
+      { variant: "home", notebook: intakeNotebook, route },
       renderIntakeGuide(intakeNotebook),
       `${intakeNotebook.title} / 자료 투입`
     ));
@@ -4574,7 +4587,7 @@ function renderApp(): void {
     setHomeProps(null);
     setIntakeProps(null);
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, getNotebook(), route),
+      { variant: "home", notebook: getNotebook(), route },
       renderPdfWorkspaceIndex(pdfLibraryContext, getNotebook(), getSubjectPdfMaterials),
       `${getNotebook().title} / PDF 작업공간`
     ));
@@ -4593,7 +4606,7 @@ function renderApp(): void {
     });
     setHomeProps(null);
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderSubjectIntakeGuide(subject, renderIntakeFeedback),
       `${subject.title} / 자료 투입`
     ));
@@ -4603,7 +4616,7 @@ function renderApp(): void {
   if (route.name === "pdf-workspace" && subject) {
     ensurePdfPreviewForWorkspace(subject.id);
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderPdfWorkspacePage(workspacePageContext, subject),
       `${subject.title} / PDF 작업공간`
     ));
@@ -4634,7 +4647,7 @@ function renderApp(): void {
 
   if ((route.name === "subject" || route.name === "subject-class") && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderSubjectClassPage(subjectClassContext, subject),
       `${subject.title} / 수업`
     ));
@@ -4643,7 +4656,7 @@ function renderApp(): void {
 
   if (route.name === "subject-summaries" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderSubjectSummariesPage(summariesContext, subject),
       `${subject.title} / 요약본`
     ));
@@ -4652,7 +4665,7 @@ function renderApp(): void {
 
   if (route.name === "subject-summary-detail" && subject && week) {
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderWeekSummaryPage(summariesContext, subject, week),
       `${subject.title} / ${week.label} 요약본`
     ));
@@ -4661,7 +4674,7 @@ function renderApp(): void {
 
   if (route.name === "subject-mcp" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderSubjectMcpPage(subject),
       `${subject.title} / MCP 호출`
     ));
@@ -4670,7 +4683,7 @@ function renderApp(): void {
 
   if (route.name === "subject-memorize" && subject) {
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderSubjectMemorizePage(subject),
       `${subject.title} / 필수 암기노트`
     ));
@@ -4679,7 +4692,7 @@ function renderApp(): void {
 
   if (route.name === "week" && subject && week) {
     mountRender(composeShell(
-      renderSubjectSidebar(sidebarContext, subject, route),
+      { variant: "subject", subject, route },
       renderWeekPage(weekPageContext, subject, week),
       `${subject.title} / ${week.label}`
     ));
@@ -4764,8 +4777,17 @@ const weekPageContext: WeekPageContext = {
     renderPdfMaterialCard(pdfLibraryContext, subject, material, opts)
 };
 
-function composeShell(sidebar: string, mainContent: string, crumb: string): string {
-  return renderAppShell(sidebar, mainContent, crumb, getAppShellContext());
+// S3b: sidebar-island slot placeholder. renderShell(appShell.ts:178) 가
+// `${sidebar}` raw-embed 로 HTML 에 그대로 삽입 → morphdom getNodeKey = node.id
+// = "sidebar-island" 으로 identity 안정. <aside> 아님 — SidebarView 가 렌더.
+const SIDEBAR_PLACEHOLDER =
+  '<div id="sidebar-island" data-react-island="sidebar" style="display:contents"></div>';
+
+function composeShell(sidebar: SidebarDescriptor, mainContent: string, crumb: string): string {
+  // S3b: descriptor → props 계산 + 발행. postMountEffect 가 slot signal.
+  // setSidebarProps 는 renderApp 재트리거 안 함 (S3 setHomeProps 와 동일 eval order).
+  setSidebarProps(buildSidebarProps(sidebar, sidebarContext));
+  return renderAppShell(SIDEBAR_PLACEHOLDER, mainContent, crumb, getAppShellContext());
 }
 
 
