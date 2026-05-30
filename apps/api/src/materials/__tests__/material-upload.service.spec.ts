@@ -95,7 +95,6 @@ function makeService(options: {
       expiresAt: new Date().toISOString()
     }),
     getObject: async () => ({ body: null as unknown as Readable, contentType: "application/pdf" }),
-    createExportBundle: () => null as unknown as import("@study-note/storage").ExportBundle,
     headObject: async () => ({ contentLength: 100 }),
     deleteObject: async () => {},
     readObjectPrefix: async (_key: string, length: number) => Buffer.from("%PDF-").subarray(0, length)

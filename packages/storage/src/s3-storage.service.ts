@@ -9,10 +9,9 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Injectable, Logger } from "@nestjs/common";
 import { Readable } from "node:stream";
-import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
+import type { PdfMaterialRecord } from "@study-note/domain";
 import type {
   DownloadIntent,
-  ExportBundle,
   HeadObjectResult,
   ListJsonObjectsOptions,
   ListJsonObjectsResult,
@@ -315,19 +314,6 @@ export class S3StorageService extends StoragePort {
 
     // Cap to requested length defensively (S3 Range 206 may return up to length bytes)
     return Buffer.from(bytes).subarray(0, length);
-  }
-
-  createExportBundle(
-    material: PdfMaterialRecord,
-    annotation: AnnotationSnapshotRecord
-  ): ExportBundle {
-    return {
-      kind: "original-pdf-plus-annotation-json",
-      generatedAt: new Date().toISOString(),
-      material,
-      originalPdf: this.createDownloadIntent(material),
-      annotation
-    };
   }
 
   // sprint-2/S1: small JSON object I/O for notes/annotations persistence.

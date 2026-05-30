@@ -106,13 +106,6 @@ export class MaterialsService {
     });
   }
 
-  async getExportBundle(ownerId: string, materialId: string) {
-    const material = await this.getUploadedMaterial(ownerId, materialId);
-    const annotation = await this.getAnnotation(ownerId, materialId);
-
-    return this.storage.createExportBundle(material, annotation);
-  }
-
   private async getUploadedMaterial(
     ownerId: string,
     materialId: string

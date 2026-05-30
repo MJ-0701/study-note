@@ -113,7 +113,6 @@ function makeService(options: {
     putObject: async () => {},
     getObject: async () => ({ body: null as unknown as import("node:stream").Readable, contentType: "application/pdf" }),
     getJsonObject: async () => options.r2Payload ? { payload: options.r2Payload } : null,
-    createExportBundle: () => null as unknown as import("@study-note/storage").ExportBundle,
     headObject: async () => ({ contentLength: 100 }),
     deleteObject: async () => {},
     readObjectPrefix: async (_key: string, length: number) => Buffer.from("%PDF-").subarray(0, length)
@@ -346,7 +345,7 @@ describe("Materials shared-read contract", () => {
   });
 
   // S2 회귀: getAnnotation 이 findFull(findUnique) populated 분기를 거쳐 본인 snapshot 을
-  // 매핑하는지 — getExportBundle(live endpoint) 가 이 경로를 탄다.
+  // 매핑하는지 — getAnnotation(live endpoint) 가 이 경로를 탄다.
   // payload SoT = R2 (DB row.payload 는 Hybrid CAS 가 JsonNull). R2 payload 를 r2Payload 로 주입.
   it("returns the populated current-user snapshot via findFull (populated branch)", async () => {
     const savedAt = new Date("2026-05-22T09:00:00Z");

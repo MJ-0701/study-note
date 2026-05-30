@@ -3,10 +3,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Readable } from "node:stream";
-import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
+import type { PdfMaterialRecord } from "@study-note/domain";
 import type {
   DownloadIntent,
-  ExportBundle,
   HeadObjectResult,
   ListJsonObjectsOptions,
   ListJsonObjectsResult,
@@ -110,19 +109,6 @@ export class LocalMockStorageService extends StoragePort {
       body: Readable.from(object.body),
       contentType: object.contentType,
       contentLength: object.body.length
-    };
-  }
-
-  createExportBundle(
-    material: PdfMaterialRecord,
-    annotation: AnnotationSnapshotRecord
-  ): ExportBundle {
-    return {
-      kind: "original-pdf-plus-annotation-json",
-      generatedAt: new Date().toISOString(),
-      material,
-      originalPdf: this.createDownloadIntent(material),
-      annotation
     };
   }
 
