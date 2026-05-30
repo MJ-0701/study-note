@@ -110,7 +110,6 @@ function makeStorage(
     }),
     putObject: async () => {},
     getObject: async () => ({ body: null as unknown as import("node:stream").Readable, contentType: "application/pdf" }),
-    createExportBundle: () => null as unknown as import("@study-note/storage").ExportBundle,
     headObject: async (_storageKey: string): Promise<HeadObjectResult> => {
       if (headResult instanceof Error) throw headResult;
       return headResult;

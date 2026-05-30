@@ -55,7 +55,6 @@ NestJS global prefix = `app.setGlobalPrefix("api")` (`apps/api/src/main.ts:38`).
 | GET | `/api/materials/:materialId/download` | materials | cookie | download disposition |
 | GET | `/api/materials/:materialId/annotation` | materials | cookie | **legacy** annotation 채널 (FE 미사용, sprint-2 이후 `/api/v1/pdf-annotations` 가 표준) |
 | PUT | `/api/materials/:materialId/annotation` | materials | cookie | **legacy** annotation 저장 |
-| GET | `/api/materials/:materialId/export-bundle` | materials | cookie | 내보내기 번들 |
 | GET | `/api/v1/notes/subject/:subjectId/week/:weekId` | user-notes | cookie → `request.user.id` 로 storage key 구성 | WeekNote.userNotes hot path GET |
 | PUT | `/api/v1/notes/subject/:subjectId/week/:weekId` | user-notes | 동일 | autosave PUT (userId 는 URL 에 없음 — cookie session 에서 추출) |
 | GET | `/api/v1/pdf-annotations/by-subject/:subjectId` | pdf-annotations | cookie → `request.user.id` × subjectId 로 material enumerate | **sprint-W21-sprint-2/S2 신규 batch GET**. 응답 = canonical schema `{ annotations:{[matId]:{payload,updatedAt}}, truncated, total, returned }`. cap = 50 material / 1MB. foreign/nonexistent/empty 모두 동일 `200 {annotations:{}}`. |

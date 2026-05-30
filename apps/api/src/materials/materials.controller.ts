@@ -171,14 +171,6 @@ export class MaterialsController {
     });
   }
 
-  @Get(":materialId/export-bundle")
-  async getExportBundle(
-    @Req() request: AuthenticatedRequest,
-    @Param("materialId") materialId: string
-  ) {
-    const bundle = await this.materials.getExportBundle(request.user.id, materialId);
-    return { ...bundle, material: toMaterialPublic(bundle.material) };
-  }
 }
 
 function readSingleHeader(

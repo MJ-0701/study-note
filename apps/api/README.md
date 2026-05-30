@@ -16,7 +16,6 @@ NestJS backend boundary for the PDF workspace prototype.
 - `GET /api/materials/:materialId/download`
 - `PUT /api/materials/:materialId/annotation`
 - `GET /api/materials/:materialId/annotation`
-- `GET /api/materials/:materialId/export-bundle`
 
 > **Removed** (slice-2): `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me` — replaced by the `v1/auth/*` routes above.
 

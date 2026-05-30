@@ -485,14 +485,6 @@ try {
     throw new Error("downloaded PDF bytes did not match uploaded bytes");
   }
 
-  const exportBundle = await requestJson(`/materials/${materialId}/export-bundle`, { jar: masterJar });
-  if (
-    exportBundle.kind !== "original-pdf-plus-annotation-json" ||
-    exportBundle.annotation?.stickyNotes?.length !== 1
-  ) {
-    throw new Error("export bundle did not include original PDF and annotation JSON");
-  }
-
   // Backend restart — cookie persists in jar, same DB+pepper → session row reusable.
   restartServer = startBackend(4200 + Math.floor(Math.random() * 1000), smokeDb);
   await waitFor(async () => {
@@ -612,7 +604,6 @@ try {
   console.log("- upload endpoints are limited to master/admin and still owner-scoped for object writes");
   console.log("- annotation snapshots are isolated per current user");
   console.log("- material metadata and annotation snapshot persist across backend process restart");
-  console.log("- export bundle returns original PDF reference plus annotation JSON");
   console.log("- backend stdout/stderr free of raw session tokens");
 } finally {
   await prisma?.$disconnect();

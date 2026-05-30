@@ -1,4 +1,4 @@
-import type { AnnotationSnapshotRecord, PdfMaterialRecord } from "@study-note/domain";
+import type { PdfMaterialRecord } from "@study-note/domain";
 import type { Readable } from "node:stream";
 
 /**
@@ -39,14 +39,6 @@ export interface StorageObjectOutput {
   contentLength?: number;
 }
 
-export interface ExportBundle {
-  kind: "original-pdf-plus-annotation-json";
-  generatedAt: string;
-  material: PdfMaterialRecord;
-  originalPdf: DownloadIntent;
-  annotation: AnnotationSnapshotRecord;
-}
-
 export interface HeadObjectResult {
   contentLength: number;
   contentType?: string;
@@ -75,10 +67,6 @@ export abstract class StoragePort {
     input: StorageObjectInput
   ): Promise<void>;
   abstract getObject(material: PdfMaterialRecord): Promise<StorageObjectOutput>;
-  abstract createExportBundle(
-    material: PdfMaterialRecord,
-    annotation: AnnotationSnapshotRecord
-  ): ExportBundle;
   // slice-1: exposed for completion endpoint (slice-2) — headObject verifies actual S3 object size
   abstract headObject(storageKey: string): Promise<HeadObjectResult>;
   // slice-1: exposed for orphan cleanup (slice-2+)
