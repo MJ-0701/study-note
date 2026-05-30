@@ -212,7 +212,7 @@ export function renderPdfWorkspacePage(
           <h2 id="pdf-workspace-title">페이지 ${selectedPage}${material ? ` / ${material.pageCount}` : ""}</h2>
         </div>
         <div class="pdf-toolbar-row">
-          <div id="pdf-toolbar-island" data-react-island="pdf-toolbar"></div>
+          <div id="pdf-toolbar-island" data-react-island="pdf-toolbar" style="display:contents"></div>
           <button
             class="pdf-inspector-toggle secondary-action"
             type="button"
