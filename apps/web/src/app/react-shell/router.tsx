@@ -4,9 +4,13 @@
 // → <LegacyView route>. S0 에서는 12 route 전부 LegacyView 로 dispatch 되므로
 // 실제 화면은 legacy renderApp 이 그린다(동작 무변경). 후속 slice 에서 route
 // 별로 실제 React 컴포넌트로 치환된다.
+//
+// S1a/WU2b: <PdfToolbarPortal> 을 pdf-workspace route 일 때만 subjectId 와
+// 함께 렌더. 다른 route 면 subjectId=null → portal null 반환.
 import { useEffect, useState } from "react";
 import { parseRoute } from "../routes.ts";
 import { LegacyView } from "./LegacyView.tsx";
+import { PdfToolbarPortal } from "./PdfToolbarPortal.tsx";
 import type { LegacyShellRegistry } from "./registry.ts";
 
 function readHash(): string {
@@ -26,5 +30,14 @@ export function ReactShellRouter({
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  return <LegacyView route={parseRoute(hash)} registry={registry} />;
+  const route = parseRoute(hash);
+  // pdf-workspace route 일 때만 subjectId 추출해 toolbar portal 활성화.
+  const pdfSubjectId = route.name === "pdf-workspace" ? route.subjectId : null;
+
+  return (
+    <>
+      <LegacyView route={route} registry={registry} />
+      <PdfToolbarPortal subjectId={pdfSubjectId} registry={registry} />
+    </>
+  );
 }

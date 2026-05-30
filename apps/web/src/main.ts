@@ -360,7 +360,7 @@ import {
   setLoginFeedback
 } from "./stores/authStore.ts";
 import { getPdfWorkspaceStore, setPdfWorkspaceStore } from "./stores/pdfWorkspaceStore.ts";
-import { getInspectorOpen, setInspectorOpen } from "./stores/uiStore.ts";
+import { getInspectorOpen, setInspectorOpen, setPdfToolbarSlot } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
 // 순환 없음).
@@ -540,7 +540,13 @@ const mainRenderSink: RenderSink | null = appRoot
         () => refreshChartWidgets(),
         () => applyQueuedDrillHighlightModule(drillHighlightContext),
         () => refreshActiveDrillHighlightsModule(drillHighlightContext),
-        (root) => applyPdfCanvasMounts(root)
+        (root) => applyPdfCanvasMounts(root),
+        // S1a/WU2a: morphdom 재렌더 후 #pdf-toolbar-island 를 찾아 React portal
+        // slot 으로 signal. pdf-workspace route 가 아니면 querySelector 가 null
+        // 반환 → slot null signal 로 PdfToolbarPortal 이 자동 unmount.
+        (root) => {
+          setPdfToolbarSlot(root.querySelector<HTMLElement>('[data-react-island="pdf-toolbar"]'));
+        }
       ]
     }
   : null;
@@ -628,6 +634,42 @@ if (isBrowserRuntime) {
       },
       closeTransientOverlays: () => {
         closeHotkeyHelpModal();
+      },
+      // S1a/WU2b — pdf-toolbar action 그룹 (least-privilege 확장).
+      // 각 wrapper = legacy click/change 분기 본체 그대로 이전 (INV-6).
+      pdfToolbar: {
+        setTool: (subjectId: string, tool: string) => {
+          if (subjectId && isPdfWorkspaceTool(tool)) {
+            setPdfTool(subjectId, tool);
+            renderApp();
+          }
+        },
+        prevPage: (subjectId: string) => {
+          movePdfPage(subjectId, -1);
+          renderApp();
+        },
+        nextPage: (subjectId: string) => {
+          movePdfPage(subjectId, 1);
+          renderApp();
+        },
+        setPage: (subjectId: string, n: number) => {
+          setPdfPage(subjectId, n);
+          renderApp();
+        },
+        setEraserShape: (subjectId: string, shape: string) => {
+          if (subjectId && isEraserShape(shape)) {
+            applySetEraserShape(subjectId, shape);
+            renderApp();
+          }
+        },
+        setEraserSize: (subjectId: string, size: number) => {
+          applySetEraserSize(subjectId, size);
+          renderApp();
+        },
+        toggleFullscreen: () => {
+          // fullscreen change 는 fullscreenchange 이벤트로 UI 갱신 — renderApp 없음.
+          togglePdfFullscreen();
+        }
       }
     });
   }
@@ -1281,6 +1323,7 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // S1a/WU2b 후 React 툴바로 이관 — legacy toolbar 미렌더로 dead.
   if (quickNoteButton?.dataset.action === "toggle-pdf-fullscreen") {
     togglePdfFullscreen();
     return;
@@ -1473,6 +1516,8 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // S1a/WU2b 후 React 툴바로 이관 — legacy toolbar 미렌더로 dead.
+  // 위임 분기는 다른 로직과 얽힘 위험이 있어 제거하지 않음.
   if (quickNoteButton?.dataset.action === "set-pdf-tool") {
     const subjectId = quickNoteButton.dataset.subjectId;
     const tool = quickNoteButton.dataset.tool as LocalPdfTool | undefined;
@@ -1485,6 +1530,7 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // S1a/WU2b 후 React 툴바로 이관 — legacy toolbar 미렌더로 dead.
   if (quickNoteButton?.dataset.action === "set-eraser-shape") {
     const subjectId = quickNoteButton.dataset.subjectId;
     const shape = quickNoteButton.dataset.eraserShape as EraserShape | undefined;
@@ -1497,6 +1543,7 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // S1a/WU2b 후 React 툴바로 이관 — legacy toolbar 미렌더로 dead.
   if (quickNoteButton?.dataset.action === "pdf-prev-page") {
     const subjectId = quickNoteButton.dataset.subjectId;
 
@@ -1508,6 +1555,7 @@ function handleDocumentClick(event: MouseEvent): void {
     return;
   }
 
+  // S1a/WU2b 후 React 툴바로 이관 — legacy toolbar 미렌더로 dead.
   if (quickNoteButton?.dataset.action === "pdf-next-page") {
     const subjectId = quickNoteButton.dataset.subjectId;
 
@@ -1991,6 +2039,7 @@ function handleDocumentInput(event: Event): void {
     return;
   }
 
+  // S1a/WU2b 후 React 툴바로 이관 — legacy toolbar 미렌더로 dead.
   if (target.dataset.action === "set-eraser-size") {
     const subjectId = target.dataset.subjectId;
 
