@@ -78,6 +78,12 @@ export function renderInto(html: string, sink: RenderSink): void {
         return false;
       }
 
+      // S1a/WU2a: React island = React 가 children 소유, morphdom skip.
+      // canvas preserve 와 short-circuit 충돌 없게 canvas 블록 뒤, 최종 return 앞.
+      if (shouldPreserveReactIsland(fromEl, toEl)) {
+        return false;
+      }
+
       return true;
     }
   });
@@ -110,6 +116,22 @@ export function shouldReplacePdfFrame(fromEl: Element, toEl: Element): boolean {
     fromFrame.dataset.materialId !== toFrame.dataset.materialId ||
     fromEl.getAttribute("src") !== toEl.getAttribute("src")
   );
+}
+
+/**
+ * shouldPreserveReactIsland — S1a/WU2a: data-react-island 가 동일한 두
+ * 엘리먼트는 morphdom 이 update 하지 않는다. React 가 해당 subtree 를
+ * 소유하므로 morphdom 이 간섭하면 portal mount 가 파괴된다.
+ */
+export function shouldPreserveReactIsland(fromEl: Element, toEl: Element): boolean {
+  if (!(fromEl instanceof HTMLElement) || !(toEl instanceof HTMLElement)) {
+    return false;
+  }
+  const key = fromEl.dataset.reactIsland;
+  if (!key) {
+    return false;
+  }
+  return key === toEl.dataset.reactIsland;
 }
 
 /**

@@ -360,7 +360,7 @@ import {
   setLoginFeedback
 } from "./stores/authStore.ts";
 import { getPdfWorkspaceStore, setPdfWorkspaceStore } from "./stores/pdfWorkspaceStore.ts";
-import { getInspectorOpen, setInspectorOpen } from "./stores/uiStore.ts";
+import { getInspectorOpen, setInspectorOpen, setPdfToolbarSlot } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
 // 순환 없음).
@@ -540,7 +540,13 @@ const mainRenderSink: RenderSink | null = appRoot
         () => refreshChartWidgets(),
         () => applyQueuedDrillHighlightModule(drillHighlightContext),
         () => refreshActiveDrillHighlightsModule(drillHighlightContext),
-        (root) => applyPdfCanvasMounts(root)
+        (root) => applyPdfCanvasMounts(root),
+        // S1a/WU2a: morphdom 재렌더 후 #pdf-toolbar-island 를 찾아 React portal
+        // slot 으로 signal. pdf-workspace route 가 아니면 querySelector 가 null
+        // 반환 → slot null signal 로 PdfToolbarPortal 이 자동 unmount.
+        (root) => {
+          setPdfToolbarSlot(root.querySelector<HTMLElement>('[data-react-island="pdf-toolbar"]'));
+        }
       ]
     }
   : null;
