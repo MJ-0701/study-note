@@ -150,14 +150,14 @@ flowchart LR
 
 > **왜 Spring Boot가 아니라 NestJS인가.** 저의 주력 스택은 **Spring Boot + Kotlin** 백엔드입니다. 그럼에도 이 프로젝트의 API를 NestJS로 구성한 이유는 세 가지입니다. ① **스터디** — 익숙한 Spring 대신 새 런타임/생태계를 직접 운영까지 경험. ② **서버 비용** — Azure Container Apps의 min-replicas=0 절전 모델에서 JVM 컨테이너는 cold start가 느리고 메모리 상주가 무거운 반면, Node 런타임은 기동이 가볍고 메모리 풋프린트가 작아 절전·과금에 유리. ③ **풀스택 속도** — FE와 BE를 모두 TypeScript로 통일해 도메인 타입을 한 패키지(`packages/domain`)에서 공유하고 컨텍스트 스위칭 없이 빠르게 반복.
 >
-> 핵심은 **Spring에서의 설계 개념을 NestJS에 1:1로 매핑**해 옮겼다는 점입니다. NestJS 자체가 Spring/Angular의 DI·모듈·데코레이터 사상을 계승했기에 이식이 자연스러웠습니다 — Spring의 `@Service`/`@Repository`/생성자 주입 ↔ Nest `@Injectable` + 모듈 provider, `@RestController` ↔ `@Controller`, Spring Security 필터 체인 ↔ `SessionAuthGuard`/`RoleGuard`(`@Roles`), `@ControllerAdvice`+`@ExceptionHandler` ↔ 전역 `ApiExceptionFilter`(4xx warn / 5xx error 로깅), Bean Validation ↔ `ValidationPipe`+`@Valid`(Shield 패턴), 포트/어댑터(헥사고날) ↔ `StoragePort`/`*Repository` 추상화. 즉 "새 언어를 처음 배우며 만든 결과물"이 아니라 **숙련된 백엔드 설계 원칙을 새 런타임으로 빠르게 이식한 결과물**입니다.
+> 핵심은 **Spring에서의 설계 개념을 NestJS에 1:1로 매핑**해 옮겼다는 점입니다. NestJS 자체가 Spring/Angular의 DI·모듈·데코레이터 사상을 계승했기에 이식이 자연스러웠습니다 — Spring의 `@Service`/`@Repository`/생성자 주입 ↔ Nest `@Injectable` + 모듈 provider, `@RestController` ↔ `@Controller`, Spring Security 필터 체인 ↔ `SessionAuthGuard`/`RoleGuard`(`@Roles`), `@ControllerAdvice`+`@ExceptionHandler` ↔ 전역 `ApiExceptionFilter`(4xx warn / 5xx error 로깅), Bean Validation ↔ `ValidationPipe`+`@Valid`(Shield 패턴). 외부 시스템 경계는 포트/어댑터(헥사고날)로 의존성을 역전했고(스토리지 `StoragePort`·LLM `LlmProvider`/`LLM_PROVIDER` — 교체 가능한 adapter), DB 접근은 aggregate별 Repository 패턴으로 Prisma를 캡슐화했습니다(이쪽은 헥사고날 port가 아니라 영속 캡슐화). 즉 "새 언어를 처음 배우며 만든 결과물"이 아니라 **숙련된 백엔드 설계 원칙을 새 런타임으로 빠르게 이식한 결과물**입니다.
 
 ### 디렉토리와 책임 경계
 
 - `apps/web`은 사용자가 만나는 UI를 담당합니다. 메인 작업공간은 `apps/web/src/main.ts`를 중심으로 모듈을 분리하고, 관리자 화면은 React 기반 별도 SPA(`apps/web/src/admin/`)로 운영합니다.
 - `apps/api`는 NestJS 컨트롤러·서비스 계층이 위치합니다. 관측 모듈(`observability/`), 텔레메트리(`telemetry/`), 권한(`auth/`) 등이 분리되어 있습니다.
 - `packages/domain`은 외부 의존이 없는 순수 도메인 타입과 reducer를 보관합니다. side-effect를 도메인 밖으로 빼는 작업을 진행하고 있습니다.
-- `packages/auth`, `packages/storage`, `packages/persistence`는 포트와 어댑터 경계입니다. 서비스는 포트를 통해서만 외부 시스템에 접근합니다.
+- `packages/storage`는 진짜 포트/어댑터(헥사고날) 경계입니다 — 서비스는 `StoragePort`(추상)만 주입받고 R2/S3·로컬 목 어댑터를 갈아끼웁니다. `packages/persistence`는 Prisma를 감싸 aggregate별 Repository로 영속 접근을 캡슐화하고(port 역전이 아니라 캡슐화), `packages/auth`는 세션 인증과 권한 가드를 담당합니다.
 - `packages/corpus`, `packages/persona-engine`, `apps/cli`, `apps/mcp`는 향후 AI 튜터 흐름의 실험 영역입니다.
 
 자세한 컨텍스트 맵은 [llm-wiki/ddd/context-map.md](llm-wiki/ddd/context-map.md)에 정리되어 있습니다.

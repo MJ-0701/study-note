@@ -8,7 +8,7 @@ import { MaterialsController } from "../materials.controller";
 import { MaterialsService, parseMaterialMetadataBody } from "../materials.service";
 import { MaterialUploadService } from "../material-upload.service";
 import { PdfMaterialRepository } from "../pdf-material.repository";
-import { AnnotationSnapshotRepository } from "../annotation-snapshot.repository";
+import { AnnotationSnapshotRepository } from "../../pdf-annotations/annotation-snapshot.repository";
 
 interface PdfMaterialRow {
   id: string;
@@ -68,7 +68,6 @@ function makeService(options: {
 }) {
   const annotations = options.annotations ?? [];
   const queries: QuerySpy = { findFirstWheres: [] };
-  let annotationSeq = annotations.length + 1;
   const prisma = {
     pdfMaterial: {
       findMany: async (args: { where: unknown }) => {
@@ -87,23 +86,15 @@ function makeService(options: {
       updateMany: async () => ({ count: 1 })
     },
     annotationSnapshot: {
-      findFirst: async (args: { where: { materialId?: string; ownerId?: string } }) =>
+      // MaterialsService.getAnnotation → AnnotationSnapshotRepository.findFull (findUnique).
+      findUnique: async (args: {
+        where: { materialId_ownerId: { materialId: string; ownerId: string } };
+      }) =>
         annotations.find(
           (item) =>
-            item.materialId === args.where.materialId &&
-            item.ownerId === args.where.ownerId
-        ) ?? null,
-      update: async (args: { where: { id: string }; data: Partial<AnnotationRow> }) => {
-        const index = annotations.findIndex((item) => item.id === args.where.id);
-        assert.notEqual(index, -1);
-        annotations[index] = { ...annotations[index], ...args.data } as AnnotationRow;
-        return annotations[index];
-      },
-      create: async (args: { data: Omit<AnnotationRow, "id"> }) => {
-        const created = { id: `ann-${annotationSeq++}`, ...args.data };
-        annotations.push(created);
-        return created;
-      }
+            item.materialId === args.where.materialId_ownerId.materialId &&
+            item.ownerId === args.where.materialId_ownerId.ownerId
+        ) ?? null
     }
   };
   const storage = {
@@ -331,29 +322,10 @@ describe("Materials shared-read contract", () => {
     );
   });
 
-  it("keeps annotation snapshots isolated per current user", async () => {
-    const { service, annotations } = makeService({ material: makeMaterial() });
-
-    await service.saveAnnotation("student-a", "mat-shared", {
-      schemaVersion: 1,
-      stickyNotes: [{ id: "note-a", pageNumber: 1, anchor: { x: 0.1, y: 0.2 }, blocks: [], updatedAt: "2026-05-20T00:00:00Z" }],
-      inkStrokes: []
-    });
-    await service.saveAnnotation("student-b", "mat-shared", {
-      schemaVersion: 1,
-      stickyNotes: [{ id: "note-b", pageNumber: 1, anchor: { x: 0.3, y: 0.4 }, blocks: [], updatedAt: "2026-05-20T00:00:00Z" }],
-      inkStrokes: []
-    });
-
-    const a = await service.getAnnotation("student-a", "mat-shared");
-    const b = await service.getAnnotation("student-b", "mat-shared");
-
-    assert.equal(annotations.length, 2);
-    assert.equal(a.ownerId, "student-a");
-    assert.equal(a.stickyNotes[0]?.id, "note-a");
-    assert.equal(b.ownerId, "student-b");
-    assert.equal(b.stickyNotes[0]?.id, "note-b");
-  });
+  // per-user annotation write isolation 은 live path(PUT /api/v1/pdf-annotations)로
+  // 이관됨 — (materialId, ownerId) composite key + R2 key namespacing 이 보장하며
+  // pdf-annotations/__tests__/annotations.spec.ts 가 검증. deprecated saveAnnotation
+  // write 경로 테스트는 메서드 제거(S5)와 함께 삭제. read 경로 isolation 은 아래 유지.
 
   it("returns an empty current-user annotation object when no snapshot exists", async () => {
     const material = makeMaterial({ updatedAt: new Date("2026-05-21T00:00:00Z") });
@@ -369,5 +341,42 @@ describe("Materials shared-read contract", () => {
       inkStrokes: [],
       savedAt: "2026-05-21T00:00:00.000Z"
     });
+  });
+
+  // S2 회귀: getAnnotation 이 findFull(findUnique) populated 분기를 거쳐 본인 snapshot 을
+  // 매핑하는지 — getExportBundle(live endpoint) 가 이 경로를 탄다.
+  it("returns the populated current-user snapshot via findFull (populated branch)", async () => {
+    const savedAt = new Date("2026-05-22T09:00:00Z");
+    const { service } = makeService({
+      material: makeMaterial(),
+      annotations: [
+        {
+          id: "ann-1",
+          materialId: "mat-shared",
+          ownerId: "student-a",
+          schemaVersion: 1,
+          payload: {
+            stickyNotes: [
+              {
+                id: "note-a",
+                pageNumber: 1,
+                anchor: { x: 0.1, y: 0.2 },
+                blocks: [],
+                updatedAt: "2026-05-20T00:00:00Z"
+              }
+            ],
+            inkStrokes: []
+          },
+          savedAt
+        }
+      ]
+    });
+
+    const annotation = await service.getAnnotation("student-a", "mat-shared");
+
+    assert.equal(annotation.ownerId, "student-a");
+    assert.equal(annotation.materialId, "mat-shared");
+    assert.equal(annotation.savedAt, savedAt.toISOString());
+    assert.equal(annotation.stickyNotes[0]?.id, "note-a");
   });
 });

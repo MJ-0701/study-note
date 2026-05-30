@@ -3,18 +3,21 @@ import { AuthModule } from "@study-note/auth";
 import { createStorageProvider, StoragePort } from "@study-note/storage";
 import { MetricsModule } from "../observability/metrics.module";
 import { PdfAnnotationsController } from "./pdf-annotations.controller";
-import { PdfAnnotationsService } from "./pdf-annotations.service";
-import { PdfMaterialRepository } from "./pdf-material.repository";
+import { PdfAnnotationQueryService } from "./pdf-annotation-query.service";
+import { PdfAnnotationCommandService } from "./pdf-annotation-command.service";
+import { PdfMaterialRepository } from "../materials/pdf-material.repository";
 import { AnnotationSnapshotRepository } from "./annotation-snapshot.repository";
 
 // sprint-2/S1 fix (codex P1): StoragePort + AuthModule 둘 다 module-level 등록.
 // SessionAuthGuard 의 의존성 resolve 위해 AuthModule import 필수.
 // DDD Slice 2: PdfMaterialRepository provider 등록 → Service inject path 활성.
+// S3 (경량 CQRS): PdfAnnotationsService 를 Query/Command service 로 분리.
 @Module({
   imports: [AuthModule, MetricsModule],
   controllers: [PdfAnnotationsController],
   providers: [
-    PdfAnnotationsService,
+    PdfAnnotationQueryService,
+    PdfAnnotationCommandService,
     PdfMaterialRepository,
     AnnotationSnapshotRepository,
     {

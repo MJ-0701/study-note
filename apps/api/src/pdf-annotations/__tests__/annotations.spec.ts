@@ -25,8 +25,9 @@ import {
   ServiceUnavailableException
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { PdfAnnotationsService } from "../pdf-annotations.service";
-import { PdfMaterialRepository } from "../pdf-material.repository";
+import { PdfAnnotationQueryService } from "../pdf-annotation-query.service";
+import { PdfAnnotationCommandService } from "../pdf-annotation-command.service";
+import { PdfMaterialRepository } from "../../materials/pdf-material.repository";
 import { AnnotationSnapshotRepository } from "../annotation-snapshot.repository";
 
 // ─── Mock factories ───────────────────────────────────────────────────────────
@@ -72,20 +73,37 @@ function makeMetricsRecorder(): {
   };
 }
 
+// S3 (경량 CQRS): Query/Command 두 service 를 동일 deps 로 구성하고, 기존 단일
+// service surface 를 유지하는 facade 를 반환 (테스트 본문 call-site 무변경).
 function makeService(
   prisma: MockPrisma,
   storage: MockStorage,
   metrics?: { observeSyncPut: (outcome: "success" | "failure" | "stale") => void }
-): PdfAnnotationsService {
-  // DDD Slice 8: service 는 Prisma 직접 의존 0 — material/annotation repository 가
-  // 동일 mock prisma 위임 (spec mock 그대로 투명 동작).
+) {
+  // service 는 Prisma 직접 의존 0 — material/annotation repository 가 동일 mock prisma
+  // 위임 (spec mock 그대로 투명 동작).
   const ps = prisma as unknown as import("@study-note/persistence").PrismaService;
-  return new PdfAnnotationsService(
-    storage as unknown as import("@study-note/storage").StoragePort,
-    new PdfMaterialRepository(ps),
-    new AnnotationSnapshotRepository(ps),
+  const storagePort = storage as unknown as import("@study-note/storage").StoragePort;
+  const materialRepo = new PdfMaterialRepository(ps);
+  const annotationRepo = new AnnotationSnapshotRepository(ps);
+  const query = new PdfAnnotationQueryService(storagePort, materialRepo, annotationRepo);
+  const command = new PdfAnnotationCommandService(
+    storagePort,
+    materialRepo,
+    annotationRepo,
     metrics as unknown as import("../../observability/metrics.service").MetricsService
   );
+  // facade = command 인스턴스(write path 의 `this.logger` spy 가 그대로 동작)에 query
+  // 메서드를 부착. 기존 단일 service surface 를 유지해 테스트 call-site 무변경.
+  const facade = command as unknown as {
+    listAnnotations: typeof query.listAnnotations;
+    getSingleAnnotation: typeof query.getSingleAnnotation;
+    batchGetBySubject: typeof query.batchGetBySubject;
+  };
+  facade.listAnnotations = query.listAnnotations.bind(query);
+  facade.getSingleAnnotation = query.getSingleAnnotation.bind(query);
+  facade.batchGetBySubject = query.batchGetBySubject.bind(query);
+  return command as PdfAnnotationCommandService & typeof facade;
 }
 
 const OWNER = "user-001";
