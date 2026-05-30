@@ -13,7 +13,11 @@ export default defineConfig({
     __AUTH_LOOP_NEG_CTRL__: process.env.AUTH_LOOP_NEG_CTRL === "1" ? "true" : "false",
     // S3 loop-gate negative control 전용 빌드타임 플래그. 평시(미설정)=false →
     // home/intake negativeControl 모듈 dead-branch tree-shake (prod 번들 영향 0).
-    __S3_LOOP_NEG_CTRL__: process.env.S3_LOOP_NEG_CTRL === "1" ? "true" : "false"
+    __S3_LOOP_NEG_CTRL__: process.env.S3_LOOP_NEG_CTRL === "1" ? "true" : "false",
+    // S3b loop-gate negative control 플래그 (A=mount-loop, B=click-loop).
+    // 평시 false → negativeControlSidebar 모듈 dead-branch tree-shake.
+    __S3B_LOOP_NEG_CTRL_A__: process.env.S3B_LOOP_NEG_CTRL_A === "1" ? "true" : "false",
+    __S3B_LOOP_NEG_CTRL_B__: process.env.S3B_LOOP_NEG_CTRL_B === "1" ? "true" : "false"
   },
   server: {
     host: "127.0.0.1",
