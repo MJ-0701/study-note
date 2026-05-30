@@ -65,6 +65,7 @@ infra/localstack/cache/
 .gstack/
 .claude/*.lock
 .claude/launch.json
+apps/*/.claude/agent-memory/
 
 
 
