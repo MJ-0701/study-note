@@ -32,6 +32,18 @@ body 는 legacy 유지(B). 동작·시각 무변경 목표, INV-2/3 무회귀.
 | AC6 회귀 0 | ✅ implemented | tsc clean / node:test 346 pass(toolbar13+island8+전 pdf-workspace/app, 신규 실패 0) / vite build green. |
 | R2b 이중처리 차단 | ✅ implemented | PdfToolbar 가 data-action/data-tool/data-subject-id 미emit → legacy document 위임 매칭 0. legacy 분기는 dead(미제거, 주석 표기). pdf-toolbar.spec case 8/9 단언. |
 
+**layout fix (ffd50a9)**: `#pdf-toolbar-island` 가 `.pdf-toolbar-row`(display:flex) 의 plain
+block flex child 가 되어 React 툴바가 1단계 깊어짐(`.pdf-toolbar-row > island > .pdf-toolbar`)
+→ flex sizing + inspector-toggle(margin-left:auto) 배치 틀어짐. **`display:contents`** 로
+island layout-transparent 화(S0 LegacyView 패턴) → `.pdf-toolbar` 가 다시 직접 flex child.
+advisor 가 지적, 코드/CSS 실독으로 확인 후 fix.
+
+**equivalence 증거 주의**: `page-render.spec`(renderPdfToolbar HTML 검증)는 호출처 제거로
+**dead code** — live 툴바 동일성 증거 아님. 실제 동등성은 `pdf-toolbar.spec`(13, 구조/onClick/
+data-action 부재)만 + operator QA 시각 diff. **operator QA watchlist 추가**: number input
+spinner 화살표 = legacy 는 change 즉시 발화(renderApp), React 는 blur/Enter commit → spinner
+클릭 시 즉시 미반영(경미, 확인 요).
+
 **self-CPO premise 검토**: behavioral contract(모든 toolbar action=helper+renderApp,
 fullscreen=document.fullscreenElement 파생/flag 부재) 코드 실독 확인. registry action
 7종 = legacy 분기 본체 1:1(eraser-size 포함 renderApp 일치 확인). placeholder-as-
