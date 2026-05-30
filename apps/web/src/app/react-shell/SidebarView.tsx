@@ -17,9 +17,9 @@ import type {
 
 // ─── Sub-components (pure, no hooks) ────────────────────────────────────
 
-function DepthNavLinks({ links }: { links: DepthNavLink[] }): React.ReactElement {
+function DepthNavLinks({ links, ariaLabel }: { links: DepthNavLink[]; ariaLabel: string }): React.ReactElement {
   return (
-    <div className="subject-sidebar-depth">
+    <div className="subject-sidebar-depth" aria-label={ariaLabel}>
       {links.map((link) => (
         <a
           key={link.href}
@@ -50,7 +50,7 @@ function SubjectNavItem({
         {item.title}
       </a>
       {item.isCurrent && item.depthNav && (
-        <DepthNavLinks links={item.depthNav} />
+        <DepthNavLinks links={item.depthNav} ariaLabel={`${item.title} 하위 화면`} />
       )}
     </div>
   );

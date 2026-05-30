@@ -120,6 +120,13 @@ describe("SidebarView 정적 소스 검증 (AC4/AC5)", () => {
     assert.match(src, /수업 일정/, "수업 일정 텍스트 존재");
   });
 
+  it("depth nav aria-label parity (sidebar.ts:97 — '<title> 하위 화면')", () => {
+    // old renderCurrentSubjectDepthNav 의 <div class="subject-sidebar-depth"
+    // aria-label="${title} 하위 화면"> 를 보존해야 함 (AC2 parity).
+    assert.match(src, /subject-sidebar-depth/, "subject-sidebar-depth div 존재");
+    assert.match(src, /하위 화면/, "depth nav aria-label '하위 화면' 보존");
+  });
+
   it("자료 관리 sidebar-details 존재", () => {
     assert.match(src, /sidebar-details/, "sidebar-details class 존재");
     assert.match(src, /자료 관리/, "자료 관리 텍스트 존재");
