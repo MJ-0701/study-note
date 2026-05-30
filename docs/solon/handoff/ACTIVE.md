@@ -1,75 +1,46 @@
-# 🎯 ACTIVE — 운영지표 v2 + DDD 9 slice 완료 (F-3 God Service split 포함)
+# 🎯 ACTIVE — BE arch+CQRS+버그픽스 완료(PR 대기) / next = backlog 2건 → 그 후 React
 
-> 본 file 은 SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
+> SessionStart hook 가 fresh session 마다 자동 inject. **이전 세션이 6 WU 로 길어져 clear 후 이어감** (Solon bug #5/#6 = session/verification 비용 교훈).
+> entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note` (receiver 는 cwd 확인 후 작업).
 
-## 현재 상태 (2026-05-29) — 운영지표 v2 prod + DDD 9 slice 완료 / ✅ iPad 펜 연속-획 버그 진단완료 (WebKit/Pencil OS 한계, 웹 fix 불가 · inkdebug 제거 fe-v0.1.63)
+## 🚀 다음 세션 FIRST ACTION = backlog 2건 fix (그 후 별도 세션서 React)
 
-### 1. 운영지표 v2 (sprint-W22-sprint-24) — ✅ 완료 + prod 배포
+새 세션 목적 = 아래 2건 처리해서 study-note dev backlog clear → 그 다음(또 새 세션)에 React 집중.
 
-- 4 Grafana dashboard (APM / Product / Cost / SLO) + Prometheus 자체호스팅 + Datadog dual-lane.
-- BE: ProductMetricsCron(30min 13 gauge) + CostMetricsCron(6h 4 gauge) + `/api/metrics` Bearer token gate(AC14) + log-derived metric 10 + TelemetryController(widget create).
-- Infra: Prometheus tsdb **Azure Files 영속** + Grafana 4 dashboard provisioning(코드 SoT) + Bearer auth cutover.
-- FE: widget telemetry beacon + admin `#ops` 4-dashboard 링크 + 별표 drag resize + 자동저장 outcome panel.
-- 배포 tag: be-v0.1.22~34, fe-v0.1.52~59, infra-v0.1.4~7. 전부 prod live. (be-v0.1.34=annotation cap 4MB, fe-v0.1.59=F-12+펜 텍스트선택 fix.)
-- PR #85~111 머지 완료.
+### Backlog A — smoke 를 CI gating 에 (품질 인프라)
+- **문제**: `pnpm run smoke:backend` 가 어디서도 자동 실행 안 됨(`.github/workflows` = be/fe/infra-release + keep-alive 뿐). → smoke 장기 死 → rot 5곳 누적(이번 세션에 한꺼번에 터짐).
+- **fix**: GH Actions 워크플로우 신규 — PR(+main push)시 MySQL service container 띄우고 `smoke:backend` 실행 → 실패 시 gating. Docker/MySQL + prisma migrate/seed 필요(smoke-db.mjs 가 docker-compose.smoke.yml 사용 — CI 에선 GH `services: mysql` 또는 동일 compose). STORAGE_PROVIDER=local + SESSION_TOKEN_PEPPER 등 env 주입.
+- **검증**: smoke full green 은 #121+#122+#123 **동반** 전제(스택 의존). CI 는 main 대상이므로 3 PR 머지 후 실효. 워크플로우 yaml 자체는 먼저 작성 가능.
+- worker(Sonnet) 위임. 단 CI yaml + docker 셋업은 검증 까다로움 — 작은 단위로.
 
-### 2. DDD 리팩토링 — 8 slice 완료 (audit: docs/solon/handoff/20260528-ddd-audit.md)
+### Backlog B — export-bundle annotation fidelity (먼저 "쓰이는지" 확인)
+- **문제**: `GET /materials/:id/export-bundle` → annotation 타입 `AnnotationSnapshotRecord` 가 `stickyNotes`+`inkStrokes` 2개만 모델링. 실제 R2 payload 는 textbox/체크리스트/표/그래프/별표/지우개 등 전 타입. → export 시 대부분 누락 (이번 #123 으로 빈값→채워졌지만 타입 협소는 잔존).
+- **⚠️ 선행 결정**: export-bundle 이 **실제 쓰이는 경로인지** 먼저 확인. 메모리 [[project-pdf-download-backlog]] = 필기포함 다운로드는 **client-side(pdf-lib)** 계획 → server export-bundle 이 legacy/미사용이면 협소함 고칠 가치 없음(deprecate 고려). FE 가 `/export-bundle` 호출하는지 grep 부터.
+- **fix(쓰이면)**: `ExportBundle.annotation` 을 R2 full payload(opaque 전 타입)로 확장 + 소비처 갱신. **domain 타입 변경 = 신중**(고위험 판단은 main, I/O/구현은 worker).
 
-| Finding | 상태 | 비고 |
-|---|---|---|
-| F-5/F-6/F-13 domain purity | ✅ | Date.now optional `at` 주입(8 factory) + console.warn 제거. domain side-effect 0. |
-| F-2 SubjectRepository / TermRepository | ✅ | be-v0.1.26/27 |
-| F-9 cross-aggregate child count → repo | ✅ | be-v0.1.28 |
-| F-8 Subjects→Term read → TermRepository | ✅ | be-v0.1.29 |
-| F-1 MaterialsService Repository (PdfMaterial + AnnotationSnapshot) | ✅ | be-v0.1.30 |
-| F-7 PdfAnnotations AnnotationSnapshotRepository | ✅ | be-v0.1.31 |
-| F-3 MaterialsService God Service split (MaterialUploadService 추출) | ✅ | PR #111, be-v0.1.32 |
+## 직전 세션(2026-05-30) 완료 — BE arch + 경량 CQRS + 버그픽스 (전부 PR 대기, codex 5/31)
 
-**결과**: API service = **Prisma 직접 의존 0** (MaterialUploadService 의 subject 존재검증 1곳만 cross-aggregate prisma 잔존 — 의도). MaterialsService = 조회/메타데이터/필기 slim, MaterialUploadService = 업로드 상태머신. material-shared.ts = 공유 헬퍼.
+### PR 3개 (codex usage-limit **2026-05-31 06:13** 해제 후 `@codex` cross-review → **3개 동반 머지**, 스택 의존)
+- **#121** `feature/be-arch-hygiene-cqrs` — sprint-2: 헥사고날 라벨 정정 + repo 중복 제거(aggregate당 1 class+accessibleWhere 단일) + PdfAnnotations Command/Query 분리 + MaterialsModule 추출 + dead code 제거. 동작 무변경. 247 unit green + DI boot.
+- **#122** `fix/seed-subjects-term` — smoke 인프라: seed Term + annotation endpoint 마이그레이션 + local-mock disk 영속 + admin(REVIEWER) 단언. (4 commit)
+- **#123** `fix/export-bundle-r2` (base=#121 스택) — export-bundle 빈값 fix(getAnnotation R2 읽기) + @Global StorageModule 단일 인스턴스 + DI싱글톤 docs. (3 commit)
+- **검증**: 통합(#121+#122+#123) full smoke **green (14 체크 exit 0)** + 247 unit + DI boot preview. self-CPO PASS. **codex cross 만 남음.**
+- sprint = `2026-W22-sprint-2` (open, codex 후 retro/close).
 
-### 3. ✅ E2E 검증 완료 (2026-05-28, 운영자 수동)
+### 정책/교훈 (적용 의무)
+- **구현 default = Sonnet worker** ([[feedback-opus-no-direct-code]] 2026-05-30 재전환). Opus(main)=plan/design/review + **고위험 인과판단만**. 명시 예외만 Opus 직접.
+- **I/O 무거운 검증/조사(smoke/test/build 로그·파일덤프·grep)도 worker 위임 + 압축 반환** (Solon bug #6 교훈 — main 컨텍스트 lean 유지). 직전 세션 Opus 1M 컨텍스트 폭증 주범 = 대용량 로그 직접 주입.
+- **긴 세션 끊기**: WU 여러 개면 handoff 후 fresh session (Solon bug #5 = enforcement 부재라 self-trigger 필수).
+- commit = branch 작업, push 는 명시 승인. 머지 전 codex.
 
-- **upload E2E**: 실 PDF 업로드 → 자료실 노출 ✅ (F-3 분할 후 동작 동일 — be-v0.1.32 배포 success + prod health 200 / materials 401).
-- **annotation/CAS E2E**: 필기 저장 ✅, cross-device sync (iPad↔PC) ✅, PC 삭제→iPad 반영 ✅.
-- **iPad 펜 "두 번째 획 누락"**: ✅ **진단 완료 (2026-05-29 새벽, Mac↔iPad Safari 원격 인스펙트)** — root cause = **WebKit/Apple Pencil OS 레벨 입력 suppression**. 빠르게 이어 그린 다음 획(예 "4"=ㄴ+ㅣ 연결)은 `pointerdown`·`touchstart(stylus)` **둘 다 미발생** = 앱이 훅 걸 이벤트 0 → **웹 코드로 수정 불가.** 천천히/획 사이 텀 두면 정상(user 확인).
-  - 측정 배제: renderApp 동기 7~8ms(<16ms, main-thread block ❌) · touch 핸들러 passive(억제 ❌) · 그려진 획 전부 `begin active=Y`/`committed=true`(begin·commit·discard 경로 ❌). 실패 획은 begin 도달조차 안 함(이벤트 0). 상세 = [[project-ipad-pen-second-stroke]].
-  - **대응**: 웹앱 한계 수용 + 워크어라운드(연속획 사이 짧은 텀). native(PencilKit)는 다른 입력경로라 안 겪음. inkdebug 임시계측(fe-v0.1.60/61/62) 전부 revert → **clean fe-v0.1.63 prod live**.
-  - 별개 follow-up(보존): bl-annotation-payload-growth(snapshot 무한증가 → decimation/압축), FE 413 silent return → 사용자 경고, API 4xx/5xx 를 trackRumError 로 RUM Error emit.
+### Solon 제품 bug 4건 제출 (MJ-0701/solon-product)
+#3 project-policy↔SFS conflict-surface guard 부재 / #4 model-profiles.yaml tier 모순 / #5 Session Continuation Guard enforcement 부재 / #6 verification-offload guidance 부재.
 
-## DDD 자율 PR run (2026-05-28 저녁, PR-only · 미배포)
+### infra (주말 비활성 — user 수동)
+- grafana/prometheus min0 max0 + api min0 + keep-alive workflow disable. 월요일 재기동(요청 시 명령 제공) + doc-drift(keep-alive.yml/README "min=0" vs 실제) sync.
 
-> `sfs loop` PROGRESS.md 미부트스트랩 → self-drive 로 PR 생산. 전부 **미머지·미배포** (user 검토 후 merge/배포). prod = be-v0.1.32 / fe-v0.1.57 유지.
+## 메모리 SoT
+`project_sprint_w22_2_be_arch_cqrs` · `project_bug_export_bundle_r2_payload` · `feedback_opus_no_direct_code` · `feedback_worker_tiering`.
 
-- **PR #112/#113/#115 = merge + 배포 완료** (self+cross+@codex 3계층 green). `be-v0.1.33` prod live (health 200 / materials·subjects 401 검증). #112 spec + #113 F-11(canDeleteSubject) + #115 F-10(MaterialPublicResponse DTO).
-- **PR #114** F-12 WeekNote import Concept↔Keyword invariant — **merge 완료** (main e9bcab3). self+cross+@codex 전부 green. Codex 가 trim(P2) + **XSS(P2)** 2건 발견 → 둘 다 fix (XSS = renderIntakeFeedback detail/title escapeHtml, 잠재 file.name XSS 도 동시 차단). strictness=Reject(user 승인). domain spec 6 + web build green.
-  - ✅ **fe-v0.1.59 로 배포 완료** (Vercel 한도 리셋 후 성공). F-12 + import XSS escape + 펜 텍스트선택 fix 전부 prod live. (fe-v0.1.58 은 한도로 실패했던 tag, fe-v0.1.59 가 대체.)
-  - ⚠ Vercel 일일한도(100/day) 재발 방지: vercel.json `git.deploymentEnabled=false`(b202f63) 로 push-당 배포 차단 — **대시보드 Git auto-deploy OFF 도 확인 권장**.
-
-## DDD backlog — 종료
-
-- **F-4** Anemic StudyNotebook (interface → class) — **user 결정으로 skip/closed**. StudyNotebook 이 apps/web 전반 + localStorage `JSON.parse` 직렬화 → class 전환 시 plain object method 호출 footgun + 전 호출부 rehydration = 큰 변경·낮은 가치. 재진입 X.
-- **R-DTO-storageKey** — ✅ **완료 + 배포** (PR #117 squash merge, main 6ed4c94, be-v0.1.35 deploy). storageKey(R2 object key) client 노출 4 surface 차단: MaterialPublicResponse DTO + controller getExportBundle 응답 + UploadIntent/DownloadIntent port + FE api/materials.ts 타입. "도메인 타입 분리 선행" 가정은 오판이었음 — domain `PdfMaterialRecord` 는 그대로 두고 FE workspace-store/class-date 가 소비하던 타입만 storageKey 없는 `BackendPdfMaterialInput` 로 retype (domain logic 은 storageKey 미사용). self+local Codex CPO PASS, web/api/storage tsc green, api material spec 48 pass.
-
-> **DDD 13 finding 전부 처리됨**: 9 배포완료 + PR #112~117 + F-4 skip. R-DTO-storageKey = 완료/배포. **backlog clear.**
-
-## 운영 대시보드 (Grafana/Prometheus) — 금요일까지 운영
-
-- 금요일 이후 비활성화 예정. runbook: `docs/runbooks/observability-toggle.md` (min-replicas toggle + README 배지).
-- 비활성 후 fallback = README 드롭다운 스냅샷 6장 (`docs/portfolio/dashboards/`).
-- 지원/이력서 제출 시점 재활성화 (toggle만으로 복원, secret/volume 보존).
-
-## 다음 세션 first action 후보
-
-1. (✅ 완료) **iPad 펜 연속-획 버그 = 진단완료** — WebKit/Pencil OS 한계, 웹 fix 불가(위 §3). inkdebug 제거 fe-v0.1.63 prod. 재진입 X. 잔여 follow-up 3건 = ✅ **전부 처리** (fe-v0.1.64+65, 아래 §4-(2)) ([[project-ipad-pen-second-stroke]]).
-2. (✅ 완료) **CLAUDE.md infra Vercel 정정** — SWA→Vercel + `docs/infra.md` 분리 + @import. 지침서 = agent 지침 전용 원칙([[feedback-instruction-file-purity]]). 로컬 커밋 bdd24dc/bbdbebd (fe-v0.1.63 tag 와 함께 push 됨).
-3. (✅ 확인) Vercel git auto-deploy = `vercel.json git.deploymentEnabled=false`(b202f63) 이미 적용. push 트리거 안 함. 대시보드 토글은 redundant(원하면 확인).
-4. **다음 세션 작업 순서 (user 합의 2026-05-29) = DTO → follow-up → migration**:
-   - **(1) R-DTO-storageKey** — ✅ **완료/배포** (PR #117, be-v0.1.35). 상세 = §DDD backlog.
-   - **(2) follow-up (관측성 3건)** — ✅ **전부 완료/배포**. ① API 4xx/5xx → `trackRumError` RUM Error emit (materials.ts + onSyncMetricEvent failure-only) **fe-v0.1.64**. ② annotation payload 무한증가 → **RDP 점 솎기 (FE-only)** — `pdf-workspace/ink-decimate.ts` (simplifyPoints/decimateInkStrokes, epsilon 0.0015 육안 무손실). buildAnnotationPayload 에서 BE PUT 사본 inkStrokes 만 단순화, live workspace·localStorage 는 full-fidelity. spec 11 case + 전 pdf-workspace spec 17 PASS, web tsc green. **fe-v0.1.65 prod (커밋 0068632, FE 200)**. ③ FE 413 silent → `PAYLOAD_TOO_LARGE_MESSAGE` 경고 banner(shared syncBackendError 재사용, escapeHtml, 닫기 가능) + 로컬 보존(local strokes 미삭제) **fe-v0.1.64**.
-   - **(3) React migration 재평가** ([[project-react-migration-backlog]]) ← **현재 next** — 분해 A~D 후 재검토 조건. main.ts 현재 ~6.9k line.
-
-## SFS 0.6.138 정책 ambient (요약 — 자세히 CLAUDE.md)
-
-- Executable Action Ownership / Runtime Token Firewall / Context Pollution Guard / Review autopilot rework loop / Session Continuation Guard.
-- commit = `sfs commit plan` → `sfs commit apply --group <name>`. push 권한은 세션별 명시.
-- 코드 수정 = Claude main 직접, Codex = cross-review (GitHub @codex bot, post-implementation).
+## React 마이그레이션 (backlog A/B 후 또 다른 새 세션)
+roadmap = `docs/solon/web/react-migration/20260529/`. 접근 A(React-shell strangler)+PDF-first+Zustand. S0 plan = `.sfs-local/sprints/2026-W22-sprint-3/plan.md`. **backlog A/B 끝난 뒤** 진입.
