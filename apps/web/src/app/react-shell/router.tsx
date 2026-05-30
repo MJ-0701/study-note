@@ -7,11 +7,25 @@
 //
 // S1a/WU2b: <PdfToolbarPortal> 을 pdf-workspace route 일 때만 subjectId 와
 // 함께 렌더. 다른 route 면 subjectId=null → portal null 반환.
+//
+// S3: <HomeIslandPortal> / <IntakeIslandPortal> sibling 추가. slot null 이면
+// portal null 반환 — 실 slot 발행은 postMountEffect(main.ts).
+// __S3_LOOP_NEG_CTRL__ (vite define, 평시 false): RED 빌드에서 negative control
+// 컴포넌트로 교체 → loop detector 가 RED 를 확인(gate 유효성 증명).
 import { useEffect, useState } from "react";
 import { parseRoute } from "../routes.ts";
 import { LegacyView } from "./LegacyView.tsx";
 import { PdfToolbarPortal } from "./PdfToolbarPortal.tsx";
+import { HomeIslandPortal } from "./HomeIslandPortal.tsx";
+import { IntakeIslandPortal } from "./IntakeIslandPortal.tsx";
+import {
+  NegativeControlHomeIslandPortal,
+  NegativeControlIntakeIslandPortal,
+} from "../../subject-views/__loopgate__/negativeControl.tsx";
 import type { LegacyShellRegistry } from "./registry.ts";
+
+// vite define 주입(평시 false → dead-branch tree-shake). S3 loop-gate RED 빌드만 true.
+declare const __S3_LOOP_NEG_CTRL__: boolean;
 
 function readHash(): string {
   return typeof window !== "undefined" ? window.location.hash : "";
@@ -34,10 +48,15 @@ export function ReactShellRouter({
   // pdf-workspace route 일 때만 subjectId 추출해 toolbar portal 활성화.
   const pdfSubjectId = route.name === "pdf-workspace" ? route.subjectId : null;
 
+  const HomePortal = __S3_LOOP_NEG_CTRL__ ? NegativeControlHomeIslandPortal : HomeIslandPortal;
+  const IntakePortal = __S3_LOOP_NEG_CTRL__ ? NegativeControlIntakeIslandPortal : IntakeIslandPortal;
+
   return (
     <>
       <LegacyView route={route} registry={registry} />
       <PdfToolbarPortal subjectId={pdfSubjectId} registry={registry} />
+      <HomePortal />
+      <IntakePortal />
     </>
   );
 }

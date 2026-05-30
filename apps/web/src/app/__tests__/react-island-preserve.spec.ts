@@ -64,6 +64,25 @@ describe("shouldPreserveReactIsland — 순수 함수 단위", () => {
     assert.equal(shouldPreserveReactIsland(from, to), true);
   });
 
+  // S3: home/intake island 키 보존 케이스
+  it("S3: 'home' island — from/to 동일 key → true", () => {
+    const from = makeIslandEl("home");
+    const to = makeIslandEl("home");
+    assert.equal(shouldPreserveReactIsland(from, to), true);
+  });
+
+  it("S3: 'intake' island — from/to 동일 key → true", () => {
+    const from = makeIslandEl("intake");
+    const to = makeIslandEl("intake");
+    assert.equal(shouldPreserveReactIsland(from, to), true);
+  });
+
+  it("S3: 'home' vs 'intake' — 다른 key → false", () => {
+    const from = makeIslandEl("home");
+    const to = makeIslandEl("intake");
+    assert.equal(shouldPreserveReactIsland(from, to), false);
+  });
+
   it("값이 다름('pdf-toolbar' vs 'other') → false", () => {
     const from = makeIslandEl("pdf-toolbar");
     const to = makeIslandEl("other");
@@ -169,6 +188,104 @@ describe("renderInto morphdom round-trip — React island 자식 생존", () => 
       plainAfter!.childNodes.length,
       0,
       "island 규칙 없이는 morphdom 이 children 을 wipe 해야 한다 (preserve 규칙의 island 한정 증명)"
+    );
+  });
+
+  // S3: home/intake island morphdom round-trip 생존
+  it("S3: home island(id=home-island) — 2차 renderInto 후 React 자식 생존", () => {
+    const appRoot = makeAppRoot();
+    const sink = { appRoot, postMountEffects: [] };
+
+    renderInto(
+      '<div id="home-island" data-react-island="home" style="display:contents"></div>',
+      sink
+    );
+
+    const island = appRoot.querySelector("#home-island") as HTMLElement | null;
+    assert.ok(island !== null, "1차 렌더 후 home island 존재");
+
+    const marker = linkedomDoc.createElement("span");
+    marker.setAttribute("data-marker", "home-react-owned");
+    island!.appendChild(marker);
+
+    renderInto(
+      '<div id="home-island" data-react-island="home" style="display:contents"></div>',
+      sink
+    );
+
+    const islandAfter = appRoot.querySelector("#home-island") as HTMLElement | null;
+    assert.ok(islandAfter !== null, "2차 렌더 후 home island 존재");
+    assert.equal(islandAfter!.childNodes.length, 1, "React 자식 생존");
+    assert.ok(
+      islandAfter!.querySelector("[data-marker='home-react-owned']") !== null,
+      "marker span 보존"
+    );
+  });
+
+  it("S3: intake island(id=intake-island) — 2차 renderInto 후 React 자식 생존", () => {
+    const appRoot = makeAppRoot();
+    const sink = { appRoot, postMountEffects: [] };
+
+    renderInto(
+      '<div id="intake-island" data-react-island="intake" style="display:contents"></div>',
+      sink
+    );
+
+    const island = appRoot.querySelector("#intake-island") as HTMLElement | null;
+    assert.ok(island !== null, "1차 렌더 후 intake island 존재");
+
+    const marker = linkedomDoc.createElement("span");
+    marker.setAttribute("data-marker", "intake-react-owned");
+    island!.appendChild(marker);
+
+    renderInto(
+      '<div id="intake-island" data-react-island="intake" style="display:contents"></div>',
+      sink
+    );
+
+    const islandAfter = appRoot.querySelector("#intake-island") as HTMLElement | null;
+    assert.ok(islandAfter !== null, "2차 렌더 후 intake island 존재");
+    assert.equal(islandAfter!.childNodes.length, 1, "React 자식 생존");
+    assert.ok(
+      islandAfter!.querySelector("[data-marker='intake-react-owned']") !== null,
+      "marker span 보존"
+    );
+  });
+
+  it("S3: LegacyView children 불변 — home/intake island 이외 자식은 영향 없음", () => {
+    const appRoot = makeAppRoot();
+    const sink = { appRoot, postMountEffects: [] };
+
+    // LegacyView 영역에 일반 content div + home island 공존
+    renderInto(
+      '<div id="sidebar-content">사이드바</div>' +
+      '<div id="home-island" data-react-island="home" style="display:contents"></div>',
+      sink
+    );
+
+    const sidebar = appRoot.querySelector("#sidebar-content") as HTMLElement | null;
+    assert.ok(sidebar !== null, "사이드바 존재");
+    // island 에 React children 삽입
+    const homeIsland = appRoot.querySelector("#home-island") as HTMLElement | null;
+    const marker = linkedomDoc.createElement("span");
+    marker.setAttribute("data-marker", "react-child");
+    homeIsland!.appendChild(marker);
+
+    // 재렌더: 사이드바 내용 변경, island placeholder 동일
+    renderInto(
+      '<div id="sidebar-content">사이드바 업데이트</div>' +
+      '<div id="home-island" data-react-island="home" style="display:contents"></div>',
+      sink
+    );
+
+    // 사이드바는 morphdom 이 업데이트
+    const sidebarAfter = appRoot.querySelector("#sidebar-content");
+    assert.ok(sidebarAfter?.textContent?.includes("업데이트"), "사이드바 morphdom 업데이트");
+    // island React children 은 보존
+    const islandAfter = appRoot.querySelector("#home-island");
+    assert.ok(
+      islandAfter?.querySelector("[data-marker='react-child']") !== null,
+      "island React children 보존"
     );
   });
 });
