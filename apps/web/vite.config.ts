@@ -10,7 +10,10 @@ export default defineConfig({
   define: {
     // WU3 loop-gate negative control 전용 빌드타임 플래그. 평시(미설정)=false →
     // negativeControl 모듈 dead-branch tree-shake (prod 번들 영향 0). gate 만 =1 로 RED 빌드.
-    __AUTH_LOOP_NEG_CTRL__: process.env.AUTH_LOOP_NEG_CTRL === "1" ? "true" : "false"
+    __AUTH_LOOP_NEG_CTRL__: process.env.AUTH_LOOP_NEG_CTRL === "1" ? "true" : "false",
+    // S3 loop-gate negative control 전용 빌드타임 플래그. 평시(미설정)=false →
+    // home/intake negativeControl 모듈 dead-branch tree-shake (prod 번들 영향 0).
+    __S3_LOOP_NEG_CTRL__: process.env.S3_LOOP_NEG_CTRL === "1" ? "true" : "false"
   },
   server: {
     host: "127.0.0.1",

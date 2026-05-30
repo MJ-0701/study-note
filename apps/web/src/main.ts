@@ -74,6 +74,9 @@ import { type AuthGateCallbacks } from "./auth/AuthGate.tsx";
 import { renderAuthGate } from "./auth/authGateMount.tsx";
 import {
   getKeywordById,
+  getNotebookCoverage,
+  getIntegrityWarnings,
+  getSubjectCoverage,
   type SubjectNote,
   type WeekNote
 } from "@study-note/domain";
@@ -293,8 +296,10 @@ import {
 import {
   renderHome,
   renderIntakeGuide,
-  renderSubjectIntakeGuide
+  renderSubjectIntakeGuide,
+  getSubjectSamplePayload
 } from "./subject-views/home-intake";
+import { localIntakeGuide } from "./data/intakeGuide";
 import {
   renderSubjectClassPage,
   type SubjectClassContext
@@ -359,7 +364,18 @@ import {
   setLoginFeedback
 } from "./stores/authStore.ts";
 import { getPdfWorkspaceStore, setPdfWorkspaceStore } from "./stores/pdfWorkspaceStore.ts";
-import { getInspectorOpen, setInspectorOpen, getPdfToolbarSlot, setPdfToolbarSlot } from "./stores/uiStore.ts";
+import {
+  getInspectorOpen,
+  setInspectorOpen,
+  getPdfToolbarSlot,
+  setPdfToolbarSlot,
+  getHomeSlot,
+  setHomeSlot,
+  setHomeProps,
+  getIntakeSlot,
+  setIntakeSlot,
+  setIntakeProps,
+} from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
 // 순환 없음).
@@ -558,6 +574,20 @@ const mainRenderSink: RenderSink | null = appRoot
           const el = root.querySelector<HTMLElement>('[data-react-island="pdf-toolbar"]');
           if (getPdfToolbarSlot() !== el) {
             setPdfToolbarSlot(el);
+          }
+        },
+        // S3: morphdom 재렌더 후 home/intake island slot 을 찾아 signal.
+        // route 이탈 시 querySelector null → slot null signal → portal unmount.
+        (root) => {
+          const homeEl = root.querySelector<HTMLElement>('[data-react-island="home"]');
+          if (getHomeSlot() !== homeEl) {
+            setHomeSlot(homeEl);
+          }
+        },
+        (root) => {
+          const intakeEl = root.querySelector<HTMLElement>('[data-react-island="intake"]');
+          if (getIntakeSlot() !== intakeEl) {
+            setIntakeSlot(intakeEl);
           }
         }
       ]
@@ -4462,6 +4492,8 @@ function renderApp(): void {
     route.name !== "pdf-workspaces" &&
     !subject
   ) {
+    setHomeProps(null);
+    setIntakeProps(null);
     mountRender(composeShell(
       renderHomeSidebar(sidebarContext, getNotebook(), { name: "home" }),
       renderNotFound(),
@@ -4471,6 +4503,8 @@ function renderApp(): void {
   }
 
   if ((route.name === "week" || route.name === "subject-summary-detail") && subject && !week) {
+    setHomeProps(null);
+    setIntakeProps(null);
     mountRender(composeShell(
       renderSubjectSidebar(sidebarContext, subject, route),
       renderNotFound(),
@@ -4480,24 +4514,65 @@ function renderApp(): void {
   }
 
   if (route.name === "home") {
+    // S3: home React island props 계산 + 발행. postMountEffect 가 slot signal.
+    // render→setState→render 루프 불성립: setHomeProps 는 renderApp 재트리거 안 함.
+    const homeNotebook = getNotebook();
+    const homeCoverage = getNotebookCoverage(homeNotebook);
+    const homeSubjectCoverageRates: Record<string, number> = {};
+    for (const s of homeNotebook.subjects) {
+      homeSubjectCoverageRates[s.id] = getSubjectCoverage(s).coverageRate;
+    }
+    const homeProps = {
+      notebook: homeNotebook,
+      coverageRate: homeCoverage.coverageRate,
+      covered: homeCoverage.covered,
+      total: homeCoverage.total,
+      totalSessions: homeNotebook.subjects.reduce(
+        (sum, s) => sum + s.weekNotes.length,
+        0
+      ),
+      needsFillSessions: homeNotebook.subjects.flatMap((s) =>
+        s.weekNotes
+          .filter((w) => w.reviewStatus === "needs-fill")
+          .map((w) => ({ subject: s, week: w }))
+      ),
+      warnings: getIntegrityWarnings(homeNotebook),
+      subjectCoverageRates: homeSubjectCoverageRates,
+    };
+    setHomeProps(homeProps);
+    setIntakeProps(null);
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, getNotebook(), route),
-      renderHome(getNotebook()),
-      `${getNotebook().title} / 홈`
+      renderHomeSidebar(sidebarContext, homeNotebook, route),
+      renderHome(homeNotebook),
+      `${homeNotebook.title} / 홈`
     ));
     return;
   }
 
   if (route.name === "intake") {
+    // S3: intake(general) React island props 계산 + 발행.
+    const intakeNotebook = getNotebook();
+    const subjectCoverageRates: Record<string, number> = {};
+    for (const s of intakeNotebook.subjects) {
+      subjectCoverageRates[s.id] = getSubjectCoverage(s).coverageRate;
+    }
+    setIntakeProps({
+      variant: "general",
+      subjects: intakeNotebook.subjects,
+      subjectCoverageRates,
+    });
+    setHomeProps(null);
     mountRender(composeShell(
-      renderHomeSidebar(sidebarContext, getNotebook(), route),
-      renderIntakeGuide(getNotebook()),
-      `${getNotebook().title} / 자료 투입`
+      renderHomeSidebar(sidebarContext, intakeNotebook, route),
+      renderIntakeGuide(intakeNotebook),
+      `${intakeNotebook.title} / 자료 투입`
     ));
     return;
   }
 
   if (route.name === "pdf-workspaces") {
+    setHomeProps(null);
+    setIntakeProps(null);
     mountRender(composeShell(
       renderHomeSidebar(sidebarContext, getNotebook(), route),
       renderPdfWorkspaceIndex(pdfLibraryContext, getNotebook(), getSubjectPdfMaterials),
@@ -4507,6 +4582,16 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-intake" && subject) {
+    // S3: subject-intake React island props 계산 + 발행.
+    setIntakeProps({
+      variant: "subject",
+      subject,
+      intakeFeedback: getIntakeFeedback(),
+      pendingPdfRetry: Boolean(getPendingPdfRetry()),
+      samplePayloadJson: JSON.stringify(getSubjectSamplePayload(subject), null, 2),
+      exampleFile: localIntakeGuide.exampleFile,
+    });
+    setHomeProps(null);
     mountRender(composeShell(
       renderSubjectSidebar(sidebarContext, subject, route),
       renderSubjectIntakeGuide(subject, renderIntakeFeedback),
