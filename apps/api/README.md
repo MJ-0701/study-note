@@ -36,7 +36,6 @@ NestJS backend boundary for the PDF workspace prototype.
 - Storage uses `StoragePort`. `STORAGE_PROVIDER=local` is the default local/mock path; `STORAGE_PROVIDER=s3` enables private S3-backed PDF object storage.
 - Upload status is stored on `PdfMaterial`: new upload intents start as `pending`, and successful backend proxy upload changes the material to `uploaded`.
 - Browser clients do not upload directly to S3 in this MVP. They upload PDF bytes to `PUT /api/materials/:materialId/file`; the backend writes the object to S3 after session and ownership checks.
-- Export bundle is original PDF reference + annotation JSON. Flattened annotated PDF generation is deferred.
 
 ## Local MySQL / Prisma
 
