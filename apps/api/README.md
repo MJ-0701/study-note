@@ -14,9 +14,11 @@ NestJS backend boundary for the PDF workspace prototype.
 - `GET /api/materials`
 - `GET /api/materials/:materialId`
 - `GET /api/materials/:materialId/download`
-- `PUT /api/materials/:materialId/annotation`
-- `GET /api/materials/:materialId/annotation`
 
+> 위 목록은 **핵심 라우트(auth + materials) 발췌**입니다. v1 전체 표면(terms · subjects · admin · pdf-annotations · user-notes · telemetry)은 `llm-wiki/modules/apps-api.md` 의 엔드포인트 표를 단일 출처로 참조하세요.
+>
+> **410 Gone (deprecated)**: `PUT|GET /api/materials/:materialId/annotation` — sprint-W21-sprint-2/S2 에서 폐기. 현행 annotation 채널은 `PUT|GET /api/v1/pdf-annotations/:materialId`.
+>
 > **Removed** (slice-2): `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me` — replaced by the `v1/auth/*` routes above.
 
 ## v1 Boundaries

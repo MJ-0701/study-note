@@ -298,7 +298,7 @@ NestJS 백엔드의 메트릭 emit 경로는 다음과 같습니다.
 | 카테고리 | 출처 | 갱신 주기 | Grafana 대시보드 |
 |---|---|---|---|
 | HTTP / sync | `HttpMetricsMiddleware`, `MetricsService.observeSyncPut` | 요청마다 | APM Live Ops |
-| Product 13 gauge | `ProductMetricsCronService` | 부팅 시 1회 + 30분마다 | Product |
+| Product 14 gauge | `ProductMetricsCronService` | 부팅 시 1회 + 30분마다 | Product |
 | Cost 4 gauge | `CostMetricsCronService` | 부팅 시 1회 + 6시간마다 | Cost |
 | SLO 3 (availability · p95 · sync success) | HTTP/sync 메트릭을 SLO 쿼리로 재계산 | 실시간 | SLO |
 | Log-derived 10 (auth/identity 5 + widget 5) | Datadog 로그 파이프라인 | 실시간 | Datadog UI |
