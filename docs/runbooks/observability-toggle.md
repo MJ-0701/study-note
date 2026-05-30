@@ -11,18 +11,34 @@ Grafana / Prometheus 는 비용 관리를 위해 한시 운영합니다. 지원�
 `study-note-api` 는 끄지 않습니다 (서비스 본체). API 의 `/api/metrics` 는 계속 노출되며,
 끄는 것은 수집(Prometheus)과 시각화(Grafana) lane 뿐입니다.
 
-## 비활성화 (예: 금요일 종료 시)
+## 비용 절감 상태 = scale-to-zero (기본 운영 상태)
+
+> ⚠️ ACA 제약 (2026-05-30 실측):
+> - `--max-replicas 0` 은 거부됨 → `ERROR: --max-replicas must be in the range [1,1000]`.
+> - `az containerapp stop` 도 이 환경 containerapp extension 에서 미지원(`'stop' is misspelled or not recognized`).
+>
+> 따라서 "끄기" = **scale-to-zero (`--min-replicas 0 --max-replicas 1`)**. idle 시 replica 가
+> 0 으로 내려가 **컴퓨트 비용 0**, 링크 접속 시 자동 기동되어 수 초 cold start 후 라이브로 응답.
 
 ```bash
 RG=study-note-be-rg
-az containerapp update -n study-note-grafana    -g $RG --min-replicas 0 --max-replicas 0
-az containerapp update -n study-note-prometheus -g $RG --min-replicas 0 --max-replicas 0
+az containerapp update -n study-note-grafana    -g $RG --min-replicas 0 --max-replicas 1
+az containerapp update -n study-note-prometheus -g $RG --min-replicas 0 --max-replicas 1
 ```
 
 후속:
-1. 루트 `README.md` 상단 "라이브 대시보드 운영 상태" 배지를 🔴 **비활성** 으로 변경.
-2. `docs/portfolio/dashboards/` 의 스냅샷이 최신인지 확인 (없으면 끄기 전에 캡처).
+1. 루트 `README.md` 상단 "라이브 대시보드 운영 상태" 배지를 🟢 **on-demand (scale-to-zero)** 로 유지.
+2. `docs/portfolio/dashboards/` 의 스냅샷이 최신인지 확인 (즉시 확인용 대체 자료).
 3. (선택) Datadog lane 은 그대로 두면 APM/Logs 는 계속 수집됨 — 완전 중단하려면 별도.
+
+### 완전 무응답(hard-off)이 필요할 때 (선택)
+scale-to-zero 는 링크 접속 시 cold start 로 응답한다. URL 자체를 무응답으로 막으려면:
+```bash
+RG=study-note-be-rg
+az containerapp ingress disable -n study-note-grafana    -g $RG   # 재활성화는 ingress enable + target-port 재지정 필요
+az containerapp ingress disable -n study-note-prometheus -g $RG
+```
+평상시엔 불필요(scale-to-zero 로 비용은 이미 0).
 
 ## 재활성화 (지원·이력서 제출 시점)
 
