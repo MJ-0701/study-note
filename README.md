@@ -266,6 +266,8 @@ constructor(@Inject(StoragePort) private readonly storage: StoragePort, /* ... *
 
 핵심 로직은 Node.js 내장 test 러너로 단위 검증하고(외부 프레임워크 의존 없음), 인수 기준(AC) 단위로 명세화된 스펙(예: CAS 선점/stale/롤백 경로, 권한 분기)을 검증합니다. 그 위에 `scripts/smoke-*.mjs`로 빌드된 백엔드를 띄워 인증·관리자 권한·S3 저장·MCP 등을 계약(contract) 수준에서 점검하며, 실제 R2 버킷을 쓰는 스모크는 credential이 있을 때만 opt-in으로 돕니다.
 
+백엔드 계약 스모크(`smoke:backend`)는 로컬 수동 실행에 더해 GitHub Actions 게이트(`.github/workflows/smoke.yml`)로 PR·main push 마다 자동 실행됩니다. 러너가 docker compose 로 MySQL을 자체 기동하고 마이그레이션·시드까지 수행한 뒤 계약 검증을 돌려, 계약 회귀를 머지 전에 차단합니다.
+
 ### 7. DI 싱글톤 — provider scope로 공유 인스턴스 보장
 
 NestJS provider는 기본 Scope.DEFAULT(singleton scope)로 등록되어 IoC 컨테이너가 앱 전체에서 인스턴스를 1개만 유지합니다. Spring의 `@Service`/`@Component` bean이 기본 singleton scope로 관리되는 것과 동일한 원리입니다.
