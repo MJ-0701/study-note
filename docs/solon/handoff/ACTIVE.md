@@ -1,9 +1,41 @@
-# 🎯 ACTIVE — S4a(subject views) + codex-fix prod 배포 완료 / 다음 = 남은 React 슬라이스(S4b·S1b·S1c·S5)
+# 🎯 ACTIVE — S4b-1(week view) Gate 6 PASS(self+cross) / 다음 = 배포 승인 대기(push→PR→@codex→fe-v tag)
 
 > SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 > entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note`.
 
-## 상태 (2026-05-31)
+## 🔥 S4b-1 brainstorm 완료 (sprint-26, 2026-05-31)
+
+- **sprint `2026-W22-sprint-26` = S4b-1 week view React island, Gate 2(brainstorm) 완료.**
+  brainstorm.md = `.sfs-local/sprints/2026-W22-sprint-26/brainstorm.md`.
+- 🔑 **handoff premise 정정**: "renderPdfMaterialCard/uploadCard 가 PDF-workspace pointer/
+  sync scope wired → island 불가" = **코드상 거짓**. pdf-library.ts:279 body = escapeHtml +
+  data-action + radio control 뿐(촉수 0). worker 가 dir-import 를 scope-coupling 오판. 실제
+  제약 = string 재사용=dangerouslySetInnerHTML=INV-8뿐 → JSX 재구현(S4a 선례)으로 해소.
+- **userNotes = blocker 아님**(handler main.ts:2203 renderApp 미호출 → `<textarea defaultValue>`
+  pure-props, sync parity gate 불요). 4 injection pt 전부 presentational.
+- **scope = 분할, week 먼저(S4b-1)**. subject-class(폼/assignment/class-date radio
+  re-render 위험) = S4b-2 격리. 신규 leaf×3(WeekView/PdfMaterialCard compact/QuickNotePanel).
+- **Gate 3 PASS(self+cross) + 구현 진입 승인 captured**(capture 20260531T095249Z-6517, 자율진행 모드).
+- **구현 완료 + Gate 6 self review 진행**(branch `react-migration/s4b1-week-island`, commit `c75e028` worker
+  + `75855b5` focus-fix). Sonnet worker 산출 → main/Opus 독립 검증.
+  - 신규: WeekView.tsx + WeekIslandPortal.tsx + negativeControlWeek.tsx + playwright-s4b-week-loop.mjs
+    + WeekView.spec + uiStore-s4b1 spec. 수정: uiStore/slots/router/vite/main.ts/sync.user-notes-sync.
+  - **독립 검증**: build exit0 · 신규 spec 30/30 · loop-gate exit0(GREEN+FOCUS-PRES+DIST+RED-A+RED-B) ·
+    6 suite fail = main baseline 동일(worktree) = pre-existing 회귀 0.
+  - 🔑 **focus 회귀 1건 fix**: worker 의 `key={userNotesValue}` → 타이핑 중 PUT 5xx → triggerRender →
+    remount → focus 손실(legacy "typing focus loss 방지" invariant 회귀). fix = token=`subjectId:weekId:
+    hydrationVersion`, `markServerHydrated` 콜백 GET T1 hydrate 에만 bump(PUT 경로 token 불변). FOCUS-PRES
+    loop-gate assertion 추가(teeth: node identity).
+  - 전 AC1~6 implemented, product gap 0. **Gate 6 self(R2)+cross 둘 다 PASS**(docs lens, codex executor;
+    capture 20260531T140709Z-76718). blocking finding 0. cross note = @codex GitHub PR review = push 후 final.
+  - `llm-wiki/.obsidian/graph.json` = untracked Obsidian UI state, S4b-1 commit 비포함(무관).
+- **다음 = 배포 승인 대기**. capture(Gate3) = "Gate6 후 배포 별도 승인" + ambient push=명시승인. 승인 시 release
+  쭉: push branch → PR → CI → @codex external review → squash 머지 → fe-v0.1.NN tag → FE Release(Vercel) →
+  prod 200 검증. branch=`react-migration/s4b1-week-island`(commit c75e028+75855b5+docs). 구현 자산=S4a 패턴.
+
+---
+
+## 상태 (S4a, 직전 — 2026-05-31)
 
 - **S4a(subject views) = 완전 종료 + prod 배포.** Gate 6 PASS → PR [#135](https://github.com/MJ-0701/study-note/pull/135)
   squash 머지 → main = **`f3426d2`** → **fe-v0.1.79 prod live**(HTTP 200, 번들 `main-BAqxE33U.js`).
@@ -22,27 +54,25 @@
 
 ## 🚀 다음 GOAL = 남은 React 마이그레이션 슬라이스
 
-잔여 = **S4b(subject-class + week)** · S1b(widget) · S1c(annotation sync) · S5(cleanup).
+잔여 = **S4b-1(week, 진행중)** · S4b-2(subject-class) · S1b(widget) · S1c(annotation sync) · S5(cleanup).
 
-- **S4b** = subject-class + week. **scoping 완료(2026-05-31, read-only)** — S4a-style 기계적
-  슬라이스 아님, 설계(brainstorm) 필요:
-  - **subject-class**(subject-class.ts) = PDF material 관리 surface. ctx-injected
-    `renderPdfMaterialCard`/`renderPdfLibraryUploadCard` + data-action `attach-pdf-to-week`/
-    `open-pdf-material`/`add-class-date` + `renderPdfMaterialAssignmentSection`. **excluded
-    PDF-workspace scope(pointer/upload/storage) 결합** → island 화 = PDF-workspace 마이그레이션
-    (S1b 영역) 선행 또는 명시 boundary. **clean presentational 슬라이스 아님.**
-  - **week**(week.ts:126 `renderWeekUserNotesSection`) = controlled `userNotes` textarea +
-    `data-action="update-week-user-notes"` PUT sync + `renderWeekMappedPdfSection`(PDF 결합).
-    = **controlled-input sync parity**, pure-props 아님. loop-gate 단독으로 sync round-trip
-    검증 불가 → sync parity 검증 방법 설계 필요.
-  - **다음 = fresh session brainstorm**: carveable presentational sub-slice(예: week static
-    sections − userNotes/PDF) 가능 여부 결정 or 전체 coupled → S1b/PDF-workspace 선행.
+- **S4b-1(week) = 진행중**(sprint-26, Gate 3 plan). 상단 §"S4b-1 brainstorm 완료" 참조.
+  week = presentational JSX 재구현 가능(clean island). userNotes = pure-props defaultValue.
+- **S4b-2(subject-class)** = 후속. 공유 leaf(PdfMaterialCard/QuickNotePanel) 재사용 + 폼 3개
+  (add-class-date/attach-pdf-to-week/import) + `renderPdfMaterialClassDateControl` radio/select
+  (attach 재렌더 중 controlled-input-under-re-render) + intakeFeedback.href 미escape(기존). week
+  와 동일하게 PDF 카드 = presentational JSX 재구현(PDF-workspace pointer 결합 아님 — 정정됨).
 - **S1b(widget)** — main.ts 공유 pointer dispatcher + pen-second-stroke 버그(REOPENED) 얽힘
   → 회귀 구분 불가. native-pointer + pen-fix 묶어 S1c 이후/S1d.
 - **S1c(annotation sync, INV-4)** — acceptance = iPad↔PC 물리 cross-device sync. 자동화 불가, 사용자 기기 필요.
-- **S5(cleanup)** — S1 전체 선행. 차단.
-- **⚠️ 자율 도달 한계** = S4a 까지 완료. S4b 는 sync/PDF 경계 brainstorm 필요, S1b/S1c/S5 =
+- **S5(cleanup)** — S1 전체 선행. 차단. (string renderer 통합/제거 = pdf-workspace 마이그레이션 후.)
+- **⚠️ 자율 도달 한계** = S4b-1/S4b-2 = presentational island(자율 가능). S1b/S1c/S5 =
   사용자/물리기기/pen-fix 게이트. 조용히 reorder 금지.
+
+> ❌ **SUPERSEDED (2026-05-31)**: 직전 handoff 의 "S4b = subject-class PDF-workspace pointer
+> 결합 / week = controlled-input sync parity gate 필요 / clean slice 아님" framing 은 **코드
+> 실독으로 정정됨**. renderPdfMaterialCard(pdf-library.ts:279) = presentational, userNotes
+> handler(main.ts:2203) = renderApp 미호출(pure-props). sprint-26 brainstorm.md/plan.md 가 SoT.
 
 ## follow-up backlog
 - **codex #4 (FullscreenButton pure-props)** — leaf-local useEffect+setState + fullscreenchange→renderApp.
