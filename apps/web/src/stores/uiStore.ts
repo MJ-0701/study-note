@@ -24,6 +24,11 @@
 // subject-mcp / subject-memorize 의 slot + props 쌍. 각 props setter 는
 // JSON-key value-equal guard 로 동일-값 재발행 시 setState skip → 재렌더 차단.
 //
+// S4b-1 week slot/props: week route 렌더 후 postMount effect 가 slot signal.
+// weekProps setter = JSON-key value-equal guard. userNotesToken 필드는
+// fetchUserNoteIfMissing 완료 후 props 변경 시 textarea defaultValue 재적용
+// 보장 (uncontrolled key 전략).
+//
 // 주의: drag/resize 등 다른 ephemeral 상태는 S1 (PDF 컴포넌트화)에서 흡수.
 import { createStore } from "zustand/vanilla";
 import type { HomeViewProps } from "../subject-views/HomeView.tsx";
@@ -33,6 +38,7 @@ import type { SubjectSummariesViewProps } from "../subject-views/SubjectSummarie
 import type { SubjectSummaryDetailViewProps } from "../subject-views/SubjectSummaryDetailView.tsx";
 import type { SubjectMcpViewProps } from "../subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "../subject-views/SubjectMemorizeView.tsx";
+import type { WeekViewProps } from "../subject-views/WeekView.tsx";
 
 interface UiStoreState {
   inspectorOpen: boolean;
@@ -52,6 +58,9 @@ interface UiStoreState {
   subjectMcpProps: SubjectMcpViewProps | null;
   subjectMemorizeSlot: HTMLElement | null;
   subjectMemorizeProps: SubjectMemorizeViewProps | null;
+  // S4b-1 week island
+  weekSlot: HTMLElement | null;
+  weekProps: WeekViewProps | null;
 }
 
 export const uiStore = createStore<UiStoreState>(() => ({
@@ -71,6 +80,8 @@ export const uiStore = createStore<UiStoreState>(() => ({
   subjectMcpProps: null,
   subjectMemorizeSlot: null,
   subjectMemorizeProps: null,
+  weekSlot: null,
+  weekProps: null,
 }));
 
 export const getInspectorOpen = (): boolean => uiStore.getState().inspectorOpen;
@@ -178,4 +189,19 @@ export const setSubjectMemorizeProps = (props: SubjectMemorizeViewProps | null):
   const current = uiStore.getState().subjectMemorizeProps;
   if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
   uiStore.setState({ subjectMemorizeProps: props });
+};
+
+// ─── S4b-1 week slot/props getters + setters ─────────────────────────────────
+// weekProps setter = JSON-key value-equal guard: 동일 직렬화 → setState skip → 재렌더 차단.
+
+export const getWeekSlot = (): HTMLElement | null => uiStore.getState().weekSlot;
+export const setWeekSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ weekSlot: el });
+};
+
+export const getWeekProps = (): WeekViewProps | null => uiStore.getState().weekProps;
+export const setWeekProps = (props: WeekViewProps | null): void => {
+  const current = uiStore.getState().weekProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ weekProps: props });
 };
