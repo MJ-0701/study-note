@@ -16,6 +16,10 @@
 // S3b: <SidebarIslandPortal> sibling 추가. 모든 route 에 사이드바 렌더.
 // __S3B_LOOP_NEG_CTRL_A__ / __S3B_LOOP_NEG_CTRL_B__ (vite define, 평시 false):
 // A = mount-time loop, B = click-time loop (§5-C 맹점 close).
+//
+// S4a: <SubjectSummariesIslandPortal> 을 neg-ctrl 빌드에서 교체.
+// __S4A_LOOP_NEG_CTRL_A__ / __S4A_LOOP_NEG_CTRL_B__ (vite define, 평시 false):
+// A = mount-time loop, B = generate-subject-note 클릭 loop (§5-C 맹점 close).
 import { useEffect, useState } from "react";
 import { parseRoute } from "../routes.ts";
 import { LegacyView } from "./LegacyView.tsx";
@@ -35,6 +39,10 @@ import {
   NegativeControlSidebarIslandPortalA,
   NegativeControlSidebarIslandPortalB,
 } from "../../subject-views/__loopgate__/negativeControlSidebar.tsx";
+import {
+  NegativeControlSubjectSummariesIslandPortalA,
+  NegativeControlSubjectSummariesIslandPortalB,
+} from "../../subject-views/__loopgate__/negativeControlSubject.tsx";
 import type { LegacyShellRegistry } from "./registry.ts";
 
 // vite define 주입(평시 false → dead-branch tree-shake). S3 loop-gate RED 빌드만 true.
@@ -42,6 +50,9 @@ declare const __S3_LOOP_NEG_CTRL__: boolean;
 // S3b loop-gate negative control 플래그(평시 false → tree-shake).
 declare const __S3B_LOOP_NEG_CTRL_A__: boolean;
 declare const __S3B_LOOP_NEG_CTRL_B__: boolean;
+// S4a loop-gate negative control 플래그(평시 false → tree-shake).
+declare const __S4A_LOOP_NEG_CTRL_A__: boolean;
+declare const __S4A_LOOP_NEG_CTRL_B__: boolean;
 
 function readHash(): string {
   return typeof window !== "undefined" ? window.location.hash : "";
@@ -74,6 +85,13 @@ export function ReactShellRouter({
       ? NegativeControlSidebarIslandPortalB
       : SidebarIslandPortal;
 
+  // S4a summaries portal 선택: neg-ctrl-A/B 빌드에서만 교체, 평시 = SubjectSummariesIslandPortal.
+  const SummariesPortal = __S4A_LOOP_NEG_CTRL_A__
+    ? NegativeControlSubjectSummariesIslandPortalA
+    : __S4A_LOOP_NEG_CTRL_B__
+      ? NegativeControlSubjectSummariesIslandPortalB
+      : SubjectSummariesIslandPortal;
+
   return (
     <>
       <LegacyView route={route} registry={registry} />
@@ -81,7 +99,7 @@ export function ReactShellRouter({
       <HomePortal />
       <IntakePortal />
       <SidebarPortal />
-      <SubjectSummariesIslandPortal />
+      <SummariesPortal />
       <SubjectSummaryDetailIslandPortal />
       <SubjectMcpIslandPortal />
       <SubjectMemorizeIslandPortal />

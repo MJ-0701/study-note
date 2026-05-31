@@ -21,6 +21,7 @@ export interface SummaryConceptItem {
   easyExplanation: string;
   sourceHints: string[];
   priority: "must-know" | "high" | "review";
+  linkedQuestionCount: number;
 }
 
 export interface SummaryQuestionItem {
@@ -91,6 +92,8 @@ function ConceptRow({ concept }: { concept: SummaryConceptItem }): React.ReactEl
         <ul>
           {concept.sourceHints.map((hint, i) => <li key={i}>{hint}</li>)}
         </ul>
+        <strong>연결 문제</strong>
+        <p>{concept.linkedQuestionCount}개</p>
       </aside>
     </article>
   );

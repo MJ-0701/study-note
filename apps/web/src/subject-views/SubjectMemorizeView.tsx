@@ -22,6 +22,7 @@ export interface MemorizeConcept {
   summary: string;
   easyExplanation: string;
   sourceHints: string[];
+  linkedQuestionCount: number;
 }
 
 export interface MemorizeKeyword {
@@ -110,7 +111,7 @@ function ConceptRow({ concept }: { concept: MemorizeConcept }): React.ReactEleme
           {concept.sourceHints.map((hint, i) => <li key={i}>{hint}</li>)}
         </ul>
         <strong>연결 문제</strong>
-        <p>-</p>
+        <p>{concept.linkedQuestionCount}개</p>
       </aside>
     </article>
   );

@@ -84,4 +84,13 @@ describe("SubjectMemorizeView 정적 소스 검증", () => {
   it("data-action='generate-keyword-note' 존재 (위임 경로 보존)", () => {
     assert.match(src, /data-action="generate-keyword-note"/);
   });
+
+  it("parity — 연결 문제 블록에 linkedQuestionCount 바인딩 존재 (대시 placeholder 제거)", () => {
+    assert.match(src, /\{concept\.linkedQuestionCount\}개/, "linkedQuestionCount 바인딩 존재");
+    assert.doesNotMatch(src, /<strong>연결 문제<\/strong>\s*<p>-<\/p>/, "대시 placeholder 삭제 확인");
+  });
+
+  it("parity — MemorizeConcept 에 linkedQuestionCount: number 존재", () => {
+    assert.match(src, /linkedQuestionCount:\s*number/, "linkedQuestionCount 필드 선언 존재");
+  });
 });

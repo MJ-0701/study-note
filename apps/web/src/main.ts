@@ -4804,6 +4804,9 @@ function renderApp(): void {
         summary: c.summary,
         easyExplanation: c.easyExplanation,
         sourceHints: c.sourceHints,
+        linkedQuestionCount: c.exampleQuestionIds
+          .map((qid) => getQuestionById(subject, qid))
+          .filter((q): q is ExampleQuestion => Boolean(q)).length,
       })),
       questions: weekQuestions.map((q) => ({
         id: q.id,
@@ -4935,6 +4938,9 @@ function renderApp(): void {
         summary: c.summary,
         easyExplanation: c.easyExplanation,
         sourceHints: c.sourceHints,
+        linkedQuestionCount: c.exampleQuestionIds
+          .map((qid) => getQuestionById(subject, qid))
+          .filter((q): q is ExampleQuestion => Boolean(q)).length,
       })),
       keywords: displayKeywords.map((kw) => ({
         id: kw.id,

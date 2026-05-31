@@ -99,4 +99,13 @@ describe("SubjectSummaryDetailView 정적 소스 검증", () => {
     assert.match(src, /data-subject-id=\{subjectId\}/, "data-subject-id 존재");
     assert.match(src, /data-week-id=\{weekId\}/, "data-week-id 존재");
   });
+
+  it("parity — 연결 문제 블록 존재 (renderConcept aside 구조 일치)", () => {
+    assert.match(src, /연결 문제/, "연결 문제 label 존재");
+    assert.match(src, /\{concept\.linkedQuestionCount\}개/, "linkedQuestionCount 바인딩 존재");
+  });
+
+  it("parity — SummaryConceptItem 에 linkedQuestionCount: number 존재", () => {
+    assert.match(src, /linkedQuestionCount:\s*number/, "linkedQuestionCount 필드 선언 존재");
+  });
 });

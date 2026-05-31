@@ -17,7 +17,11 @@ export default defineConfig({
     // S3b loop-gate negative control 플래그 (A=mount-loop, B=click-loop).
     // 평시 false → negativeControlSidebar 모듈 dead-branch tree-shake.
     __S3B_LOOP_NEG_CTRL_A__: process.env.S3B_LOOP_NEG_CTRL_A === "1" ? "true" : "false",
-    __S3B_LOOP_NEG_CTRL_B__: process.env.S3B_LOOP_NEG_CTRL_B === "1" ? "true" : "false"
+    __S3B_LOOP_NEG_CTRL_B__: process.env.S3B_LOOP_NEG_CTRL_B === "1" ? "true" : "false",
+    // S4a loop-gate negative control 플래그 (A=mount-loop, B=click-loop).
+    // 평시 false → negativeControlSubject 모듈 dead-branch tree-shake.
+    __S4A_LOOP_NEG_CTRL_A__: process.env.S4A_LOOP_NEG_CTRL_A === "1" ? "true" : "false",
+    __S4A_LOOP_NEG_CTRL_B__: process.env.S4A_LOOP_NEG_CTRL_B === "1" ? "true" : "false"
   },
   server: {
     host: "127.0.0.1",
