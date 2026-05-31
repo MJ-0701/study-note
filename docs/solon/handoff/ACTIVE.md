@@ -24,10 +24,19 @@
 
 잔여 = **S4b(subject-class + week)** · S1b(widget) · S1c(annotation sync) · S5(cleanup).
 
-- **S4b** = subject-class(renderPdfMaterialCard/renderPdfLibraryUploadCard = PDF-workspace
-  pointer/pen/sync 결합) + week(update-week-user-notes PUT sync). 둘 다 **excluded PDF/sync
-  scope** 결합 → S4a 에서 격리. island 화 가능하나 INV-8/sync 경계 설계 필요. **다음 후보**
-  이나 자율 검증 난이도 ↑(loop-gate + sync parity). brainstorm 부터.
+- **S4b** = subject-class + week. **scoping 완료(2026-05-31, read-only)** — S4a-style 기계적
+  슬라이스 아님, 설계(brainstorm) 필요:
+  - **subject-class**(subject-class.ts) = PDF material 관리 surface. ctx-injected
+    `renderPdfMaterialCard`/`renderPdfLibraryUploadCard` + data-action `attach-pdf-to-week`/
+    `open-pdf-material`/`add-class-date` + `renderPdfMaterialAssignmentSection`. **excluded
+    PDF-workspace scope(pointer/upload/storage) 결합** → island 화 = PDF-workspace 마이그레이션
+    (S1b 영역) 선행 또는 명시 boundary. **clean presentational 슬라이스 아님.**
+  - **week**(week.ts:126 `renderWeekUserNotesSection`) = controlled `userNotes` textarea +
+    `data-action="update-week-user-notes"` PUT sync + `renderWeekMappedPdfSection`(PDF 결합).
+    = **controlled-input sync parity**, pure-props 아님. loop-gate 단독으로 sync round-trip
+    검증 불가 → sync parity 검증 방법 설계 필요.
+  - **다음 = fresh session brainstorm**: carveable presentational sub-slice(예: week static
+    sections − userNotes/PDF) 가능 여부 결정 or 전체 coupled → S1b/PDF-workspace 선행.
 - **S1b(widget)** — main.ts 공유 pointer dispatcher + pen-second-stroke 버그(REOPENED) 얽힘
   → 회귀 구분 불가. native-pointer + pen-fix 묶어 S1c 이후/S1d.
 - **S1c(annotation sync, INV-4)** — acceptance = iPad↔PC 물리 cross-device sync. 자동화 불가, 사용자 기기 필요.
