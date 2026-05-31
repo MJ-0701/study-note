@@ -17,13 +17,55 @@
 사용자 지시 = "남은 슬라이스 끝날 때까지 계속 작업". 단발 슬라이스가 아니라 roadmap §4
 잔여를 **연속**으로 진행. 매 슬라이스 = brainstorm→plan→Gate3→implement→Gate6→배포.
 
-- roadmap = `docs/solon/web/react-migration/20260529/react-migration-roadmap.md`
-  (§4 슬라이스 표 + §5 INV ledger). **먼저 읽어 잔여 슬라이스 확정.**
-- 알려진 잔여: **S1b(widget)** = 연기 상태(pen-fix + native-pointer 직결 묶음, roadmap §3.3).
-  결정 근거 = `docs/solon/web/react-migration/20260530/s1b-decision-reroute-to-s2.md`.
-  재진입 시 widget drag/resize = main.ts 공유 pointer dispatcher + pen second-stroke 버그
-  (REOPENED) 같은 표면 주의.
+### ▶ 진행 상태 (2026-05-31 10:33) — sprint-7 / S4a / **Gate 3 PASS → 다음 = `sfs implement`**
+
+- sprint `2026-W22-sprint-7` 진행. brainstorm✓ + plan✓ + **Gate 3 (Plan) self-CPO PASS**
+  (executor=codex, partial→docs/evidence fix→PASS). 산출 = `.sfs-local/sprints/2026-W22-sprint-7/`
+  {brainstorm,plan,evidence,review}.md.
+- **다음 = `sfs implement`** (S4a 5뷰). 구현 = Sonnet worker. 아직 코드 0 / branch 0 / main=`5474fe9`.
+- **Gate 3 carry-items (implement/Gate6 필수)**:
+  - AC2 = **dispatch-half seam 실독을 producer/leaf review 와 별도로 강제**(S3b 교훈 재발 방지)
+  - AC4 = prod-build playwright loop-gate 5뷰 GREEN + negative control A(mount #185)/B(value-eq 누락 setState RED) — 없으면 Gate 6 blocker
+  - Gate 6 evidence = seam/producer/loop-gate fixture **embedded 발췌**(요약 아님)
+- 이벤트 전략 = (a) data-action emit 유지 확정(legacy pdf-workspace 공존 강제). 사용자 질문 불필요. deploy 만 승인 경계.
+- ✅ **codex CPO cross review (S1a~S3b) 완료** (07:00 obligation, codex 복구 확인). VERDICT=concerns.
+  XSS/morphdom clobber 0 + build pass. **Required 2(main.ts:4555 Home / 4572 intake loop-immunity
+  계약 gap) + Important 2(PdfToolbar:289 double-commit / :191 fullscreen 2nd render source) + FYI 2.**
+  findings = `docs/solon/web/react-migration/20260531/codex-cross-review-s1a-s3b.md`. **fix-forward 별
+  트랙(prod 코드, 각자 PR), S4a 와 무관. 사용자 우선순위 결정 대기.**
+
+### 🧭 슬라이스 순서 결정 (2026-05-31 03:2x, advisor 합의) — 다음 = **S4a (위 진행)**
+
+잔여 = S1b(widget) · S1c(annotation sync) · S4(subject views) · S5(cleanup).
+
+- **진행 중 = sprint-7 / S4a (presentational subject views, 5종만)**: subject-class,
+  subject-summaries, subject-summary-detail, subject-mcp, subject-memorize.
+  **week = S4b 로 격리**(update-week-user-notes PUT sync 보유). **subject-intake = 이미
+  island**(S3 home-intake.ts:35) → 제외. cavecrew map 으로 7 route 실독 후 분할.
+  **discriminator = "acceptance 를 자율 검증 가능한가"** (roadmap 순서 아님).
+  S4a = island 패턴 + prod-build playwright loop-gate A/B 로 parity 자율 검증 가능
+  (S3/S3b 가 end-to-end 입증). roadmap S1-선행 = route-swap 가정 → S2/S3/S3b 가
+  LegacyView 공존으로 이미 완화 → unblocked.
+- **연기(자율 불가, 물리/사용자 게이트)**:
+  - **S1b(widget)** — main.ts 공유 pointer dispatcher + pen-second-stroke 버그(REOPENED)
+    얽힘 → 회귀 구분 불가. native-pointer + pen-fix 묶어 S1c 이후 또는 S1d.
+    근거 `docs/solon/web/react-migration/20260530/s1b-decision-reroute-to-s2.md`.
+  - **S1c(annotation sync, INV-4 매우높음)** — acceptance = iPad↔PC 물리 cross-device
+    sync. 자동화 불가 (prod-build playwright 로 대체 불가). 사용자 기기 필요.
+  - **S5(cleanup)** — S1 전체 선행. S1b/S1c 미완 → 차단.
+- **⚠️ 완주(完走)의 정직한 현실**: 자율 도달 가능 = **S4 only**. S4 도 deploy gate 에서 멈춤
+  (deploy = 명시 승인 필요, 미래 슬라이스 standing grant 없음). S1b/S1c/S5 = 사용자/물리
+  기기/pen-fix 게이트. → 본 세션·시리즈 honest end-state = *S4 구현 + Gate6 PASS + branch
+  commit, deploy 승인 + S1b/S1c/S5 사용자 대기*. 조용히 reorder 금지 — 차단 사실 명시.
 - Session Continuation Guard → 슬라이스 사이 token 누적 시 fresh session handoff.
+
+### ⏰ 06:22 KST fallback scheduler 등록됨 (2026-05-31)
+
+- scheduled-task `react-migration-s4-resume` (one-time, `2026-05-31T06:22:00+09:00`,
+  auto-disable). 파일 = `~/.claude/scheduled-tasks/react-migration-s4-resume/SKILL.md`.
+- 목적 = 본 세션이 token 고갈로 끊기면 06:22 에 **S4 슬라이스 작업** 자율 resume.
+- ⚠️ scheduler = 원격 run → **codex review 범위 밖**(로컬 CLI auth 불가). deploy/push 안 함.
+  SFS runtime 원격 부재 시 docs/code 직접 편집 fallback. 끝에 ACTIVE 갱신 지시 포함.
 
 ## ⏰ 7시(07:00 KST) 이후 = codex CPO cross review (필수 obligation)
 
