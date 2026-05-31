@@ -1,0 +1,53 @@
+---
+phase: retro
+gate_number: 7
+gate_label: "Gate 7 (Retro)"
+gate_id: G5
+sprint_id: "2026-W22-sprint-26"
+workspace: "s4b-1-week-view-react-island-usernotes-quicknote-pdf"
+handoff_dir: "docs/solon/user/accounts/s4b-1-week-view-react-island-usernotes-quicknote-pdf/20260531"
+goal: "S4b-1 week view React island (정적+userNotes+quickNote+PDF섹션)"
+created_at: ""
+last_touched_at: "2026-05-31T23:18:56+09:00"
+closed_at: 2026-05-31T23:18:56+09:00
+domain: "user"
+subdomain: "accounts"
+feature: "s4b-1-week-view-react-island-usernotes-quicknote-pdf"
+---
+
+# 회고
+
+> 이 문서는 사용자의 native/workspace 언어로 작성한다.
+
+## 1. 계속할 것
+
+-
+
+## 2. 문제
+
+-
+
+## 3. 시도할 것
+
+-
+
+## 4. 이어갈 것
+
+-
+
+## 5. 종료 체크
+
+- [ ] report 가 최신이다
+- [ ] review 조치가 완료 또는 이월됐다
+- [ ] workbench 가 접혔다
+
+## §6. 다음 cycle 본부 활성 추천 (auto)
+
+<!-- solon:division-recommendations:start -->
+- detected: project_size=medium (716 tracked files), domains=3, last_review=pass, infra_signals=12, ui_signals=12
+- recommended action format: update `.sfs-local/divisions.yaml` + record why in `.sfs-local/decisions/<NNNN>-activate-<division>.md`
+- recommend: `qa` activate (light) — regression smoke + AC checks; triggers: review!=pass or medium+ codebase
+- recommend: `taxonomy` activate (light) — glossary + naming/aggregation rules; triggers: multi-domain or large codebase
+- consider: `infra` activate (light) — deploy/observability/rollback checklist; triggers: infra files present or large codebase
+- generated_at: 2026-05-31T23:18:56+09:00 (auto) — edit outside the marker block to preserve manual notes
+<!-- solon:division-recommendations:end -->

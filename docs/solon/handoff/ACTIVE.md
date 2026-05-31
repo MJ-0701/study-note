@@ -1,4 +1,14 @@
-# 🎯 ACTIVE — S4b-1(week view) Gate 6 PASS(self+cross) / 다음 = 배포 승인 대기(push→PR→@codex→fe-v tag)
+# 🎯 ACTIVE — S4b-1(week view) **prod 배포 완료(fe-v0.1.80)** / 다음 = retro close → S4b-2(subject-class)
+
+## ✅ S4b-1 종료 (sprint-26, 2026-05-31)
+- **prod live**: PR [#136](https://github.com/MJ-0701/study-note/pull/136) squash 머지 → main `aec04bb`
+  → **fe-v0.1.80** → FE Release(Vercel) exit0 → prod **HTTP 200** 번들 `main-C80f2DQj.js`(fe-v0.1.79 `BAqxE33U`서 교체).
+- Gate 3/6 self+cross PASS. @codex GitHub bot 240s 무응답 → waiver(cross=codex executor bridge PASS + main/Opus 독립검증).
+- 🔑 focus 회귀 fix(token=route:hydrationVersion, GET-only bump, FOCUS-PRES gate teeth) — 상세 아래.
+- branch 삭제됨. 남은 = **operator 시각 QA(week 페이지 렌더, auth-gated 자동화 불가) = user 후속**.
+- 다음 = `/sfs retro` close → S4b-2(subject-class).
+
+---
 
 > SessionStart hook 가 fresh session 마다 자동 inject. SFS 0.6.138.
 > entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note`.
