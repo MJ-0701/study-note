@@ -334,7 +334,11 @@ function PdfMaterialClassDateControl({ material, subjectId }: {
             </summary>
             <div className="pdf-material-card__class-date-options" role="radiogroup" aria-label="수업일 선택">
               {classDateOptions.map((opt) => (
-                <PdfClassDateOption key={opt.value} opt={opt} radioName={classDateRadioName} />
+                // key 에 checked 포함: 적용 후 같은 카드(materialKey) 재렌더 시 selectedValue
+                // 변경되면 영향받은 option 의 key 변경 → remount → defaultChecked 재적용.
+                // (uncontrolled radio 의 defaultChecked 는 update 시 무시되는 React 동작 →
+                // old morphdom 은 checked attr 매렌더 sync, 이로써 parity 회복. codex P2)
+                <PdfClassDateOption key={`${opt.value}:${opt.checked}`} opt={opt} radioName={classDateRadioName} />
               ))}
             </div>
           </details>
