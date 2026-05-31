@@ -20,11 +20,19 @@
 // target 으로 사용. sidebarProps = buildSidebarProps memoize 객체 ref (value-equal
 // 재발행 시 동일 ref → zustand ref 비교로 재렌더 차단, AC6).
 //
+// S4a subject view slots/props: subject-summaries / subject-summary-detail /
+// subject-mcp / subject-memorize 의 slot + props 쌍. 각 props setter 는
+// JSON-key value-equal guard 로 동일-값 재발행 시 setState skip → 재렌더 차단.
+//
 // 주의: drag/resize 등 다른 ephemeral 상태는 S1 (PDF 컴포넌트화)에서 흡수.
 import { createStore } from "zustand/vanilla";
 import type { HomeViewProps } from "../subject-views/HomeView.tsx";
 import type { IntakeViewProps } from "../subject-views/IntakeView.tsx";
 import type { SidebarViewProps } from "../app/react-shell/sidebar-props";
+import type { SubjectSummariesViewProps } from "../subject-views/SubjectSummariesView.tsx";
+import type { SubjectSummaryDetailViewProps } from "../subject-views/SubjectSummaryDetailView.tsx";
+import type { SubjectMcpViewProps } from "../subject-views/SubjectMcpView.tsx";
+import type { SubjectMemorizeViewProps } from "../subject-views/SubjectMemorizeView.tsx";
 
 interface UiStoreState {
   inspectorOpen: boolean;
@@ -35,6 +43,15 @@ interface UiStoreState {
   intakeProps: IntakeViewProps | null;
   sidebarSlot: HTMLElement | null;
   sidebarProps: SidebarViewProps | null;
+  // S4a subject view islands
+  subjectSummariesSlot: HTMLElement | null;
+  subjectSummariesProps: SubjectSummariesViewProps | null;
+  subjectSummaryDetailSlot: HTMLElement | null;
+  subjectSummaryDetailProps: SubjectSummaryDetailViewProps | null;
+  subjectMcpSlot: HTMLElement | null;
+  subjectMcpProps: SubjectMcpViewProps | null;
+  subjectMemorizeSlot: HTMLElement | null;
+  subjectMemorizeProps: SubjectMemorizeViewProps | null;
 }
 
 export const uiStore = createStore<UiStoreState>(() => ({
@@ -46,6 +63,14 @@ export const uiStore = createStore<UiStoreState>(() => ({
   intakeProps: null,
   sidebarSlot: null,
   sidebarProps: null,
+  subjectSummariesSlot: null,
+  subjectSummariesProps: null,
+  subjectSummaryDetailSlot: null,
+  subjectSummaryDetailProps: null,
+  subjectMcpSlot: null,
+  subjectMcpProps: null,
+  subjectMemorizeSlot: null,
+  subjectMemorizeProps: null,
 }));
 
 export const getInspectorOpen = (): boolean => uiStore.getState().inspectorOpen;
@@ -102,4 +127,55 @@ export const setSidebarSlot = (el: HTMLElement | null): void => {
 export const getSidebarProps = (): SidebarViewProps | null => uiStore.getState().sidebarProps;
 export const setSidebarProps = (props: SidebarViewProps | null): void => {
   uiStore.setState({ sidebarProps: props });
+};
+
+// ─── S4a subject view slot/props getters + setters ───────────────────────────
+// props setter 는 JSON-key value-equal guard: 동일 직렬화 → setState skip → 재렌더 차단.
+
+export const getSubjectSummariesSlot = (): HTMLElement | null => uiStore.getState().subjectSummariesSlot;
+export const setSubjectSummariesSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ subjectSummariesSlot: el });
+};
+
+export const getSubjectSummariesProps = (): SubjectSummariesViewProps | null => uiStore.getState().subjectSummariesProps;
+export const setSubjectSummariesProps = (props: SubjectSummariesViewProps | null): void => {
+  const current = uiStore.getState().subjectSummariesProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ subjectSummariesProps: props });
+};
+
+export const getSubjectSummaryDetailSlot = (): HTMLElement | null => uiStore.getState().subjectSummaryDetailSlot;
+export const setSubjectSummaryDetailSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ subjectSummaryDetailSlot: el });
+};
+
+export const getSubjectSummaryDetailProps = (): SubjectSummaryDetailViewProps | null => uiStore.getState().subjectSummaryDetailProps;
+export const setSubjectSummaryDetailProps = (props: SubjectSummaryDetailViewProps | null): void => {
+  const current = uiStore.getState().subjectSummaryDetailProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ subjectSummaryDetailProps: props });
+};
+
+export const getSubjectMcpSlot = (): HTMLElement | null => uiStore.getState().subjectMcpSlot;
+export const setSubjectMcpSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ subjectMcpSlot: el });
+};
+
+export const getSubjectMcpProps = (): SubjectMcpViewProps | null => uiStore.getState().subjectMcpProps;
+export const setSubjectMcpProps = (props: SubjectMcpViewProps | null): void => {
+  const current = uiStore.getState().subjectMcpProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ subjectMcpProps: props });
+};
+
+export const getSubjectMemorizeSlot = (): HTMLElement | null => uiStore.getState().subjectMemorizeSlot;
+export const setSubjectMemorizeSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ subjectMemorizeSlot: el });
+};
+
+export const getSubjectMemorizeProps = (): SubjectMemorizeViewProps | null => uiStore.getState().subjectMemorizeProps;
+export const setSubjectMemorizeProps = (props: SubjectMemorizeViewProps | null): void => {
+  const current = uiStore.getState().subjectMemorizeProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ subjectMemorizeProps: props });
 };

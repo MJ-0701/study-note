@@ -23,6 +23,10 @@ import { PdfToolbarPortal } from "./PdfToolbarPortal.tsx";
 import { HomeIslandPortal } from "./HomeIslandPortal.tsx";
 import { IntakeIslandPortal } from "./IntakeIslandPortal.tsx";
 import { SidebarIslandPortal } from "./SidebarIslandPortal.tsx";
+import { SubjectSummariesIslandPortal } from "./SubjectSummariesIslandPortal.tsx";
+import { SubjectSummaryDetailIslandPortal } from "./SubjectSummaryDetailIslandPortal.tsx";
+import { SubjectMcpIslandPortal } from "./SubjectMcpIslandPortal.tsx";
+import { SubjectMemorizeIslandPortal } from "./SubjectMemorizeIslandPortal.tsx";
 import {
   NegativeControlHomeIslandPortal,
   NegativeControlIntakeIslandPortal,
@@ -77,6 +81,10 @@ export function ReactShellRouter({
       <HomePortal />
       <IntakePortal />
       <SidebarPortal />
+      <SubjectSummariesIslandPortal />
+      <SubjectSummaryDetailIslandPortal />
+      <SubjectMcpIslandPortal />
+      <SubjectMemorizeIslandPortal />
     </>
   );
 }
