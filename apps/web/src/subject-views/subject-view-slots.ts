@@ -30,3 +30,8 @@ export function renderSubjectMemorizeSlot(): string {
 export function renderWeekSlot(): string {
   return `<div id="week-island" data-react-island="week" style="display:contents"></div>`;
 }
+
+/** subject/subject-class route — slot placeholder. */
+export function renderSubjectClassSlot(): string {
+  return `<div id="subject-class-island" data-react-island="subject-class" style="display:contents"></div>`;
+}

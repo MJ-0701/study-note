@@ -29,6 +29,11 @@
 // fetchUserNoteIfMissing 완료 후 props 변경 시 textarea defaultValue 재적용
 // 보장 (uncontrolled key 전략).
 //
+// S4b-2 subjectClass slot/props: subject/subject-class route(공통 분기) 렌더 후
+// postMount effect 가 slot signal. subjectClassProps setter = JSON-key value-equal
+// guard (동일-값 재발행 시 setState skip → 재렌더 차단, 무한루프 방지).
+// form input 없는 sync 경로라 userNotesToken 불필요 (plan D3).
+//
 // 주의: drag/resize 등 다른 ephemeral 상태는 S1 (PDF 컴포넌트화)에서 흡수.
 import { createStore } from "zustand/vanilla";
 import type { HomeViewProps } from "../subject-views/HomeView.tsx";
@@ -39,6 +44,7 @@ import type { SubjectSummaryDetailViewProps } from "../subject-views/SubjectSumm
 import type { SubjectMcpViewProps } from "../subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "../subject-views/SubjectMemorizeView.tsx";
 import type { WeekViewProps } from "../subject-views/WeekView.tsx";
+import type { SubjectClassViewProps } from "../subject-views/SubjectClassView.tsx";
 
 interface UiStoreState {
   inspectorOpen: boolean;
@@ -61,6 +67,9 @@ interface UiStoreState {
   // S4b-1 week island
   weekSlot: HTMLElement | null;
   weekProps: WeekViewProps | null;
+  // S4b-2 subject-class island
+  subjectClassSlot: HTMLElement | null;
+  subjectClassProps: SubjectClassViewProps | null;
 }
 
 export const uiStore = createStore<UiStoreState>(() => ({
@@ -82,6 +91,8 @@ export const uiStore = createStore<UiStoreState>(() => ({
   subjectMemorizeProps: null,
   weekSlot: null,
   weekProps: null,
+  subjectClassSlot: null,
+  subjectClassProps: null,
 }));
 
 export const getInspectorOpen = (): boolean => uiStore.getState().inspectorOpen;
@@ -204,4 +215,19 @@ export const setWeekProps = (props: WeekViewProps | null): void => {
   const current = uiStore.getState().weekProps;
   if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
   uiStore.setState({ weekProps: props });
+};
+
+// ─── S4b-2 subject-class slot/props getters + setters ─────────────────────────
+// subjectClassProps setter = JSON-key value-equal guard: 동일 직렬화 → setState skip → 재렌더 차단.
+
+export const getSubjectClassSlot = (): HTMLElement | null => uiStore.getState().subjectClassSlot;
+export const setSubjectClassSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ subjectClassSlot: el });
+};
+
+export const getSubjectClassProps = (): SubjectClassViewProps | null => uiStore.getState().subjectClassProps;
+export const setSubjectClassProps = (props: SubjectClassViewProps | null): void => {
+  const current = uiStore.getState().subjectClassProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ subjectClassProps: props });
 };
