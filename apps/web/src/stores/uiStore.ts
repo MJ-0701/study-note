@@ -63,8 +63,20 @@ export const setHomeSlot = (el: HTMLElement | null): void => {
   uiStore.setState({ homeSlot: el });
 };
 
+// homeProps/intakeProps loop-immunity guard (codex cross review Required, 20260531):
+// vanilla renderApp 이 매 렌더 새 ref (notebook + needsFillSessions/warnings 배열 +
+// subjectCoverageRates 객체) 로 props 를 만든다. portal 의 useShallow 는 nested 새 ref
+// 를 value-equal 로 못 보므로 매 renderApp 재렌더가 발생했다. publish 경계에서 stable
+// JSON key 로 value-equal 재발행을 skip → 동일 ref 유지 → 재렌더 차단.
+// S3b sidebarProps 의 producer memoize(sidebar-props.ts:128) 와 동일 의도, publish-side 적용.
+const propsKey = (props: unknown): string => (props === null ? "null" : JSON.stringify(props));
+
+let _lastHomeKey = "null";
 export const getHomeProps = (): HomeViewProps | null => uiStore.getState().homeProps;
 export const setHomeProps = (props: HomeViewProps | null): void => {
+  const key = propsKey(props);
+  if (key === _lastHomeKey) return; // value-equal → 재발행 skip (loop-immunity)
+  _lastHomeKey = key;
   uiStore.setState({ homeProps: props });
 };
 
@@ -73,8 +85,12 @@ export const setIntakeSlot = (el: HTMLElement | null): void => {
   uiStore.setState({ intakeSlot: el });
 };
 
+let _lastIntakeKey = "null";
 export const getIntakeProps = (): IntakeViewProps | null => uiStore.getState().intakeProps;
 export const setIntakeProps = (props: IntakeViewProps | null): void => {
+  const key = propsKey(props);
+  if (key === _lastIntakeKey) return; // value-equal → 재발행 skip (loop-immunity)
+  _lastIntakeKey = key;
   uiStore.setState({ intakeProps: props });
 };
 

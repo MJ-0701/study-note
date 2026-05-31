@@ -288,7 +288,9 @@ function PageControls(props: PageControlsProps): React.ReactElement {
         onBlur: commitPage,
         onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
           if (e.key === "Enter") {
-            commitPage();
+            // blur() 가 onBlur=commitPage 를 발화 → 단일 commit.
+            // 직접 commitPage() 후 blur() 면 commitPage 재발화 = 같은 page 이중
+            // setPage (codex cross review Important, 20260531).
             (e.target as HTMLInputElement).blur();
           }
         }
