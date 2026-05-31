@@ -202,8 +202,11 @@ describe("SubjectClassView 정적 소스 검증", () => {
     assert.match(src, /key=\{material\.materialKey\}/, "PdfMaterialCard key=materialKey 존재");
   });
 
-  it("AC4 stable key — class-date option key=opt.value 존재", () => {
-    assert.match(src, /key=\{opt\.value\}/, "class-date option key=value 존재");
+  it("AC4 stable key — class-date option key 가 opt.value+checked 포함(remount on select change)", () => {
+    // codex P2 fix: key 에 opt.value + opt.checked → 같은 카드(materialKey) 재렌더 시
+    // selectedValue 변경되면 영향 radio remount → defaultChecked 재적용(uncontrolled
+    // radio defaultChecked 가 update 시 무시되는 React 동작 보정, old morphdom parity).
+    assert.match(src, /key=\{`\$\{opt\.value\}:\$\{opt\.checked\}`\}/, "class-date option key = value+checked");
   });
 
   // ─── AC5/AC6: security ───────────────────────────────────────────────────
