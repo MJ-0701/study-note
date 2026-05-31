@@ -136,6 +136,7 @@ import {
   weekSummaryPath,
 } from "./app/routes";
 import { escapeHtml } from "./app/escape-html";
+import { sanitizeExternalUrl } from "./app/safe-url";
 import {
   renderInto as renderIntoSink,
   renderShell as renderAppShell,
@@ -323,24 +324,27 @@ import {
   renderSubjectSummaryDetailSlot,
   renderSubjectMcpSlot,
   renderSubjectMemorizeSlot,
+  renderWeekSlot,
 } from "./subject-views/subject-view-slots";
 import type { SubjectSummariesViewProps } from "./subject-views/SubjectSummariesView.tsx";
 import type { SubjectSummaryDetailViewProps } from "./subject-views/SubjectSummaryDetailView.tsx";
 import type { SubjectMcpViewProps } from "./subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "./subject-views/SubjectMemorizeView.tsx";
+import type { WeekViewProps } from "./subject-views/WeekView.tsx";
 import { PERSONA_BY_SUBJECT } from "./subject-views/mcp";
 import { parseClassDateLabel } from "./subject-views/memorize";
 import {
+  formatConceptPriority,
+  formatQuestionDifficulty,
   formatReviewStatus,
   formatSourceKind,
   formatSourceVisibility,
 } from "./subject-views/subject-cards";
 import {
-  renderWeekPage,
-  type WeekPageContext
-} from "./subject-views/week";
-import {
   canManagePdfMaterials,
+  getPdfMaterialClassDateLabel,
+  getPdfMaterialOwnerLabel,
+  getPdfMaterialStatusLabel,
   getPdfMaterialsForWeek,
   isUnconfirmedPdfClassDate,
   renderPdfLibraryUploadCard,
@@ -353,9 +357,7 @@ import {
   buildKeywordQuickNote,
   buildSubjectQuickNote,
   buildWeekQuickNote,
-  renderQuickNotePanel,
   type QuickNote,
-  type QuickNoteContext
 } from "./subject-views/quick-note";
 import { formatQuickNoteStatus } from "./subject-views/subject-cards";
 import {
@@ -416,6 +418,9 @@ import {
   setSubjectMemorizeSlot,
   setSubjectMemorizeProps,
   getSubjectMemorizeSlot,
+  setWeekSlot,
+  setWeekProps,
+  getWeekSlot,
 } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
@@ -662,6 +667,13 @@ const mainRenderSink: RenderSink | null = appRoot
           const el = root.querySelector<HTMLElement>('[data-react-island="subject-memorize"]');
           if (getSubjectMemorizeSlot() !== el) {
             setSubjectMemorizeSlot(el);
+          }
+        },
+        // S4b-1: week island slot signal (route 이탈 시 null → portal unmount).
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="week"]');
+          if (getWeekSlot() !== el) {
+            setWeekSlot(el);
           }
         }
       ]
@@ -4749,6 +4761,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setWeekProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectSummariesSlot(),
@@ -4839,6 +4852,7 @@ function renderApp(): void {
     setSubjectSummariesProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setWeekProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectSummaryDetailSlot(),
@@ -4879,6 +4893,7 @@ function renderApp(): void {
     setSubjectSummariesProps(null);
     setSubjectSummaryDetailProps(null);
     setSubjectMemorizeProps(null);
+    setWeekProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectMcpSlot(),
@@ -4964,6 +4979,7 @@ function renderApp(): void {
     setSubjectSummariesProps(null);
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
+    setWeekProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectMemorizeSlot(),
@@ -4973,13 +4989,103 @@ function renderApp(): void {
   }
 
   if (route.name === "week" && subject && week) {
+    // S4b-1: week React island props 계산 + 발행. postMountEffect 가 slot signal.
+    const weekMaterials = getPdfMaterialsForWeek(
+      subject,
+      week,
+      getSubjectPdfMaterials(subject.id)
+    );
+    const weekKeywords = week.requiredKeywordIds
+      .map((keywordId) => getKeywordById(subject, keywordId))
+      .filter((keyword): keyword is RequiredKeyword => Boolean(keyword));
+    const weekConcepts = week.conceptIds
+      .map((conceptId) => getConceptById(subject, conceptId))
+      .filter((concept): concept is Concept => Boolean(concept));
+    const weekQuestions = week.exampleQuestionIds
+      .map((questionId) => getQuestionById(subject, questionId))
+      .filter((question): question is ExampleQuestion => Boolean(question));
+    const weekSources = week.sourceMaterialIds
+      .map((sourceId) => getSourceById(subject, sourceId))
+      .filter((source): source is SourceMaterial => Boolean(source));
+    const weekQuickNoteRaw = getQuickNote();
+    const weekQuickNote = (
+      weekQuickNoteRaw &&
+      weekQuickNoteRaw.subjectId === subject.id &&
+      ["week"].includes(weekQuickNoteRaw.origin)
+    ) ? weekQuickNoteRaw : undefined;
+    const userNotesValue = typeof week.userNotes === "string" ? week.userNotes : "";
+    const weekProps: WeekViewProps = {
+      subjectId: subject.id,
+      subjectTitle: subject.title,
+      weekId: week.id,
+      weekLabel: week.label,
+      weekTitle: week.title,
+      weekFocus: week.focus,
+      reviewStatusLabel: formatReviewStatus(week.reviewStatus),
+      classPath: subjectClassPath(subject),
+      keywordLabels: weekKeywords.map((kw) => kw.label),
+      conceptTitles: weekConcepts.map((c) => c.title),
+      sourceTitles: weekSources.map((s) => s.title),
+      concepts: weekConcepts.map((c) => {
+        const linkedQuestions = c.exampleQuestionIds
+          .map((qid) => getQuestionById(subject, qid))
+          .filter((q): q is ExampleQuestion => Boolean(q));
+        return {
+          id: c.id,
+          priority: formatConceptPriority(c.priority),
+          title: c.title,
+          summary: c.summary,
+          easyExplanation: c.easyExplanation,
+          sourceHints: c.sourceHints,
+          linkedQuestionCount: linkedQuestions.length,
+        };
+      }),
+      questions: weekQuestions.map((q) => ({
+        difficulty: formatQuestionDifficulty(q.difficulty),
+        prompt: q.prompt,
+        answer: q.answer,
+        explanation: q.explanation,
+      })),
+      userNotes: userNotesValue,
+      // userNotesToken: fetchUserNoteIfMissing 완료 후 renderApp 재호출 시 value 변경 →
+      // key 변경 → textarea 재마운트 → defaultValue 재적용. 타이핑 중 renderApp 미호출
+      // → token 동일 → 재마운트 없음 (uncontrolled 무결성 보장).
+      userNotesToken: userNotesValue,
+      materials: weekMaterials.map((material) => ({
+        materialKey: getPdfMaterialKey(material),
+        subjectTitle: subject.title,
+        classDateLabel: getPdfMaterialClassDateLabel(subject, material),
+        fileName: material.fileName,
+        fileSize: formatPdfFileSize(material.fileSize),
+        pageCount: material.pageCount,
+        statusLabel: getPdfMaterialStatusLabel(material),
+        ownerLabel: getPdfMaterialOwnerLabel(pdfLibraryContext, material),
+        classDateIsUnconfirmed: isUnconfirmedPdfClassDate(subject, material.classDate),
+      })),
+      quickNote: weekQuickNote ? {
+        statusLabel: formatQuickNoteStatus(weekQuickNote.status),
+        title: weekQuickNote.title,
+        subtitle: weekQuickNote.subtitle,
+        sections: weekQuickNote.sections,
+        primaryHref: weekQuickNote.primaryHref
+          ? sanitizeExternalUrl(weekQuickNote.primaryHref)
+          : null,
+        primaryLabel: weekQuickNote.primaryLabel ?? null,
+      } : null,
+    };
+    setWeekProps(weekProps);
+    setSubjectSummariesProps(null);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMcpProps(null);
+    setSubjectMemorizeProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
-      renderWeekPage(weekPageContext, subject, week),
+      renderWeekSlot(),
       `${subject.title} / ${week.label}`
     ));
     // sprint-2/S2: lazy fetch userNotes from BE on first week view (per-session cache).
     void fetchUserNoteIfMissing(subject.id, week.id);
+    return;
   }
 
 }
@@ -5014,11 +5120,6 @@ const pdfLibraryContext: PdfLibraryContext = {
   getAuthSession: () => getAuthSession()
 };
 
-// Quick-note context (slice-10 — quick-note.ts). 1 field (lazy getQuickNote).
-const quickNoteContext: QuickNoteContext = {
-  getQuickNote: () => getQuickNote()
-};
-
 // Sidebar context (slice-2 — sidebar.ts). lazy getter only.
 const sidebarContext: SidebarContext = {
   getNotebook: () => getNotebook(),
@@ -5038,16 +5139,6 @@ const subjectClassContext: SubjectClassContext = {
   renderIntakeFeedback,
   renderPdfLibraryUploadCard: (subject, materialCount) =>
     renderPdfLibraryUploadCard(pdfLibraryContext, subject, materialCount),
-  renderPdfMaterialCard: (subject, material, opts) =>
-    renderPdfMaterialCard(pdfLibraryContext, subject, material, opts)
-};
-
-// Week page context (slice-8 — week.ts). 1 lazy + 1 fn ref + 2 callback.
-const weekPageContext: WeekPageContext = {
-  getSubjectPdfMaterials,
-  getPdfMaterialsForWeek,
-  renderQuickNotePanel: (subject, origins) =>
-    renderQuickNotePanel(quickNoteContext, subject, origins),
   renderPdfMaterialCard: (subject, material, opts) =>
     renderPdfMaterialCard(pdfLibraryContext, subject, material, opts)
 };

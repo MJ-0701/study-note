@@ -20,6 +20,10 @@
 // S4a: <SubjectSummariesIslandPortal> 을 neg-ctrl 빌드에서 교체.
 // __S4A_LOOP_NEG_CTRL_A__ / __S4A_LOOP_NEG_CTRL_B__ (vite define, 평시 false):
 // A = mount-time loop, B = generate-subject-note 클릭 loop (§5-C 맹점 close).
+//
+// S4b-1: <WeekIslandPortal> 을 neg-ctrl 빌드에서 교체.
+// __S4B_LOOP_NEG_CTRL_A__ / __S4B_LOOP_NEG_CTRL_B__ (vite define, 평시 false):
+// A = mount-time loop, B = generate-week-note 클릭 loop (§5-C 맹점 close).
 import { useEffect, useState } from "react";
 import { parseRoute } from "../routes.ts";
 import { LegacyView } from "./LegacyView.tsx";
@@ -31,6 +35,7 @@ import { SubjectSummariesIslandPortal } from "./SubjectSummariesIslandPortal.tsx
 import { SubjectSummaryDetailIslandPortal } from "./SubjectSummaryDetailIslandPortal.tsx";
 import { SubjectMcpIslandPortal } from "./SubjectMcpIslandPortal.tsx";
 import { SubjectMemorizeIslandPortal } from "./SubjectMemorizeIslandPortal.tsx";
+import { WeekIslandPortal } from "./WeekIslandPortal.tsx";
 import {
   NegativeControlHomeIslandPortal,
   NegativeControlIntakeIslandPortal,
@@ -43,6 +48,10 @@ import {
   NegativeControlSubjectSummariesIslandPortalA,
   NegativeControlSubjectSummariesIslandPortalB,
 } from "../../subject-views/__loopgate__/negativeControlSubject.tsx";
+import {
+  NegativeControlWeekIslandPortalA,
+  NegativeControlWeekIslandPortalB,
+} from "../../subject-views/__loopgate__/negativeControlWeek.tsx";
 import type { LegacyShellRegistry } from "./registry.ts";
 
 // vite define 주입(평시 false → dead-branch tree-shake). S3 loop-gate RED 빌드만 true.
@@ -53,6 +62,9 @@ declare const __S3B_LOOP_NEG_CTRL_B__: boolean;
 // S4a loop-gate negative control 플래그(평시 false → tree-shake).
 declare const __S4A_LOOP_NEG_CTRL_A__: boolean;
 declare const __S4A_LOOP_NEG_CTRL_B__: boolean;
+// S4b-1 loop-gate negative control 플래그(평시 false → tree-shake).
+declare const __S4B_LOOP_NEG_CTRL_A__: boolean;
+declare const __S4B_LOOP_NEG_CTRL_B__: boolean;
 
 function readHash(): string {
   return typeof window !== "undefined" ? window.location.hash : "";
@@ -92,6 +104,13 @@ export function ReactShellRouter({
       ? NegativeControlSubjectSummariesIslandPortalB
       : SubjectSummariesIslandPortal;
 
+  // S4b-1 week portal 선택: neg-ctrl-A/B 빌드에서만 교체, 평시 = WeekIslandPortal.
+  const WeekPortal = __S4B_LOOP_NEG_CTRL_A__
+    ? NegativeControlWeekIslandPortalA
+    : __S4B_LOOP_NEG_CTRL_B__
+      ? NegativeControlWeekIslandPortalB
+      : WeekIslandPortal;
+
   return (
     <>
       <LegacyView route={route} registry={registry} />
@@ -103,6 +122,7 @@ export function ReactShellRouter({
       <SubjectSummaryDetailIslandPortal />
       <SubjectMcpIslandPortal />
       <SubjectMemorizeIslandPortal />
+      <WeekPortal />
     </>
   );
 }

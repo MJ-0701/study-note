@@ -25,3 +25,8 @@ export function renderSubjectMcpSlot(): string {
 export function renderSubjectMemorizeSlot(): string {
   return `<div id="subject-memorize-island" data-react-island="subject-memorize" style="display:contents"></div>`;
 }
+
+/** week route — slot placeholder. */
+export function renderWeekSlot(): string {
+  return `<div id="week-island" data-react-island="week" style="display:contents"></div>`;
+}
