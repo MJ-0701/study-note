@@ -73,10 +73,17 @@ import {
 import { type AuthGateCallbacks } from "./auth/AuthGate.tsx";
 import { renderAuthGate } from "./auth/authGateMount.tsx";
 import {
+  getConceptById,
   getKeywordById,
   getNotebookCoverage,
   getIntegrityWarnings,
+  getQuestionById,
+  getSourceById,
   getSubjectCoverage,
+  type Concept,
+  type ExampleQuestion,
+  type RequiredKeyword,
+  type SourceMaterial,
   type SubjectNote,
   type WeekNote
 } from "@study-note/domain";
@@ -120,8 +127,13 @@ import {
 import "./styles.css";
 import {
   parseRoute,
+  subjectClassPath,
+  subjectMcpPath,
+  subjectMemorizePath,
   subjectPdfWorkspacePath,
-  weekPath
+  subjectSummaryPath,
+  weekPath,
+  weekSummaryPath,
 } from "./app/routes";
 import { escapeHtml } from "./app/escape-html";
 import {
@@ -307,12 +319,22 @@ import {
   type SubjectClassContext
 } from "./subject-views/subject-class";
 import {
-  renderSubjectSummariesPage,
-  renderWeekSummaryPage,
-  type SummariesContext
-} from "./subject-views/summaries";
-import { renderSubjectMemorizePage } from "./subject-views/memorize";
-import { renderSubjectMcpPage } from "./subject-views/mcp";
+  renderSubjectSummariesSlot,
+  renderSubjectSummaryDetailSlot,
+  renderSubjectMcpSlot,
+  renderSubjectMemorizeSlot,
+} from "./subject-views/subject-view-slots";
+import type { SubjectSummariesViewProps } from "./subject-views/SubjectSummariesView.tsx";
+import type { SubjectSummaryDetailViewProps } from "./subject-views/SubjectSummaryDetailView.tsx";
+import type { SubjectMcpViewProps } from "./subject-views/SubjectMcpView.tsx";
+import type { SubjectMemorizeViewProps } from "./subject-views/SubjectMemorizeView.tsx";
+import { PERSONA_BY_SUBJECT } from "./subject-views/mcp";
+import { parseClassDateLabel } from "./subject-views/memorize";
+import {
+  formatReviewStatus,
+  formatSourceKind,
+  formatSourceVisibility,
+} from "./subject-views/subject-cards";
 import {
   renderWeekPage,
   type WeekPageContext
@@ -332,8 +354,10 @@ import {
   buildSubjectQuickNote,
   buildWeekQuickNote,
   renderQuickNotePanel,
+  type QuickNote,
   type QuickNoteContext
 } from "./subject-views/quick-note";
+import { formatQuickNoteStatus } from "./subject-views/subject-cards";
 import {
   buildNotebookKey,
   clearNotebookStorageError,
@@ -380,6 +404,18 @@ import {
   getSidebarSlot,
   setSidebarSlot,
   setSidebarProps,
+  setSubjectSummariesSlot,
+  setSubjectSummariesProps,
+  getSubjectSummariesSlot,
+  setSubjectSummaryDetailSlot,
+  setSubjectSummaryDetailProps,
+  getSubjectSummaryDetailSlot,
+  setSubjectMcpSlot,
+  setSubjectMcpProps,
+  getSubjectMcpSlot,
+  setSubjectMemorizeSlot,
+  setSubjectMemorizeProps,
+  getSubjectMemorizeSlot,
 } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
@@ -601,6 +637,31 @@ const mainRenderSink: RenderSink | null = appRoot
           const sidebarEl = root.querySelector<HTMLElement>('[data-react-island="sidebar"]');
           if (getSidebarSlot() !== sidebarEl) {
             setSidebarSlot(sidebarEl);
+          }
+        },
+        // S4a: subject view island slot signal (route 이탈 시 null → portal unmount).
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="subject-summaries"]');
+          if (getSubjectSummariesSlot() !== el) {
+            setSubjectSummariesSlot(el);
+          }
+        },
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="subject-summary-detail"]');
+          if (getSubjectSummaryDetailSlot() !== el) {
+            setSubjectSummaryDetailSlot(el);
+          }
+        },
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="subject-mcp"]');
+          if (getSubjectMcpSlot() !== el) {
+            setSubjectMcpSlot(el);
+          }
+        },
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="subject-memorize"]');
+          if (getSubjectMemorizeSlot() !== el) {
+            setSubjectMemorizeSlot(el);
           }
         }
       ]
@@ -4655,36 +4716,257 @@ function renderApp(): void {
   }
 
   if (route.name === "subject-summaries" && subject) {
+    // S4a: subject-summaries React island props 계산 + 발행. postMountEffect 가 slot signal.
+    const coverage = getSubjectCoverage(subject);
+    const summariesProps: SubjectSummariesViewProps = {
+      subjectId: subject.id,
+      subjectTitle: subject.title,
+      examLabel: subject.examLabel,
+      weekRange: subject.summary.weekRange,
+      classPath: subjectClassPath(subject),
+      memorizePath: subjectMemorizePath(subject),
+      coverageRate: coverage.coverageRate,
+      covered: coverage.covered,
+      total: coverage.total,
+      weekCount: subject.weekNotes.length,
+      examScope: subject.summary.examScope,
+      examLabelShort: subject.examLabel,
+      strategy: subject.summary.strategy,
+      weakSpots: subject.summary.weakSpots.join(", "),
+      days: subject.weekNotes.map((week) => ({
+        id: week.id,
+        formattedLabel: formatWeekLabel(week.label),
+        reviewStatusLabel: formatReviewStatus(week.reviewStatus),
+        title: week.title,
+        focus: week.focus,
+        conceptCount: week.conceptIds.length,
+        questionCount: week.exampleQuestionIds.length,
+        summaryDetailHref: weekSummaryPath(subject, week),
+        classDetailHref: weekPath(subject, week),
+      })),
+    };
+    setSubjectSummariesProps(summariesProps);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMcpProps(null);
+    setSubjectMemorizeProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
-      renderSubjectSummariesPage(summariesContext, subject),
+      renderSubjectSummariesSlot(),
       `${subject.title} / 요약본`
     ));
     return;
   }
 
   if (route.name === "subject-summary-detail" && subject && week) {
+    // S4a: subject-summary-detail React island props 계산 + 발행.
+    const weekKeywords = week.requiredKeywordIds
+      .map((keywordId) => getKeywordById(subject, keywordId))
+      .filter((keyword): keyword is RequiredKeyword => Boolean(keyword));
+    const weekConcepts = week.conceptIds
+      .map((conceptId) => getConceptById(subject, conceptId))
+      .filter((concept): concept is Concept => Boolean(concept));
+    const weekQuestions = week.exampleQuestionIds
+      .map((questionId) => getQuestionById(subject, questionId))
+      .filter((question): question is ExampleQuestion => Boolean(question));
+    const weekSources = week.sourceMaterialIds
+      .map((sourceId) => getSourceById(subject, sourceId))
+      .filter((source): source is SourceMaterial => Boolean(source));
+    // quick-note panel: resolve current quick-note for week origin.
+    const currentQuickNote: QuickNote | undefined = getQuickNote();
+    const weekQuickNote = (
+      currentQuickNote &&
+      currentQuickNote.subjectId === subject.id &&
+      currentQuickNote.origin === "week"
+    ) ? currentQuickNote : undefined;
+    const summaryDetailProps: SubjectSummaryDetailViewProps = {
+      subjectId: subject.id,
+      subjectTitle: subject.title,
+      weekId: week.id,
+      weekLabel: week.label,
+      weekTitle: week.title,
+      weekFocus: week.focus,
+      classPath: weekPath(subject, week),
+      summaryListPath: subjectSummaryPath(subject),
+      keywords: weekKeywords.map((kw) => ({
+        id: kw.id,
+        label: kw.label,
+        professorSignal: kw.professorSignal,
+        status: kw.status,
+        conceptTitles: kw.conceptIds
+          .map((cid) => getConceptById(subject, cid))
+          .filter((c): c is Concept => Boolean(c))
+          .map((c) => c.title),
+      })),
+      concepts: weekConcepts.map((c) => ({
+        id: c.id,
+        priority: c.priority,
+        title: c.title,
+        summary: c.summary,
+        easyExplanation: c.easyExplanation,
+        sourceHints: c.sourceHints,
+        linkedQuestionCount: c.exampleQuestionIds
+          .map((qid) => getQuestionById(subject, qid))
+          .filter((q): q is ExampleQuestion => Boolean(q)).length,
+      })),
+      questions: weekQuestions.map((q) => ({
+        id: q.id,
+        difficulty: q.difficulty,
+        prompt: q.prompt,
+        answer: q.answer,
+        explanation: q.explanation,
+      })),
+      sources: weekSources.map((s) => ({
+        id: s.id,
+        kind: s.kind,
+        kindLabel: formatSourceKind(s.kind),
+        visibility: s.visibility,
+        visibilityLabel: formatSourceVisibility(s.visibility),
+        title: s.title,
+        note: s.note,
+        pages: s.pages ?? null,
+      })),
+      quickNote: weekQuickNote ? {
+        status: weekQuickNote.status,
+        title: weekQuickNote.title,
+        subtitle: weekQuickNote.subtitle,
+        statusLabel: formatQuickNoteStatus(weekQuickNote.status),
+        sections: weekQuickNote.sections,
+        primaryHref: weekQuickNote.primaryHref ?? null,
+        primaryLabel: weekQuickNote.primaryLabel ?? null,
+      } : null,
+    };
+    setSubjectSummaryDetailProps(summaryDetailProps);
+    setSubjectSummariesProps(null);
+    setSubjectMcpProps(null);
+    setSubjectMemorizeProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
-      renderWeekSummaryPage(summariesContext, subject, week),
+      renderSubjectSummaryDetailSlot(),
       `${subject.title} / ${week.label} 요약본`
     ));
     return;
   }
 
   if (route.name === "subject-mcp" && subject) {
+    // S4a: subject-mcp React island props 계산 + 발행.
+    const mcpPersonaEntry = PERSONA_BY_SUBJECT[subject.id];
+    const mcpQuestions = subject.weekNotes
+      .flatMap((w) => w.exampleQuestionIds)
+      .map((questionId) => getQuestionById(subject, questionId))
+      .filter((question): question is ExampleQuestion => Boolean(question));
+    const mcpProps: SubjectMcpViewProps = {
+      subjectId: subject.id,
+      subjectTitle: subject.title,
+      examLabel: subject.examLabel,
+      weekRange: subject.summary.weekRange,
+      summaryPath: subjectSummaryPath(subject),
+      personaCallHref: mcpPersonaEntry?.active
+        ? `/persona-turn.html?subject=${encodeURIComponent(subject.id)}`
+        : null,
+      persona: mcpPersonaEntry
+        ? { nick: mcpPersonaEntry.nick, active: mcpPersonaEntry.active }
+        : null,
+      weakSpots: subject.summary.weakSpots.join(", "),
+      keywordsLabel: subject.requiredKeywords.map((kw) => kw.label).join(", "),
+      questions: mcpQuestions.map((q) => ({
+        difficulty: q.difficulty,
+        prompt: q.prompt,
+        answer: q.answer,
+        explanation: q.explanation,
+      })),
+    };
+    setSubjectMcpProps(mcpProps);
+    setSubjectSummariesProps(null);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMemorizeProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
-      renderSubjectMcpPage(subject),
+      renderSubjectMcpSlot(),
       `${subject.title} / MCP 호출`
     ));
     return;
   }
 
   if (route.name === "subject-memorize" && subject) {
+    // S4a: subject-memorize React island props 계산 + 발행.
+    const mustKnowConcepts = subject.summary.mustKnowConceptIds
+      .map((conceptId) => getConceptById(subject, conceptId))
+      .filter((concept): concept is Concept => Boolean(concept));
+    const missingKeywords = subject.requiredKeywords.filter((kw) => kw.status !== "covered");
+    const displayKeywords = missingKeywords.length > 0 ? missingKeywords : subject.requiredKeywords;
+    const memorizeExamQuestions = subject.weekNotes
+      .flatMap((w) => w.exampleQuestionIds)
+      .map((questionId) => getQuestionById(subject, questionId))
+      .filter((question): question is ExampleQuestion => Boolean(question));
+    const subjectPhase = subject.examPhase ?? "final";
+    const sortedMemorizeWeeks = [...subject.weekNotes].sort(
+      (a, b) => parseClassDateLabel(a.label) - parseClassDateLabel(b.label)
+    );
+    const midtermWeeks = sortedMemorizeWeeks.filter((w) => (w.examPhase ?? subjectPhase) === "midterm");
+    const finalWeeks = sortedMemorizeWeeks.filter((w) => (w.examPhase ?? subjectPhase) === "final");
+    const memorizeProps: SubjectMemorizeViewProps = {
+      subjectId: subject.id,
+      subjectTitle: subject.title,
+      examLabel: subject.examLabel,
+      summaryPath: subjectSummaryPath(subject),
+      mcpPath: subjectMcpPath(subject),
+      examScope: subject.summary.examScope,
+      strategy: subject.summary.strategy,
+      weakSpots: subject.summary.weakSpots.join(", "),
+      midtermGroup: {
+        title: "중간고사",
+        weeks: midtermWeeks.map((w) => ({
+          id: w.id,
+          label: w.label,
+          title: w.title,
+          href: weekPath(subject, w),
+        })),
+      },
+      finalGroup: {
+        title: "기말고사",
+        weeks: finalWeeks.map((w) => ({
+          id: w.id,
+          label: w.label,
+          title: w.title,
+          href: weekPath(subject, w),
+        })),
+      },
+      mustKnowConcepts: mustKnowConcepts.map((c) => ({
+        id: c.id,
+        priority: c.priority,
+        title: c.title,
+        summary: c.summary,
+        easyExplanation: c.easyExplanation,
+        sourceHints: c.sourceHints,
+        linkedQuestionCount: c.exampleQuestionIds
+          .map((qid) => getQuestionById(subject, qid))
+          .filter((q): q is ExampleQuestion => Boolean(q)).length,
+      })),
+      keywords: displayKeywords.map((kw) => ({
+        id: kw.id,
+        subjectId: subject.id,
+        label: kw.label,
+        professorSignal: kw.professorSignal,
+        status: kw.status,
+        conceptTitles: kw.conceptIds
+          .map((cid) => getConceptById(subject, cid))
+          .filter((c): c is Concept => Boolean(c))
+          .map((c) => c.title),
+      })),
+      examQuestions: memorizeExamQuestions.slice(0, 5).map((q) => ({
+        difficulty: q.difficulty,
+        prompt: q.prompt,
+        answer: q.answer,
+        explanation: q.explanation,
+      })),
+    };
+    setSubjectMemorizeProps(memorizeProps);
+    setSubjectSummariesProps(null);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMcpProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
-      renderSubjectMemorizePage(subject),
+      renderSubjectMemorizeSlot(),
       `${subject.title} / 필수 암기노트`
     ));
     return;
@@ -4744,13 +5026,6 @@ const sidebarContext: SidebarContext = {
   getSidebarTermsCache,
   getSidebarSubjectsCache,
   getSidebarOpenTermIds
-};
-
-// Summaries context (slice-5 — summaries.ts). 2 field (fn ref + callback).
-const summariesContext: SummariesContext = {
-  formatWeekLabel,
-  renderQuickNotePanel: (subject, origins) =>
-    renderQuickNotePanel(quickNoteContext, subject, origins)
 };
 
 // Subject-class context (slice-4 — subject-class.ts). 2 lazy + 3 fn ref + 3 callback.
