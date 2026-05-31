@@ -65,6 +65,10 @@ export interface UserNotesSyncCallbacks {
   persistNotebook(): void;
   triggerRender(): void;
   handleAuthExpired(): void;
+  // GET T1 hydrate 완료 시 호출 — userNotesHydrationVersion 을 bump 해
+  // textarea key 변경 → defaultValue 재적용 트리거. PUT 경로에서는 절대 호출 X
+  // (타이핑 중 renderApp 가 key 변경 → textarea remount → focus/cursor 손실 방지).
+  markServerHydrated(): void;
 }
 
 const userNotesPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -365,6 +369,10 @@ export async function fetchUserNoteIfMissing(
       )
     };
     if (applied) {
+      // markServerHydrated → userNotesHydrationVersion bump → 다음 renderApp 에서
+      // 새 token → textarea remount → defaultValue 재적용(서버 값). triggerRender
+      // 전에 호출해야 render 가 이미 증가된 version 을 읽는다.
+      cb.markServerHydrated();
       cb.setNotebook(next);
       cb.persistNotebook();
       cb.triggerRender();

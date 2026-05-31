@@ -1,8 +1,9 @@
 // S4b-1 React island leaf — week 뷰 순수 프레젠테이션 컴포넌트(props only, hook 0).
 // hook 구독 0, effect-setState 0. data-action 위임 보존. JSX 자동 escape.
 // userNotes = uncontrolled textarea (defaultValue). key=userNotesToken 으로
-// fetchUserNoteIfMissing 완료 후 re-hydrate 보장 (typing 중 renderApp 미호출 →
-// 동일 token → 재마운트 없음).
+// GET T1 hydrate 완료(markServerHydrated → userNotesHydrationVersion bump) 시에만
+// remount → defaultValue 재적용. PUT 경로(타이핑 후 5xx)에서는 version 불변 →
+// token 불변 → remount 없음 → focus/cursor 유지(parity: legacy morphdom 동일 보장).
 
 // ─── public types ────────────────────────────────────────────────────────────
 

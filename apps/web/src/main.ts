@@ -1010,11 +1010,16 @@ const userNotesSyncCtx: UserNotesSyncContext = {
   getAuthSession: () => getAuthSession(),
   getNotebook: () => getNotebook()
 };
+// GET T1 hydrate 완료 카운터 — bump 시 week producer 가 새 userNotesToken 생성.
+// PUT 경로 / recovery(recordSyncSuccess) 에서는 절대 bump 금지(타이핑 중 focus 손실).
+let userNotesHydrationVersion = 0;
+
 const userNotesSyncCb: UserNotesSyncCallbacks = {
   setNotebook: (next) => { setNotebook(next); },
   persistNotebook: () => { persistNotebook(); },
   triggerRender: () => { try { renderApp(); } catch { /* ignore */ } },
-  handleAuthExpired: () => { handleAuthExpiredFromSync(); }
+  handleAuthExpired: () => { handleAuthExpiredFromSync(); },
+  markServerHydrated: () => { userNotesHydrationVersion += 1; },
 };
 function scheduleUserNotePut(subjectId: string, weekId: string, body: string): void {
   scheduleUserNotePutModule(userNotesSyncCtx, userNotesSyncCb, subjectId, weekId, body);
@@ -5047,10 +5052,12 @@ function renderApp(): void {
         explanation: q.explanation,
       })),
       userNotes: userNotesValue,
-      // userNotesToken: fetchUserNoteIfMissing 완료 후 renderApp 재호출 시 value 변경 →
-      // key 변경 → textarea 재마운트 → defaultValue 재적용. 타이핑 중 renderApp 미호출
-      // → token 동일 → 재마운트 없음 (uncontrolled 무결성 보장).
-      userNotesToken: userNotesValue,
+      // userNotesToken: GET T1 hydrate 완료(markServerHydrated → userNotesHydrationVersion
+      // bump) 시에만 token 변경 → textarea remount → defaultValue 재적용(서버 값).
+      // PUT 경로(타이핑 후 실패)에서는 version 불변 → token 불변 → remount 없음
+      // → focus/cursor 유지. subjectId+weekId 포함 — week 이동 시 route identity
+      // 보장(version-only 면 이전 week 메모 잔존).
+      userNotesToken: `${subject.id}:${week.id}:${userNotesHydrationVersion}`,
       materials: weekMaterials.map((material) => ({
         materialKey: getPdfMaterialKey(material),
         subjectTitle: subject.title,
