@@ -315,22 +315,21 @@ import {
   getSubjectSamplePayload
 } from "./subject-views/home-intake";
 import { localIntakeGuide } from "./data/intakeGuide";
-import {
-  renderSubjectClassPage,
-  type SubjectClassContext
-} from "./subject-views/subject-class";
+// subject-class.ts is preserved as parity oracle (renderSubjectClassPage etc.) — no main.ts import needed post-S4b-2.
 import {
   renderSubjectSummariesSlot,
   renderSubjectSummaryDetailSlot,
   renderSubjectMcpSlot,
   renderSubjectMemorizeSlot,
   renderWeekSlot,
+  renderSubjectClassSlot,
 } from "./subject-views/subject-view-slots";
 import type { SubjectSummariesViewProps } from "./subject-views/SubjectSummariesView.tsx";
 import type { SubjectSummaryDetailViewProps } from "./subject-views/SubjectSummaryDetailView.tsx";
 import type { SubjectMcpViewProps } from "./subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "./subject-views/SubjectMemorizeView.tsx";
 import type { WeekViewProps } from "./subject-views/WeekView.tsx";
+import type { SubjectClassViewProps } from "./subject-views/SubjectClassView.tsx";
 import { PERSONA_BY_SUBJECT } from "./subject-views/mcp";
 import { parseClassDateLabel } from "./subject-views/memorize";
 import {
@@ -342,13 +341,14 @@ import {
 } from "./subject-views/subject-cards";
 import {
   canManagePdfMaterials,
+  canEditPdfMaterialClassDate,
   getPdfMaterialClassDateLabel,
+  getPdfMaterialClassDateSelectValue,
   getPdfMaterialOwnerLabel,
   getPdfMaterialStatusLabel,
   getPdfMaterialsForWeek,
+  getSortedPdfClassDateWeeks,
   isUnconfirmedPdfClassDate,
-  renderPdfLibraryUploadCard,
-  renderPdfMaterialCard,
   renderPdfWorkspaceIndex,
   renderSubjectPdfMaterialBrowser,
   type PdfLibraryContext
@@ -421,6 +421,9 @@ import {
   setWeekSlot,
   setWeekProps,
   getWeekSlot,
+  setSubjectClassSlot,
+  setSubjectClassProps,
+  getSubjectClassSlot,
 } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
@@ -675,6 +678,13 @@ const mainRenderSink: RenderSink | null = appRoot
           if (getWeekSlot() !== el) {
             setWeekSlot(el);
           }
+        },
+        // S4b-2: subject-class island slot signal (route 이탈 시 null → portal unmount).
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="subject-class"]');
+          if (getSubjectClassSlot() !== el) {
+            setSubjectClassSlot(el);
+          }
         }
       ]
     }
@@ -747,6 +757,10 @@ if (isBrowserRuntime) {
   // useEffect 는 commit 이후 = main.ts 모듈 eval 완료 후 실행되므로 기존
   // queueMicrotask 가 회피하던 TDZ ("Cannot access 'tableWidgetContext'…")를
   // 동일하게 회피한다.
+  // loop-gate FOCUS-PRES 테스트 진입점: 동일 route 에서 background renderApp 트리거.
+  // window.__studyNoteRenderApp() = renderApp(). hoisted function ref 안전.
+  (window as unknown as { __studyNoteRenderApp?: () => void }).__studyNoteRenderApp = renderApp;
+
   if (appRoot) {
     mountReactShell(appRoot, {
       renderApp,
@@ -4724,9 +4738,16 @@ function renderApp(): void {
   }
 
   if ((route.name === "subject" || route.name === "subject-class") && subject) {
+    // S4b-2: subject-class React island props 계산 + 발행. postMountEffect 가 slot signal.
+    setSubjectClassProps(buildSubjectClassProps(subject));
+    setSubjectSummariesProps(null);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMcpProps(null);
+    setSubjectMemorizeProps(null);
+    setWeekProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
-      renderSubjectClassPage(subjectClassContext, subject),
+      renderSubjectClassSlot(),
       `${subject.title} / 수업`
     ));
     return;
@@ -4767,6 +4788,7 @@ function renderApp(): void {
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
     setWeekProps(null);
+    setSubjectClassProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectSummariesSlot(),
@@ -4858,6 +4880,7 @@ function renderApp(): void {
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
     setWeekProps(null);
+    setSubjectClassProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectSummaryDetailSlot(),
@@ -4899,6 +4922,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMemorizeProps(null);
     setWeekProps(null);
+    setSubjectClassProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectMcpSlot(),
@@ -4985,6 +5009,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
     setWeekProps(null);
+    setSubjectClassProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectMemorizeSlot(),
@@ -5085,6 +5110,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setSubjectClassProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderWeekSlot(),
@@ -5136,19 +5162,156 @@ const sidebarContext: SidebarContext = {
   getSidebarOpenTermIds
 };
 
-// Subject-class context (slice-4 — subject-class.ts). 2 lazy + 3 fn ref + 3 callback.
-const subjectClassContext: SubjectClassContext = {
-  getSubjectPdfMaterials,
-  canManagePdfMaterials: () => canManagePdfMaterials(pdfLibraryContext),
-  isUnconfirmedPdfClassDate,
-  formatWeekLabel,
-  getPdfMaterialsForWeek,
-  renderIntakeFeedback,
-  renderPdfLibraryUploadCard: (subject, materialCount) =>
-    renderPdfLibraryUploadCard(pdfLibraryContext, subject, materialCount),
-  renderPdfMaterialCard: (subject, material, opts) =>
-    renderPdfMaterialCard(pdfLibraryContext, subject, material, opts)
-};
+// S4b-2: subject-class island view-model builder.
+// producer 가 pdf-library / subject-class 의 helper 를 모두 호출해 plain data 로 변환.
+// 리프(SubjectClassView) 는 helper 직접 호출 없이 props 만 렌더.
+export function buildSubjectClassProps(subject: SubjectNote): SubjectClassViewProps {
+  const subjectMaterials = getSubjectPdfMaterials(subject.id);
+  const canManage = canManagePdfMaterials(pdfLibraryContext);
+  const canEdit = canEditPdfMaterialClassDate(pdfLibraryContext, {} as never);
+
+  // --- intake feedback view-model ---
+  const rawFeedback = getIntakeFeedback();
+  const intakeFeedbackViewmodel = rawFeedback
+    ? {
+        // parity: raw kind passthrough (is-success / is-error CSS). is-info 스타일 없음.
+        kind: rawFeedback.kind,
+        title: rawFeedback.title,
+        detail: rawFeedback.detail,
+        href: rawFeedback.href
+          ? sanitizeExternalUrl(rawFeedback.href)
+          : null,
+        retrySubjectId: rawFeedback.retrySubjectId ?? null,
+        hasPendingRetry: Boolean(getPendingPdfRetry()),
+      }
+    : null;
+
+  // --- sorted week cards ---
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  const sortedWeeks = [...subject.weekNotes].sort((a, b) => {
+    const aIso = ISO_RE.test(a.label);
+    const bIso = ISO_RE.test(b.label);
+    if (aIso && bIso) return a.label.localeCompare(b.label);
+    if (aIso !== bIso) return aIso ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+
+  const classDayCards: SubjectClassViewProps["classDayCards"] = sortedWeeks.map((week) => {
+    const linkedMaterials = getPdfMaterialsForWeek(subject, week, subjectMaterials);
+    const unassigned = subjectMaterials.filter((m) =>
+      isUnconfirmedPdfClassDate(subject, m.classDate)
+    );
+    const linkedPdfButtons = linkedMaterials.slice(0, 2).map((m) => ({
+      materialKey: getPdfMaterialKey(m),
+      fileName: m.fileName,
+    }));
+    return {
+      weekId: week.id,
+      weekLabel: week.label,
+      weekLabelFormatted: formatWeekLabel(week.label),
+      reviewStatusLabel: formatReviewStatus(week.reviewStatus),
+      weekTitle: week.title,
+      weekFocus: week.focus,
+      linkedMaterialCount: linkedMaterials.length,
+      keywordCount: week.requiredKeywordIds.length,
+      linkedPdfButtons,
+      extraPdfCount: linkedMaterials.length > 2 ? linkedMaterials.length - 2 : 0,
+      weekPath: weekPath(subject, week),
+      weekSummaryPath: weekSummaryPath(subject, week),
+      canManage,
+      unassignedOptions: unassigned.map((m) => ({
+        materialKey: getPdfMaterialKey(m),
+        fileName: m.fileName,
+      })),
+    };
+  });
+
+  // --- upload card ---
+  const safeSubjectId = subject.id;
+  const uploadCard: SubjectClassViewProps["uploadCard"] = {
+    isReadonly: !canManage,
+    subjectTitle: subject.title,
+    subjectId: safeSubjectId,
+    materialCount: subjectMaterials.length,
+    readonlyHref: sanitizeExternalUrl(subjectPdfWorkspacePath(subject)),
+    inputId: `pdf-library-upload-${safeSubjectId}`,
+  };
+
+  // --- assignment section: per-material with class-date control ---
+  const materials: SubjectClassViewProps["materials"] = subjectMaterials.map((material) => {
+    const materialKey = getPdfMaterialKey(material);
+    const classDateLabel = getPdfMaterialClassDateLabel(subject, material);
+    const classDateIsUnconfirmed = isUnconfirmedPdfClassDate(subject, material.classDate);
+    const ownerLabel = getPdfMaterialOwnerLabel(pdfLibraryContext, material);
+    const statusLabel = getPdfMaterialStatusLabel(material);
+    const selectedValue = getPdfMaterialClassDateSelectValue(subject, material);
+    const radioName = `pdf-class-date-${subject.id}-${materialKey}`;
+
+    // Replicate private getPdfClassDateOptionLabel inline
+    function computeSelectedLabel(value: string): string {
+      if (value === PDF_MATERIAL_UNASSIGNED_CLASS_DATE) return "수업일 미지정";
+      const w = subject.weekNotes.find((item) => item.label === value);
+      return w?.title ? `${w.label} · ${w.title}` : value;
+    }
+    const selectedLabel = computeSelectedLabel(selectedValue);
+
+    // Build options: [미지정 + sorted weeks]
+    const sortedWeeksForOptions = getSortedPdfClassDateWeeks(subject);
+    const options = [
+      {
+        value: PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
+        label: "수업일 미지정",
+        checked: selectedValue === PDF_MATERIAL_UNASSIGNED_CLASS_DATE,
+        disabled: false,
+      },
+      ...sortedWeeksForOptions.map((week) => {
+        const isIso = ISO_RE.test(week.label);
+        const displayLabel = week.title ? `${week.label} · ${week.title}` : week.label;
+        const label = isIso ? displayLabel : `${displayLabel} (사용 불가 — 이전 형식)`;
+        return {
+          value: week.label,
+          label,
+          checked: selectedValue === week.label,
+          disabled: !isIso,
+        };
+      }),
+    ];
+
+    return {
+      materialKey,
+      fileName: material.fileName,
+      fileSize: formatPdfFileSize(material.fileSize),
+      pageCount: material.pageCount,
+      statusLabel,
+      ownerLabel,
+      classDateLabel,
+      classDateIsUnconfirmed,
+      classDateSelectedValue: selectedValue,
+      classDateSelectedLabel: selectedLabel,
+      classDateCanEdit: canEdit,
+      classDateRadioName: radioName,
+      classDateOptions: options,
+    };
+  });
+
+  return {
+    subjectId: subject.id,
+    subjectTitle: subject.title,
+    examLabel: subject.examLabel,
+    weekRange: subject.summary.weekRange,
+    classPath: subjectClassPath(subject),
+    summaryPath: subjectSummaryPath(subject),
+    memorizePath: subjectMemorizePath(subject),
+    pdfWorkspacePath: subjectPdfWorkspacePath(subject),
+    weekCount: subject.weekNotes.length,
+    materialCount: subjectMaterials.length,
+    intakeFeedback: intakeFeedbackViewmodel,
+    intakeFeedbackEmptyText: "수업일 추가와 PDF 매핑 상태가 여기에 표시됩니다.",
+    classDayCards,
+    uploadCard,
+    materials,
+  };
+}
 
 // S3b: sidebar-island slot placeholder. renderShell(appShell.ts:178) 가
 // `${sidebar}` raw-embed 로 HTML 에 그대로 삽입 → morphdom getNodeKey = node.id
@@ -5199,7 +5362,7 @@ function renderIntakeFeedback(
     <div class="import-feedback is-${intakeFeedback.kind}">
       <strong>${escapeHtml(intakeFeedback.title)}</strong>
       <p>${escapeHtml(intakeFeedback.detail)}</p>
-      ${intakeFeedback.href ? `<a href="${intakeFeedback.href}">반영된 수업일 노트 보기</a>` : ""}
+      ${intakeFeedback.href ? `<a href="${escapeHtml(sanitizeExternalUrl(intakeFeedback.href))}">반영된 수업일 노트 보기</a>` : ""}
       ${retryButton}
     </div>
   `;

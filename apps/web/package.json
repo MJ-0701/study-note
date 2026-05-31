@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test:run": "node --experimental-strip-types --no-warnings --test src/subject-views/__tests__/SubjectClassView.spec.ts src/stores/__tests__/uiStore-s4b2-loop-immunity.spec.ts src/subject-views/__tests__/WeekView.spec.ts src/stores/__tests__/uiStore-s4b1-week-loop-immunity.spec.ts src/stores/__tests__/uiStore-s4a-loop-immunity.spec.ts src/stores/__tests__/uiStore-loop-immunity.spec.ts src/subject-views/__tests__/subject-class.spec.ts",
+    "loopgate:s4b2": "node scripts/playwright-s4b2-subject-class-loop.mjs"
   },
   "dependencies": {
     "@datadog/browser-rum": "^7.1.0",
