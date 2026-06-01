@@ -315,7 +315,7 @@ NestJS 백엔드의 메트릭 emit 경로는 다음과 같습니다.
 
 ## 기술 스택
 
-- Frontend: Vite, TypeScript, vanilla TS 모듈 + React admin SPA, pdfjs-dist
+- Frontend: Vite, TypeScript, vanilla TS routing shell + React islands/admin SPA, pdfjs-dist
 - Backend: NestJS, Express, Prisma, `@nestjs/schedule`
 - Database: Azure MySQL Flex
 - Storage: Cloudflare R2 (S3 호환)
@@ -363,7 +363,7 @@ pnpm run smoke:s3-storage
 RUN_REAL_S3_SMOKE=1 pnpm run smoke:s3-real
 ```
 
-프로덕션 프런트 스모크는 Playwright 스크립트로 분리되어 있습니다.
+프로덕션 프론트엔드 스모크는 Playwright 스크립트로 분리되어 있습니다.
 
 ```bash
 node scripts/playwright-prod-smoke.mjs
