@@ -42,10 +42,11 @@ const PRODUCT_GAUGES: readonly GaugeSpec[] = [
   }
 ] as const;
 
-/** AC8 Org gauges (6) — role distribution + Term/Subject/Material averages. */
+/** AC8 Org gauges (7) — role distribution + Term/Subject/Material averages. */
 const ORG_GAUGES: readonly GaugeSpec[] = [
   { name: "study_note.product.users.role_master", help: "Users with role=MASTER." },
   { name: "study_note.product.users.role_admin", help: "Users with role=ADMIN." },
+  { name: "study_note.product.users.role_reviewer", help: "Users with role=REVIEWER." },
   { name: "study_note.product.users.role_normal", help: "Users with role=NORMAL." },
   { name: "study_note.product.org.term_active_count", help: "Total Term rows." },
   {
