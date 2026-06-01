@@ -84,6 +84,7 @@ export interface WorkspaceStoreCallbacks {
       charts: SubjectPdfWorkspace["charts"];
       starMarks: SubjectPdfWorkspace["starMarks"];
     },
+    subjectId: string,
     annotationSyncContext: AnnotationSyncContext,
     annotationSyncCallbacks: AnnotationSyncCallbacks
   ) => void;
@@ -373,6 +374,7 @@ export function updatePdfWorkspace(
     callbacks.scheduleAnnotationPut(
       nextId!,
       payload,
+      subjectId,
       callbacks.getAnnotationSyncContext(),
       callbacks.getAnnotationSyncCallbacks()
     );

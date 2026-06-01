@@ -91,7 +91,12 @@ const syncFailureTracker: SyncFailureTracker = {
 };
 
 const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const annotationPendingPutPayloads = new Map<string, unknown>();
+interface PendingAnnotationPutPayload {
+  payload: unknown;
+  mergeWithCanonical: boolean;
+}
+
+const annotationPendingPutPayloads = new Map<string, PendingAnnotationPutPayload>();
 const annotationPutAborts = new Map<string, AbortController>();
 const annotationPutChains = new Map<string, Promise<void>>();
 const annotationFetchedKeys = new Set<string>();
@@ -190,7 +195,11 @@ function mergeAnnotationArray(canonical: unknown, pending: unknown): unknown[] |
   return merged;
 }
 
-function mergeAnnotationPayloads(canonical: unknown, pending: unknown): unknown {
+function mergeAnnotationPayloads(
+  canonical: unknown,
+  pending: unknown,
+  options: { mergeCanonicalArrays: boolean }
+): unknown {
   if (!isRecord(canonical) && !isRecord(pending)) {
     return pending ?? canonical;
   }
@@ -198,9 +207,12 @@ function mergeAnnotationPayloads(canonical: unknown, pending: unknown): unknown 
   const pendingRecord = isRecord(pending) ? pending : {};
   const merged: Record<string, unknown> = { ...canonicalRecord, ...pendingRecord };
   for (const key of ANNOTATION_ARRAY_KEYS) {
-    const array = mergeAnnotationArray(canonicalRecord[key], pendingRecord[key]);
-    if (array) {
-      merged[key] = array;
+    if (Array.isArray(pendingRecord[key])) {
+      merged[key] = options.mergeCanonicalArrays
+        ? mergeAnnotationArray(canonicalRecord[key], pendingRecord[key])
+        : pendingRecord[key];
+    } else if (Array.isArray(canonicalRecord[key])) {
+      merged[key] = canonicalRecord[key];
     }
   }
   return merged;
@@ -210,13 +222,30 @@ function mergePendingAnnotationPutPayload(
   materialId: string,
   canonicalPayload: unknown
 ): Partial<SubjectPdfWorkspace> | undefined {
-  const pendingPayload = annotationPendingPutPayloads.get(materialId);
-  const mergedPayload = mergeAnnotationPayloads(canonicalPayload, pendingPayload);
+  const pending = annotationPendingPutPayloads.get(materialId);
+  const mergedPayload = mergeAnnotationPayloads(canonicalPayload, pending?.payload, {
+    mergeCanonicalArrays: pending?.mergeWithCanonical ?? false
+  });
   if (!isRecord(mergedPayload)) {
     return undefined;
   }
-  annotationPendingPutPayloads.set(materialId, mergedPayload);
+  annotationPendingPutPayloads.set(materialId, {
+    payload: mergedPayload,
+    mergeWithCanonical: false
+  });
   return mergedPayload as Partial<SubjectPdfWorkspace>;
+}
+
+function shouldMergePendingPutWithCanonical(
+  subjectId: string,
+  materialId: string,
+  ctx: AnnotationSyncContext
+): boolean {
+  const sessionUserId = ctx.getSessionUserId();
+  if (!sessionUserId) {
+    return false;
+  }
+  return lastHydratedAnnotationByMaterial.get(getSubjectKey(sessionUserId, subjectId)) !== materialId;
 }
 
 // ─── sync metric tracker ─────────────────────────────────────────────────
@@ -418,6 +447,7 @@ export async function putAnnotationToBE(
 export function scheduleAnnotationPut(
   materialId: string,
   payload: unknown,
+  subjectId: string,
   ctx: AnnotationSyncContext,
   cb: AnnotationSyncCallbacks
 ): void {
@@ -425,10 +455,13 @@ export function scheduleAnnotationPut(
   if (existing) {
     clearTimeout(existing);
   }
-  annotationPendingPutPayloads.set(materialId, payload);
+  annotationPendingPutPayloads.set(materialId, {
+    payload,
+    mergeWithCanonical: shouldMergePendingPutWithCanonical(subjectId, materialId, ctx)
+  });
   const timer = setTimeout(() => {
     annotationPutTimers.delete(materialId);
-    const pendingPayload = annotationPendingPutPayloads.get(materialId) ?? payload;
+    const pendingPayload = annotationPendingPutPayloads.get(materialId)?.payload ?? payload;
     annotationPendingPutPayloads.delete(materialId);
     void putAnnotationToBE(materialId, pendingPayload, ctx, cb);
   }, ANNOTATION_PUT_DEBOUNCE_MS);
