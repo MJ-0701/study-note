@@ -1,10 +1,65 @@
-# 🎯 ACTIVE — S5 죽은 oracle 제거 완료 (Code Review Only, 배포 없음)
+# ACTIVE — React migration Phase 1 공유 leaf 배포 완료
 
 > entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note`.
-> merged = PR#141 → main squash `55f6d5f` (2026-06-01).
-> status = S5 source cleanup 완료. 배포 없음.
+> latest_code = PR#143 → main squash `51a61fc` (2026-06-01).
+> latest_fe_release = `fe-v0.1.85` → GitHub Actions FE Release run `26739780203` success.
+> status = S5 dead cleanup + Phase 1 `PdfMaterialCard` shared leaf 완료/배포. S1 단수 route는 hard stop.
+
+## ✅ Phase 1 결과 — `PdfMaterialCard` 공유 leaf 추출
+
+S4b-2 `SubjectClassView`와 S4c `PdfWorkspacesView`에 중복되어 있던 material card JSX leaf를 공유 컴포넌트로 추출했다.
+
+### 변경 파일
+- `apps/web/src/subject-views/PdfMaterialCard.tsx`
+  - shared `PdfMaterialCard` 추가.
+  - `showClassDateControl: true` branch에서만 수업일 picker/적용 버튼 렌더.
+  - uncontrolled radio parity 유지: `defaultChecked={opt.checked}` + ``key={`${opt.value}:${opt.checked}`}``.
+- `apps/web/src/subject-views/SubjectClassView.tsx`
+  - local `PdfMaterialCard`/class-date control leaf 제거.
+  - shared card import 후 `showClassDateControl={true}`로 호출.
+- `apps/web/src/subject-views/PdfWorkspacesView.tsx`
+  - local `PdfMaterialCard` 제거.
+  - shared card import 후 `showClassDateControl`를 넘기지 않음(false branch).
+- `apps/web/src/subject-views/__tests__/SubjectClassView.spec.ts`
+  - shared leaf source + subject-class callsite를 함께 검사하도록 조정.
+- `apps/web/src/subject-views/__tests__/PdfWorkspacesView.spec.ts`
+  - shared leaf source + pdf-workspaces callsite를 함께 검사.
+  - pdf-workspaces callsite가 `showClassDateControl={true}`를 넘기지 않는 negative guard 유지.
+
+### 검증 evidence
+- targeted static specs:
+  - `node --experimental-strip-types --no-warnings --test apps/web/src/subject-views/__tests__/SubjectClassView.spec.ts apps/web/src/subject-views/__tests__/PdfWorkspacesView.spec.ts`
+  - exit 0 · 87 pass · 0 fail
+- workspace build:
+  - `pnpm -r build`
+  - exit 0
+- web explicit tests:
+  - `pnpm --filter web test:run`
+  - exit 0 · 165 pass · 0 fail
+- loop gates:
+  - `node apps/web/scripts/playwright-s4b2-subject-class-loop.mjs`
+  - exit 0 · GREEN + FOCUS-PRES + DIST delta + RED A/B PASS
+  - `node apps/web/scripts/playwright-s4c-pdf-workspaces-loop.mjs`
+  - exit 0 · GREEN + FOCUS-PRES N/A + DIST delta + RED A/B PASS
+  - 참고: sandbox 안 preview listen은 `EPERM`으로 실패해, 같은 스크립트를 sandbox 밖에서 재실행했다.
+- SFS review:
+  - Gate 3 self/cross: PASS
+  - Gate 6 self/cross: PASS
+- GitHub:
+  - PR#143 `@codex review`: major issues 없음
+  - GitHub Action `Smoke (Backend Contract)` run #48: success
+
+### 배포 evidence
+- PR#143 squash merged to main: `51a61fc`.
+- tag: `fe-v0.1.85` pushed at `51a61fc`.
+- FE Release (Vercel) run `26739780203`: success.
+- Vercel deployment URL: `https://study-note-27x31i4rm-study-note.vercel.app`.
+- custom domain prod smoke:
+  - `PROD_URL=https://study-note.910701.xyz/ node scripts/playwright-prod-smoke.mjs`
+  - exit 0 · HTTP 200 · login visible true · signup visible true · PASS
 
 ## ✅ S5 결과 — dead S4c oracle renderer 제거
+
 S4c가 `#/pdf-workspaces`를 React island로 대체한 뒤 남아 있던 old string renderer를 제거했다.
 
 ### 삭제한 함수
@@ -14,28 +69,17 @@ S4c가 `#/pdf-workspaces`를 React island로 대체한 뒤 남아 있던 old str
   - `renderPdfLibraryUploadCard`
 - 함께 제거: 위 함수 전용 unused import(`StudyNotebook`, `sanitizeExternalUrl`, `subjectPdfWorkspacePath`, `renderMetric`).
 
-### spec/source-grep 정리
-- `apps/web/src/subject-views/__tests__/pdf-library.spec.ts`
-  - 삭제된 `pdf-workspaces` string index/section/upload-card renderer 단언 제거.
-  - KEEP set인 `renderSubjectPdfMaterialBrowser`, `renderPdfMaterialCard`, `renderPdfMaterialClassDateControl` 단언은 유지.
-- `apps/web/src/__tests__/pdf-material-library.spec.ts`
-  - 삭제된 renderer source-grep 단언 제거.
-  - S4b/S4a 이후 현재 route 배선에 맞게 `renderApp` 단언을 island slot/props 경로로 갱신.
-- `apps/web/package.json`
-  - `test:run` 목록 변경 없음. 위 두 spec은 등록 목록에 없었다.
-
-## 🔎 liveness 판정
+### liveness 판정
 - 정의 파일 포함 전체 grep으로 재확인했다.
 - `renderPdfWorkspaceIndex`: live caller 0. 기존 ref는 S4c JSX mirror 주석/spec뿐이었다.
 - `renderPdfSubjectLibrarySection`: live caller 0. 기존 caller는 `renderPdfWorkspaceIndex` 본체뿐이었다.
-- `renderPdfLibraryUploadCard`: `subject-class.ts`가 main route에서 호출되는지 먼저 확인했다.
-  - `main.ts`는 `subject`/`subject-class` route에서 `setSubjectClassProps(buildSubjectClassProps(subject))` + `renderSubjectClassSlot()`만 사용한다.
-  - `renderSubjectClassPage(subjectClassContext, subject)` live call 없음.
-  - 따라서 `pdf-library.ts`의 `renderPdfLibraryUploadCard` export는 runtime dead로 판정해 삭제했다.
-  - 남은 `ctx.renderPdfLibraryUploadCard` 문자열은 `subject-class.ts` old oracle/test callback 이름이며 `pdf-library.ts` export 참조가 아니다.
+- `renderPdfLibraryUploadCard`: `subject-class.ts` old string producer가 `main.ts`에서 호출되지 않아 runtime dead로 판정했다.
+- PR#141 squash merged to main: `55f6d5f`.
+- S5는 dead-code/source cleanup이라 `fe-v*` tag/Vercel 배포를 하지 않았다.
 
-## 🔴 KEEP set 확인
-S1 단수 `#/subjects/:id/pdf` string route는 아직 live라 유지했다.
+## 🔴 KEEP / Hard Stop
+
+S1 단수 `#/subjects/:id/pdf` string route는 아직 live라 유지한다.
 
 경로:
 `apps/web/src/pdf-workspace/workspace-page.ts` → `renderSubjectPdfMaterialBrowser` → `renderPdfMaterialCard` → `renderPdfMaterialClassDateControl`
@@ -45,42 +89,22 @@ S1 단수 `#/subjects/:id/pdf` string route는 아직 live라 유지했다.
 - `renderPdfMaterialCard`
 - `renderPdfMaterialClassDateControl`
 
-## ✅ 검증
-- 보조 spec 직접 실행:
-  - `node --experimental-strip-types --no-warnings --test apps/web/src/subject-views/__tests__/pdf-library.spec.ts apps/web/src/__tests__/pdf-material-library.spec.ts`
-  - exit 0 · 35 pass · 0 fail
-- 필수 build:
-  - `pnpm -r build`
-  - exit 0
-- 필수 web tests:
-  - `pnpm --filter web test:run`
-  - exit 0 · 165 pass · 0 fail
-- orphan 단언 확인:
-  - `apps/web/src/subject-views/__tests__/pdf-library.spec.ts`, `apps/web/src/__tests__/pdf-material-library.spec.ts`, `apps/web/package.json`에서 삭제 함수명 grep 결과 0.
+## 잔여 로드맵
 
-## 🚫 배포/릴리스 상태
-- PR: #141 squash merged to main (`55f6d5f`).
-- duplicate PR #140 closed unmerged (local main ahead docs가 섞여 clean PR로 재작성).
-- `fe-v*` tag: 생성하지 않음.
-- Vercel/prod 배포: 하지 않음.
-- S5는 dead-code/source cleanup이라 release 대상이 아니다.
-
-## 리뷰/검증 evidence
-- GitHub Action `Smoke (Backend Contract)` run #44: success.
-- `@codex review` on PR#141: major issues 없음, review threads 0.
-- clean PR diff: 1 commit, 6 files. S4c report/retro docs가 섞였던 duplicate PR#140은 닫았다.
-
-## 잔여 로드맵 (S5 후 보존)
-- **#1 PdfMaterialCard 공유 leaf 추출** — user 명시 승인 필요(decision-A 반전, prod island 2개 터치).
-- **S1 (pdf-workspace 단수)** — 마지막 string. S1b(pen 2nd-stroke)·S1c(annotation 물리 cross-device) 게이트 = 자율 한계.
+- **S1 (pdf-workspace 단수)** — 마지막 string route.
+  - S1b: pen 2nd-stroke physical check 필요.
+  - S1c: annotation physical cross-device gate 필요.
+  - 위 두 물리 게이트 unlock 전에는 agent 자율 구현 금지.
 
 ## 필수 교훈 (보존)
+
 - dead-code trace = 정의 파일 포함 전체 grep. caller-count만으로 dead 단정 금지.
 - worker/자가보고 불신 → build/test/grep 직접 재실행 후 보고.
 - 신규 spec은 `apps/web/package.json`의 explicit `test:run` 등록 필요(node:test glob 아님).
-- 배포 = 매번 별도 승인. dead cleanup은 fe tag/Vercel release 금지.
+- 배포는 scope별 명시 승인과 release evidence가 필요하다. S5 dead cleanup처럼 번들 무변화면 배포 금지.
 - 조용히 roadmap reorder 금지.
 
 ## follow-up backlog (별개)
+
 - codex #4(FullscreenButton pure-props) = 별도 fix-forward.
 - operator 시각 QA(subject-class/week/pdf-workspaces, auth-gated) = user 후속.
