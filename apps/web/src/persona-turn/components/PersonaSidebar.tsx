@@ -48,7 +48,7 @@ export function PersonaSidebar({
   activeConversationId
 }: {
   activeSubjectId?: string;
-  role?: "master" | "admin" | "normal";
+  role?: "master" | "admin" | "reviewer" | "normal";
   // sprint-8 slice-2 — backend GET /v1/conversations 응답. App.tsx (slice-3) 가 주입.
   // 기본값 [] 로 slice-2 단독 commit 시에도 컴파일 안전.
   conversations?: ConversationListItemLike[];
