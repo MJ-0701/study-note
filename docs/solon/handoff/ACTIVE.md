@@ -1,8 +1,8 @@
 # 🎯 ACTIVE — S5 죽은 oracle 제거 완료 (Code Review Only, 배포 없음)
 
 > entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note`.
-> branch = `chore/s5-dead-oracle-removal-clean`.
-> status = clean PR branch 준비 중. S5 source cleanup만 포함.
+> merged = PR#141 → main squash `55f6d5f` (2026-06-01).
+> status = S5 source cleanup 완료. 배포 없음.
 
 ## ✅ S5 결과 — dead S4c oracle renderer 제거
 S4c가 `#/pdf-workspaces`를 React island로 대체한 뒤 남아 있던 old string renderer를 제거했다.
@@ -59,15 +59,16 @@ S1 단수 `#/subjects/:id/pdf` string route는 아직 live라 유지했다.
   - `apps/web/src/subject-views/__tests__/pdf-library.spec.ts`, `apps/web/src/__tests__/pdf-material-library.spec.ts`, `apps/web/package.json`에서 삭제 함수명 grep 결과 0.
 
 ## 🚫 배포/릴리스 상태
+- PR: #141 squash merged to main (`55f6d5f`).
+- duplicate PR #140 closed unmerged (local main ahead docs가 섞여 clean PR로 재작성).
 - `fe-v*` tag: 생성하지 않음.
 - Vercel/prod 배포: 하지 않음.
 - S5는 dead-code/source cleanup이라 release 대상이 아니다.
 
-## 남은 액션
-- clean branch push.
-- PR 생성 후 `@codex review` 트리거.
-- review/check green이면 source cleanup PR로 main squash merge.
-- 배포 금지: dead cleanup이라 fe tag/Vercel release 없음.
+## 리뷰/검증 evidence
+- GitHub Action `Smoke (Backend Contract)` run #44: success.
+- `@codex review` on PR#141: major issues 없음, review threads 0.
+- clean PR diff: 1 commit, 6 files. S4c report/retro docs가 섞였던 duplicate PR#140은 닫았다.
 
 ## 잔여 로드맵 (S5 후 보존)
 - **#1 PdfMaterialCard 공유 leaf 추출** — user 명시 승인 필요(decision-A 반전, prod island 2개 터치).
