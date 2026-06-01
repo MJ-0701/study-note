@@ -48,13 +48,14 @@ export function PersonaSidebar({
   activeConversationId
 }: {
   activeSubjectId?: string;
-  role?: "master" | "admin" | "normal";
+  role?: "master" | "admin" | "reviewer" | "normal";
   // sprint-8 slice-2 — backend GET /v1/conversations 응답. App.tsx (slice-3) 가 주입.
   // 기본값 [] 로 slice-2 단독 commit 시에도 컴파일 안전.
   conversations?: ConversationListItemLike[];
   activeConversationId?: string | null;
 }) {
-  const showAdmin = role === "master" || role === "admin";
+  const showUserManagement = role === "master" || role === "admin";
+  const showOps = showUserManagement || role === "reviewer";
   const recentItems = buildRecentConversationItems(
     conversations ?? [],
     activeConversationId
@@ -123,12 +124,17 @@ export function PersonaSidebar({
           </a>
         </nav>
       </div>
-      {showAdmin && (
+      {showOps && (
         <div className="sidebar-group">
           <p className="group-label">🛡️ 관리자</p>
           <nav>
-            <a href="/admin.html" aria-label="관리자 대시보드">
-              사용자 관리
+            {showUserManagement && (
+              <a href="/admin.html#users" aria-label="사용자 관리">
+                사용자 관리
+              </a>
+            )}
+            <a href="/admin.html#ops" aria-label="운영 지표">
+              운영 지표
             </a>
           </nav>
         </div>

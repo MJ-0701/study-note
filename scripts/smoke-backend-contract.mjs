@@ -28,8 +28,10 @@ const SESSION_COOKIE_NAME = "study_note_session";
 
 const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
 const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
-const SECOND_USER_NAME = process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer";
-const SECOND_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002";
+const REVIEWER_USER_NAME = process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer";
+const REVIEWER_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002";
+const ADMIN_USER_NAME = process.env.STUDY_NOTE_ADMIN_USER_NAME ?? "Admin User";
+const ADMIN_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_ADMIN_STUDENT_NUMBER ?? "20260004";
 const NORMAL_USER_NAME = "Smoke Normal User";
 const NORMAL_USER_STUDENT_NUMBER = "20260003";
 const NORMAL_USER_EMAIL = "smoke-normal-user@example.com";
@@ -547,12 +549,20 @@ try {
     401
   );
 
-  // Second user sign-in (REVIEWER role) — reviewer route checks.
-  const secondJar = createCookieJar();
+  // Reviewer sign-in — reviewer can read ops only, not admin user management.
+  const reviewerJar = createCookieJar();
   await requestJson("/v1/auth/sign-in", {
     method: "POST",
-    jar: secondJar,
-    body: { name: SECOND_USER_NAME, studentNumber: SECOND_USER_STUDENT_NUMBER }
+    jar: reviewerJar,
+    body: { name: REVIEWER_USER_NAME, studentNumber: REVIEWER_USER_STUDENT_NUMBER }
+  });
+
+  // Admin user sign-in — admin route and cross-user upload denial tests.
+  const adminJar = createCookieJar();
+  await requestJson("/v1/auth/sign-in", {
+    method: "POST",
+    jar: adminJar,
+    body: { name: ADMIN_USER_NAME, studentNumber: ADMIN_USER_STUDENT_NUMBER }
   });
 
   // Master cookie was revoked above — re-sign-in for the admin route check.
@@ -570,45 +580,18 @@ try {
 
   // reviewer는 /v1/admin/users 에 접근 불가 (403 정당).
   await assertStatus("admin/users rejects reviewer role (403)", () =>
-    request("/v1/admin/users", { jar: secondJar }),
+    request("/v1/admin/users", { jar: reviewerJar }),
     403
   );
   console.log("admin route rejects reviewer (403 confirmed)");
 
   // reviewer는 ops-dashboard 열람 가능 (포트폴리오 데모 계정 전용 권한).
-  const reviewerOpsDashboard = await requestJson("/v1/admin/ops-dashboard", { jar: secondJar });
+  const reviewerOpsDashboard = await requestJson("/v1/admin/ops-dashboard", { jar: reviewerJar });
   if (typeof reviewerOpsDashboard.generatedAt !== "string") {
     throw new Error("reviewer ops-dashboard response missing generatedAt");
   }
   console.log("reviewer can access ops-dashboard (role-limited read)");
 
-  // Ephemeral admin user — tests admin-positive /v1/admin/users AND owner-scoped upload denial.
-  const ADMIN_USER_STUDENT_NUMBER = "20269999";
-  const ADMIN_USER_NAME = "Smoke Admin User";
-  const ADMIN_USER_EMAIL = "smoke-admin-user@example.com";
-  await prisma.user.upsert({
-    where: { studentNumber: ADMIN_USER_STUDENT_NUMBER },
-    update: {
-      displayName: ADMIN_USER_NAME,
-      email: ADMIN_USER_EMAIL,
-      role: "ADMIN",
-      devUserFlag: true
-    },
-    create: {
-      id: "user-smoke-admin-1",
-      displayName: ADMIN_USER_NAME,
-      studentNumber: ADMIN_USER_STUDENT_NUMBER,
-      email: ADMIN_USER_EMAIL,
-      role: "ADMIN",
-      devUserFlag: true
-    }
-  });
-  const adminJar = createCookieJar();
-  await requestJson("/v1/auth/sign-in", {
-    method: "POST",
-    jar: adminJar,
-    body: { name: ADMIN_USER_NAME, studentNumber: ADMIN_USER_STUDENT_NUMBER }
-  });
   const adminUsers = await requestJson("/v1/admin/users", { jar: adminJar });
   if (!Array.isArray(adminUsers)) {
     throw new Error("admin role did not receive users list array");

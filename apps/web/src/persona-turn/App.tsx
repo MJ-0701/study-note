@@ -33,7 +33,7 @@ type ChatTurn = PersonaTurnResult & {
   createdAt: string;
 };
 
-type UserRole = "master" | "admin" | "normal";
+type UserRole = "master" | "admin" | "reviewer" | "normal";
 
 interface AuthUser {
   userId: string;
@@ -45,7 +45,7 @@ interface AuthUser {
 type AuthState = "checking" | "signed-in" | "signed-out";
 
 function isUserRole(r: string): r is UserRole {
-  return r === "master" || r === "admin" || r === "normal";
+  return r === "master" || r === "admin" || r === "reviewer" || r === "normal";
 }
 
 // sprint-8 slice-3 — URL 우선 + localStorage mirror. URL 이 source of truth.

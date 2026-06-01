@@ -8,7 +8,8 @@
  *   no-cookie GET /v1/admin/users → 401 AUTH_REQUIRED
  *
  * Seed: user-dev-1 (master/"Dev User"/20260001),
- *       user-dev-2 (admin/"Reviewer"/20260002),
+ *       user-dev-2 (reviewer/"Reviewer"/20260002),
+ *       user-dev-4 (admin/"Admin User"/20260004),
  *       user-dev-3 (normal/"Plain User"/20269998)
  *
  * Note: user-dev-3 has devUserFlag=false so cannot sign-in. A fresh NORMAL
@@ -45,7 +46,7 @@ try {
   }
 
   const masterCookie = await signIn(baseUrl, "Dev User", "20260001");
-  const adminCookie = await signIn(baseUrl, "Reviewer", "20260002");
+  const adminCookie = await signIn(baseUrl, "Admin User", "20260004");
 
   // ── master GET /v1/admin/users → 200, array with seeded users ─────────────
   const masterResp = await fetch(`${baseUrl}/v1/admin/users`, {
@@ -66,7 +67,8 @@ try {
   // Verify seeded users are present
   const ids = masterBody.map((u) => u.id);
   assert(ids.includes("user-dev-1"), "AC2-master: user-dev-1 (master) is present");
-  assert(ids.includes("user-dev-2"), "AC2-master: user-dev-2 (admin) is present");
+  assert(ids.includes("user-dev-2"), "AC2-master: user-dev-2 (reviewer) is present");
+  assert(ids.includes("user-dev-4"), "AC2-master: user-dev-4 (admin) is present");
   assert(ids.includes("user-dev-3"), "AC2-master: user-dev-3 (normal) is present");
   console.log("smoke-admin-users-list AC2-master: PASS");
 
