@@ -1,8 +1,7 @@
 // S4c React island leaf — pdf-workspaces 자료실 목록 순수 프레젠테이션 컴포넌트(props only, hook 0).
 // hook 구독 0, effect-setState 0. data-action 위임 보존. JSX 자동 escape.
-// parity oracle: renderPdfWorkspaceIndex / renderPdfSubjectLibrarySection /
-//   renderPdfLibraryUploadCard / renderPdfMaterialCard(isCurrent=false, compact=false,
-//   showClassDateControl=undefined) 의 1:1 미러.
+// S5: legacy string index/subject/upload renderers were removed after this island took over.
+// Remaining material-card parity is fixed to isCurrent=false, compact=false, showClassDateControl=undefined.
 
 // ─── public types ────────────────────────────────────────────────────────────
 
@@ -63,10 +62,9 @@ function MetricCard({ label, value, description }: {
 }
 
 /**
- * renderPdfMaterialCard(ctx, subject, material, { isCurrent: false, compact: false })
- * 의 JSX 미러.
- * ⚠️ isCurrent=false 고정 → is-current span 렌더 없음, 버튼 레이블 "열기" 고정.
- * ⚠️ showClassDateControl=undefined(falsy) → class-date picker 없음.
+ * Material card mirror for the pdf-workspaces island.
+ * isCurrent=false 고정 → is-current span 렌더 없음, 버튼 레이블 "열기" 고정.
+ * showClassDateControl=undefined(falsy) → class-date picker 없음.
  */
 function PdfMaterialCard({ material, subjectId, subjectTitle }: {
   material: PdfWorkspacesViewMaterial;
@@ -99,7 +97,7 @@ function PdfMaterialCard({ material, subjectId, subjectTitle }: {
   );
 }
 
-/** renderPdfLibraryUploadCard 의 JSX 미러 — readonly/editable 2 분기. */
+/** Upload-card branch — readonly/editable 2 분기. */
 function UploadCard({ card }: { card: PdfWorkspacesViewUploadCard }): React.ReactElement {
   if (card.isReadonly) {
     return (
@@ -137,7 +135,7 @@ function UploadCard({ card }: { card: PdfWorkspacesViewUploadCard }): React.Reac
   );
 }
 
-/** renderPdfSubjectLibrarySection 의 JSX 미러. */
+/** Subject library section branch. */
 function SubjectLibrarySection({ subject }: {
   subject: PdfWorkspacesViewSubject;
 }): React.ReactElement {
@@ -167,7 +165,7 @@ function SubjectLibrarySection({ subject }: {
 
 // ─── leaf ────────────────────────────────────────────────────────────────────
 
-/** renderPdfWorkspaceIndex 의 JSX 미러 — pure-props, hook 0. */
+/** pdf-workspaces island root — pure-props, hook 0. */
 export function PdfWorkspacesView({ summary, subjects }: PdfWorkspacesViewProps): React.ReactElement {
   return (
     <>

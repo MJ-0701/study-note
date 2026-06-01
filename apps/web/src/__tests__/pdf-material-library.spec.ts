@@ -16,7 +16,6 @@ const appRoutesTs = readFileSync(new URL("../app/routes.ts", import.meta.url), "
 const pdfLibraryTs = readFileSync(new URL("../subject-views/pdf-library.ts", import.meta.url), "utf8");
 const pdfWorkspacePageTs = readFileSync(new URL("../pdf-workspace/workspace-page.ts", import.meta.url), "utf8");
 const sidebarTs = readFileSync(new URL("../subject-views/sidebar.ts", import.meta.url), "utf8");
-const subjectClassTs = readFileSync(new URL("../subject-views/subject-class.ts", import.meta.url), "utf8");
 const summariesTs = readFileSync(new URL("../subject-views/summaries.ts", import.meta.url), "utf8");
 const memorizeTs = readFileSync(new URL("../subject-views/memorize.ts", import.meta.url), "utf8");
 const mcpTs = readFileSync(new URL("../subject-views/mcp.ts", import.meta.url), "utf8");
@@ -27,7 +26,6 @@ const SOURCES: Array<{ name: string; text: string }> = [
   { name: "subject-views/pdf-library.ts", text: pdfLibraryTs },
   { name: "pdf-workspace/workspace-page.ts", text: pdfWorkspacePageTs },
   { name: "subject-views/sidebar.ts", text: sidebarTs },
-  { name: "subject-views/subject-class.ts", text: subjectClassTs },
   { name: "subject-views/summaries.ts", text: summariesTs },
   { name: "subject-views/memorize.ts", text: memorizeTs },
   { name: "subject-views/mcp.ts", text: mcpTs },
@@ -73,32 +71,6 @@ function getCssRuleBlock(selector: string): string {
 }
 
 describe("PDF material library UI", () => {
-  it("renders a course-level PDF library instead of a single-subject upload view", () => {
-    const indexBlock = getFunctionBlock("renderPdfWorkspaceIndex");
-    const sectionBlock = getFunctionBlock("renderPdfSubjectLibrarySection");
-
-    assert.match(indexBlock, /PDF 자료실/);
-    assert.match(indexBlock, /수업자료 찾기/);
-    assert.match(indexBlock, /등록 자료/);
-    assert.match(indexBlock, /과목별 PDF/);
-    assert.match(indexBlock, /renderPdfSubjectLibrarySection/);
-    assert.match(sectionBlock, /pdf-material-slider/);
-    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(ctx, subject, materials\.length\)/);
-  });
-
-  it("lets admins upload a new PDF directly from each subject library section", () => {
-    const sectionBlock = getFunctionBlock("renderPdfSubjectLibrarySection");
-    const uploadCardBlock = getFunctionBlock("renderPdfLibraryUploadCard");
-
-    assert.match(sectionBlock, /renderPdfLibraryUploadCard\(ctx, subject, materials\.length\)/);
-    assert.match(uploadCardBlock, /pdf-library-upload-\$\{safeSubjectId\}/);
-    assert.match(uploadCardBlock, /data-action="import-pdf-material"/);
-    assert.match(uploadCardBlock, /data-subject-id="\$\{safeSubjectId\}"/);
-    assert.match(uploadCardBlock, /새 PDF 업로드/);
-    assert.match(uploadCardBlock, /수업 자료 추가/);
-    assert.match(uploadCardBlock, /PDF 업로드는 관리자만 가능합니다/);
-  });
-
   it("uses material cards with shared-source labels and an explicit open action", () => {
     const cardBlock = getFunctionBlock("renderPdfMaterialCard");
     const ownerLabelBlock = getFunctionBlock("getPdfMaterialOwnerLabel");
@@ -237,7 +209,6 @@ describe("PDF material library UI", () => {
     const renderAppBlock = getFunctionBlock("renderApp");
     const sidebarBlock = getFunctionBlock("renderSubjectSidebar");
     const depthBlock = getFunctionBlock("renderCurrentSubjectDepthNav");
-    const classBlock = getFunctionBlock("renderSubjectClassPage");
     const summariesBlock = getFunctionBlock("renderSubjectSummariesPage");
     const summaryDetailBlock = getFunctionBlock("renderWeekSummaryPage");
     const memorizeBlock = getFunctionBlock("renderSubjectMemorizePage");
@@ -255,11 +226,17 @@ describe("PDF material library UI", () => {
     assert.match(routeBlock, /name: "subject-memorize"/);
     assert.match(renderAppBlock, /route\.name === "subject"/);
     assert.match(renderAppBlock, /route\.name === "subject-class"/);
-    assert.match(renderAppBlock, /renderSubjectClassPage\(subjectClassContext, subject\)/);
-    assert.match(renderAppBlock, /renderSubjectSummariesPage\(summariesContext, subject\)/);
-    assert.match(renderAppBlock, /renderWeekSummaryPage\(summariesContext, subject, week\)/);
-    assert.match(renderAppBlock, /renderSubjectMcpPage\(subject\)/);
-    assert.match(renderAppBlock, /renderSubjectMemorizePage\(subject\)/);
+    assert.match(renderAppBlock, /setSubjectClassProps\(buildSubjectClassProps\(subject\)\)/);
+    assert.match(renderAppBlock, /renderSubjectClassSlot\(\)/);
+    assert.doesNotMatch(renderAppBlock, /renderSubjectClassPage\(subjectClassContext, subject\)/);
+    assert.match(renderAppBlock, /setSubjectSummariesProps\(summariesProps\)/);
+    assert.match(renderAppBlock, /renderSubjectSummariesSlot\(\)/);
+    assert.match(renderAppBlock, /setSubjectSummaryDetailProps\(summaryDetailProps\)/);
+    assert.match(renderAppBlock, /renderSubjectSummaryDetailSlot\(\)/);
+    assert.match(renderAppBlock, /setSubjectMcpProps\(mcpProps\)/);
+    assert.match(renderAppBlock, /renderSubjectMcpSlot\(\)/);
+    assert.match(renderAppBlock, /setSubjectMemorizeProps\(memorizeProps\)/);
+    assert.match(renderAppBlock, /renderSubjectMemorizeSlot\(\)/);
     assert.match(sidebarBlock, /renderSubjectNavItem/);
     assert.match(depthBlock, /subject-sidebar-depth/);
     assert.match(depthBlock, /subjectClassPath\(subject\)/);
@@ -271,12 +248,6 @@ describe("PDF material library UI", () => {
     assert.match(depthBlock, /subjectMemorizePath\(subject\)/);
     assert.match(depthBlock, />필수 암기노트<\/a>/);
     assert.doesNotMatch(sidebarBlock, /subject-week-details/);
-    assert.match(classBlock, /renderClassDateAddSection\(ctx, subject\)/);
-    assert.match(classBlock, /renderClassDayCard/);
-    assert.match(classBlock, /renderPdfMaterialAssignmentSection\(ctx, subject, subjectMaterials\)/);
-    assert.match(subjectClassTs, /function renderClassDayPdfLinks/);
-    assert.match(subjectClassTs, /data-action="open-pdf-material"/);
-    assert.match(subjectClassTs, /연결 PDF/);
     assert.match(summariesBlock, /수업일별 요약 목록/);
     assert.match(summariesBlock, /renderSummaryDayCard\(ctx, subject, week\)/);
     assert.match(summaryDetailBlock, /이 날짜 요약 만들기/);
