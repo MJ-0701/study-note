@@ -45,6 +45,7 @@ import type { SubjectMcpViewProps } from "../subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "../subject-views/SubjectMemorizeView.tsx";
 import type { WeekViewProps } from "../subject-views/WeekView.tsx";
 import type { SubjectClassViewProps } from "../subject-views/SubjectClassView.tsx";
+import type { PdfWorkspacesViewProps } from "../subject-views/PdfWorkspacesView.tsx";
 
 interface UiStoreState {
   inspectorOpen: boolean;
@@ -70,6 +71,9 @@ interface UiStoreState {
   // S4b-2 subject-class island
   subjectClassSlot: HTMLElement | null;
   subjectClassProps: SubjectClassViewProps | null;
+  // S4c pdf-workspaces island
+  pdfWorkspacesSlot: HTMLElement | null;
+  pdfWorkspacesProps: PdfWorkspacesViewProps | null;
 }
 
 export const uiStore = createStore<UiStoreState>(() => ({
@@ -93,6 +97,8 @@ export const uiStore = createStore<UiStoreState>(() => ({
   weekProps: null,
   subjectClassSlot: null,
   subjectClassProps: null,
+  pdfWorkspacesSlot: null,
+  pdfWorkspacesProps: null,
 }));
 
 export const getInspectorOpen = (): boolean => uiStore.getState().inspectorOpen;
@@ -230,4 +236,19 @@ export const setSubjectClassProps = (props: SubjectClassViewProps | null): void 
   const current = uiStore.getState().subjectClassProps;
   if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
   uiStore.setState({ subjectClassProps: props });
+};
+
+// ─── S4c pdf-workspaces slot/props getters + setters ─────────────────────────
+// pdfWorkspacesProps setter = JSON-key value-equal guard: 동일 직렬화 → setState skip → 재렌더 차단.
+
+export const getPdfWorkspacesSlot = (): HTMLElement | null => uiStore.getState().pdfWorkspacesSlot;
+export const setPdfWorkspacesSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ pdfWorkspacesSlot: el });
+};
+
+export const getPdfWorkspacesProps = (): PdfWorkspacesViewProps | null => uiStore.getState().pdfWorkspacesProps;
+export const setPdfWorkspacesProps = (props: PdfWorkspacesViewProps | null): void => {
+  const current = uiStore.getState().pdfWorkspacesProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ pdfWorkspacesProps: props });
 };

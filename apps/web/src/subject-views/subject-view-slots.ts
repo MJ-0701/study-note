@@ -35,3 +35,8 @@ export function renderWeekSlot(): string {
 export function renderSubjectClassSlot(): string {
   return `<div id="subject-class-island" data-react-island="subject-class" style="display:contents"></div>`;
 }
+
+/** pdf-workspaces route — slot placeholder. */
+export function renderPdfWorkspacesSlot(): string {
+  return `<div id="pdf-workspaces-island" data-react-island="pdf-workspaces" style="display:contents"></div>`;
+}
