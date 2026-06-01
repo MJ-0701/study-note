@@ -323,6 +323,7 @@ import {
   renderSubjectMemorizeSlot,
   renderWeekSlot,
   renderSubjectClassSlot,
+  renderPdfWorkspacesSlot,
 } from "./subject-views/subject-view-slots";
 import type { SubjectSummariesViewProps } from "./subject-views/SubjectSummariesView.tsx";
 import type { SubjectSummaryDetailViewProps } from "./subject-views/SubjectSummaryDetailView.tsx";
@@ -330,6 +331,7 @@ import type { SubjectMcpViewProps } from "./subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "./subject-views/SubjectMemorizeView.tsx";
 import type { WeekViewProps } from "./subject-views/WeekView.tsx";
 import type { SubjectClassViewProps } from "./subject-views/SubjectClassView.tsx";
+import type { PdfWorkspacesViewProps } from "./subject-views/PdfWorkspacesView.tsx";
 import { PERSONA_BY_SUBJECT } from "./subject-views/mcp";
 import { parseClassDateLabel } from "./subject-views/memorize";
 import {
@@ -339,6 +341,8 @@ import {
   formatSourceKind,
   formatSourceVisibility,
 } from "./subject-views/subject-cards";
+// renderPdfWorkspaceIndex 는 pdf-library.ts 에 parity oracle 로 보존 — main.ts import 불필요 (S4c 이후).
+// S5 에서 string renderer 제거 시 pdf-library.ts 에서 함께 제거.
 import {
   canManagePdfMaterials,
   canEditPdfMaterialClassDate,
@@ -349,7 +353,6 @@ import {
   getPdfMaterialsForWeek,
   getSortedPdfClassDateWeeks,
   isUnconfirmedPdfClassDate,
-  renderPdfWorkspaceIndex,
   renderSubjectPdfMaterialBrowser,
   type PdfLibraryContext
 } from "./subject-views/pdf-library";
@@ -424,6 +427,9 @@ import {
   setSubjectClassSlot,
   setSubjectClassProps,
   getSubjectClassSlot,
+  setPdfWorkspacesSlot,
+  setPdfWorkspacesProps,
+  getPdfWorkspacesSlot,
 } from "./stores/uiStore.ts";
 // React 마이그레이션 S0: React shell entry (createRoot(#app) + hash router +
 // LegacyView). main.ts → root.tsx 단방향 import (root.tsx 는 main.ts 미import →
@@ -684,6 +690,13 @@ const mainRenderSink: RenderSink | null = appRoot
           const el = root.querySelector<HTMLElement>('[data-react-island="subject-class"]');
           if (getSubjectClassSlot() !== el) {
             setSubjectClassSlot(el);
+          }
+        },
+        // S4c: pdf-workspaces island slot signal (route 이탈 시 null → portal unmount).
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="pdf-workspaces"]');
+          if (getPdfWorkspacesSlot() !== el) {
+            setPdfWorkspacesSlot(el);
           }
         }
       ]
@@ -4646,6 +4659,7 @@ function renderApp(): void {
     };
     setHomeProps(homeProps);
     setIntakeProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "home", notebook: homeNotebook, route },
       renderHome(homeNotebook),
@@ -4667,6 +4681,7 @@ function renderApp(): void {
       subjectCoverageRates,
     });
     setHomeProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "home", notebook: intakeNotebook, route },
       renderIntakeGuide(intakeNotebook),
@@ -4676,11 +4691,19 @@ function renderApp(): void {
   }
 
   if (route.name === "pdf-workspaces") {
+    // S4c: pdf-workspaces React island props 계산 + 발행. postMountEffect 가 slot signal.
+    setPdfWorkspacesProps(buildPdfWorkspacesProps());
     setHomeProps(null);
     setIntakeProps(null);
+    setSubjectClassProps(null);
+    setSubjectSummariesProps(null);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMcpProps(null);
+    setSubjectMemorizeProps(null);
+    setWeekProps(null);
     mountRender(composeShell(
       { variant: "home", notebook: getNotebook(), route },
-      renderPdfWorkspaceIndex(pdfLibraryContext, getNotebook(), getSubjectPdfMaterials),
+      renderPdfWorkspacesSlot(),
       `${getNotebook().title} / PDF 작업공간`
     ));
     return;
@@ -4697,6 +4720,7 @@ function renderApp(): void {
       exampleFile: localIntakeGuide.exampleFile,
     });
     setHomeProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectIntakeGuide(subject, renderIntakeFeedback),
@@ -4745,6 +4769,7 @@ function renderApp(): void {
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
     setWeekProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectClassSlot(),
@@ -4789,6 +4814,7 @@ function renderApp(): void {
     setSubjectMemorizeProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectSummariesSlot(),
@@ -4881,6 +4907,7 @@ function renderApp(): void {
     setSubjectMemorizeProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectSummaryDetailSlot(),
@@ -4923,6 +4950,7 @@ function renderApp(): void {
     setSubjectMemorizeProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectMcpSlot(),
@@ -5010,6 +5038,7 @@ function renderApp(): void {
     setSubjectMcpProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderSubjectMemorizeSlot(),
@@ -5111,6 +5140,7 @@ function renderApp(): void {
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
     setSubjectClassProps(null);
+    setPdfWorkspacesProps(null);
     mountRender(composeShell(
       { variant: "subject", subject, route },
       renderWeekSlot(),
@@ -5310,6 +5340,64 @@ export function buildSubjectClassProps(subject: SubjectNote): SubjectClassViewPr
     classDayCards,
     uploadCard,
     materials,
+  };
+}
+
+// S4c: pdf-workspaces island view-model builder.
+// oracle = renderPdfWorkspaceIndex(pdf-library.ts:149) 의 1:1 소스-diff.
+// 동일 iteration 순서: subjects.map → getSubjectPdfMaterials → summary 계산 → per-subject view-model.
+export function buildPdfWorkspacesProps(): PdfWorkspacesViewProps {
+  const notebook = getNotebook();
+  const subjectSummaries = notebook.subjects.map((subject) => ({
+    subject,
+    materials: getSubjectPdfMaterials(subject.id)
+  }));
+  const totalMaterials = subjectSummaries.reduce(
+    (total, item) => total + item.materials.length,
+    0
+  );
+  const activeSubjects = subjectSummaries.filter((item) => item.materials.length > 0).length;
+
+  const subjects: PdfWorkspacesViewProps["subjects"] = subjectSummaries.map(({ subject, materials }) => {
+    const canManage = canManagePdfMaterials(pdfLibraryContext);
+    const uploadCard: PdfWorkspacesViewProps["subjects"][number]["uploadCard"] = {
+      isReadonly: !canManage,
+      subjectTitle: subject.title,
+      subjectId: subject.id,
+      materialCount: materials.length,
+      readonlyHref: sanitizeExternalUrl(subjectPdfWorkspacePath(subject)),
+      inputId: `pdf-library-upload-${subject.id}`,
+    };
+
+    const materialViewModels: PdfWorkspacesViewProps["subjects"][number]["materials"] = materials.map((material) => ({
+      materialKey: getPdfMaterialKey(material),
+      fileName: material.fileName,
+      fileSize: formatPdfFileSize(material.fileSize),
+      pageCount: material.pageCount,
+      statusLabel: getPdfMaterialStatusLabel(material),
+      ownerLabel: getPdfMaterialOwnerLabel(pdfLibraryContext, material),
+      classDateLabel: getPdfMaterialClassDateLabel(subject, material),
+      classDateIsUnconfirmed: isUnconfirmedPdfClassDate(subject, material.classDate),
+    }));
+
+    return {
+      subjectId: subject.id,
+      title: subject.title,
+      examLabel: subject.examLabel,
+      weekRange: subject.summary.weekRange,
+      materialCount: materials.length,
+      uploadCard,
+      materials: materialViewModels,
+    };
+  });
+
+  return {
+    summary: {
+      totalMaterials,
+      activeSubjects,
+      totalSubjects: notebook.subjects.length,
+    },
+    subjects,
   };
 }
 
