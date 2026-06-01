@@ -91,6 +91,16 @@ const syncFailureTracker: SyncFailureTracker = {
 };
 
 const annotationPutTimers = new Map<string, ReturnType<typeof setTimeout>>();
+interface PendingAnnotationPutPayload {
+  payload: unknown;
+  mergeWithCanonical: boolean;
+}
+
+export interface ScheduleAnnotationPutOptions {
+  mergeWithCanonical?: boolean;
+}
+
+const annotationPendingPutPayloads = new Map<string, PendingAnnotationPutPayload>();
 const annotationPutAborts = new Map<string, AbortController>();
 const annotationPutChains = new Map<string, Promise<void>>();
 const annotationFetchedKeys = new Set<string>();
@@ -136,6 +146,110 @@ function isStillActiveMaterial(
   const ws = ctx.readSubjectWorkspace(subjectId);
   const active = ws?.material?.backendMaterialId ?? ws?.material?.id;
   return active === materialId;
+}
+
+const ANNOTATION_ARRAY_KEYS = [
+  "stickyNotes",
+  "inkStrokes",
+  "textBoxes",
+  "checklists",
+  "tables",
+  "charts",
+  "starMarks"
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function getAnnotationItemKey(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const id = value.id;
+  if (typeof id === "string" || typeof id === "number") {
+    return String(id);
+  }
+  return undefined;
+}
+
+function mergeAnnotationArray(canonical: unknown, pending: unknown): unknown[] | undefined {
+  if (!Array.isArray(canonical) && !Array.isArray(pending)) {
+    return undefined;
+  }
+  const merged = Array.isArray(canonical) ? [...canonical] : [];
+  const indexById = new Map<string, number>();
+  for (const [index, item] of merged.entries()) {
+    const key = getAnnotationItemKey(item);
+    if (key) {
+      indexById.set(key, index);
+    }
+  }
+  if (Array.isArray(pending)) {
+    for (const item of pending) {
+      const key = getAnnotationItemKey(item);
+      if (key && indexById.has(key)) {
+        merged[indexById.get(key)!] = item;
+      } else {
+        if (key) {
+          indexById.set(key, merged.length);
+        }
+        merged.push(item);
+      }
+    }
+  }
+  return merged;
+}
+
+function mergeAnnotationPayloads(
+  canonical: unknown,
+  pending: unknown,
+  options: { mergeCanonicalArrays: boolean }
+): unknown {
+  if (!isRecord(canonical) && !isRecord(pending)) {
+    return pending ?? canonical;
+  }
+  const canonicalRecord = isRecord(canonical) ? canonical : {};
+  const pendingRecord = isRecord(pending) ? pending : {};
+  const merged: Record<string, unknown> = { ...canonicalRecord, ...pendingRecord };
+  for (const key of ANNOTATION_ARRAY_KEYS) {
+    if (Array.isArray(pendingRecord[key])) {
+      merged[key] = options.mergeCanonicalArrays
+        ? mergeAnnotationArray(canonicalRecord[key], pendingRecord[key])
+        : pendingRecord[key];
+    } else if (Array.isArray(canonicalRecord[key])) {
+      merged[key] = canonicalRecord[key];
+    }
+  }
+  return merged;
+}
+
+function mergePendingAnnotationPutPayload(
+  materialId: string,
+  canonicalPayload: unknown
+): Partial<SubjectPdfWorkspace> | undefined {
+  const pending = annotationPendingPutPayloads.get(materialId);
+  const mergedPayload = mergeAnnotationPayloads(canonicalPayload, pending?.payload, {
+    mergeCanonicalArrays: pending?.mergeWithCanonical ?? false
+  });
+  if (!isRecord(mergedPayload)) {
+    return undefined;
+  }
+  annotationPendingPutPayloads.set(materialId, {
+    payload: mergedPayload,
+    mergeWithCanonical: false
+  });
+  return mergedPayload as Partial<SubjectPdfWorkspace>;
+}
+
+function shouldMergePendingPutWithCanonical(
+  subjectId: string,
+  materialId: string,
+  ctx: AnnotationSyncContext
+): boolean {
+  const sessionUserId = ctx.getSessionUserId();
+  if (!sessionUserId) {
+    return false;
+  }
+  return lastHydratedAnnotationByMaterial.get(getSubjectKey(sessionUserId, subjectId)) !== materialId;
 }
 
 // ─── sync metric tracker ─────────────────────────────────────────────────
@@ -191,6 +305,7 @@ export function clearAnnotationSyncCaches(): void {
     clearTimeout(timer);
   }
   annotationPutTimers.clear();
+  annotationPendingPutPayloads.clear();
   for (const abort of annotationPutAborts.values()) {
     try {
       abort.abort();
@@ -336,16 +451,25 @@ export async function putAnnotationToBE(
 export function scheduleAnnotationPut(
   materialId: string,
   payload: unknown,
+  subjectId: string,
   ctx: AnnotationSyncContext,
-  cb: AnnotationSyncCallbacks
+  cb: AnnotationSyncCallbacks,
+  options: ScheduleAnnotationPutOptions = {}
 ): void {
   const existing = annotationPutTimers.get(materialId);
   if (existing) {
     clearTimeout(existing);
   }
+  annotationPendingPutPayloads.set(materialId, {
+    payload,
+    mergeWithCanonical:
+      options.mergeWithCanonical ?? shouldMergePendingPutWithCanonical(subjectId, materialId, ctx)
+  });
   const timer = setTimeout(() => {
     annotationPutTimers.delete(materialId);
-    void putAnnotationToBE(materialId, payload, ctx, cb);
+    const pendingPayload = annotationPendingPutPayloads.get(materialId)?.payload ?? payload;
+    annotationPendingPutPayloads.delete(materialId);
+    void putAnnotationToBE(materialId, pendingPayload, ctx, cb);
   }, ANNOTATION_PUT_DEBOUNCE_MS);
   annotationPutTimers.set(materialId, timer);
 }
@@ -571,9 +695,12 @@ export async function fetchAnnotationsForSubject(
     }
     annotationFetchedKeys.add(getCacheKey(sessionUserId, subjectId, materialId));
     if (active === materialId && entry.payload && typeof entry.payload === "object") {
+      const payload = annotationPutTimers.has(materialId)
+        ? mergePendingAnnotationPutPayload(materialId, entry.payload)
+        : (entry.payload as Partial<SubjectPdfWorkspace>);
       hydrationEntries.push({
         materialId,
-        payload: entry.payload as Partial<SubjectPdfWorkspace>
+        payload: payload ?? (entry.payload as Partial<SubjectPdfWorkspace>)
       });
       lastHydratedAnnotationByMaterial.set(
         getSubjectKey(sessionUserId, subjectId),
@@ -660,7 +787,24 @@ export async function fetchAnnotationIfMissing(
     if (ctx.getSessionUserId() !== sessionUserId) {
       return;
     }
+    const entry = json.annotations?.[materialId];
     if (annotationPutTimers.has(materialId)) {
+      recordFetchSuccess(cb);
+      if (entry && typeof entry === "object") {
+        if (typeof entry.updatedAt === "string") {
+          lastHydratedAnnotationRevision.set(
+            getRevisionKey(sessionUserId, materialId),
+            entry.updatedAt
+          );
+        }
+        if (entry.payload && typeof entry.payload === "object") {
+          const payload = mergePendingAnnotationPutPayload(materialId, entry.payload);
+          if (payload && isStillActiveMaterial(ctx, subjectId, materialId)) {
+            cb.applyAnnotationHydration(subjectId, [{ materialId, payload }]);
+            cb.triggerRenderApp();
+          }
+        }
+      }
       if (isStillActiveMaterial(ctx, subjectId, materialId)) {
         lastHydratedAnnotationByMaterial.set(subjectKey, materialId);
       } else {
@@ -670,7 +814,6 @@ export async function fetchAnnotationIfMissing(
     }
     recordFetchSuccess(cb);
 
-    const entry = json.annotations?.[materialId];
     if (entry && typeof entry === "object") {
       if (typeof entry.updatedAt === "string") {
         lastHydratedAnnotationRevision.set(
@@ -715,6 +858,7 @@ export function _inspectModuleState() {
     fetchedKeysSize: annotationFetchedKeys.size,
     lastByMaterialSize: lastHydratedAnnotationByMaterial.size,
     lastRevisionSize: lastHydratedAnnotationRevision.size,
+    pendingPutPayloadsSize: annotationPendingPutPayloads.size,
     subjectBatchFetchedSize: annotationSubjectBatchFetched.size,
     subjectBatchInflightSize: annotationSubjectBatchInflight.size
   };

@@ -137,12 +137,36 @@ function makeWorkspace(
   } as unknown as SubjectPdfWorkspace;
 }
 
+type AnnotationSnapshotInput = Pick<
+  SubjectPdfWorkspace,
+  "stickyNotes" | "inkStrokes" | "textBoxes" | "checklists" | "tables" | "charts" | "starMarks"
+>;
+
+function makeAnnotationSnapshot(
+  overrides: Partial<AnnotationSnapshotInput> = {}
+): AnnotationSnapshotInput {
+  return {
+    stickyNotes: [],
+    inkStrokes: [],
+    textBoxes: [],
+    checklists: [],
+    tables: [],
+    charts: [],
+    starMarks: [],
+    ...overrides
+  } as unknown as AnnotationSnapshotInput;
+}
+
 interface Harness {
   storage: StorageImpl;
   store: PdfWorkspaceStore;
   ctx: WorkspaceStoreContext;
   cb: WorkspaceStoreCallbacks;
-  putCalls: Array<{ materialId: string; payload: unknown }>;
+  putCalls: Array<{
+    materialId: string;
+    payload: unknown;
+    options?: Parameters<WorkspaceStoreCallbacks["scheduleAnnotationPut"]>[5];
+  }>;
   clearedSubjectIds: string[];
   setStoreCalls: PdfWorkspaceStore[];
 }
@@ -153,7 +177,7 @@ function makeHarness(opts: {
 } = {}): Harness {
   const storage = installFakeLocalStorage();
   let store: PdfWorkspaceStore = opts.initialStore ?? { workspaces: {} };
-  const putCalls: Array<{ materialId: string; payload: unknown }> = [];
+  const putCalls: Harness["putCalls"] = [];
   const clearedSubjectIds: string[] = [];
   const setStoreCalls: PdfWorkspaceStore[] = [];
 
@@ -167,8 +191,8 @@ function makeHarness(opts: {
       store = next;
       setStoreCalls.push(next);
     },
-    scheduleAnnotationPut: (materialId, payload) => {
-      putCalls.push({ materialId, payload });
+    scheduleAnnotationPut: (materialId, payload, _subjectId, _ctx, _cb, options) => {
+      putCalls.push({ materialId, payload, options });
     },
     getAnnotationSyncContext: () => ({} as never),
     getAnnotationSyncCallbacks: () => ({} as never),
@@ -370,6 +394,35 @@ describe("AC6 (5) — updatePdfWorkspace", () => {
     // annotation PUT 은 호출됨 (BE 가 cookie session 검증) — sprint-3/S2 정책.
     assert.equal(h.putCalls.length, 1);
   });
+
+  it("기존 local snapshot 이 있으면 pending PUT 은 canonical merge 를 끈다", () => {
+    const material = makeMaterial("m1");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({
+            material,
+            stickyNotes: [{ id: "n1" } as never],
+            annotationSnapshots: {
+              m1: makeAnnotationSnapshot({ stickyNotes: [{ id: "n1" } as never] })
+            } as never
+          })
+        }
+      }
+    });
+    updatePdfWorkspace(
+      "s1",
+      (ws) => ({
+        ...ws,
+        stickyNotes: []
+      }),
+      h.ctx,
+      h.cb
+    );
+    assert.equal(h.putCalls.length, 1);
+    assert.deepEqual(h.putCalls[0]?.options, { mergeWithCanonical: false });
+  });
 });
 
 // ─── AC6 (6) — syncCurrentPdfMaterial (1 case) ───────────────────────────
@@ -478,6 +531,58 @@ describe("AC6 (9) — selectPdfWorkspaceMaterial", () => {
     const ws = h.store.workspaces.s1;
     assert.equal(ws.material?.id, "m2");
     assert.deepEqual(ws.stickyNotes, [], "전환 시 직전 material 의 stickyNotes 초기화");
+  });
+
+  it("material 전환 시 직전 material annotation snapshot 을 localStorage 에 보존", () => {
+    const m1 = makeMaterial("m1");
+    const m2 = makeMaterial("m2");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({
+            material: m1,
+            materials: [m1, m2],
+            stickyNotes: [{ id: "n1" } as never]
+          })
+        }
+      }
+    });
+    selectPdfWorkspaceMaterial("s1", "m2", h.ctx, h.cb);
+    const written = h.storage.store.get(buildPdfWorkspaceKey("userA", EXPECTED_STORAGE_KEY_PREFIX));
+    assert.ok(written, "material switch persists workspace store");
+    const parsed = JSON.parse(written!) as PdfWorkspaceStore;
+    assert.deepEqual(
+      parsed.workspaces.s1?.annotationSnapshots?.m1.stickyNotes,
+      [{ id: "n1" }],
+      "직전 material 의 최신 로컬 annotation 은 material 별 snapshot 으로 보존"
+    );
+    assert.deepEqual(parsed.workspaces.s1?.stickyNotes, [], "활성 flat 배열은 clear 유지");
+  });
+
+  it("material 재선택 시 local annotation snapshot 을 즉시 복원", () => {
+    const m1 = makeMaterial("m1");
+    const m2 = makeMaterial("m2");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({
+            material: m2,
+            materials: [m1, m2],
+            annotationSnapshots: {
+              m1: makeAnnotationSnapshot({ stickyNotes: [{ id: "n1" } as never] })
+            } as never
+          })
+        }
+      }
+    });
+    selectPdfWorkspaceMaterial("s1", "m1", h.ctx, h.cb);
+    assert.deepEqual(
+      h.store.workspaces.s1?.stickyNotes,
+      [{ id: "n1" }],
+      "snapshot 이 있으면 fetch 전에도 직전 로컬 annotation 을 복원"
+    );
   });
 
   it("clearWorkspaceAnnotations → 7종 annotation 배열 전부 비움 (비-annotation 설정 보존)", () => {

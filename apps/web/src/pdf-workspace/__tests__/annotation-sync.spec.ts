@@ -10,7 +10,10 @@
  *     apps/web/src/pdf-workspace/__tests__/annotation-sync.spec.ts
  */
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { describe, it, beforeEach } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { SubjectPdfWorkspace } from "@study-note/domain";
 import {
   clearAnnotationSyncCaches,
@@ -21,6 +24,7 @@ import {
   recordFetchSuccess,
   recordSyncFailure,
   recordSyncSuccess,
+  scheduleAnnotationPut,
   type AnnotationHydrationEntry,
   type AnnotationSyncCallbacks,
   type AnnotationSyncContext,
@@ -29,6 +33,8 @@ import {
 } from "../annotation-sync.ts";
 
 // ─── shared fixtures ─────────────────────────────────────────────────────
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface FetchCall {
   url: string;
@@ -277,6 +283,216 @@ describe("AC2 (d) — batch hydrate /by-subject endpoint", () => {
     } finally {
       harness.restore();
     }
+  });
+});
+
+// ─── (d1) hydration 전 빠른 편집 보존 ─────────────────────────────────
+
+describe("AC2 (d1) — pending PUT + hydration merge", () => {
+  it("single GET 중 pending PUT 이 있으면 canonical payload 와 병합해 저장한다", async () => {
+    let putBody: string | undefined;
+    const harness = makeHarness({
+      sessionUserId: "u1",
+      workspace: makeWorkspace("m1"),
+      fetchImpl: async (_url, init) => {
+        if (init?.method === "PUT") {
+          putBody = typeof init.body === "string" ? init.body : undefined;
+          return new Response(
+            JSON.stringify({
+              annotations: { m1: { payload: {}, updatedAt: "2026-05-25T04:01:00Z" } }
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            annotations: {
+              m1: {
+                payload: {
+                  stickyNotes: [{ id: "server-note" }],
+                  starMarks: [{ id: "server-star" }]
+                },
+                updatedAt: "2026-05-25T04:00:00Z"
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    });
+    try {
+      scheduleAnnotationPut(
+        "m1",
+        {
+          stickyNotes: [{ id: "local-note" }],
+          inkStrokes: [],
+          textBoxes: [],
+          checklists: [],
+          tables: [],
+          charts: [],
+          starMarks: []
+        },
+        "s1",
+        harness.ctx,
+        harness.cb
+      );
+      await fetchAnnotationIfMissing("s1", "m1", harness.ctx, harness.cb);
+
+      assert.equal(harness.hydrationCalls.length, 1);
+      assert.equal(harness.getRenderCount(), 1, "pending single-GET hydration repaint");
+      const hydrated = harness.hydrationCalls[0]!.hydration[0]!.payload;
+      assert.deepEqual(
+        (hydrated.stickyNotes ?? []).map((note) => (note as { id: string }).id),
+        ["server-note", "local-note"]
+      );
+      assert.deepEqual(
+        (hydrated.starMarks ?? []).map((mark) => (mark as { id: string }).id),
+        ["server-star"]
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      assert.ok(putBody, "debounced PUT body captured");
+      const saved = JSON.parse(putBody!) as { payload: SubjectPdfWorkspace };
+      assert.deepEqual(
+        (saved.payload.stickyNotes ?? []).map((note) => (note as { id: string }).id),
+        ["server-note", "local-note"]
+      );
+      assert.deepEqual(
+        (saved.payload.starMarks ?? []).map((mark) => (mark as { id: string }).id),
+        ["server-star"]
+      );
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("hydrated material 의 pending snapshot 은 삭제를 되살리지 않는다", async () => {
+    let putBody: string | undefined;
+    const workspace = makeWorkspace("m1");
+    const harness = makeHarness({
+      sessionUserId: "u1",
+      workspace,
+      fetchImpl: async (_url, init) => {
+        if (init?.method === "PUT") {
+          putBody = typeof init.body === "string" ? init.body : undefined;
+          return new Response(
+            JSON.stringify({
+              annotations: { m1: { payload: {}, updatedAt: "2026-05-25T04:02:00Z" } }
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            annotations: {
+              m1: {
+                payload: { stickyNotes: [{ id: "server-note" }] },
+                updatedAt: "2026-05-25T04:00:00Z"
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    });
+    try {
+      await fetchAnnotationIfMissing("s1", "m1", harness.ctx, harness.cb);
+      assert.equal(harness.hydrationCalls.length, 1, "initial hydration 완료");
+
+      scheduleAnnotationPut(
+        "m1",
+        {
+          stickyNotes: [],
+          inkStrokes: [],
+          textBoxes: [],
+          checklists: [],
+          tables: [],
+          charts: [],
+          starMarks: []
+        },
+        "s1",
+        harness.ctx,
+        harness.cb
+      );
+      await fetchAnnotationsForSubject("s1", harness.ctx, harness.cb);
+      assert.equal(harness.hydrationCalls.length, 2, "concurrent hydration callback");
+      assert.deepEqual(harness.hydrationCalls[1]!.hydration[0]!.payload.stickyNotes ?? [], []);
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      assert.ok(putBody, "debounced PUT body captured");
+      const saved = JSON.parse(putBody!) as { payload: SubjectPdfWorkspace };
+      assert.deepEqual(saved.payload.stickyNotes ?? [], []);
+    } finally {
+      harness.restore();
+    }
+  });
+
+  it("local snapshot 복원 후 pre-hydration 삭제는 canonical merge 로 되살리지 않는다", async () => {
+    let putBody: string | undefined;
+    const harness = makeHarness({
+      sessionUserId: "u1",
+      workspace: makeWorkspace("m1"),
+      fetchImpl: async (_url, init) => {
+        if (init?.method === "PUT") {
+          putBody = typeof init.body === "string" ? init.body : undefined;
+          return new Response(
+            JSON.stringify({
+              annotations: { m1: { payload: {}, updatedAt: "2026-05-25T04:03:00Z" } }
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            annotations: {
+              m1: {
+                payload: { stickyNotes: [{ id: "server-note" }] },
+                updatedAt: "2026-05-25T04:00:00Z"
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    });
+    try {
+      scheduleAnnotationPut(
+        "m1",
+        {
+          stickyNotes: [],
+          inkStrokes: [],
+          textBoxes: [],
+          checklists: [],
+          tables: [],
+          charts: [],
+          starMarks: []
+        },
+        "s1",
+        harness.ctx,
+        harness.cb,
+        { mergeWithCanonical: false }
+      );
+      await fetchAnnotationIfMissing("s1", "m1", harness.ctx, harness.cb);
+      assert.equal(harness.hydrationCalls.length, 1);
+      assert.deepEqual(harness.hydrationCalls[0]!.hydration[0]!.payload.stickyNotes ?? [], []);
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      assert.ok(putBody, "debounced PUT body captured");
+      const saved = JSON.parse(putBody!) as { payload: SubjectPdfWorkspace };
+      assert.deepEqual(saved.payload.stickyNotes ?? [], []);
+    } finally {
+      harness.restore();
+    }
+  });
+});
+
+describe("AC2 (d2) — main hydration source guard", () => {
+  it("applyAnnotationHydrationToStore 가 starMarks 도 payload 에서 복원한다", async () => {
+    const src = await readFile(resolve(__dirname, "../../main.ts"), "utf-8");
+    assert.match(
+      src,
+      /starMarks:\s*Array\.isArray\(incoming\.starMarks\)\s*\?\s*incoming\.starMarks\s*:\s*current\.starMarks/
+    );
   });
 });
 
@@ -638,7 +854,7 @@ describe("AC2 (m1) — URL path segment encoding", () => {
 // ─── clearAnnotationSyncCaches ──────────────────────────────────────────
 
 describe("clearAnnotationSyncCaches — user 전환 reset", () => {
-  it("4 Map/Set + chain/abort/timers 모두 0", async () => {
+  it("Map/Set + chain/abort/timers 모두 0", async () => {
     // sync metric helper 로 일부 state 채우기
     const cb: AnnotationSyncCallbacks = {
       setSyncBackendError: () => {},
@@ -659,6 +875,7 @@ describe("clearAnnotationSyncCaches — user 전환 reset", () => {
     assert.equal(state.fetchedKeysSize, 0);
     assert.equal(state.lastByMaterialSize, 0);
     assert.equal(state.lastRevisionSize, 0);
+    assert.equal(state.pendingPutPayloadsSize, 0);
     assert.equal(state.subjectBatchFetchedSize, 0);
     assert.equal(state.subjectBatchInflightSize, 0);
     assert.equal(state.syncFailureTracker.recentFailuresCount, 0);
