@@ -795,6 +795,7 @@ export async function fetchAnnotationIfMissing(
           const payload = mergePendingAnnotationPutPayload(materialId, entry.payload);
           if (payload && isStillActiveMaterial(ctx, subjectId, materialId)) {
             cb.applyAnnotationHydration(subjectId, [{ materialId, payload }]);
+            cb.triggerRenderApp();
           }
         }
       }

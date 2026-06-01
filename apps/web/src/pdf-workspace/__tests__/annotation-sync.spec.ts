@@ -339,6 +339,7 @@ describe("AC2 (d1) — pending PUT + hydration merge", () => {
       await fetchAnnotationIfMissing("s1", "m1", harness.ctx, harness.cb);
 
       assert.equal(harness.hydrationCalls.length, 1);
+      assert.equal(harness.getRenderCount(), 1, "pending single-GET hydration repaint");
       const hydrated = harness.hydrationCalls[0]!.hydration[0]!.payload;
       assert.deepEqual(
         (hydrated.stickyNotes ?? []).map((note) => (note as { id: string }).id),
