@@ -221,6 +221,13 @@
         },
         {
           "refId": "C",
+          "expr": "max(last_over_time(study_note_product_users_role_reviewer[35m]))",
+          "legendFormat": "reviewer",
+          "instant": true,
+          "range": false
+        },
+        {
+          "refId": "D",
           "expr": "max(last_over_time(study_note_product_users_role_normal[35m]))",
           "legendFormat": "normal",
           "instant": true,
