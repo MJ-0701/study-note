@@ -1,55 +1,84 @@
-# 🎯 ACTIVE — 다음 GOAL = **S5 죽은 oracle 제거** (자율, Code-Review tier, 배포 없음)
+# 🎯 ACTIVE — S5 죽은 oracle 제거 완료 (Code Review Only, 배포 없음)
 
 > entry_working_dir = `/Users/mj/IdeaProjects/study-note` · entry_repo = `study-note`.
-> 직전 세션이 S4c full lifecycle + 잔여논의 누적 → Session Continuation Guard 로 fresh session 인계.
-> **user 승인 = S5만 자율 진행**(2026-06-01). #1 공유추출은 명시 승인 전까지 금지, S1 은 게이트.
+> branch = `chore/s5-dead-oracle-removal`.
+> status = local branch 작업 완료. push/PR/merge는 사용자 명시 승인 대기.
 
-## 🚀 GOAL = S5 — dead S4c oracle renderer 제거 (source hygiene)
-S4c 가 `#/pdf-workspaces` 를 island 로 대체 → old string renderer 가 죽음. 제거.
+## ✅ S5 결과 — dead S4c oracle renderer 제거
+S4c가 `#/pdf-workspaces`를 React island로 대체한 뒤 남아 있던 old string renderer를 제거했다.
 
-- **tier = Code Review Only**(구현→리뷰). full PDCA/Gate 6 ceremony 불요.
-- **배포 없음**: dead 함수는 이미 tree-shaken(미참조) → 번들 무변화. fe tag/Vercel release 불필요.
-  (단 main 머지는 함 — 소스 정리 PR.)
-- 검증 = `pnpm -r build` exit0 + `pnpm --filter web test:run` 165-0 유지 + 영향 spec 정리.
+### 삭제한 함수
+- `apps/web/src/subject-views/pdf-library.ts`
+  - `renderPdfWorkspaceIndex`
+  - `renderPdfSubjectLibrarySection`
+  - `renderPdfLibraryUploadCard`
+- 함께 제거: 위 함수 전용 unused import(`StudyNotebook`, `sanitizeExternalUrl`, `subjectPdfWorkspacePath`, `renderMetric`).
 
-### safe-delete set — ⚠️ fresh session 이 cross-file import trace 로 재확정 후 삭제
-직전 세션 1차 grep 이 정의 파일을 필터해 오판한 전력 있음 → **정의 파일 포함 전체 trace 필수.**
-- ✅ **확정 dead**: `renderPdfWorkspaceIndex`(pdf-library.ts:149) — 유일 ref = PdfWorkspacesView.tsx:170 JSX-mirror **주석**뿐. live caller 0.
-- ✅ **dead-with-parent**: `renderPdfSubjectLibrarySection`(pdf-library.ts:187) — caller = pdf-library.ts:180(renderPdfWorkspaceIndex 본체) 유일. 부모 제거 시 같이 dead.
-- ⚠️ **미확정 — trace 필요**: `renderPdfLibraryUploadCard`(pdf-library.ts:241) — 아직 `subject-class.ts:263`(ctx.renderPdfLibraryUploadCard) 참조. **subject-class.ts(old string producer) 가 S4b-2 island 후 live 인지 dead 인지 먼저 판정.** subject-class.ts 가 main.ts 에서 미호출=dead 면 renderPdfLibraryUploadCard 도 제거 대상; live 면 KEEP.
-- 🔴 **KEEP (S1 통해 live)**: `renderPdfMaterialCard`·`renderSubjectPdfMaterialBrowser`·`renderPdfMaterialClassDateControl`.
-  경로 = workspace-page.ts:200(S1 pdf-workspace 단수 string) → renderSubjectPdfMaterialBrowser → renderPdfMaterialCard → (showClassDateControl 시) renderPdfMaterialClassDateControl. S1 미이전이라 전부 live.
-- spec 정리: `subject-views/__tests__/pdf-library.spec.ts` 등 삭제 함수 단언 제거. orphan 단언 0 확인.
+### spec/source-grep 정리
+- `apps/web/src/subject-views/__tests__/pdf-library.spec.ts`
+  - 삭제된 `pdf-workspaces` string index/section/upload-card renderer 단언 제거.
+  - KEEP set인 `renderSubjectPdfMaterialBrowser`, `renderPdfMaterialCard`, `renderPdfMaterialClassDateControl` 단언은 유지.
+- `apps/web/src/__tests__/pdf-material-library.spec.ts`
+  - 삭제된 renderer source-grep 단언 제거.
+  - S4b/S4a 이후 현재 route 배선에 맞게 `renderApp` 단언을 island slot/props 경로로 갱신.
+- `apps/web/package.json`
+  - `test:run` 목록 변경 없음. 위 두 spec은 등록 목록에 없었다.
 
-### 첫 명령 (fresh session)
-```
-git switch -c chore/s5-dead-oracle-removal
-# 1) cross-file trace: subject-class.ts liveness 판정 → safe-delete set 확정
-# 2) 삭제 + spec 정리
-# 3) pnpm -r build (exit0) + pnpm --filter web test:run (165-0 유지)
-# 4) self code-review → PR → @codex(post-merge) → squash main (배포 tag 없음)
-```
+## 🔎 liveness 판정
+- 정의 파일 포함 전체 grep으로 재확인했다.
+- `renderPdfWorkspaceIndex`: live caller 0. 기존 ref는 S4c JSX mirror 주석/spec뿐이었다.
+- `renderPdfSubjectLibrarySection`: live caller 0. 기존 caller는 `renderPdfWorkspaceIndex` 본체뿐이었다.
+- `renderPdfLibraryUploadCard`: `subject-class.ts`가 main route에서 호출되는지 먼저 확인했다.
+  - `main.ts`는 `subject`/`subject-class` route에서 `setSubjectClassProps(buildSubjectClassProps(subject))` + `renderSubjectClassSlot()`만 사용한다.
+  - `renderSubjectClassPage(subjectClassContext, subject)` live call 없음.
+  - 따라서 `pdf-library.ts`의 `renderPdfLibraryUploadCard` export는 runtime dead로 판정해 삭제했다.
+  - 남은 `ctx.renderPdfLibraryUploadCard` 문자열은 `subject-class.ts` old oracle/test callback 이름이며 `pdf-library.ts` export 참조가 아니다.
 
-## ✅ 직전 완료 — S4c (sprint 2026-W23-sprint-1 closed)
-- PR#139 squash→main `263208a` → **fe-v0.1.84** → Vercel prod 200 `main-tK9mwvCl.js`. @codex no findings.
-- Gate 3/6 self+cross PASS. 독립검증 build/test 165-0/loop-gate exit0.
-- 누적 prod island 8개(S1a·S2·S3·S3b·S4a·S4b-1·S4b-2·S4c). **11 island / 1 string(pdf-workspace=S1) 잔여.**
-- 상세 = MEMORY `project_sprint_w23_1_s4c_pdf_workspaces.md`.
+## 🔴 KEEP set 확인
+S1 단수 `#/subjects/:id/pdf` string route는 아직 live라 유지했다.
 
-## 📋 잔여 로드맵 (S5 후)
-- **#1 PdfMaterialCard 공유 leaf 추출** — ⚠️ user 명시 승인 필요(decision-A 반전, prod island 2개 터치).
-- **S1 (pdf-workspace 단수)** — 마지막 string. 🔴 S1b(pen 2nd-stroke)·S1c(annotation 물리 cross-device) 게이트 = 자율 한계.
+경로:
+`apps/web/src/pdf-workspace/workspace-page.ts` → `renderSubjectPdfMaterialBrowser` → `renderPdfMaterialCard` → `renderPdfMaterialClassDateControl`
 
-## 🔑 필수 교훈 (누적)
-- **dead-code trace = 정의 파일 포함 전체 grep**(필터 금지). caller-count 만으로 dead 판정 오판 위험.
-- **parity = oracle source-diff + render/dispatch 양면 실독**. worker 자가보고 불신 → main 독립 재실행.
-- **신규 spec → `apps/web/package.json` test:run 등록 필수**(node:test=명시 enumerate).
-- **fe tag 선점 확인** `git tag -l 'fe-v*'|sort -V|tail` + `merge-base --is-ancestor`. 최신=**fe-v0.1.84**.
-- **gh pr merge --squash**: 로컬 unpushed commit diverge 시 ff abort → reset --hard origin/main 동기화.
-- **배포 = 매번 별도 승인**. **조용히 reorder 금지**(roadmap 순서 user 승인 기반).
+삭제하지 않은 함수:
+- `renderSubjectPdfMaterialBrowser`
+- `renderPdfMaterialCard`
+- `renderPdfMaterialClassDateControl`
 
-## 정책 ambient (SFS 0.6.138)
-- 구현 = Sonnet worker(generator). main(Opus) = plan/review/INV + 독립검증. commit=branch, push/deploy=명시 승인.
+## ✅ 검증
+- 보조 spec 직접 실행:
+  - `node --experimental-strip-types --no-warnings --test apps/web/src/subject-views/__tests__/pdf-library.spec.ts apps/web/src/__tests__/pdf-material-library.spec.ts`
+  - exit 0 · 35 pass · 0 fail
+- 필수 build:
+  - `pnpm -r build`
+  - exit 0
+- 필수 web tests:
+  - `pnpm --filter web test:run`
+  - exit 0 · 165 pass · 0 fail
+- orphan 단언 확인:
+  - `apps/web/src/subject-views/__tests__/pdf-library.spec.ts`, `apps/web/src/__tests__/pdf-material-library.spec.ts`, `apps/web/package.json`에서 삭제 함수명 grep 결과 0.
+
+## 🚫 배포/릴리스 상태
+- PR: 없음.
+- merge: 없음.
+- `fe-v*` tag: 생성하지 않음.
+- Vercel/prod 배포: 하지 않음.
+
+## 다음 액션
+- 사용자 승인 후에만 push/PR 생성.
+- PR 생성 시 `@codex review` 트리거 후 source cleanup PR로 main squash merge.
+- 배포 금지: dead code cleanup이라 fe tag/Vercel release 없음.
+
+## 잔여 로드맵 (S5 후 보존)
+- **#1 PdfMaterialCard 공유 leaf 추출** — user 명시 승인 필요(decision-A 반전, prod island 2개 터치).
+- **S1 (pdf-workspace 단수)** — 마지막 string. S1b(pen 2nd-stroke)·S1c(annotation 물리 cross-device) 게이트 = 자율 한계.
+
+## 필수 교훈 (보존)
+- dead-code trace = 정의 파일 포함 전체 grep. caller-count만으로 dead 단정 금지.
+- worker/자가보고 불신 → build/test/grep 직접 재실행 후 보고.
+- 신규 spec은 `apps/web/package.json`의 explicit `test:run` 등록 필요(node:test glob 아님).
+- 배포 = 매번 별도 승인. dead cleanup은 fe tag/Vercel release 금지.
+- 조용히 roadmap reorder 금지.
 
 ## follow-up backlog (별개)
 - codex #4(FullscreenButton pure-props) = 별도 fix-forward.

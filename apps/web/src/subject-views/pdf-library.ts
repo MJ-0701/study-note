@@ -1,21 +1,19 @@
 // sprint-2026-W22-sprint-17 / layer C/slice-9 — pdf-library cluster.
-// 13 fn (5 render + 1 control + 5 helper + 2 auth-bound).
-// PdfLibraryContext 1 field (getAuthSession lazy) — auth-bound fn 만 Context 받음.
+// S1 pdf-workspace string route still uses the material browser/card renderers.
+// PdfLibraryContext 1 field (getAuthSession lazy) — auth-bound helpers 만 Context 받음.
 //
 // invariant (AC9 5-layer security closure):
 //   (a) user content escape — subject.title / material.fileName / classDateLabel / week.label.
 //   (b) attribute escape — subject.id / material.id (materialKey) data-*.
-//   (c) href escape (3-layer) — subjectPdfWorkspacePath + sanitizeExternalUrl + escapeHtml.
-//   (d) denylist UI (canManage=false) — upload card readonly + select.disabled.
-//   (e) auth boundary — canManagePdfMaterials role allowlist ("master" / "admin")
+//   (c) denylist UI (canManage=false) — class-date picker/apply disabled.
+//   (d) auth boundary — canManagePdfMaterials role allowlist ("master" / "admin")
 //       deny-by-default (undefined session / role / empty / other → false).
-//   (f) ownership boundary — getPdfMaterialOwnerLabel auth-derived label.
-//   (g) PII/log boundary — console / RUM / datadog import 0.
+//   (e) ownership boundary — getPdfMaterialOwnerLabel auth-derived label.
+//   (f) PII/log boundary — console / RUM / datadog import 0.
 
 import {
   formatPdfFileSize,
   type PdfMaterialDraft,
-  type StudyNotebook,
   type SubjectNote,
   type WeekNote
 } from "@study-note/domain";
@@ -24,10 +22,7 @@ import {
   PDF_MATERIAL_UNASSIGNED_WIRE_DATE
 } from "../pdf-workspace/constants";
 import { escapeHtml } from "../app/escape-html";
-import { sanitizeExternalUrl } from "../app/safe-url";
-import { subjectPdfWorkspacePath } from "../app/routes";
 import { getPdfMaterialKey } from "../pdf-workspace/workspace-store";
-import { renderMetric } from "./subject-cards";
 
 // ─── Public types ────────────────────────────────────────────────────────
 
@@ -146,70 +141,6 @@ export function getPdfMaterialStatusLabel(material: PdfMaterialDraft): string {
 
 // ─── Renderers ───────────────────────────────────────────────────────────
 
-export function renderPdfWorkspaceIndex(
-  ctx: PdfLibraryContext,
-  studyNotebook: StudyNotebook,
-  getSubjectPdfMaterials: (subjectId: string) => PdfMaterialDraft[]
-): string {
-  const subjectSummaries = studyNotebook.subjects.map((subject) => ({
-    subject,
-    materials: getSubjectPdfMaterials(subject.id)
-  }));
-  const totalMaterials = subjectSummaries.reduce(
-    (total, item) => total + item.materials.length,
-    0
-  );
-  const activeSubjects = subjectSummaries.filter((item) => item.materials.length > 0).length;
-
-  return `
-    <section class="subject-page-hero">
-      <p class="meta">PDF 자료실</p>
-      <h1>수업자료 찾기</h1>
-      <p class="lede">관리자가 올린 PDF를 과목별로 골라 열고, 같은 원문 위에 내 필기만 따로 저장합니다.</p>
-      <div class="pdf-library-summary" aria-label="PDF 자료 현황">
-        ${renderMetric("등록 자료", `${totalMaterials}개`, "업로드된 PDF")}
-        ${renderMetric("과목", `${activeSubjects}/${studyNotebook.subjects.length}`, "자료가 있는 과목")}
-        ${renderMetric("필기", "개인별", "PDF 원문과 분리 저장")}
-      </div>
-    </section>
-    <section aria-labelledby="pdf-workspaces-title">
-      <p class="meta">자료 목록</p>
-      <h2 id="pdf-workspaces-title">과목별 PDF</h2>
-      <div class="pdf-library">
-        ${subjectSummaries.map(({ subject, materials }) =>
-          renderPdfSubjectLibrarySection(ctx, subject, materials)
-        ).join("")}
-      </div>
-    </section>
-  `;
-}
-
-export function renderPdfSubjectLibrarySection(
-  ctx: PdfLibraryContext,
-  subject: SubjectNote,
-  materials: PdfMaterialDraft[]
-): string {
-  const safeTitle = escapeHtml(subject.title);
-  return `
-    <section class="pdf-subject-section" aria-labelledby="pdf-subject-${escapeHtml(subject.id)}">
-      <div class="pdf-subject-section__header">
-        <div>
-          <p class="meta">${escapeHtml(subject.examLabel)} · ${escapeHtml(subject.summary.weekRange)}</p>
-          <h3 id="pdf-subject-${escapeHtml(subject.id)}">${safeTitle}</h3>
-        </div>
-        <span class="pdf-count-pill">${materials.length}개 자료</span>
-      </div>
-      <div class="pdf-material-slider" aria-label="${safeTitle} PDF 자료 슬라이더">
-        ${renderPdfLibraryUploadCard(ctx, subject, materials.length)}
-        ${materials.map((material) => renderPdfMaterialCard(ctx, subject, material, {
-          isCurrent: false,
-          compact: false
-        })).join("")}
-      </div>
-    </section>
-  `;
-}
-
 export function renderSubjectPdfMaterialBrowser(
   ctx: PdfLibraryContext,
   subject: SubjectNote,
@@ -235,44 +166,6 @@ export function renderSubjectPdfMaterialBrowser(
         })).join("")}
       </div>
     </section>
-  `;
-}
-
-export function renderPdfLibraryUploadCard(
-  ctx: PdfLibraryContext,
-  subject: SubjectNote,
-  materialCount: number
-): string {
-  if (!canManagePdfMaterials(ctx)) {
-    return `
-      <article class="pdf-upload-card is-readonly">
-        <p class="meta">${escapeHtml(subject.title)}</p>
-        <h4>새 자료 요청</h4>
-        <p>PDF 업로드는 관리자만 가능합니다. 필요한 강의자료가 없으면 관리자에게 요청하세요.</p>
-        <a class="secondary-link" href="${escapeHtml(sanitizeExternalUrl(subjectPdfWorkspacePath(subject)))}">${materialCount > 0 ? "공유 자료 보기" : "작업공간 열기"}</a>
-      </article>
-    `;
-  }
-
-  const safeSubjectId = escapeHtml(subject.id);
-  const inputId = `pdf-library-upload-${safeSubjectId}`;
-
-  return `
-    <article class="pdf-upload-card">
-      <input
-        id="${inputId}"
-        class="file-input"
-        type="file"
-        accept="application/pdf,.pdf"
-        data-action="import-pdf-material"
-        data-subject-id="${safeSubjectId}"
-      />
-      <label class="pdf-upload-card__label" for="${inputId}">
-        <span>새 PDF 업로드</span>
-        <strong>${escapeHtml(subject.title)} 수업 자료 추가</strong>
-        <small>${materialCount > 0 ? `${materialCount}개 자료에 이어 추가합니다.` : "첫 강의 PDF를 바로 올립니다."}</small>
-      </label>
-    </article>
   `;
 }
 

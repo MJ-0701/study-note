@@ -99,10 +99,6 @@ function makeCtx(session?: { id: string; role: string }): import("../pdf-library
   };
 }
 
-function makeNotebook(subjects: unknown[]): never {
-  return { subjects } as never;
-}
-
 // ─── (a) canManagePdfMaterials — fail-closed deny-by-default ──────────────
 
 describe("pdf-library — (a) canManagePdfMaterials fail-closed", () => {
@@ -172,76 +168,9 @@ describe("pdf-library — (b) getPdfMaterialOwnerLabel ownership", () => {
   });
 });
 
-// ─── (c) renderPdfWorkspaceIndex + Subject section XSS ────────────────────
+// ─── (c) renderPdfMaterialCard XSS ────────────────────────────────────────
 
-describe("pdf-library — (c) renderPdfWorkspaceIndex XSS", () => {
-  test("case 12: characterization hero + summary metric + subject section", () => {
-    const subject = makeSubject();
-    const mat = makeMaterial({ classDate: "2026-05-14" });
-    const html = pl.renderPdfWorkspaceIndex(makeCtx(), makeNotebook([subject]), () => [mat]);
-    const c = parseC(html);
-    assert.equal(c.querySelectorAll(".subject-page-hero").length, 1);
-    assert.equal(c.querySelectorAll(".pdf-subject-section").length, 1);
-    assert.equal(c.querySelectorAll(".pdf-count-pill").length, 1);
-  });
-
-  test("case 13: hostile subject.title in index/section/upload escape", () => {
-    const subject = makeSubject({ title: "<script>alert(1)</script>" });
-    const html = pl.renderPdfWorkspaceIndex(makeCtx(), makeNotebook([subject]), () => []);
-    const c = parseC(html);
-    assert.equal(c.querySelectorAll("script").length, 0);
-  });
-
-  test("case 14: hostile subject.id in data-subject-id + section id attribute", () => {
-    const subject = makeSubject({ id: '"><img src=x onerror=alert(1)>' });
-    const html = pl.renderPdfWorkspaceIndex(makeCtx({ id: "u1", role: "admin" }), makeNotebook([subject]), () => []);
-    const c = parseC(html);
-    assert.equal(c.querySelectorAll("script,img").length, 0);
-    assert.equal(c.querySelectorAll("[onerror]").length, 0);
-  });
-});
-
-// ─── (d) renderPdfLibraryUploadCard — denylist UI ────────────────────────
-
-describe("pdf-library — (d) renderPdfLibraryUploadCard denylist", () => {
-  test("case 15: canManage=false → is-readonly + no file input", () => {
-    const html = pl.renderPdfLibraryUploadCard(makeCtx(), makeSubject(), 3);
-    const c = parseC(html);
-    assert.equal(c.querySelectorAll(".pdf-upload-card.is-readonly").length, 1);
-    assert.equal(c.querySelectorAll('input[type="file"]').length, 0);
-  });
-
-  test("case 16: canManage=true → editable + file input present", () => {
-    const html = pl.renderPdfLibraryUploadCard(makeCtx({ id: "u1", role: "admin" }), makeSubject(), 0);
-    const c = parseC(html);
-    assert.equal(c.querySelectorAll(".pdf-upload-card.is-readonly").length, 0);
-    assert.equal(c.querySelectorAll('input[type="file"]').length, 1);
-  });
-
-  test("case 17: hostile subject.id in input id + data-subject-id escape", () => {
-    const subject = makeSubject({ id: '"><script>x</script>' });
-    const html = pl.renderPdfLibraryUploadCard(makeCtx({ id: "u1", role: "admin" }), subject, 0);
-    const c = parseC(html);
-    assert.equal(c.querySelectorAll("script").length, 0);
-  });
-
-  test("case 18: canManage=false hostile subjectPdfWorkspacePath javascript: blocked (3-layer)", () => {
-    // sanitizeExternalUrl strips javascript: / data: / mailto: protocols.
-    // subjectPdfWorkspacePath returns #/subjects/<id>/pdf form — safe by construction.
-    // Verify defense in depth: even if subject.id manipulated, output has no script sink.
-    const subject = makeSubject({ id: 'javascript:alert(1)' });
-    const html = pl.renderPdfLibraryUploadCard(makeCtx(), subject, 1);
-    const c = parseC(html);
-    const link = c.querySelector(".secondary-link");
-    assert.notEqual(link, null);
-    const href = link!.getAttribute("href") ?? "";
-    assert.ok(!href.toLowerCase().startsWith("javascript:"), `href must not start with javascript: got=${href}`);
-  });
-});
-
-// ─── (e) renderPdfMaterialCard XSS ────────────────────────────────────────
-
-describe("pdf-library — (e) renderPdfMaterialCard XSS", () => {
+describe("pdf-library — (c) renderPdfMaterialCard XSS", () => {
   test("case 19: hostile material.fileName in h4 escape", () => {
     const subject = makeSubject();
     const mat = makeMaterial({ fileName: "<script>alert(1)</script>.pdf" });
@@ -268,9 +197,9 @@ describe("pdf-library — (e) renderPdfMaterialCard XSS", () => {
   });
 });
 
-// ─── (f) renderPdfMaterialClassDateControl + denylist + week label ────────
+// ─── (d) renderPdfMaterialClassDateControl + denylist + week label ────────
 
-describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
+describe("pdf-library — (d) renderPdfMaterialClassDateControl", () => {
   test("case 22: canManage=false → picker/button disabled", () => {
     const subject = makeSubject();
     const mat = makeMaterial();
@@ -346,9 +275,9 @@ describe("pdf-library — (f) renderPdfMaterialClassDateControl", () => {
   });
 });
 
-// ─── (g) renderSubjectPdfMaterialBrowser ─────────────────────────────────
+// ─── (e) renderSubjectPdfMaterialBrowser ─────────────────────────────────
 
-describe("pdf-library — (g) renderSubjectPdfMaterialBrowser", () => {
+describe("pdf-library — (e) renderSubjectPdfMaterialBrowser", () => {
   test("case 26: 0 materials → empty string", () => {
     const html = pl.renderSubjectPdfMaterialBrowser(makeCtx(), makeSubject(), [], undefined);
     assert.equal(html, "");
@@ -363,14 +292,11 @@ describe("pdf-library — (g) renderSubjectPdfMaterialBrowser", () => {
   });
 });
 
-// ─── (h) export shape + helpers ──────────────────────────────────────────
+// ─── (f) export shape + helpers ──────────────────────────────────────────
 
-describe("pdf-library — (h) export shape + helpers", () => {
-  test("case 28: 13 fn export + isUnconfirmedPdfClassDate + getPdfMaterialsForWeek", () => {
-    assert.equal(typeof pl.renderPdfWorkspaceIndex, "function");
-    assert.equal(typeof pl.renderPdfSubjectLibrarySection, "function");
+describe("pdf-library — (f) export shape + helpers", () => {
+  test("case 28: live renderer exports + isUnconfirmedPdfClassDate + getPdfMaterialsForWeek", () => {
     assert.equal(typeof pl.renderSubjectPdfMaterialBrowser, "function");
-    assert.equal(typeof pl.renderPdfLibraryUploadCard, "function");
     assert.equal(typeof pl.renderPdfMaterialCard, "function");
     assert.equal(typeof pl.renderPdfMaterialClassDateControl, "function");
     assert.equal(typeof pl.getPdfMaterialClassDateLabel, "function");

@@ -341,8 +341,7 @@ import {
   formatSourceKind,
   formatSourceVisibility,
 } from "./subject-views/subject-cards";
-// renderPdfWorkspaceIndex 는 pdf-library.ts 에 parity oracle 로 보존 — main.ts import 불필요 (S4c 이후).
-// S5 에서 string renderer 제거 시 pdf-library.ts 에서 함께 제거.
+// S4c 이후 pdf-workspaces 는 React island props builder가 소유한다.
 import {
   canManagePdfMaterials,
   canEditPdfMaterialClassDate,
@@ -5344,7 +5343,6 @@ export function buildSubjectClassProps(subject: SubjectNote): SubjectClassViewPr
 }
 
 // S4c: pdf-workspaces island view-model builder.
-// oracle = renderPdfWorkspaceIndex(pdf-library.ts:149) 의 1:1 소스-diff.
 // 동일 iteration 순서: subjects.map → getSubjectPdfMaterials → summary 계산 → per-subject view-model.
 export function buildPdfWorkspacesProps(): PdfWorkspacesViewProps {
   const notebook = getNotebook();
