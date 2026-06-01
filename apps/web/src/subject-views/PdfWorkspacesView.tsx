@@ -3,18 +3,11 @@
 // S5: legacy string index/subject/upload renderers were removed after this island took over.
 // Remaining material-card parity is fixed to isCurrent=false, compact=false, showClassDateControl=undefined.
 
+import { PdfMaterialCard, type PdfMaterialCardMaterial } from "./PdfMaterialCard";
+
 // ─── public types ────────────────────────────────────────────────────────────
 
-export interface PdfWorkspacesViewMaterial {
-  materialKey: string;
-  fileName: string;
-  fileSize: string; // 이미 formatPdfFileSize 적용됨
-  pageCount: number;
-  statusLabel: string;
-  ownerLabel: string;
-  classDateLabel: string;
-  classDateIsUnconfirmed: boolean;
-}
+export interface PdfWorkspacesViewMaterial extends PdfMaterialCardMaterial {}
 
 export interface PdfWorkspacesViewUploadCard {
   isReadonly: boolean;
@@ -57,42 +50,6 @@ function MetricCard({ label, value, description }: {
       <p className="meta">{label}</p>
       <strong>{value}</strong>
       <span>{description}</span>
-    </article>
-  );
-}
-
-/**
- * Material card mirror for the pdf-workspaces island.
- * isCurrent=false 고정 → is-current span 렌더 없음, 버튼 레이블 "열기" 고정.
- * showClassDateControl=undefined(falsy) → class-date picker 없음.
- */
-function PdfMaterialCard({ material, subjectId, subjectTitle }: {
-  material: PdfWorkspacesViewMaterial;
-  subjectId: string;
-  subjectTitle: string;
-}): React.ReactElement {
-  return (
-    <article className="pdf-material-card">
-      <div className="pdf-material-card__body">
-        <p className="meta">{subjectTitle} · {material.classDateLabel}</p>
-        <h4>{material.fileName}</h4>
-        <p>{material.fileSize} · {material.pageCount}페이지 · {material.statusLabel}</p>
-        <div className="pdf-material-card__badges">
-          <span>{material.ownerLabel}</span>
-          {material.classDateIsUnconfirmed && <span>나중에 수정</span>}
-          {/* isCurrent=false 고정 → is-current span 없음 (parity: oracle line 300) */}
-        </div>
-        {/* showClassDateControl=undefined → class-date picker 없음 (parity: oracle line 302) */}
-      </div>
-      <div className="pdf-material-card__actions">
-        <button
-          className="action-button"
-          type="button"
-          data-action="open-pdf-material"
-          data-subject-id={subjectId}
-          data-material-id={material.materialKey}
-        >열기</button>
-      </div>
     </article>
   );
 }

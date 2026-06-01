@@ -14,7 +14,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const src = readFileSync(new URL("../SubjectClassView.tsx", import.meta.url), "utf8");
+const viewSrc = readFileSync(new URL("../SubjectClassView.tsx", import.meta.url), "utf8");
+const cardSrc = readFileSync(new URL("../PdfMaterialCard.tsx", import.meta.url), "utf8");
+const src = `${viewSrc}\n${cardSrc}`;
 
 describe("SubjectClassView 정적 소스 검증", () => {
   // ─── AC1/INV: pure-props ───────────────────────────────────────────────────
