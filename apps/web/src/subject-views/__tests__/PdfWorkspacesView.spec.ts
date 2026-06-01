@@ -14,7 +14,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-const src = readFileSync(new URL("../PdfWorkspacesView.tsx", import.meta.url), "utf8");
+const viewSrc = readFileSync(new URL("../PdfWorkspacesView.tsx", import.meta.url), "utf8");
+const cardSrc = readFileSync(new URL("../PdfMaterialCard.tsx", import.meta.url), "utf8");
+const src = `${viewSrc}\n${cardSrc}`;
 
 describe("PdfWorkspacesView 정적 소스 검증", () => {
   // ─── INV: pure-props ────────────────────────────────────────────────────────
@@ -89,11 +91,12 @@ describe("PdfWorkspacesView 정적 소스 검증", () => {
   // ─── AC3 parity: class-date picker 없음 ─────────────────────────────────────
 
   it("AC3 — class-date picker 없음 (showClassDateControl=false 경로)", () => {
-    // renderPdfMaterialClassDateControl 는 showClassDateControl=false 시 미호출.
-    // 인덱스 뷰에서 class-date picker/radio/details 없어야 함.
-    assert.doesNotMatch(src, /pdf-class-date-picker/);
-    assert.doesNotMatch(src, /class-date-summary/);
-    assert.doesNotMatch(src, /assign-pdf-class-date/);
+    // Shared leaf는 class-date branch를 갖지만, index island callsite는 켜지 않는다.
+    assert.match(cardSrc, /showClassDateControl/);
+    assert.doesNotMatch(viewSrc, /showClassDateControl=\{true\}/);
+    assert.doesNotMatch(viewSrc, /pdf-class-date-picker/);
+    assert.doesNotMatch(viewSrc, /class-date-summary/);
+    assert.doesNotMatch(viewSrc, /assign-pdf-class-date/);
   });
 
   // ─── hero / metric summary ──────────────────────────────────────────────────
