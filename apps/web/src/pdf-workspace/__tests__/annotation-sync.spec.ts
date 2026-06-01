@@ -426,6 +426,64 @@ describe("AC2 (d1) — pending PUT + hydration merge", () => {
       harness.restore();
     }
   });
+
+  it("local snapshot 복원 후 pre-hydration 삭제는 canonical merge 로 되살리지 않는다", async () => {
+    let putBody: string | undefined;
+    const harness = makeHarness({
+      sessionUserId: "u1",
+      workspace: makeWorkspace("m1"),
+      fetchImpl: async (_url, init) => {
+        if (init?.method === "PUT") {
+          putBody = typeof init.body === "string" ? init.body : undefined;
+          return new Response(
+            JSON.stringify({
+              annotations: { m1: { payload: {}, updatedAt: "2026-05-25T04:03:00Z" } }
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            annotations: {
+              m1: {
+                payload: { stickyNotes: [{ id: "server-note" }] },
+                updatedAt: "2026-05-25T04:00:00Z"
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+    });
+    try {
+      scheduleAnnotationPut(
+        "m1",
+        {
+          stickyNotes: [],
+          inkStrokes: [],
+          textBoxes: [],
+          checklists: [],
+          tables: [],
+          charts: [],
+          starMarks: []
+        },
+        "s1",
+        harness.ctx,
+        harness.cb,
+        { mergeWithCanonical: false }
+      );
+      await fetchAnnotationIfMissing("s1", "m1", harness.ctx, harness.cb);
+      assert.equal(harness.hydrationCalls.length, 1);
+      assert.deepEqual(harness.hydrationCalls[0]!.hydration[0]!.payload.stickyNotes ?? [], []);
+
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      assert.ok(putBody, "debounced PUT body captured");
+      const saved = JSON.parse(putBody!) as { payload: SubjectPdfWorkspace };
+      assert.deepEqual(saved.payload.stickyNotes ?? [], []);
+    } finally {
+      harness.restore();
+    }
+  });
 });
 
 describe("AC2 (d2) — main hydration source guard", () => {

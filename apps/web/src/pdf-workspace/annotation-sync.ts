@@ -96,6 +96,10 @@ interface PendingAnnotationPutPayload {
   mergeWithCanonical: boolean;
 }
 
+export interface ScheduleAnnotationPutOptions {
+  mergeWithCanonical?: boolean;
+}
+
 const annotationPendingPutPayloads = new Map<string, PendingAnnotationPutPayload>();
 const annotationPutAborts = new Map<string, AbortController>();
 const annotationPutChains = new Map<string, Promise<void>>();
@@ -449,7 +453,8 @@ export function scheduleAnnotationPut(
   payload: unknown,
   subjectId: string,
   ctx: AnnotationSyncContext,
-  cb: AnnotationSyncCallbacks
+  cb: AnnotationSyncCallbacks,
+  options: ScheduleAnnotationPutOptions = {}
 ): void {
   const existing = annotationPutTimers.get(materialId);
   if (existing) {
@@ -457,7 +462,8 @@ export function scheduleAnnotationPut(
   }
   annotationPendingPutPayloads.set(materialId, {
     payload,
-    mergeWithCanonical: shouldMergePendingPutWithCanonical(subjectId, materialId, ctx)
+    mergeWithCanonical:
+      options.mergeWithCanonical ?? shouldMergePendingPutWithCanonical(subjectId, materialId, ctx)
   });
   const timer = setTimeout(() => {
     annotationPutTimers.delete(materialId);

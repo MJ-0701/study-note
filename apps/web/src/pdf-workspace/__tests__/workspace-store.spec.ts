@@ -162,7 +162,11 @@ interface Harness {
   store: PdfWorkspaceStore;
   ctx: WorkspaceStoreContext;
   cb: WorkspaceStoreCallbacks;
-  putCalls: Array<{ materialId: string; payload: unknown }>;
+  putCalls: Array<{
+    materialId: string;
+    payload: unknown;
+    options?: Parameters<WorkspaceStoreCallbacks["scheduleAnnotationPut"]>[5];
+  }>;
   clearedSubjectIds: string[];
   setStoreCalls: PdfWorkspaceStore[];
 }
@@ -173,7 +177,7 @@ function makeHarness(opts: {
 } = {}): Harness {
   const storage = installFakeLocalStorage();
   let store: PdfWorkspaceStore = opts.initialStore ?? { workspaces: {} };
-  const putCalls: Array<{ materialId: string; payload: unknown }> = [];
+  const putCalls: Harness["putCalls"] = [];
   const clearedSubjectIds: string[] = [];
   const setStoreCalls: PdfWorkspaceStore[] = [];
 
@@ -187,8 +191,8 @@ function makeHarness(opts: {
       store = next;
       setStoreCalls.push(next);
     },
-    scheduleAnnotationPut: (materialId, payload) => {
-      putCalls.push({ materialId, payload });
+    scheduleAnnotationPut: (materialId, payload, _subjectId, _ctx, _cb, options) => {
+      putCalls.push({ materialId, payload, options });
     },
     getAnnotationSyncContext: () => ({} as never),
     getAnnotationSyncCallbacks: () => ({} as never),
@@ -389,6 +393,35 @@ describe("AC6 (5) — updatePdfWorkspace", () => {
     assert.equal(h.storage.store.size, 0, "LS write 는 차단 (unauthenticated)");
     // annotation PUT 은 호출됨 (BE 가 cookie session 검증) — sprint-3/S2 정책.
     assert.equal(h.putCalls.length, 1);
+  });
+
+  it("기존 local snapshot 이 있으면 pending PUT 은 canonical merge 를 끈다", () => {
+    const material = makeMaterial("m1");
+    const h = makeHarness({
+      userId: "userA",
+      initialStore: {
+        workspaces: {
+          s1: makeWorkspace({
+            material,
+            stickyNotes: [{ id: "n1" } as never],
+            annotationSnapshots: {
+              m1: makeAnnotationSnapshot({ stickyNotes: [{ id: "n1" } as never] })
+            } as never
+          })
+        }
+      }
+    });
+    updatePdfWorkspace(
+      "s1",
+      (ws) => ({
+        ...ws,
+        stickyNotes: []
+      }),
+      h.ctx,
+      h.cb
+    );
+    assert.equal(h.putCalls.length, 1);
+    assert.deepEqual(h.putCalls[0]?.options, { mergeWithCanonical: false });
   });
 });
 

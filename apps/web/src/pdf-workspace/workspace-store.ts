@@ -25,7 +25,8 @@ import type {
 } from "@study-note/domain";
 import type {
   AnnotationSyncCallbacks,
-  AnnotationSyncContext
+  AnnotationSyncContext,
+  ScheduleAnnotationPutOptions
 } from "./annotation-sync";
 import { decimateInkStrokes } from "./ink-decimate.ts";
 
@@ -86,7 +87,8 @@ export interface WorkspaceStoreCallbacks {
     },
     subjectId: string,
     annotationSyncContext: AnnotationSyncContext,
-    annotationSyncCallbacks: AnnotationSyncCallbacks
+    annotationSyncCallbacks: AnnotationSyncCallbacks,
+    options?: ScheduleAnnotationPutOptions
   ) => void;
   getAnnotationSyncContext: () => AnnotationSyncContext;
   getAnnotationSyncCallbacks: () => AnnotationSyncCallbacks;
@@ -407,6 +409,8 @@ export function updatePdfWorkspace(
   const nextId = nextMaterial?.backendMaterialId ?? nextMaterial?.id;
   const annotationsChanged =
     serializeAnnotationPayload(current) !== serializeAnnotationPayload(updated);
+  const hadLocalAnnotationSnapshot =
+    nextId !== undefined && current.annotationSnapshots?.[nextId] !== undefined;
   if (nextMaterial && previousId === nextId && annotationsChanged) {
     updated = rememberMaterialAnnotations(updated, nextId!);
   }
@@ -427,7 +431,8 @@ export function updatePdfWorkspace(
       payload,
       subjectId,
       callbacks.getAnnotationSyncContext(),
-      callbacks.getAnnotationSyncCallbacks()
+      callbacks.getAnnotationSyncCallbacks(),
+      hadLocalAnnotationSnapshot ? { mergeWithCanonical: false } : undefined
     );
   }
 }
