@@ -27,8 +27,8 @@ const SESSION_COOKIE_NAME = "study_note_session";
 
 const SEED_USER_NAME = process.env.STUDY_NOTE_DEV_USER_NAME ?? "Dev User";
 const SEED_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_DEV_STUDENT_NUMBER ?? "20260001";
-const SECOND_USER_NAME = process.env.STUDY_NOTE_SECOND_USER_NAME ?? "Reviewer";
-const SECOND_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_SECOND_STUDENT_NUMBER ?? "20260002";
+const ADMIN_USER_NAME = process.env.STUDY_NOTE_ADMIN_USER_NAME ?? "Admin User";
+const ADMIN_USER_STUDENT_NUMBER = process.env.STUDY_NOTE_ADMIN_STUDENT_NUMBER ?? "20260004";
 const NORMAL_USER_NAME = "Smoke Normal User";
 const NORMAL_USER_STUDENT_NUMBER = "20260003";
 const NORMAL_USER_EMAIL = "smoke-normal-user@example.com";
@@ -555,12 +555,12 @@ try {
     401
   );
 
-  // Second user sign-in (ADMIN role) — admin route and cross-user upload denial tests.
-  const secondJar = createCookieJar();
+  // Admin user sign-in — admin route and cross-user upload denial tests.
+  const adminJar = createCookieJar();
   await requestJson("/v1/auth/sign-in", {
     method: "POST",
-    jar: secondJar,
-    body: { name: SECOND_USER_NAME, studentNumber: SECOND_USER_STUDENT_NUMBER }
+    jar: adminJar,
+    body: { name: ADMIN_USER_NAME, studentNumber: ADMIN_USER_STUDENT_NUMBER }
   });
 
   // Master cookie was revoked above — re-sign-in for the admin route check.
@@ -575,7 +575,7 @@ try {
     throw new Error("master role did not receive users list array");
   }
   console.log("admin route accepts master user");
-  const adminUsers = await requestJson("/v1/admin/users", { jar: secondJar });
+  const adminUsers = await requestJson("/v1/admin/users", { jar: adminJar });
   if (!Array.isArray(adminUsers)) {
     throw new Error("admin role did not receive users list array");
   }
@@ -584,7 +584,7 @@ try {
   await assertStatus("cross-user file upload access is denied", () =>
     requestBinary(`/materials/${materialId}/file`, {
       method: "PUT",
-      jar: secondJar,
+      jar: adminJar,
       body: samplePdf,
       contentType: "application/pdf"
     }),

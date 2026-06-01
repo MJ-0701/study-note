@@ -36,7 +36,7 @@ try {
   }
 
   const masterCookie = await signIn(baseUrl, "Dev User", "20260001");
-  const adminCookie = await signIn(baseUrl, "Reviewer", "20260002");
+  const adminCookie = await signIn(baseUrl, "Admin User", "20260004");
   // user-dev-3 has devUserFlag=false, blocking sign-in; use sign-up for a normal-role cookie.
   const normalCookie = await signUp(baseUrl, "스모크노멀", "20269001");
 

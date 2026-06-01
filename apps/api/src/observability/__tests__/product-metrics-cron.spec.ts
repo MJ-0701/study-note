@@ -1,5 +1,5 @@
 // 운영지표 v2 / S1 / AC10 — ProductMetricsCronService spec. mock PrismaService +
-// mock MetricsService. 13 gauge emit / role group / 0 divisor / bigint coerce /
+// mock MetricsService. 14 gauge emit / role group / 0 divisor / bigint coerce /
 // PII no-emit / cron schedule decorator / dogstatsd dual-emit / 소스 파일 PII grep.
 
 import { strict as assert } from "node:assert";
@@ -16,7 +16,10 @@ interface PrismaStubOpts {
   annotationTotal?: number;
   termCount?: number;
   subjectCount?: number;
-  roleGroups?: Array<{ role: "MASTER" | "ADMIN" | "NORMAL"; _count: { _all: number } }>;
+  roleGroups?: Array<{
+    role: "MASTER" | "ADMIN" | "REVIEWER" | "NORMAL";
+    _count: { _all: number };
+  }>;
   /** Sequential return values for $queryRaw calls in collect() order:
    *  [DAU, new_today, new_7d, pdf_upload_24h]. Each entry is the unwrapped count. */
   rawCounts?: [unknown, unknown, unknown, unknown];
@@ -69,7 +72,7 @@ function spyMetrics(): { metrics: MetricsService; calls: EmitRecord[] } {
 }
 
 describe("ProductMetricsCronService.collectAndEmit", () => {
-  it("emits all 13 gauges with source=product_metrics_cron", async () => {
+  it("emits all 14 gauges with source=product_metrics_cron", async () => {
     const { prisma } = buildPrismaStub({
       usersTotal: 42,
       pdfTotal: 100,
@@ -79,6 +82,7 @@ describe("ProductMetricsCronService.collectAndEmit", () => {
       roleGroups: [
         { role: "MASTER", _count: { _all: 1 } },
         { role: "ADMIN", _count: { _all: 3 } },
+        { role: "REVIEWER", _count: { _all: 4 } },
         { role: "NORMAL", _count: { _all: 38 } }
       ],
       rawCounts: [7, 2, 5, 8]
@@ -88,7 +92,7 @@ describe("ProductMetricsCronService.collectAndEmit", () => {
     const cron = new ProductMetricsCronService(prisma, metrics);
     await cron.collectAndEmit();
 
-    assert.equal(calls.length, 13);
+    assert.equal(calls.length, 14);
     for (const call of calls) {
       assert.equal(call.tags.source, "product_metrics_cron");
       assert.ok(Number.isFinite(call.value), `value finite: ${call.name}`);
@@ -104,6 +108,7 @@ describe("ProductMetricsCronService.collectAndEmit", () => {
     assert.equal(byName.get("study_note.product.content.pdf_upload_24h"), 8);
     assert.equal(byName.get("study_note.product.users.role_master"), 1);
     assert.equal(byName.get("study_note.product.users.role_admin"), 3);
+    assert.equal(byName.get("study_note.product.users.role_reviewer"), 4);
     assert.equal(byName.get("study_note.product.users.role_normal"), 38);
     assert.equal(byName.get("study_note.product.org.term_active_count"), 4);
     assert.equal(byName.get("study_note.product.org.subject_avg_per_term"), 3);
@@ -189,7 +194,7 @@ describe("ProductMetricsCronService runtime safety", () => {
 });
 
 describe("MetricsService dual-emit (Prom + dogstatsd)", () => {
-  it("registers all 13 gauges in prom registry", () => {
+  it("registers all 14 gauges in prom registry", () => {
     const svc = new MetricsService(null);
     const known = [
       "study_note.product.users.total",
@@ -201,6 +206,7 @@ describe("MetricsService dual-emit (Prom + dogstatsd)", () => {
       "study_note.product.content.pdf_upload_24h",
       "study_note.product.users.role_master",
       "study_note.product.users.role_admin",
+      "study_note.product.users.role_reviewer",
       "study_note.product.users.role_normal",
       "study_note.product.org.term_active_count",
       "study_note.product.org.subject_avg_per_term",

@@ -8,12 +8,30 @@ export const subjects = [
   { id: "computer-introduction", title: "컴퓨터개론" }
 ];
 
+const defaultTerm = {
+  id: "default-term-backfill-001",
+  grade: 1,
+  semester: 1,
+  title: "기본 학기",
+  createdById: "system"
+};
+
 export async function seedSubjects(prisma) {
+  await prisma.term.upsert({
+    where: { id: defaultTerm.id },
+    update: {
+      grade: defaultTerm.grade,
+      semester: defaultTerm.semester,
+      title: defaultTerm.title
+    },
+    create: defaultTerm
+  });
+
   for (const subject of subjects) {
     await prisma.subject.upsert({
       where: { id: subject.id },
-      update: { title: subject.title },
-      create: subject
+      update: { title: subject.title, termId: defaultTerm.id },
+      create: { ...subject, termId: defaultTerm.id }
     });
   }
 

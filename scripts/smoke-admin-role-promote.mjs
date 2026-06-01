@@ -5,7 +5,7 @@
  *   master PUT /users/user-dev-3/role {role:"ADMIN"} → 200 + role=admin in response
  *   admin  PUT /users/user-dev-3/role {role:"NORMAL"} → 200 (revert, admin can demote)
  *   admin  PUT /users/user-dev-3/role {role:"MASTER"} → 400 ADMIN_CANNOT_PROMOTE_TO_MASTER
- *   admin  PUT /users/user-dev-2/role {role:"NORMAL"} → 403 CANNOT_MODIFY_SELF
+ *   admin  PUT /users/user-dev-4/role {role:"NORMAL"} → 403 CANNOT_MODIFY_SELF
  *   normal PUT /users/user-dev-3/role {role:"ADMIN"} → 403 FORBIDDEN_ROLE
  */
 import { spawn } from "node:child_process";
@@ -38,7 +38,7 @@ try {
   }
 
   const masterCookie = await signIn(baseUrl, "Dev User", "20260001");
-  const adminCookie = await signIn(baseUrl, "Reviewer", "20260002");
+  const adminCookie = await signIn(baseUrl, "Admin User", "20260004");
   // user-dev-3 has devUserFlag=false, blocking sign-in; use sign-up for a normal-role cookie.
   const normalCookie = await signUp(baseUrl, "스모크노멀", "20269001");
 
@@ -79,7 +79,7 @@ try {
   console.log("smoke-admin-role-promote AC3-admin-master: PASS");
 
   // ── admin tries to modify own role → 403 CANNOT_MODIFY_SELF ──────────────
-  const adminSelfResp = await fetch(`${baseUrl}/v1/admin/users/user-dev-2/role`, {
+  const adminSelfResp = await fetch(`${baseUrl}/v1/admin/users/user-dev-4/role`, {
     method: "PUT",
     headers: { "content-type": "application/json", cookie: adminCookie },
     body: JSON.stringify({ role: "NORMAL" })
