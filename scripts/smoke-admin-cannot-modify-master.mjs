@@ -2,7 +2,7 @@
  * smoke-admin-cannot-modify-master.mjs — AC2: CANNOT_MODIFY_MASTER regression guard
  *
  * Cases:
- *   admin (Reviewer / 20260002) PUT /users/user-dev-1/role {role:"NORMAL"}
+ *   admin (Admin User / 20260004) PUT /users/user-dev-1/role {role:"NORMAL"}
  *   → HTTP 403 + errorCode "CANNOT_MODIFY_MASTER"
  *
  * user-dev-1 is the master seed user (seeded by prepareSmokeDatabase).
@@ -40,8 +40,8 @@ try {
     await waitForHealthy(baseUrl);
   }
 
-  // admin sign-in (Reviewer — role=admin seed user)
-  const adminCookie = await signIn(baseUrl, "Reviewer", "20260002");
+  // admin sign-in (role=admin seed user)
+  const adminCookie = await signIn(baseUrl, "Admin User", "20260004");
   console.log("  ✓ admin sign-in OK");
 
   // admin attempts to change role of master target (user-dev-1) → must be 403

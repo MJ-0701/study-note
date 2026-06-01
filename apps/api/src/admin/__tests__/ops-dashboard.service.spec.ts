@@ -150,13 +150,13 @@ describe("OpsDashboardService", () => {
 });
 
 describe("AdminController ops dashboard guard", () => {
-  it("keeps the Datadog snapshot master/admin only", () => {
+  it("allows reviewer access to the ops dashboard only", () => {
     const fn = AdminController.prototype.getOpsDashboard;
     const guards = Reflect.getMetadata("__guards__", fn) as unknown[] | undefined;
 
     assert.ok(guards?.includes(SessionAuthGuard));
     assert.ok(guards?.includes(RoleGuard));
-    assert.deepEqual(Reflect.getMetadata(ROLES_KEY, fn), ["master", "admin"]);
+    assert.deepEqual(Reflect.getMetadata(ROLES_KEY, fn), ["master", "admin", "reviewer"]);
   });
 });
 

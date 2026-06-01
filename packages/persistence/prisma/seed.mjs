@@ -21,6 +21,14 @@ const users = [
     devUserFlag: true
   },
   {
+    id: "user-dev-4",
+    displayName: process.env.STUDY_NOTE_ADMIN_USER_NAME ?? "Admin User",
+    studentNumber: process.env.STUDY_NOTE_ADMIN_STUDENT_NUMBER ?? "20260004",
+    email: process.env.STUDY_NOTE_ADMIN_USER_EMAIL ?? "admin@example.com",
+    role: "ADMIN",
+    devUserFlag: true
+  },
+  {
     id: "user-dev-3",
     displayName: process.env.STUDY_NOTE_THIRD_USER_NAME ?? "Plain User",
     studentNumber: process.env.STUDY_NOTE_THIRD_STUDENT_NUMBER ?? "20269998",
