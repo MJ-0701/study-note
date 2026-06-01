@@ -819,6 +819,7 @@ function applyAnnotationHydrationToStore(
       : current.checklists,
     tables: Array.isArray(incoming.tables) ? incoming.tables : current.tables,
     charts: Array.isArray(incoming.charts) ? incoming.charts : current.charts,
+    starMarks: Array.isArray(incoming.starMarks) ? incoming.starMarks : current.starMarks,
     updatedAt: new Date().toISOString()
   };
   setPdfWorkspaceStore({
