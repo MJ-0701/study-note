@@ -1073,6 +1073,33 @@ describe("AC9-c: hydrateSubjectPdfWorkspace fail-closed", () => {
     assert.equal(result.charts[0]?.chartType, "sparkline");
     assert.equal(result.charts[0]?.collapsed, false);
   });
+
+  it("annotationSnapshots 도 materialId 별 local cache 로 hydration 보존", () => {
+    const now = new Date().toISOString();
+    const result = hydrateSubjectPdfWorkspace({
+      subjectId: "sub-snap",
+      stickyNotes: [],
+      inkStrokes: [],
+      textBoxes: [],
+      checklists: [],
+      tables: [],
+      charts: [],
+      starMarks: [],
+      annotationSnapshots: {
+        m1: {
+          stickyNotes: [{ id: "n1" }],
+          inkStrokes: [],
+          textBoxes: [],
+          checklists: [],
+          tables: [],
+          charts: [],
+          starMarks: []
+        }
+      },
+      updatedAt: now
+    });
+    assert.deepEqual(result.annotationSnapshots?.m1?.stickyNotes, [{ id: "n1" }]);
+  });
 });
 
 // ---------------------------------------------------------------------------

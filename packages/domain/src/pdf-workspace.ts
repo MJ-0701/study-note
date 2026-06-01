@@ -201,6 +201,16 @@ export interface PdfMaterialDraft {
   updatedAt?: string;
 }
 
+export interface PdfWorkspaceAnnotationSnapshot {
+  stickyNotes: PdfStickyNote[];
+  inkStrokes: PdfInkStroke[];
+  textBoxes: PdfTextBox[];
+  checklists: PdfChecklist[];
+  tables: PdfTable[];
+  charts: PdfChart[];
+  starMarks: PdfStarMark[];
+}
+
 // SubjectPdfWorkspace: sprint-13 확장 — tables + charts 추가 (기존 sticky/ink/text/checklist BC).
 export interface SubjectPdfWorkspace {
   subjectId: string;
@@ -218,6 +228,7 @@ export interface SubjectPdfWorkspace {
   charts: PdfChart[];
   // sprint-W21-sprint-1 / S6 — 별표 masking widget.
   starMarks: PdfStarMark[];
+  annotationSnapshots?: Record<string, PdfWorkspaceAnnotationSnapshot>;
   updatedAt: string;
 }
 
@@ -1079,6 +1090,52 @@ function validatePdfMaterialDraft(raw: unknown): PdfMaterialDraft | null {
   };
 }
 
+function hydrateAnnotationSnapshots(raw: unknown): Record<string, PdfWorkspaceAnnotationSnapshot> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return undefined;
+  }
+
+  const snapshots: Record<string, PdfWorkspaceAnnotationSnapshot> = {};
+  for (const [materialId, value] of Object.entries(raw)) {
+    if (!isNonEmptyString(materialId) || !value || typeof value !== "object" || Array.isArray(value)) {
+      continue;
+    }
+
+    const r = value as Record<string, unknown>;
+    snapshots[materialId] = {
+      stickyNotes: Array.isArray(r.stickyNotes) ? (r.stickyNotes as PdfStickyNote[]) : [],
+      inkStrokes: Array.isArray(r.inkStrokes) ? (r.inkStrokes as PdfInkStroke[]) : [],
+      textBoxes: Array.isArray(r.textBoxes)
+        ? r.textBoxes
+            .map(validateTextBox)
+            .filter((tb): tb is PdfTextBox => tb !== null)
+        : [],
+      checklists: Array.isArray(r.checklists)
+        ? r.checklists
+            .map(validateChecklist)
+            .filter((cl): cl is PdfChecklist => cl !== null)
+        : [],
+      tables: Array.isArray(r.tables)
+        ? r.tables
+            .map(validateTable)
+            .filter((table): table is PdfTable => table !== null)
+        : [],
+      charts: Array.isArray(r.charts)
+        ? r.charts
+            .map(validateChart)
+            .filter((chart): chart is PdfChart => chart !== null)
+        : [],
+      starMarks: Array.isArray(r.starMarks)
+        ? r.starMarks
+            .map(validateStarMark)
+            .filter((sm): sm is PdfStarMark => sm !== null)
+        : []
+    };
+  }
+
+  return Object.keys(snapshots).length > 0 ? snapshots : undefined;
+}
+
 export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
   if (raw === null || raw === undefined || typeof raw !== "object") {
     return createEmptyPdfWorkspace("<unknown>");
@@ -1141,6 +1198,7 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
       : [];
   const updatedAt =
     typeof r.updatedAt === "string" ? r.updatedAt : new Date().toISOString();
+  const annotationSnapshots = hydrateAnnotationSnapshots(r.annotationSnapshots);
 
   return {
     subjectId,
@@ -1155,6 +1213,7 @@ export function hydrateSubjectPdfWorkspace(raw: unknown): SubjectPdfWorkspace {
     tables,
     charts,
     starMarks,
+    ...(annotationSnapshots ? { annotationSnapshots } : {}),
     updatedAt
   };
 }

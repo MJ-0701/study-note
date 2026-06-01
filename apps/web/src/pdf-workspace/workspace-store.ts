@@ -111,8 +111,54 @@ function buildAnnotationPayload(workspace: SubjectPdfWorkspace): AnnotationPaylo
   };
 }
 
+function buildLocalAnnotationSnapshot(workspace: SubjectPdfWorkspace): AnnotationPayload {
+  return {
+    stickyNotes: workspace.stickyNotes,
+    inkStrokes: workspace.inkStrokes,
+    textBoxes: workspace.textBoxes,
+    checklists: workspace.checklists,
+    tables: workspace.tables,
+    charts: workspace.charts,
+    starMarks: workspace.starMarks ?? []
+  };
+}
+
 function serializeAnnotationPayload(workspace: SubjectPdfWorkspace): string {
   return JSON.stringify(buildAnnotationPayload(workspace));
+}
+
+function rememberMaterialAnnotations(
+  workspace: SubjectPdfWorkspace,
+  materialId: string,
+  payload = buildLocalAnnotationSnapshot(workspace)
+): SubjectPdfWorkspace {
+  return {
+    ...workspace,
+    annotationSnapshots: {
+      ...(workspace.annotationSnapshots ?? {}),
+      [materialId]: payload
+    }
+  };
+}
+
+function restoreMaterialAnnotations(
+  workspace: SubjectPdfWorkspace,
+  materialId: string
+): SubjectPdfWorkspace {
+  const snapshot = workspace.annotationSnapshots?.[materialId];
+  if (!snapshot) {
+    return clearWorkspaceAnnotations(workspace);
+  }
+  return {
+    ...workspace,
+    stickyNotes: snapshot.stickyNotes,
+    inkStrokes: snapshot.inkStrokes,
+    textBoxes: snapshot.textBoxes,
+    checklists: snapshot.checklists,
+    tables: snapshot.tables,
+    charts: snapshot.charts,
+    starMarks: snapshot.starMarks
+  };
 }
 
 // sprint-3/S2: userId-scoped pdfWorkspaceStore localStorage key. Mirrors the
@@ -345,19 +391,11 @@ export function updatePdfWorkspace(
 ): void {
   const store = context.getStore();
   const current = context.domain.getSubjectWorkspace(store, subjectId);
-  const updated = syncCurrentPdfMaterial({
+  let updated = syncCurrentPdfMaterial({
     ...updater(current),
     updatedAt: new Date().toISOString()
   });
 
-  const nextStore: PdfWorkspaceStore = {
-    workspaces: {
-      ...store.workspaces,
-      [subjectId]: updated
-    }
-  };
-  callbacks.setStore(nextStore);
-  savePdfWorkspaceStore(context);
   // sprint-2/S2 fix (codex P1): only PUT annotations when the active material
   // did not change. If the mutator only switched material (current.material →
   // updated.material is a different id), the workspace's annotation arrays
@@ -369,6 +407,19 @@ export function updatePdfWorkspace(
   const nextId = nextMaterial?.backendMaterialId ?? nextMaterial?.id;
   const annotationsChanged =
     serializeAnnotationPayload(current) !== serializeAnnotationPayload(updated);
+  if (nextMaterial && previousId === nextId && annotationsChanged) {
+    updated = rememberMaterialAnnotations(updated, nextId!);
+  }
+
+  const nextStore: PdfWorkspaceStore = {
+    workspaces: {
+      ...store.workspaces,
+      [subjectId]: updated
+    }
+  };
+  callbacks.setStore(nextStore);
+  savePdfWorkspaceStore(context);
+
   if (nextMaterial && previousId === nextId && annotationsChanged) {
     const payload = buildAnnotationPayload(updated);
     callbacks.scheduleAnnotationPut(
@@ -398,6 +449,9 @@ export function selectPdfWorkspaceMaterial(
 
   const materialChanged =
     !current.material || getPdfMaterialKey(current.material) !== materialId;
+  const previousMaterialId = current.material
+    ? getPdfMaterialKey(current.material)
+    : undefined;
 
   if (current.material && getPdfMaterialKey(current.material) !== materialId) {
     callbacks.clearActivePdfObjectUrl(subjectId);
@@ -406,7 +460,10 @@ export function selectPdfWorkspaceMaterial(
   updatePdfWorkspace(
     subjectId,
     (workspace) => {
-      const next = upsertPdfWorkspaceMaterial(workspace, target);
+      const source = materialChanged && previousMaterialId
+        ? rememberMaterialAnnotations(workspace, previousMaterialId)
+        : workspace;
+      const next = upsertPdfWorkspaceMaterial(source, target);
       // material 전환 시 flat annotation 배열을 비운다. 이 배열들은 *활성
       // material* 의 annotation 만 담아야 한다 (저장 PUT /pdf-annotations/{materialId}
       // 와 hydration 모두 materialId 기준). 전환 시 비우지 않으면 이전 material 의
@@ -416,7 +473,9 @@ export function selectPdfWorkspaceMaterial(
       // 상태 유지 = 정상). PUT 은 material 변경 시 skip 되므로(아래 updatePdfWorkspace
       // 의 previousId===nextId guard) 빈 배열이 BE 로 새어나가지 않는다. 직전
       // material 의 미저장분은 edit 시점마다 PUT 이 예약돼(payload 캡처) 보존된다.
-      return materialChanged ? clearWorkspaceAnnotations(next) : next;
+      // 동시에 localStorage 안의 annotationSnapshots 에 직전 material snapshot 을
+      // 남겨 reload/offline 중에도 최근 로컬 annotation 을 다시 선택해 복원한다.
+      return materialChanged ? restoreMaterialAnnotations(next, materialId) : next;
     },
     context,
     callbacks
