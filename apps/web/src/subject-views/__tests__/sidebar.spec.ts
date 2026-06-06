@@ -176,9 +176,9 @@ describe("sidebar — (d) renderCurrentSubjectDepthNav", () => {
   });
 
   test("case 8c: subjects without artifacts hide exam-prep depth nav", () => {
-    const subject = makeSubject("computer-introduction", "컴퓨터개론");
-    const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject", subjectId: "computer-introduction" } as never);
-    assert.ok(!html.includes("#/subjects/computer-introduction/exam-prep"));
+    const subject = makeSubject("no-artifact-subject", "자료 없는 과목");
+    const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject", subjectId: "no-artifact-subject" } as never);
+    assert.ok(!html.includes("#/subjects/no-artifact-subject/exam-prep"));
   });
 });
 

@@ -48,6 +48,12 @@ describe("SubjectMemorizeView 정적 소스 검증", () => {
     assert.match(src, /memorize-exam-group/, "memorize-exam-group class 존재");
   });
 
+  it("parity — 시험 기준 챕터 섹션 존재 (memorize-exam-chapters-title)", () => {
+    assert.match(src, /MemorizeExamChapter/, "MemorizeExamChapter 인터페이스 존재");
+    assert.match(src, /memorize-exam-chapters-title/, "시험 기준 챕터 h2 id 존재");
+    assert.match(src, /memorize-chapter-grid/, "memorize-chapter-grid class 존재");
+  });
+
   it("parity — 필수 개념 섹션 존재 (memorize-concepts-title)", () => {
     assert.match(src, /memorize-concepts-title/);
     assert.match(src, /concept-list/);

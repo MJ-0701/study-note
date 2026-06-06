@@ -5006,6 +5006,12 @@ function renderApp(): void {
       examScope: subject.summary.examScope,
       strategy: subject.summary.strategy,
       weakSpots: subject.summary.weakSpots.join(", "),
+      examChapters: (subject.summary.examChapters ?? []).map((chapter) => ({
+        label: chapter.label,
+        title: chapter.title,
+        focus: chapter.focus,
+        sourceHint: chapter.sourceHint ?? null,
+      })),
       midtermGroup: {
         title: "중간고사",
         weeks: midtermWeeks.map((w) => ({
@@ -5046,7 +5052,7 @@ function renderApp(): void {
           .filter((c): c is Concept => Boolean(c))
           .map((c) => c.title),
       })),
-      examQuestions: memorizeExamQuestions.slice(0, 5).map((q) => ({
+      examQuestions: memorizeExamQuestions.map((q) => ({
         difficulty: q.difficulty,
         prompt: q.prompt,
         answer: q.answer,

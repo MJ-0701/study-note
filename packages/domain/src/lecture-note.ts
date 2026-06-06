@@ -73,9 +73,17 @@ export interface SubjectSummary {
   goal: string;
   examScope: string;
   weekRange: string;
+  examChapters?: ExamChapterSummary[];
   mustKnowConceptIds: string[];
   weakSpots: string[];
   strategy: string;
+}
+
+export interface ExamChapterSummary {
+  label: string;
+  title: string;
+  focus: string;
+  sourceHint?: string;
 }
 
 export type ExamPhase = "midterm" | "final";

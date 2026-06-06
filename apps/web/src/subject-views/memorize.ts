@@ -1,6 +1,6 @@
 // sprint-2026-W22-sprint-14 / layer C/slice-6 — memorize cluster.
-// 4 fn = renderSubjectMemorizePage + renderMemorizeExamGroup +
-//        parseClassDateLabel + safeDateMs.
+// 5 fn = renderSubjectMemorizePage + renderMemorizeExamGroup +
+//        renderMemorizeExamChapters + parseClassDateLabel + safeDateMs.
 // pure leaves. Context 0.
 //
 // invariant (AC9 5-layer security closure):
@@ -74,6 +74,28 @@ export function renderMemorizeExamGroup(
   `;
 }
 
+export function renderMemorizeExamChapters(subject: SubjectNote): string {
+  const chapters = subject.summary.examChapters ?? [];
+  if (chapters.length === 0) return "";
+
+  return `
+    <section aria-labelledby="memorize-exam-chapters-title">
+      <p class="meta">시험 기준 챕터</p>
+      <h2 id="memorize-exam-chapters-title">이번 시험에서 먼저 외울 범위</h2>
+      <div class="memorize-chapter-grid">
+        ${chapters.map((chapter) => `
+          <article class="memorize-chapter">
+            <span>${escapeHtml(chapter.label)}</span>
+            <h3>${escapeHtml(chapter.title)}</h3>
+            <p>${escapeHtml(chapter.focus)}</p>
+            ${chapter.sourceHint ? `<small>${escapeHtml(chapter.sourceHint)}</small>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 // sprint-2/S3: parse "5월 14일(목)" / "5월14일" / "5/14" → millisecond timestamp.
 // Failed parses → +Infinity 로 정렬 끝으로 보냄 (stable order 유지).
 // sprint-2/S3 fix (codex P3): JS Date 가 invalid combo (e.g., 2/31) 를 silently
@@ -140,6 +162,8 @@ export function renderSubjectMemorizePage(subject: SubjectNote): string {
       ${renderSummaryBlock("취약 포인트", escapeHtml(subject.summary.weakSpots.join(", ")))}
     </section>
 
+    ${renderMemorizeExamChapters(subject)}
+
     <section aria-labelledby="memorize-by-exam-title">
       <p class="meta">시험 구간별 수업일</p>
       <h2 id="memorize-by-exam-title">중간고사 / 기말고사 묶음</h2>
@@ -170,7 +194,7 @@ export function renderSubjectMemorizePage(subject: SubjectNote): string {
       <p class="meta">직전 점검</p>
       <h2 id="memorize-questions-title">말로 풀어볼 질문</h2>
       <div class="question-list">
-        ${examQuestions.slice(0, 5).map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
+        ${examQuestions.map(renderQuestion).join("") || '<p class="empty-note">아직 연결된 예제문제가 없습니다.</p>'}
       </div>
     </section>
   `;

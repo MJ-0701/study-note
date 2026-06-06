@@ -7,154 +7,265 @@ const digitalEngineering: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "논리게이트, 부울대수, 조합논리 회로를 시험 직전 계산 문제 중심으로 정리한다.",
-    examScope: "number system, boolean algebra, logic gate, combinational circuit",
-    weekRange: "4월 30일(목)-6월 13일(토)",
-    mustKnowConceptIds: [
-      "de-number-system",
-      "de-boolean-algebra",
-      "de-combinational-circuit"
+    goal: "6장 논리식 간소화, 7장 조합논리회로, 8장 플립플롭을 힌트/퀴즈 PDF 유형 중심으로 정리한다.",
+    examScope: "6장 논리식의 간소화, 7장 조합논리회로, 8장 플립플롭, 별도 힌트/퀴즈 PDF",
+    weekRange: "6장, 7장, 8장 + 별도 PDF",
+    examChapters: [
+      {
+        label: "6장",
+        title: "논리식의 간소화",
+        focus: "카르노맵, 무관항, 드모르간, NAND/NOR 변환, XOR/XNOR",
+        sourceHint: "제06장 논리식의 간소화 + 힌트 PDF 3쪽/마지막 회로"
+      },
+      {
+        label: "7장",
+        title: "조합논리회로",
+        focus: "회로의 논리식, 반가산기/전가산기, 비교기, 디코더/인코더, MUX/DEMUX",
+        sourceHint: "제07장 조합논리회로 + 퀴즈 PDF 5쪽"
+      },
+      {
+        label: "8장",
+        title: "플립플롭",
+        focus: "NOR SR 래치, SR/D/JK/T 플립플롭 진리표, 특성표, 파형",
+        sourceHint: "제08장 플립플롭 + 힌트 PDF 파형"
+      }
     ],
-    weakSpots: ["카르노맵 간소화는 실제 강의자료로 보강 필요"],
-    strategy: "진법 변환과 논리식 간소화를 먼저 풀고, 마지막에 회로도 해석 문제로 확인한다."
+    mustKnowConceptIds: [
+      "de-kmap",
+      "de-universal-gates",
+      "de-combinational-circuit",
+      "de-selector-circuits",
+      "de-flipflop"
+    ],
+    weakSpots: ["무관항 사용 여부", "NAND/NOR 회로 중간 출력", "디코더/MUX 선택선", "D/JK/T 다음 상태", "SR 래치 파형 구간별 상태"],
+    strategy: "힌트 PDF와 퀴즈 PDF 유형을 먼저 풀고, 6장 계산형 -> 7장 공식/선택회로형 -> 8장 표/파형형 순서로 반복한다."
   },
   sources: [
     {
-      id: "de-pdf-08-14",
-      title: "디지털공학개론 교수님 PDF 기말 범위",
+      id: "de-pdf-06-08",
+      title: "디지털공학개론 6-8장 교수님 PDF",
       kind: "professor-pdf",
       visibility: "private-source",
-      pages: "p.1-p.72",
+      pages: "6장-8장",
       note: "원문 PDF는 로컬 자료로만 보관하고 reader에는 출처 힌트와 파생 요약만 둔다."
     },
     {
-      id: "de-prof-keywords",
-      title: "디지털공학개론 교수님 중요 키워드",
+      id: "de-hint-quiz-pdf",
+      title: "디지털공학개론 힌트/퀴즈 PDF",
       kind: "manual-keyword",
       visibility: "derived-note-only",
-      note: "수업 중 시험 가능성이 언급된 키워드를 coverage 상태로 추적한다."
+      note: "힌트 PDF와 퀴즈 PDF에 나온 계산/표/파형 유형을 시험 대비 우선순위로 추적한다."
     }
   ],
   requiredKeywords: [
     {
-      id: "de-kw-number-system",
-      label: "진법 변환",
+      id: "de-kw-kmap",
+      label: "카르노맵과 minterm",
       status: "covered",
-      professorSignal: "2진수/8진수/16진수 변환 계산 강조",
-      conceptIds: ["de-number-system"]
+      professorSignal: "힌트 PDF와 퀴즈 PDF에 반복 등장",
+      conceptIds: ["de-kmap"]
     },
     {
-      id: "de-kw-boolean",
-      label: "부울대수",
+      id: "de-kw-dont-care",
+      label: "무관항",
       status: "covered",
-      professorSignal: "논리식 간소화 출제 가능",
-      conceptIds: ["de-boolean-algebra"]
+      professorSignal: "간소화 과정에서 도움이 될 때만 사용하는 조건",
+      conceptIds: ["de-kmap"]
+    },
+    {
+      id: "de-kw-nand-nor",
+      label: "NAND/NOR 변환",
+      status: "covered",
+      professorSignal: "회로 출력 간소화 유형",
+      conceptIds: ["de-universal-gates"]
     },
     {
       id: "de-kw-combinational",
-      label: "조합논리 회로",
+      label: "가산기/감산기/비교기",
       status: "covered",
-      professorSignal: "truth table과 회로도 상호 변환 강조",
+      professorSignal: "회로식, 가산기, 비교기, 가산기/감산기 명칭",
       conceptIds: ["de-combinational-circuit"]
     },
     {
-      id: "de-kw-kmap",
-      label: "카르노맵",
-      status: "missing",
-      professorSignal: "실제 강의자료 기반 보강 필요",
-      conceptIds: []
+      id: "de-kw-decoder-mux",
+      label: "디코더/인코더/MUX/DEMUX",
+      status: "covered",
+      professorSignal: "7장 선택선과 출력선 개수 비교형",
+      conceptIds: ["de-selector-circuits"]
+    },
+    {
+      id: "de-kw-flipflop",
+      label: "SR 래치",
+      status: "covered",
+      professorSignal: "NOR SR 래치 진리표와 파형",
+      conceptIds: ["de-flipflop"]
+    },
+    {
+      id: "de-kw-flipflop-types",
+      label: "D/JK/T 플립플롭",
+      status: "covered",
+      professorSignal: "입력별 다음 상태와 toggle 조건",
+      conceptIds: ["de-flipflop"]
     }
   ],
   concepts: [
     {
-      id: "de-number-system",
-      title: "진법 변환",
+      id: "de-kmap",
+      title: "6장 카르노맵과 논리식 간소화",
       priority: "must-know",
-      summary: "숫자를 2진수, 8진수, 10진수, 16진수 표현 사이에서 바꾸는 절차다.",
-      easyExplanation: "같은 값을 서로 다른 표기법으로 적는 것이며, 자리값의 기준만 달라진다.",
-      sourceHints: ["교수님 PDF p.6-p.14", "진법 변환 계산 예제"],
-      relatedKeywordIds: ["de-kw-number-system"],
-      exampleQuestionIds: ["de-q-number-system"]
+      summary: "진리표나 논리식을 minterm으로 옮기고 Gray code 순서의 맵에서 1과 필요한 무관항을 크게 묶어 식을 줄인다.",
+      easyExplanation: "1이 있는 칸을 큰 사각형으로 묶어, 묶음 안에서 변하지 않는 변수만 답에 남기는 절차다. X는 식이 짧아질 때만 같이 묶는다.",
+      sourceHints: ["6장 논리식의 간소화", "힌트 PDF 3쪽", "퀴즈 PDF 진리표 간소화"],
+      relatedKeywordIds: ["de-kw-kmap", "de-kw-dont-care"],
+      exampleQuestionIds: ["de-q-kmap", "de-q-dont-care"]
     },
     {
-      id: "de-boolean-algebra",
-      title: "부울대수와 논리식 간소화",
+      id: "de-universal-gates",
+      title: "6장 NAND/NOR와 드모르간",
       priority: "must-know",
-      summary: "AND, OR, NOT 연산을 법칙으로 정리해 같은 출력을 더 단순한 식으로 표현한다.",
-      easyExplanation: "복잡한 조건문을 같은 결과가 나오도록 짧게 줄이는 과정과 비슷하다.",
-      sourceHints: ["교수님 PDF p.18-p.29", "드모르간 법칙"],
-      relatedKeywordIds: ["de-kw-boolean"],
-      exampleQuestionIds: ["de-q-boolean"]
+      summary: "NAND와 NOR는 범용 게이트이며, 출력마다 보수가 붙는 구조를 드모르간 법칙으로 풀어 최종식을 구한다.",
+      easyExplanation: "NAND/NOR 회로는 중간 출력에 작은 따옴표가 계속 붙는다고 생각하고, 괄호를 풀 때 드모르간으로 AND와 OR를 바꾼다.",
+      sourceHints: ["6장 논리식의 간소화", "힌트 PDF 마지막 회로"],
+      relatedKeywordIds: ["de-kw-nand-nor"],
+      exampleQuestionIds: ["de-q-nand-output"]
     },
     {
       id: "de-combinational-circuit",
-      title: "조합논리 회로",
-      priority: "high",
-      summary: "현재 입력 조합만으로 출력이 결정되는 논리회로다.",
-      easyExplanation: "기억장치 없이 입력 스위치 조합에 따라 바로 결과가 나오는 회로다.",
-      sourceHints: ["교수님 PDF p.40-p.56", "truth table과 회로도 변환"],
+      title: "7장 가산기/감산기/비교기",
+      priority: "must-know",
+      summary: "현재 입력만으로 출력이 결정되는 회로이며 반가산기/전가산기, 감산기, 비교기 식을 계산한다.",
+      easyExplanation: "기억 없이 입력 조합을 바로 결과로 바꾸는 회로다. 가산기는 합과 자리올림, 비교기는 대소/같음을 출력한다.",
+      sourceHints: ["7장 조합논리회로", "힌트 PDF 회로식", "퀴즈 PDF 4비트 병렬 가산기/감산기"],
       relatedKeywordIds: ["de-kw-combinational"],
-      exampleQuestionIds: ["de-q-combinational"]
+      exampleQuestionIds: ["de-q-logic-expression", "de-q-adders", "de-q-comparator"]
+    },
+    {
+      id: "de-selector-circuits",
+      title: "7장 디코더/인코더/MUX/DEMUX",
+      priority: "must-know",
+      summary: "디코더와 인코더는 코드 변환, MUX와 DEMUX는 데이터 선택과 분배를 담당한다.",
+      easyExplanation: "디코더는 번호를 여러 출력선 중 하나로 풀고, MUX는 여러 데이터 중 하나를 고른다. 선택선 n개면 보통 2^n개 경로를 다룬다.",
+      sourceHints: ["7장 조합논리회로", "디코더/인코더", "MUX/DEMUX"],
+      relatedKeywordIds: ["de-kw-decoder-mux"],
+      exampleQuestionIds: ["de-q-decoder-mux"]
+    },
+    {
+      id: "de-flipflop",
+      title: "8장 래치와 D/JK/T 플립플롭",
+      priority: "must-know",
+      summary: "이전 상태를 기억하는 순서논리 기본소자이며 SR 래치와 D/JK/T 플립플롭의 입력별 다음 상태를 판단한다.",
+      easyExplanation: "입력만 보는 조합회로와 달리 직전 Q 값을 기억한다. D는 그대로 저장, JK의 11과 T의 1은 toggle이다.",
+      sourceHints: ["8장 플립플롭", "힌트 PDF NOR SR 래치 파형", "퀴즈 PDF SR 플립플롭 진리표"],
+      relatedKeywordIds: ["de-kw-flipflop", "de-kw-flipflop-types"],
+      exampleQuestionIds: ["de-q-sr-latch", "de-q-flipflop-types"]
     }
   ],
   exampleQuestions: [
     {
-      id: "de-q-number-system",
-      conceptId: "de-number-system",
-      difficulty: "basic",
-      prompt: "10진수 45를 2진수로 변환하라.",
-      answer: "101101이다.",
-      explanation: "45 = 32 + 8 + 4 + 1 이므로 각 자리값을 표시하면 101101이 된다."
-    },
-    {
-      id: "de-q-boolean",
-      conceptId: "de-boolean-algebra",
+      id: "de-q-kmap",
+      conceptId: "de-kmap",
       difficulty: "applied",
-      prompt: "A + AB를 간소화하라.",
-      answer: "A다.",
-      explanation: "흡수 법칙 A + AB = A를 적용한다."
+      prompt: "진리표에서 1이 되는 항을 카르노맵으로 묶어 논리식을 간소화하는 절차를 설명하라.",
+      answer: "minterm을 표시하고 Gray code 순서로 배치한 뒤 가능한 큰 묶음을 만들고 변하지 않는 변수만 남긴다.",
+      explanation: "열 순서 00, 01, 11, 10과 모든 1 포함 여부가 핵심 감점 포인트다."
     },
     {
-      id: "de-q-combinational",
+      id: "de-q-dont-care",
+      conceptId: "de-kmap",
+      difficulty: "applied",
+      prompt: "카르노맵에서 무관항 X를 언제 사용하는지 설명하라.",
+      answer: "무관항은 더 큰 묶음을 만들어 식이 짧아질 때만 1처럼 사용하고, 필요 없으면 사용하지 않는다.",
+      explanation: "X는 정답에 반드시 포함해야 하는 1이 아니다. 간소화에 도움이 되는 선택지로 보는 것이 안전하다."
+    },
+    {
+      id: "de-q-nand-output",
+      conceptId: "de-universal-gates",
+      difficulty: "applied",
+      prompt: "NAND 회로에서 중간 출력을 적어 최종 출력을 간소화하라.",
+      answer: "중간 NAND 출력을 괄호와 보수로 적고 드모르간을 적용해 최종식을 구한다.",
+      explanation: "힌트 PDF 마지막 회로는 B'와 (AB')'를 거쳐 X = A + B로 간소화된다."
+    },
+    {
+      id: "de-q-logic-expression",
       conceptId: "de-combinational-circuit",
       difficulty: "applied",
-      prompt: "truth table에서 출력이 1인 minterm을 보고 논리식을 작성하는 절차를 설명하라.",
-      answer: "출력 1인 행마다 입력 조합의 곱항을 만들고, 모든 곱항을 OR로 연결한다.",
-      explanation: "SOP 형태로 truth table을 논리식으로 옮기는 기본 절차다."
+      prompt: "두 회로가 각각 F = HD + DK와 F = D(H + K)를 만들 때 같은 회로인지 판단하라.",
+      answer: "HD + DK = D(H + K)이므로 두 회로는 같은 논리식이다.",
+      explanation: "게이트별 중간 출력을 먼저 쓰고 공통 인수 D를 묶는다."
+    },
+    {
+      id: "de-q-adders",
+      conceptId: "de-combinational-circuit",
+      difficulty: "basic",
+      prompt: "반가산기와 전가산기의 합과 자리올림 식을 쓰라.",
+      answer: "반가산기 S=A xor B, C=AB. 전가산기 S=A xor B xor Cin, Cout=AB+ACin+BCin.",
+      explanation: "자리올림은 입력 셋 중 적어도 두 개가 1인 경우다. 병렬 가산기는 전가산기를 자리수만큼 이어 붙인 구조로 본다."
+    },
+    {
+      id: "de-q-comparator",
+      conceptId: "de-combinational-circuit",
+      difficulty: "basic",
+      prompt: "1비트 비교기의 A>B, A=B, A<B 식을 쓰라.",
+      answer: "A>B는 AB', A=B는 AB + A'B', A<B는 A'B다.",
+      explanation: "같음은 XNOR이며 다중 비트 비교는 최상위 비트부터 판단한다."
+    },
+    {
+      id: "de-q-decoder-mux",
+      conceptId: "de-selector-circuits",
+      difficulty: "basic",
+      prompt: "디코더, 인코더, MUX, DEMUX의 역할을 각각 구분하라.",
+      answer: "디코더는 n비트 코드를 2^n 출력 중 하나로 풀고, 인코더는 활성 입력 번호를 코드로 바꾼다. MUX는 여러 입력 중 하나를 선택해 출력하고, DEMUX는 하나의 입력을 여러 출력 중 하나로 보낸다.",
+      explanation: "디코더/인코더는 코드 변환, MUX/DEMUX는 데이터 선택과 분배로 나눠 외우면 헷갈림이 줄어든다."
+    },
+    {
+      id: "de-q-sr-latch",
+      conceptId: "de-flipflop",
+      difficulty: "applied",
+      prompt: "NOR SR 래치의 S/R 입력에 따른 다음 Q 상태를 설명하라.",
+      answer: "00은 유지, 01은 Reset, 10은 Set, 11은 금지/부정 상태다.",
+      explanation: "파형 문제는 각 구간의 S/R 조합을 표에 대입하면 된다."
+    },
+    {
+      id: "de-q-flipflop-types",
+      conceptId: "de-flipflop",
+      difficulty: "basic",
+      prompt: "D, JK, T 플립플롭의 다음 상태를 설명하라.",
+      answer: "D는 Q+=D, JK는 00 유지/01 Reset/10 Set/11 Toggle, T는 0 유지/1 Toggle이다.",
+      explanation: "JK의 11과 T의 1이 toggle이라는 점이 8장 단답과 파형 문제의 핵심이다."
     }
   ],
   weekNotes: [
     {
-      id: "de-week-08",
-      label: "2026-04-30",
-      title: "진법과 코드",
-      focus: "진법 변환 계산 절차를 반복한다.",
-      sourceMaterialIds: ["de-pdf-08-14"],
-      requiredKeywordIds: ["de-kw-number-system"],
-      conceptIds: ["de-number-system"],
-      exampleQuestionIds: ["de-q-number-system"],
+      id: "de-chapter-06",
+      label: "6장",
+      title: "논리식의 간소화",
+      focus: "카르노맵, 무관항, NAND/NOR 변환을 계산형으로 반복한다.",
+      sourceMaterialIds: ["de-pdf-06-08", "de-hint-quiz-pdf"],
+      requiredKeywordIds: ["de-kw-kmap", "de-kw-dont-care", "de-kw-nand-nor"],
+      conceptIds: ["de-kmap", "de-universal-gates"],
+      exampleQuestionIds: ["de-q-kmap", "de-q-dont-care", "de-q-nand-output"],
       reviewStatus: "ready"
     },
     {
-      id: "de-week-10",
-      label: "2026-05-02",
-      title: "부울대수",
-      focus: "드모르간 법칙과 흡수 법칙을 문제에 적용한다.",
-      sourceMaterialIds: ["de-pdf-08-14"],
-      requiredKeywordIds: ["de-kw-boolean", "de-kw-kmap"],
-      conceptIds: ["de-boolean-algebra"],
-      exampleQuestionIds: ["de-q-boolean"],
-      reviewStatus: "needs-fill"
+      id: "de-chapter-07",
+      label: "7장",
+      title: "조합논리회로",
+      focus: "회로식, 가산기, 비교기, 디코더/인코더, MUX/DEMUX 유형을 외운다.",
+      sourceMaterialIds: ["de-pdf-06-08", "de-hint-quiz-pdf"],
+      requiredKeywordIds: ["de-kw-combinational", "de-kw-decoder-mux"],
+      conceptIds: ["de-combinational-circuit", "de-selector-circuits"],
+      exampleQuestionIds: ["de-q-logic-expression", "de-q-adders", "de-q-comparator", "de-q-decoder-mux"],
+      reviewStatus: "ready"
     },
     {
-      id: "de-week-12",
-      label: "2026-05-07",
-      title: "조합논리 회로",
-      focus: "truth table, 논리식, 회로도 변환 흐름을 잡는다.",
-      sourceMaterialIds: ["de-pdf-08-14"],
-      requiredKeywordIds: ["de-kw-combinational"],
-      conceptIds: ["de-combinational-circuit"],
-      exampleQuestionIds: ["de-q-combinational"],
+      id: "de-chapter-08",
+      label: "8장",
+      title: "플립플롭",
+      focus: "NOR SR 래치 진리표와 파형, D/JK/T 다음 상태와 toggle을 마지막에 확인한다.",
+      sourceMaterialIds: ["de-pdf-06-08", "de-hint-quiz-pdf"],
+      requiredKeywordIds: ["de-kw-flipflop", "de-kw-flipflop-types"],
+      conceptIds: ["de-flipflop"],
+      exampleQuestionIds: ["de-q-sr-latch", "de-q-flipflop-types"],
       reviewStatus: "ready"
     }
   ]
@@ -167,144 +278,272 @@ const informationCommunication: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "통신 기본 모델, 전송매체, 네트워크 계층 구조를 용어 비교 중심으로 정리한다.",
-    examScope: "communication model, signal, transmission media, OSI/TCP-IP",
-    weekRange: "4월 30일(목)-6월 13일(토)",
-    mustKnowConceptIds: ["ic-signal", "ic-osi-model", "ic-transmission-media"],
-    weakSpots: ["변조 방식 세부 비교는 강의자료로 보강 필요"],
-    strategy: "정의 암기보다 계층별 역할과 비교 포인트를 먼저 고정한다."
+    goal: "6~9장 강의자료와 레포트2 문항을 시험 답안 형태로 암기한다.",
+    examScope: "6장 네트워크 구성 장비, 7장 교환기술, 8장 TCP/IP, 9장 고속/광역 데이터 서비스, 별도 레포트2 PDF",
+    weekRange: "6장, 7장, 8장, 9장 + 별도 PDF",
+    examChapters: [
+      {
+        label: "6장",
+        title: "네트워크 구성 장비",
+        focus: "트랜시버, 리피터, 허브, 브리지, 스위치, 라우터, 게이트웨이와 OSI 계층",
+        sourceHint: "레포트 문항 7~9"
+      },
+      {
+        label: "7장",
+        title: "교환기술",
+        focus: "회선교환, 데이터그램, 가상회선, 패킷교환 비교",
+        sourceHint: "레포트 문항 10"
+      },
+      {
+        label: "8장",
+        title: "TCP/IP",
+        focus: "OSI/TCP-IP 비교, 주소 3가지, IP/TCP 헤더, ARP/RARP, IPv6",
+        sourceHint: "레포트 문항 11~17"
+      },
+      {
+        label: "9장",
+        title: "고속/광역 데이터 서비스",
+        focus: "RIP와 OSPF, 고속망 용어 정의",
+        sourceHint: "레포트 문항 18 + 용어 정의"
+      }
+    ],
+    mustKnowConceptIds: ["ic-lan-802", "ic-network-devices", "ic-switching", "ic-tcp-ip", "ic-ip-tcp-headers"],
+    weakSpots: ["IP/TCP 헤더 필드명과 비트 위치", "장비별 OSI 계층", "RIP/OSPF 비교 기준"],
+    strategy: "선행개념을 먼저 고정한 뒤 레포트 설명형 18문항을 제목만 보고 말로 답하고, 헤더/장비/용어는 빈칸형으로 반복한다."
   },
   sources: [
     {
-      id: "ic-pdf-08-14",
-      title: "정보통신개론 교수님 PDF 기말 범위",
+      id: "ic-pdf-06-09",
+      title: "정보통신개론 6-9장 교수님 PDF",
       kind: "professor-pdf",
       visibility: "private-source",
-      pages: "p.3-p.68",
+      pages: "6장-9장",
       note: "reader는 원문 대신 시험 대비 핵심 정의와 비교표 역할을 한다."
+    },
+    {
+      id: "ic-report2",
+      title: "정보통신개론 레포트2 시험직결 PDF",
+      kind: "manual-keyword",
+      visibility: "derived-note-only",
+      note: "교수님이 시험문제를 그대로 낸다고 안내한 레포트 문항을 답안화한다."
     }
   ],
   requiredKeywords: [
     {
-      id: "ic-kw-signal",
-      label: "아날로그/디지털 신호",
+      id: "ic-kw-lan",
+      label: "LAN과 IEEE 802",
       status: "covered",
-      professorSignal: "신호 차이와 장단점 비교 강조",
-      conceptIds: ["ic-signal"]
+      professorSignal: "레포트 문항 1~6",
+      conceptIds: ["ic-lan-802"]
     },
     {
-      id: "ic-kw-osi",
-      label: "OSI 7계층",
+      id: "ic-kw-devices",
+      label: "네트워크 장비와 OSI 계층",
       status: "covered",
-      professorSignal: "각 계층 역할 암기 강조",
-      conceptIds: ["ic-osi-model"]
+      professorSignal: "장비 이름과 계층 매칭 단답식 가능",
+      conceptIds: ["ic-network-devices"]
     },
     {
-      id: "ic-kw-media",
-      label: "전송매체",
+      id: "ic-kw-switching",
+      label: "회선교환/패킷교환",
       status: "covered",
-      professorSignal: "유선/무선 매체 비교 가능",
-      conceptIds: ["ic-transmission-media"]
+      professorSignal: "경로 설정 여부와 순서 보장 비교",
+      conceptIds: ["ic-switching"]
     },
     {
-      id: "ic-kw-modulation",
-      label: "변조",
-      status: "missing",
-      professorSignal: "ASK/FSK/PSK는 실제 자료로 보강 필요",
-      conceptIds: []
+      id: "ic-kw-tcpip",
+      label: "TCP/IP 계층과 주소",
+      status: "covered",
+      professorSignal: "OSI/TCP-IP 비교와 주소 3가지",
+      conceptIds: ["ic-tcp-ip"]
+    },
+    {
+      id: "ic-kw-headers",
+      label: "IP/TCP 헤더",
+      status: "covered",
+      professorSignal: "수시시험 10점 표시, 빈칸형 최우선",
+      conceptIds: ["ic-ip-tcp-headers"]
+    },
+    {
+      id: "ic-kw-routing",
+      label: "RIP와 OSPF",
+      status: "covered",
+      professorSignal: "9장 라우팅 비교",
+      conceptIds: ["ic-routing"]
     }
   ],
   concepts: [
     {
-      id: "ic-signal",
-      title: "아날로그 신호와 디지털 신호",
+      id: "ic-lan-802",
+      title: "LAN과 IEEE 802 데이터링크 계층",
       priority: "must-know",
-      summary: "아날로그는 연속적인 값, 디지털은 이산적인 값으로 정보를 표현한다.",
-      easyExplanation: "아날로그는 부드러운 곡선, 디지털은 0과 1 같은 단계적 표현에 가깝다.",
-      sourceHints: ["교수님 PDF p.10-p.18"],
-      relatedKeywordIds: ["ic-kw-signal"],
-      exampleQuestionIds: ["ic-q-signal"]
+      summary: "LAN은 제한된 지역의 장치를 연결하는 근거리 통신망이고, IEEE 802는 데이터링크 계층을 LLC와 MAC으로 나눈다.",
+      easyExplanation: "LAN 특징을 말한 뒤 LLC는 상위계층 연결, MAC은 매체 접근과 프레임 처리를 맡는다고 쓰면 된다.",
+      sourceHints: ["레포트 문항 1", "6장 LAN/IEEE 802"],
+      relatedKeywordIds: ["ic-kw-lan"],
+      exampleQuestionIds: ["ic-q-lan"]
     },
     {
-      id: "ic-osi-model",
-      title: "OSI 7계층",
+      id: "ic-network-devices",
+      title: "6장 네트워크 장비와 OSI 계층",
       priority: "must-know",
-      summary: "통신 기능을 7개 계층으로 나눠 각 계층의 책임을 구분하는 모델이다.",
-      easyExplanation: "택배가 포장, 운송, 주소 확인, 전달 절차로 나뉘듯 통신도 역할을 나눈다.",
-      sourceHints: ["교수님 PDF p.25-p.39"],
-      relatedKeywordIds: ["ic-kw-osi"],
-      exampleQuestionIds: ["ic-q-osi"]
+      summary: "리피터/허브는 1계층, 브리지/스위치는 2계층, 라우터는 3계층, 게이트웨이는 상위 계층 변환 장비다.",
+      easyExplanation: "장비가 보는 정보가 비트, MAC, IP, 프로토콜 순서로 깊어진다고 외운다.",
+      sourceHints: ["레포트 문항 7~9", "6장 네트워크 구성 장비"],
+      relatedKeywordIds: ["ic-kw-devices"],
+      exampleQuestionIds: ["ic-q-devices"]
     },
     {
-      id: "ic-transmission-media",
-      title: "전송매체",
+      id: "ic-switching",
+      title: "7장 교환기술",
       priority: "high",
-      summary: "데이터가 지나가는 물리적 경로이며 유선과 무선 매체로 나뉜다.",
-      easyExplanation: "정보가 이동하는 도로가 케이블인지 공기 중 전파인지 구분하는 것이다.",
-      sourceHints: ["교수님 PDF p.44-p.53"],
-      relatedKeywordIds: ["ic-kw-media"],
-      exampleQuestionIds: ["ic-q-media"]
+      summary: "회선교환은 전용 경로를 먼저 잡고, 패킷교환은 데이터를 패킷으로 나눠 효율적으로 전송한다.",
+      easyExplanation: "전화처럼 길을 먼저 잡는 방식과, 택배처럼 조각별로 보내는 방식을 비교한다.",
+      sourceHints: ["레포트 문항 10", "7장 교환기술"],
+      relatedKeywordIds: ["ic-kw-switching"],
+      exampleQuestionIds: ["ic-q-switching"]
+    },
+    {
+      id: "ic-tcp-ip",
+      title: "8장 TCP/IP 계층과 인터넷 주소",
+      priority: "must-know",
+      summary: "OSI 7계층과 TCP/IP 4계층을 대응시키고 MAC/IP/도메인 이름의 계층과 역할을 구분한다.",
+      easyExplanation: "실제 인터넷 모델은 TCP/IP이고, 주소는 MAC-장치, IP-논리 위치, 도메인-사람용 이름으로 나뉜다.",
+      sourceHints: ["레포트 문항 11~14", "8장 TCP/IP"],
+      relatedKeywordIds: ["ic-kw-tcpip"],
+      exampleQuestionIds: ["ic-q-tcpip", "ic-q-address", "ic-q-tcp-udp"]
+    },
+    {
+      id: "ic-ip-tcp-headers",
+      title: "IP 헤더와 TCP 헤더",
+      priority: "must-know",
+      summary: "IP 헤더는 단편화/TTL/Protocol/주소 필드, TCP 헤더는 포트/순서/ACK/윈도우/코드 비트가 핵심이다.",
+      easyExplanation: "IP는 목적지까지 가는 봉투 정보, TCP는 순서와 확인응답을 관리하는 운송장 정보로 보면 된다.",
+      sourceHints: ["레포트 문항 15", "수시시험 10점 표시"],
+      relatedKeywordIds: ["ic-kw-headers"],
+      exampleQuestionIds: ["ic-q-headers"]
+    },
+    {
+      id: "ic-routing",
+      title: "9장 RIP와 OSPF",
+      priority: "high",
+      summary: "RIP는 홉 수 기반 거리 벡터, OSPF는 비용 기반 링크 상태 라우팅 프로토콜이다.",
+      easyExplanation: "RIP는 몇 번 거치는지, OSPF는 링크 상태와 비용으로 길을 고른다.",
+      sourceHints: ["레포트 문항 18", "9장 고속/광역 데이터 서비스"],
+      relatedKeywordIds: ["ic-kw-routing"],
+      exampleQuestionIds: ["ic-q-routing"]
     }
   ],
   exampleQuestions: [
     {
-      id: "ic-q-signal",
-      conceptId: "ic-signal",
+      id: "ic-q-lan",
+      conceptId: "ic-lan-802",
       difficulty: "basic",
-      prompt: "아날로그 신호와 디지털 신호의 차이를 한 문장으로 설명하라.",
-      answer: "아날로그는 연속적인 값으로, 디지털은 이산적인 값으로 정보를 표현한다.",
-      explanation: "연속/이산 표현 차이가 핵심이다."
+      prompt: "LAN의 정의와 특징, LLC/MAC 기능을 설명하라.",
+      answer: "LAN은 제한된 지역의 근거리 통신망이며 빠른 속도, 낮은 오류율, 쉬운 확장이 특징이다. LLC는 상위계층 인터페이스와 제어, MAC은 매체 접근과 프레임/FCS 처리를 맡는다.",
+      explanation: "정의, 특징, LLC, MAC 순서로 답안을 구성한다."
     },
     {
-      id: "ic-q-osi",
-      conceptId: "ic-osi-model",
+      id: "ic-q-devices",
+      conceptId: "ic-network-devices",
       difficulty: "basic",
-      prompt: "OSI 7계층을 사용하는 이유를 설명하라.",
-      answer: "통신 기능을 계층별로 나누어 이해, 설계, 문제 해결을 쉽게 하기 위해서다.",
-      explanation: "계층화와 역할 분리가 답안에 들어가야 한다."
+      prompt: "리피터, 브리지, 라우터, 게이트웨이가 동작하는 OSI 계층을 쓰라.",
+      answer: "리피터는 1계층, 브리지는 2계층, 라우터는 3계층, 게이트웨이는 상위 계층까지 포함해 프로토콜을 변환한다.",
+      explanation: "허브까지는 물리, 브리지/스위치는 MAC, 라우터는 IP로 외운다."
     },
     {
-      id: "ic-q-media",
-      conceptId: "ic-transmission-media",
+      id: "ic-q-switching",
+      conceptId: "ic-switching",
       difficulty: "applied",
-      prompt: "유선 전송매체와 무선 전송매체의 차이를 예시와 함께 설명하라.",
-      answer: "유선은 꼬임쌍선/광섬유처럼 물리 선로를 쓰고, 무선은 전파를 통해 전송한다.",
-      explanation: "전송 경로와 예시를 같이 쓰면 된다."
+      prompt: "회선교환망과 패킷교환망을 비교하라.",
+      answer: "회선교환은 통신 전에 전용 경로를 설정해 안정적이지만 비효율이 생길 수 있고, 패킷교환은 패킷 단위로 전송해 효율적이지만 지연/순서 변동이 생길 수 있다.",
+      explanation: "경로 설정 여부와 순서 보장 여부를 비교 축으로 삼는다."
+    },
+    {
+      id: "ic-q-tcpip",
+      conceptId: "ic-tcp-ip",
+      difficulty: "basic",
+      prompt: "OSI 참조모델과 TCP/IP를 비교하고 계층별 프로토콜 예를 쓰라.",
+      answer: "OSI는 7계층 이론 모델, TCP/IP는 인터넷 4계층 모델이다. 응용에는 HTTP/DNS, 전송에는 TCP/UDP, IP 계층에는 IP/ICMP/ARP, 네트워크 액세스에는 Ethernet/Wi-Fi가 있다.",
+      explanation: "계층 대응과 프로토콜 예시를 같이 써야 한다."
+    },
+    {
+      id: "ic-q-address",
+      conceptId: "ic-tcp-ip",
+      difficulty: "basic",
+      prompt: "인터넷 사용에 필요한 주소 3가지를 계층, 저장 위치, 역할로 설명하라.",
+      answer: "MAC 주소는 데이터링크 계층 주소로 NIC에 저장되고, IP 주소는 네트워크 계층 논리 주소로 OS 네트워크 설정에 저장되며, 도메인 이름은 응용 계층의 사람용 이름으로 DNS가 IP로 변환한다.",
+      explanation: "계층, 저장 위치, 역할 세 칸을 모두 채워야 한다."
+    },
+    {
+      id: "ic-q-tcp-udp",
+      conceptId: "ic-tcp-ip",
+      difficulty: "basic",
+      prompt: "TCP와 UDP의 특징을 비교하라.",
+      answer: "TCP는 연결형, 신뢰성, 순서 보장, 흐름/오류제어가 핵심이고 UDP는 비연결형, 단순한 헤더, 빠른 전송이 핵심이다.",
+      explanation: "TCP=정확성, UDP=속도다."
+    },
+    {
+      id: "ic-q-headers",
+      conceptId: "ic-ip-tcp-headers",
+      difficulty: "applied",
+      prompt: "IP 헤더와 TCP 헤더의 핵심 필드를 설명하라.",
+      answer: "IP 헤더는 Version, Header Length, Total Length, Identification, Flags, Fragment Offset, TTL, Protocol, Source/Destination IP가 핵심이다. TCP 헤더는 Source/Destination Port, Sequence Number, ACK Number, Window, Code Bits가 핵심이다.",
+      explanation: "IP 단편화 3종 세트와 TCP 순서/ACK/윈도우/코드 비트를 먼저 외운다."
+    },
+    {
+      id: "ic-q-routing",
+      conceptId: "ic-routing",
+      difficulty: "basic",
+      prompt: "RIP와 OSPF를 비교하라.",
+      answer: "RIP는 홉 수 기반 거리 벡터 방식이고 작은 네트워크에 적합하다. OSPF는 비용 기반 링크 상태 방식이고 큰 네트워크에 적합하다.",
+      explanation: "RIP=홉 수, OSPF=비용/링크 상태로 대비한다."
     }
   ],
   weekNotes: [
     {
-      id: "ic-week-08",
-      label: "2026-04-30",
-      title: "신호와 데이터",
-      focus: "아날로그/디지털 신호 차이를 구분한다.",
-      sourceMaterialIds: ["ic-pdf-08-14"],
-      requiredKeywordIds: ["ic-kw-signal"],
-      conceptIds: ["ic-signal"],
-      exampleQuestionIds: ["ic-q-signal"],
+      id: "ic-chapter-06",
+      label: "6장",
+      title: "네트워크 구성 장비와 LAN",
+      focus: "LAN/IEEE 802, 무선랜, 장비-OSI 계층을 레포트 문항 순서대로 외운다.",
+      sourceMaterialIds: ["ic-pdf-06-09", "ic-report2"],
+      requiredKeywordIds: ["ic-kw-lan", "ic-kw-devices"],
+      conceptIds: ["ic-lan-802", "ic-network-devices"],
+      exampleQuestionIds: ["ic-q-lan", "ic-q-devices"],
       reviewStatus: "ready"
     },
     {
-      id: "ic-week-10",
-      label: "2026-05-02",
-      title: "네트워크 계층 모델",
-      focus: "OSI 7계층의 순서와 역할을 외운다.",
-      sourceMaterialIds: ["ic-pdf-08-14"],
-      requiredKeywordIds: ["ic-kw-osi"],
-      conceptIds: ["ic-osi-model"],
-      exampleQuestionIds: ["ic-q-osi"],
+      id: "ic-chapter-07",
+      label: "7장",
+      title: "교환기술",
+      focus: "회선교환과 패킷교환, 데이터그램과 가상회선 차이를 비교한다.",
+      sourceMaterialIds: ["ic-pdf-06-09", "ic-report2"],
+      requiredKeywordIds: ["ic-kw-switching"],
+      conceptIds: ["ic-switching"],
+      exampleQuestionIds: ["ic-q-switching"],
       reviewStatus: "ready"
     },
     {
-      id: "ic-week-12",
-      label: "2026-05-07",
-      title: "전송매체와 변조",
-      focus: "전송매체 비교를 먼저 보고 변조 방식은 보강한다.",
-      sourceMaterialIds: ["ic-pdf-08-14"],
-      requiredKeywordIds: ["ic-kw-media", "ic-kw-modulation"],
-      conceptIds: ["ic-transmission-media"],
-      exampleQuestionIds: ["ic-q-media"],
-      reviewStatus: "needs-fill"
+      id: "ic-chapter-08",
+      label: "8장",
+      title: "TCP/IP와 인터넷 주소",
+      focus: "TCP/IP 계층, 주소 3가지, TCP/UDP, IP/TCP 헤더를 빈칸형으로 반복한다.",
+      sourceMaterialIds: ["ic-pdf-06-09", "ic-report2"],
+      requiredKeywordIds: ["ic-kw-tcpip", "ic-kw-headers"],
+      conceptIds: ["ic-tcp-ip", "ic-ip-tcp-headers"],
+      exampleQuestionIds: ["ic-q-tcpip", "ic-q-address", "ic-q-tcp-udp", "ic-q-headers"],
+      reviewStatus: "ready"
+    },
+    {
+      id: "ic-chapter-09",
+      label: "9장",
+      title: "고속/광역 데이터 서비스와 라우팅",
+      focus: "RIP/OSPF 비교와 용어 정의를 단답형으로 정리한다.",
+      sourceMaterialIds: ["ic-pdf-06-09", "ic-report2"],
+      requiredKeywordIds: ["ic-kw-routing"],
+      conceptIds: ["ic-routing"],
+      exampleQuestionIds: ["ic-q-routing"],
+      reviewStatus: "ready"
     }
   ]
 };
@@ -316,144 +555,268 @@ const cLanguage: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "포인터, 배열, 함수, 구조체를 코드 읽기와 출력 예측 문제 중심으로 정리한다.",
-    examScope: "pointer, array, function, struct, file I/O",
-    weekRange: "4월 30일(목)-6월 13일(토)",
-    mustKnowConceptIds: ["c-pointer", "c-array-function", "c-struct"],
-    weakSpots: ["파일 입출력은 실제 예제 코드로 보강 필요"],
-    strategy: "개념 정의보다 코드 실행 흐름과 메모리 주소 변화를 먼저 추적한다."
+    goal: "별도 PDF의 코드 읽기, 출력 예측, 빈칸, 배열/함수 작성형을 시험 답안 형태로 정리한다.",
+    examScope: "C언어 별도 PDF 기말 참고자료",
+    weekRange: "별도 PDF",
+    examChapters: [
+      {
+        label: "별도 PDF",
+        title: "제어문과 함수",
+        focus: "continue, 함수 원형, 반환값, call by value, 지역/전역 변수, static",
+        sourceHint: "기말고사 참고자료 1~11번"
+      },
+      {
+        label: "별도 PDF",
+        title: "배열과 반복문",
+        focus: "배열 선언 O/X, 배열 복사, 총점/평균, 피라미드, 구구단",
+        sourceHint: "기말고사 참고자료 4, 6, 7, 13, 15, 16번"
+      },
+      {
+        label: "별도 PDF",
+        title: "코드 작성형",
+        focus: "최댓값, 원의 넓이, 홀수 합, 복사 함수 작성",
+        sourceHint: "기말고사 참고자료 8, 12, 14, 16번"
+      }
+    ],
+    mustKnowConceptIds: ["c-function-scope", "c-array-copy", "c-loop-output"],
+    weakSpots: ["배열 전체 대입 금지", "함수 반환값 저장 누락", "static 지역변수 출력 예측"],
+    strategy: "문제별 출력과 오류 원인을 먼저 말로 설명하고, 배열/함수 작성형은 손으로 코드를 한 번씩 써본다."
   },
   sources: [
     {
-      id: "c-pdf-08-14",
-      title: "C언어 교수님 PDF 기말 범위",
+      id: "c-final-reference",
+      title: "C언어 기말고사 참고자료 별도 PDF",
       kind: "professor-pdf",
       visibility: "private-source",
-      pages: "p.5-p.82",
+      pages: "기말고사 참고자료",
       note: "코드 원문은 강의자료를 기준으로 확인하고 reader에는 시험용 설명과 예제만 둔다."
     }
   ],
   requiredKeywords: [
     {
-      id: "c-kw-pointer",
-      label: "포인터",
+      id: "c-kw-function",
+      label: "함수와 스코프",
       status: "covered",
-      professorSignal: "주소와 역참조 개념 강조",
-      conceptIds: ["c-pointer"]
+      professorSignal: "Max, swap, static, 지역/전역 변수 문제",
+      conceptIds: ["c-function-scope"]
     },
     {
-      id: "c-kw-array",
-      label: "배열과 함수",
+      id: "c-kw-array-copy",
+      label: "배열 선언과 복사",
       status: "covered",
-      professorSignal: "배열 전달 방식과 출력 예측 가능",
-      conceptIds: ["c-array-function"]
+      professorSignal: "배열 O/X, brr = arr 오류, copy_arr 작성",
+      conceptIds: ["c-array-copy"]
     },
     {
-      id: "c-kw-struct",
-      label: "구조체",
+      id: "c-kw-loop-output",
+      label: "반복문 출력 예측",
       status: "covered",
-      professorSignal: "멤버 접근 연산자 구분 강조",
-      conceptIds: ["c-struct"]
+      professorSignal: "홀수 출력, 피라미드, 구구단, 총점/평균",
+      conceptIds: ["c-loop-output"]
     },
     {
-      id: "c-kw-file",
-      label: "파일 입출력",
-      status: "missing",
-      professorSignal: "fopen/fscanf/fprintf 예제 보강 필요",
-      conceptIds: []
+      id: "c-kw-code-writing",
+      label: "코드 작성형",
+      status: "covered",
+      professorSignal: "홀수 합, 원의 넓이, 최댓값 함수",
+      conceptIds: ["c-function-scope", "c-loop-output", "c-array-copy"]
     }
   ],
   concepts: [
     {
-      id: "c-pointer",
-      title: "포인터와 역참조",
+      id: "c-function-scope",
+      title: "함수, 반환값, 스코프",
       priority: "must-know",
-      summary: "포인터는 변수의 메모리 주소를 저장하고, 역참조로 그 주소의 값을 읽거나 쓴다.",
-      easyExplanation: "값이 적힌 종이를 직접 들고 있는 게 아니라, 그 종이가 있는 위치를 들고 있는 것이다.",
-      sourceHints: ["교수님 PDF p.12-p.28", "주소 출력 예제"],
-      relatedKeywordIds: ["c-kw-pointer"],
-      exampleQuestionIds: ["c-q-pointer"]
+      summary: "함수 호출 인자 수, 반환값 저장, 지역변수와 전역변수의 이름 가림, static 지역변수의 값 유지가 핵심이다.",
+      easyExplanation: "함수는 값을 돌려줄 수 있지만 호출한 쪽에서 받아야 하고, 같은 이름이면 가까운 지역변수가 우선된다.",
+      sourceHints: ["기말고사 참고자료 2, 3, 5, 9, 10, 12, 14번"],
+      relatedKeywordIds: ["c-kw-function", "c-kw-code-writing"],
+      exampleQuestionIds: ["c-q-max", "c-q-swap", "c-q-input-sum", "c-q-static", "c-q-block-scope", "c-q-circle-area", "c-q-max-three"]
     },
     {
-      id: "c-array-function",
-      title: "배열과 함수 전달",
+      id: "c-array-copy",
+      title: "배열 선언과 원소별 복사",
       priority: "must-know",
-      summary: "배열 이름은 많은 상황에서 첫 원소의 주소처럼 동작해 함수 안에서 원본 값을 바꿀 수 있다.",
-      easyExplanation: "배열 전체를 복사해서 넘기는 게 아니라 시작 위치를 알려주는 것에 가깝다.",
-      sourceHints: ["교수님 PDF p.31-p.44"],
-      relatedKeywordIds: ["c-kw-array"],
-      exampleQuestionIds: ["c-q-array"]
+      summary: "C에서 배열 전체는 =로 복사할 수 없고, 크기와 초기값 개수를 맞추며 반복문으로 원소별 복사해야 한다.",
+      easyExplanation: "배열은 통째로 대입하는 상자가 아니라, 각 칸을 하나씩 옮겨야 하는 묶음이다.",
+      sourceHints: ["기말고사 참고자료 4, 6, 15, 16번"],
+      relatedKeywordIds: ["c-kw-array-copy", "c-kw-code-writing"],
+      exampleQuestionIds: ["c-q-array-ox", "c-q-array-copy", "c-q-array-score-average", "c-q-copy-arr-function"]
     },
     {
-      id: "c-struct",
-      title: "구조체와 멤버 접근",
+      id: "c-loop-output",
+      title: "반복문 출력과 누적",
       priority: "high",
-      summary: "서로 다른 타입의 값을 하나의 사용자 정의 자료형으로 묶는 방법이다.",
-      easyExplanation: "학생의 이름, 학번, 점수를 하나의 묶음으로 다루는 형태다.",
-      sourceHints: ["교수님 PDF p.55-p.66"],
-      relatedKeywordIds: ["c-kw-struct"],
-      exampleQuestionIds: ["c-q-struct"]
+      summary: "continue, 조건문, 중첩 반복문, 누적 변수를 이용해 출력 모양과 합계/평균을 계산한다.",
+      easyExplanation: "바깥 반복은 줄, 안쪽 반복은 칸이라고 생각하면 피라미드와 구구단을 추적하기 쉽다.",
+      sourceHints: ["기말고사 참고자료 1, 5, 7, 8, 11, 13, 15번"],
+      relatedKeywordIds: ["c-kw-loop-output", "c-kw-code-writing"],
+      exampleQuestionIds: ["c-q-continue", "c-q-input-sum", "c-q-pyramid", "c-q-odd-sum", "c-q-even-odd", "c-q-gugudan", "c-q-array-score-average"]
     }
   ],
   exampleQuestions: [
     {
-      id: "c-q-pointer",
-      conceptId: "c-pointer",
+      id: "c-q-continue",
+      conceptId: "c-loop-output",
       difficulty: "applied",
-      prompt: "int a = 3; int *p = &a; *p = 5; 이후 a의 값은?",
-      answer: "5다.",
-      explanation: "p가 a의 주소를 가리키고 있으므로 *p에 대입하면 a의 값이 바뀐다."
+      prompt: "짝수일 때 아래 printf를 건너뛰고 홀수만 출력하려면 어떤 문장을 쓰는가?",
+      answer: "continue;를 쓴다.",
+      explanation: "continue는 현재 반복의 남은 문장을 건너뛰고 다음 반복으로 이동한다."
     },
     {
-      id: "c-q-array",
-      conceptId: "c-array-function",
+      id: "c-q-max",
+      conceptId: "c-function-scope",
       difficulty: "applied",
-      prompt: "함수에 배열을 넘겼을 때 함수 안에서 arr[0]을 바꾸면 원본 배열은 어떻게 되는가?",
-      answer: "원본 배열의 첫 원소도 바뀐다.",
-      explanation: "배열의 시작 주소가 전달되어 같은 메모리 위치를 수정하기 때문이다."
+      prompt: "Max 함수 호출 오류와 출력 수정 포인트를 설명하라.",
+      answer: "인자 3개를 맞춰 Max(3,4,5)를 호출하고 반환값을 main의 max에 저장한다.",
+      explanation: "인자 수, 지역변수 가림, 반환값 저장 누락을 함께 확인한다."
     },
     {
-      id: "c-q-struct",
-      conceptId: "c-struct",
+      id: "c-q-swap",
+      conceptId: "c-function-scope",
       difficulty: "basic",
-      prompt: "구조체 변수의 멤버와 구조체 포인터의 멤버에 접근하는 연산자를 각각 쓰라.",
-      answer: "구조체 변수는 . 연산자, 구조체 포인터는 -> 연산자를 쓴다.",
-      explanation: "변수 자체인지 포인터인지에 따라 접근 연산자가 달라진다."
+      prompt: "swap(int x, int y) 호출 후 원본 c, d가 바뀌지 않는 이유를 설명하라.",
+      answer: "값을 복사해서 전달하는 call by value이므로 함수 안의 x, y 변경은 원본 c, d에 반영되지 않는다.",
+      explanation: "포인터를 넘기지 않는 한 원본 변수는 바뀌지 않는다."
+    },
+    {
+      id: "c-q-static",
+      conceptId: "c-function-scope",
+      difficulty: "applied",
+      prompt: "static 지역변수와 일반 지역변수의 출력 차이를 설명하라.",
+      answer: "일반 지역변수는 호출마다 새로 초기화되고 static 지역변수는 이전 호출 값을 유지한다.",
+      explanation: "출력 예측에서 static은 누적값으로 판단한다."
+    },
+    {
+      id: "c-q-input-sum",
+      conceptId: "c-loop-output",
+      difficulty: "applied",
+      prompt: "입력받은 정수까지 합계를 구하는 코드에서 함수 원형, 정의, 반환값을 어떻게 맞추는가?",
+      answer: "함수 원형과 정의를 int sum(int a)처럼 맞추고, 입력 함수는 입력받은 num을 return num;으로 반환한다.",
+      explanation: "함수 원형, 정의, 호출부의 반환 타입이 어긋나면 컴파일 오류나 의도와 다른 결과가 난다."
+    },
+    {
+      id: "c-q-array-ox",
+      conceptId: "c-array-copy",
+      difficulty: "basic",
+      prompt: "배열 선언 O/X에서 주로 확인할 조건은 무엇인가?",
+      answer: "배열 크기, 초기값 개수, 미선언 변수 사용 여부를 확인한다.",
+      explanation: "크기 4 배열에 초기값 5개를 넣는 식은 X다."
+    },
+    {
+      id: "c-q-array-copy",
+      conceptId: "c-array-copy",
+      difficulty: "applied",
+      prompt: "brr = arr;가 잘못된 이유와 수정 방법을 쓰라.",
+      answer: "C에서 배열 전체는 =로 복사할 수 없으므로 for문으로 brr[i] = arr[i]를 수행한다.",
+      explanation: "배열 이름은 대입 가능한 일반 변수가 아니다."
+    },
+    {
+      id: "c-q-pyramid",
+      conceptId: "c-loop-output",
+      difficulty: "applied",
+      prompt: "# 피라미드 출력에서 공백과 # 반복 수를 설명하라.",
+      answer: "i행에서 앞 공백은 6-i개, #은 i개 출력하고 줄바꿈한다.",
+      explanation: "바깥 i는 행, 안쪽 j/k는 공백과 문자 개수다."
+    },
+    {
+      id: "c-q-odd-sum",
+      conceptId: "c-loop-output",
+      difficulty: "basic",
+      prompt: "1부터 x까지 홀수의 합을 구하는 AAA 함수의 핵심 조건은?",
+      answer: "i % 2 == 1일 때만 sum += i를 수행하고 sum을 반환한다.",
+      explanation: "홀수 판별 조건과 누적 변수 초기화가 핵심이다."
+    },
+    {
+      id: "c-q-block-scope",
+      conceptId: "c-function-scope",
+      difficulty: "basic",
+      prompt: "블록 스코프와 전역변수가 함께 있을 때 어떤 변수가 우선 사용되는가?",
+      answer: "가장 가까운 블록에서 선언된 지역변수가 우선 사용되고, 그 블록 밖에서는 바깥 변수나 전역변수가 사용된다.",
+      explanation: "같은 이름의 변수가 여러 개일 때는 현재 코드 위치를 감싸는 가장 가까운 범위를 먼저 찾는다."
+    },
+    {
+      id: "c-q-even-odd",
+      conceptId: "c-loop-output",
+      difficulty: "basic",
+      prompt: "정수가 홀수인지 짝수인지 판별하는 조건을 쓰라.",
+      answer: "num % 2 == 0이면 짝수이고, 그렇지 않으면 홀수다.",
+      explanation: "나머지 연산자 %로 2로 나누었을 때의 나머지를 확인한다."
+    },
+    {
+      id: "c-q-circle-area",
+      conceptId: "c-function-scope",
+      difficulty: "basic",
+      prompt: "원의 넓이를 구하는 함수에서 계산식과 반환값을 어떻게 쓰는가?",
+      answer: "반지름 r에 대해 area = PI * r * r을 계산하고 그 값을 반환한다.",
+      explanation: "상수 PI, 매개변수 r, 반환 타입이 문제의 함수 선언과 맞아야 한다."
+    },
+    {
+      id: "c-q-gugudan",
+      conceptId: "c-loop-output",
+      difficulty: "applied",
+      prompt: "이중 while문으로 구구단을 출력할 때 안쪽 반복 변수는 언제 초기화해야 하는가?",
+      answer: "바깥 while이 한 단을 시작할 때마다 안쪽 반복 변수를 다시 초기화해야 한다.",
+      explanation: "바깥 반복은 단, 안쪽 반복은 곱하는 수를 담당한다. 안쪽 변수를 초기화하지 않으면 다음 단이 출력되지 않는다."
+    },
+    {
+      id: "c-q-max-three",
+      conceptId: "c-function-scope",
+      difficulty: "basic",
+      prompt: "3개의 정수 중 최댓값을 구하는 함수의 기본 비교 흐름은?",
+      answer: "첫 값을 max에 둔 뒤 나머지 두 값과 차례로 비교해 더 큰 값으로 max를 갱신하고 반환한다.",
+      explanation: "두 개를 먼저 비교한 뒤 남은 하나와 다시 비교해도 되고, max 변수를 갱신하는 방식으로 써도 된다."
+    },
+    {
+      id: "c-q-array-score-average",
+      conceptId: "c-array-copy",
+      difficulty: "applied",
+      prompt: "배열로 점수 총점과 평균을 구할 때 반복문에서 무엇을 누적하는가?",
+      answer: "배열 원소를 반복문으로 모두 더해 total을 구하고 average = total / 개수로 계산한다.",
+      explanation: "평균이 실수로 필요하면 정수 나눗셈이 되지 않도록 형 변환이나 실수 변수를 사용한다."
+    },
+    {
+      id: "c-q-copy-arr-function",
+      conceptId: "c-array-copy",
+      difficulty: "applied",
+      prompt: "배열 복사 함수 copy_arr는 어떤 인자와 반복문으로 작성하는가?",
+      answer: "원본 배열, 대상 배열, 크기를 인자로 받고 for문으로 target[i] = source[i]를 수행한다.",
+      explanation: "배열은 함수 인자로 전달될 때 시작 주소처럼 동작하므로 함수 안에서 대상 배열 원소를 바꾸면 호출한 쪽 배열도 바뀐다."
     }
   ],
   weekNotes: [
     {
-      id: "c-week-08",
-      label: "2026-04-30",
-      title: "포인터",
-      focus: "주소, 포인터 변수, 역참조 관계를 코드로 추적한다.",
-      sourceMaterialIds: ["c-pdf-08-14"],
-      requiredKeywordIds: ["c-kw-pointer"],
-      conceptIds: ["c-pointer"],
-      exampleQuestionIds: ["c-q-pointer"],
+      id: "c-final-functions",
+      label: "별도 PDF",
+      title: "제어문과 함수",
+      focus: "continue, Max, swap, static, 스코프 문제를 출력 예측 중심으로 본다.",
+      sourceMaterialIds: ["c-final-reference"],
+      requiredKeywordIds: ["c-kw-function", "c-kw-code-writing"],
+      conceptIds: ["c-function-scope", "c-loop-output"],
+      exampleQuestionIds: ["c-q-continue", "c-q-max", "c-q-swap", "c-q-input-sum", "c-q-static", "c-q-block-scope", "c-q-even-odd"],
       reviewStatus: "ready"
     },
     {
-      id: "c-week-10",
-      label: "2026-05-02",
-      title: "배열과 함수",
-      focus: "배열 전달과 원본 수정 여부를 구분한다.",
-      sourceMaterialIds: ["c-pdf-08-14"],
-      requiredKeywordIds: ["c-kw-array"],
-      conceptIds: ["c-array-function"],
-      exampleQuestionIds: ["c-q-array"],
+      id: "c-final-arrays",
+      label: "별도 PDF",
+      title: "배열과 반복문",
+      focus: "배열 O/X, 배열 복사, 피라미드와 총점/평균을 손으로 추적한다.",
+      sourceMaterialIds: ["c-final-reference"],
+      requiredKeywordIds: ["c-kw-array-copy", "c-kw-loop-output"],
+      conceptIds: ["c-array-copy", "c-loop-output"],
+      exampleQuestionIds: ["c-q-array-ox", "c-q-array-copy", "c-q-pyramid", "c-q-gugudan", "c-q-array-score-average"],
       reviewStatus: "ready"
     },
     {
-      id: "c-week-12",
-      label: "2026-05-07",
-      title: "구조체와 파일",
-      focus: "구조체 멤버 접근을 먼저 정리하고 파일 입출력은 보강한다.",
-      sourceMaterialIds: ["c-pdf-08-14"],
-      requiredKeywordIds: ["c-kw-struct", "c-kw-file"],
-      conceptIds: ["c-struct"],
-      exampleQuestionIds: ["c-q-struct"],
-      reviewStatus: "needs-fill"
+      id: "c-final-code-writing",
+      label: "별도 PDF",
+      title: "코드 작성형",
+      focus: "홀수 합, 원의 넓이, 3개 최댓값, 배열 복사 함수를 손으로 작성한다.",
+      sourceMaterialIds: ["c-final-reference"],
+      requiredKeywordIds: ["c-kw-code-writing", "c-kw-array-copy"],
+      conceptIds: ["c-function-scope", "c-loop-output", "c-array-copy"],
+      exampleQuestionIds: ["c-q-odd-sum", "c-q-circle-area", "c-q-max-three", "c-q-copy-arr-function"],
+      reviewStatus: "ready"
     }
   ]
 };
@@ -465,144 +828,308 @@ const computerIntroduction: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "컴퓨터 구조, 운영체제, 데이터 표현, 네트워크 기초를 큰 그림 중심으로 훑는다.",
-    examScope: "computer system, data representation, OS basics, network basics",
-    weekRange: "4월 30일(목)-6월 13일(토)",
-    mustKnowConceptIds: ["ci-system", "ci-data-representation", "ci-os-network"],
-    weakSpots: ["보안/소프트웨어 공학 파트는 실제 범위 확인 필요"],
-    strategy: "세부 계산보다 각 구성요소가 무엇을 담당하는지 연결해서 본다."
+    goal: "수업자료 8장, 9장, 10장, 13장을 범위로 유지하되 2024년도 시험문제 8문항을 답안형으로 암기한다.",
+    examScope: "8장 프로그래밍 언어1, 9장 데이터베이스, 10장 컴퓨터 네트워크와 월드와이드웹, 13장 정보보안, 2024년도 시험문제",
+    weekRange: "8장, 9장, 10장, 13장 + 2024년도 시험문제",
+    examChapters: [
+      {
+        label: "8장",
+        title: "프로그래밍 언어1",
+        focus: "프로그래밍 언어의 개념과 번역 방식은 범위로 유지하되, 2024년 타이핑 문제에는 직접 문항 없음",
+        sourceHint: "단원08 프로그래밍 언어1.pdf"
+      },
+      {
+        label: "9장",
+        title: "데이터베이스",
+        focus: "관계형 데이터베이스의 기본키와 외부/개념/내부 스키마",
+        sourceHint: "2024년도 시험문제 1, 6번"
+      },
+      {
+        label: "24년",
+        title: "MPEG와 압축",
+        focus: "GOP의 I/P/B 프레임, 손실 압축과 비손실 압축의 차이와 예",
+        sourceHint: "2024년도 시험문제 2, 4번"
+      },
+      {
+        label: "10장",
+        title: "컴퓨터 네트워크와 월드와이드웹",
+        focus: "회선교환/패킷교환, DNS 서버 종류와 역할",
+        sourceHint: "2024년도 시험문제 5, 7번"
+      },
+      {
+        label: "13장",
+        title: "정보보안",
+        focus: "공개키/비공개키 암호, 스니핑, 스푸핑",
+        sourceHint: "2024년도 시험문제 3, 8번"
+      }
+    ],
+    mustKnowConceptIds: ["ci-database", "ci-multimedia-compression", "ci-network-web", "ci-security"],
+    weakSpots: ["기본키와 후보키의 표현 차이", "DNS 서버 2종류의 수업자료 용어", "I/P/B 프레임 역할 순서", "스니핑과 스푸핑 한 문장 구분"],
+    strategy: "24년도 시험문제 8문항을 제목만 보고 먼저 말하고, 헷갈리는 DNS와 키 용어는 해설의 보충 표현까지 같이 외운다."
   },
   sources: [
     {
-      id: "ci-pdf-08-14",
-      title: "컴퓨터개론 교수님 PDF 기말 범위",
+      id: "ci-pdf-08-09-10-13",
+      title: "컴퓨터개론 수업자료 기말 범위",
       kind: "professor-pdf",
       visibility: "private-source",
-      pages: "p.2-p.74",
+      pages: "8장, 9장, 10장, 13장",
       note: "원문은 private source로 유지하고 reader에는 시험용 개념 지도만 둔다."
+    },
+    {
+      id: "ci-2024-exam",
+      title: "컴퓨터개론 2024년도 시험문제",
+      kind: "manual-keyword",
+      visibility: "derived-note-only",
+      note: "사용자가 타이핑한 8문항을 시험 답안과 해설 중심으로 정리한다."
     }
   ],
   requiredKeywords: [
     {
-      id: "ci-kw-system",
-      label: "컴퓨터 시스템 구성",
+      id: "ci-kw-programming",
+      label: "프로그래밍 언어",
       status: "covered",
-      professorSignal: "하드웨어/소프트웨어 구분 강조",
-      conceptIds: ["ci-system"]
+      professorSignal: "8장 수업자료 기준, 2024년 타이핑 문제에는 직접 문항 없음",
+      conceptIds: ["ci-programming-language"]
     },
     {
-      id: "ci-kw-data",
-      label: "데이터 표현",
+      id: "ci-kw-primary-key",
+      label: "기본키와 후보키",
       status: "covered",
-      professorSignal: "비트/바이트와 문자 표현 강조",
-      conceptIds: ["ci-data-representation"]
+      professorSignal: "2024년도 시험문제 1번",
+      conceptIds: ["ci-database"]
     },
     {
-      id: "ci-kw-os-network",
-      label: "운영체제와 네트워크 기초",
+      id: "ci-kw-db-schema",
+      label: "DB 3단계 추상화",
       status: "covered",
-      professorSignal: "역할 중심 서술형 가능",
-      conceptIds: ["ci-os-network"]
+      professorSignal: "2024년도 시험문제 6번",
+      conceptIds: ["ci-database"]
     },
     {
-      id: "ci-kw-security",
-      label: "정보보안 기초",
-      status: "missing",
-      professorSignal: "실제 시험 범위 확인 필요",
-      conceptIds: []
+      id: "ci-kw-mpeg-gop",
+      label: "MPEG GOP",
+      status: "covered",
+      professorSignal: "2024년도 시험문제 2번",
+      conceptIds: ["ci-multimedia-compression"]
+    },
+    {
+      id: "ci-kw-compression",
+      label: "손실/비손실 압축",
+      status: "covered",
+      professorSignal: "2024년도 시험문제 4번",
+      conceptIds: ["ci-multimedia-compression"]
+    },
+    {
+      id: "ci-kw-switching",
+      label: "회선교환과 패킷교환",
+      status: "covered",
+      professorSignal: "2024년도 시험문제 5번",
+      conceptIds: ["ci-network-web"]
+    },
+    {
+      id: "ci-kw-dns",
+      label: "DNS 서버 종류",
+      status: "covered",
+      professorSignal: "2024년도 시험문제 7번",
+      conceptIds: ["ci-network-web"]
+    },
+    {
+      id: "ci-kw-crypto",
+      label: "공개키/비공개키 암호",
+      status: "covered",
+      professorSignal: "2024년도 시험문제 3번",
+      conceptIds: ["ci-security"]
+    },
+    {
+      id: "ci-kw-sniffing-spoofing",
+      label: "스니핑과 스푸핑",
+      status: "covered",
+      professorSignal: "2024년도 시험문제 8번",
+      conceptIds: ["ci-security"]
     }
   ],
   concepts: [
     {
-      id: "ci-system",
-      title: "컴퓨터 시스템 구성",
-      priority: "must-know",
-      summary: "컴퓨터 시스템은 하드웨어와 소프트웨어가 함께 동작해 입력, 처리, 저장, 출력을 수행한다.",
-      easyExplanation: "기계 부품과 그 부품을 움직이는 명령 체계가 같이 있어야 컴퓨터가 동작한다.",
-      sourceHints: ["교수님 PDF p.8-p.18"],
-      relatedKeywordIds: ["ci-kw-system"],
-      exampleQuestionIds: ["ci-q-system"]
+      id: "ci-programming-language",
+      title: "8장 프로그래밍 언어1",
+      priority: "review",
+      summary: "프로그래밍 언어의 목적, 분류, 번역 방식, 알고리즘 표현은 범위 자료로 유지한다.",
+      easyExplanation: "24년도 타이핑 문제에는 직접 출제되지 않았지만 범위 PDF에 포함되어 마지막에 빠르게 훑는다.",
+      sourceHints: ["단원08 프로그래밍 언어1.pdf"],
+      relatedKeywordIds: ["ci-kw-programming"],
+      exampleQuestionIds: ["ci-q-programming-language"]
     },
     {
-      id: "ci-data-representation",
-      title: "데이터 표현",
-      priority: "high",
-      summary: "컴퓨터는 모든 정보를 비트 조합으로 표현하고 해석 규칙에 따라 숫자, 문자, 이미지로 다룬다.",
-      easyExplanation: "같은 0과 1도 어떤 약속으로 읽느냐에 따라 숫자나 글자가 된다.",
-      sourceHints: ["교수님 PDF p.22-p.34"],
-      relatedKeywordIds: ["ci-kw-data"],
-      exampleQuestionIds: ["ci-q-data"]
+      id: "ci-database",
+      title: "9장 데이터베이스 키와 3단계 스키마",
+      priority: "must-know",
+      summary: "관계형 모델에서 기본키로 튜플을 식별하고, 외부/개념/내부 단계로 데이터베이스 관점을 나눈다.",
+      easyExplanation: "기본키는 한 행을 찍어내는 이름표이고, 3단계 스키마는 사용자 눈, 전체 설계도, 실제 저장 방식이다.",
+      sourceHints: ["단원09 데이터베이스.pdf", "2024년도 시험문제 1, 6번"],
+      relatedKeywordIds: ["ci-kw-primary-key", "ci-kw-db-schema"],
+      exampleQuestionIds: ["ci-q-primary-key", "ci-q-db-three-level"]
     },
     {
-      id: "ci-os-network",
-      title: "운영체제와 네트워크 기초",
+      id: "ci-multimedia-compression",
+      title: "24년도 기출 MPEG와 압축",
       priority: "must-know",
-      summary: "운영체제는 자원을 관리하고, 네트워크는 컴퓨터 사이의 데이터 교환을 가능하게 한다.",
-      easyExplanation: "운영체제는 컴퓨터 내부 관리자, 네트워크는 다른 컴퓨터와 연결되는 통로에 가깝다.",
-      sourceHints: ["교수님 PDF p.42-p.61"],
-      relatedKeywordIds: ["ci-kw-os-network"],
-      exampleQuestionIds: ["ci-q-os-network"]
+      summary: "MPEG GOP의 I/P/B 프레임 역할과 손실/비손실 압축 차이를 예시와 함께 답한다.",
+      easyExplanation: "I는 혼자 복원, P는 이전을 보고 예측, B는 앞뒤를 보고 더 세게 압축한다. 손실은 버리고, 비손실은 그대로 되살린다.",
+      sourceHints: ["2024년도 시험문제 2, 4번"],
+      relatedKeywordIds: ["ci-kw-mpeg-gop", "ci-kw-compression"],
+      exampleQuestionIds: ["ci-q-mpeg-gop", "ci-q-compression"]
+    },
+    {
+      id: "ci-network-web",
+      title: "10장 컴퓨터 네트워크와 월드와이드웹",
+      priority: "must-know",
+      summary: "회선교환과 패킷교환을 대표 예로 비교하고, DNS 서버의 역할 차이를 설명한다.",
+      easyExplanation: "전화망은 길을 먼저 잡고, 인터넷은 조각을 그때그때 보낸다. DNS는 주소 이름을 IP로 바꿔준다.",
+      sourceHints: ["단원10 컴퓨터 네트워크와 월드와이드웹.pdf", "2024년도 시험문제 5, 7번"],
+      relatedKeywordIds: ["ci-kw-switching", "ci-kw-dns"],
+      exampleQuestionIds: ["ci-q-switching", "ci-q-dns-server-types"]
+    },
+    {
+      id: "ci-security",
+      title: "13장 정보보안",
+      priority: "must-know",
+      summary: "공개키/비공개키 암호 알고리즘 예시와 스니핑/스푸핑의 공격 의미를 구분한다.",
+      easyExplanation: "RSA는 키 한 쌍, AES는 같은 비밀키다. 스니핑은 엿보기, 스푸핑은 속이기다.",
+      sourceHints: ["단원13 정보보안.pdf", "2024년도 시험문제 3, 8번"],
+      relatedKeywordIds: ["ci-kw-crypto", "ci-kw-sniffing-spoofing"],
+      exampleQuestionIds: ["ci-q-crypto", "ci-q-sniffing-spoofing"]
     }
   ],
   exampleQuestions: [
     {
-      id: "ci-q-system",
-      conceptId: "ci-system",
+      id: "ci-q-programming-language",
+      conceptId: "ci-programming-language",
       difficulty: "basic",
-      prompt: "컴퓨터 시스템에서 하드웨어와 소프트웨어의 차이를 설명하라.",
-      answer: "하드웨어는 물리적 장치이고, 소프트웨어는 하드웨어가 수행할 명령과 프로그램이다.",
-      explanation: "물리 장치와 명령 체계의 차이를 구분하면 된다."
+      prompt: "프로그래밍 언어를 배우는 이유를 설명하라.",
+      answer: "문제 해결 절차를 컴퓨터가 실행할 수 있는 명령으로 표현하기 위해서다.",
+      explanation: "8장 범위 확인용 보조 문항이다. 2024년도 타이핑 문제의 직접 문항은 아니므로 마지막에 훑는다."
     },
     {
-      id: "ci-q-data",
-      conceptId: "ci-data-representation",
+      id: "ci-q-primary-key",
+      conceptId: "ci-database",
       difficulty: "basic",
-      prompt: "비트와 바이트의 관계를 설명하라.",
-      answer: "1바이트는 일반적으로 8비트다.",
-      explanation: "데이터 표현 단위의 기본 관계를 묻는 문제다."
+      prompt: "관계형 데이터베이스 모델에서 여러 튜플 중 하나의 튜플을 유일하게 식별할 수 있는 키는 무엇인가.",
+      answer: "기본키다. 후보키 중 대표 식별자로 선택된 키이며 중복과 NULL을 허용하지 않는다.",
+      explanation: "유일 식별성만 보면 후보키도 맞는 성질이지만, 시험 단답은 기본키로 쓰는 것이 가장 안전하다."
     },
     {
-      id: "ci-q-os-network",
-      conceptId: "ci-os-network",
+      id: "ci-q-mpeg-gop",
+      conceptId: "ci-multimedia-compression",
       difficulty: "applied",
-      prompt: "운영체제와 네트워크의 역할을 각각 한 문장으로 설명하라.",
-      answer: "운영체제는 컴퓨터 자원을 관리하고, 네트워크는 컴퓨터 간 데이터 교환을 지원한다.",
-      explanation: "내부 자원 관리와 외부 연결 역할을 구분해야 한다."
+      prompt: "MPEG GOP의 I, P, B 프레임이 각각 어떻게 사용되는지 설명하라.",
+      answer: "I 프레임은 독립 복원 기준 프레임, P 프레임은 이전 I/P 프레임 기준 예측 프레임, B 프레임은 이전과 이후를 모두 참조하는 양방향 예측 프레임이다.",
+      explanation: "I는 크지만 기준이 되고, P는 차이를 저장하며, B는 압축률을 높인다."
+    },
+    {
+      id: "ci-q-crypto",
+      conceptId: "ci-security",
+      difficulty: "basic",
+      prompt: "공개키 암호 알고리즘과 비공개키 암호 알고리즘의 예를 각각 하나씩 쓰라.",
+      answer: "공개키 암호의 예는 RSA, 비공개키 또는 대칭키 암호의 예는 AES다.",
+      explanation: "RSA는 공개키/개인키 한 쌍, AES는 송수신자가 공유하는 같은 비밀키를 사용한다."
+    },
+    {
+      id: "ci-q-compression",
+      conceptId: "ci-multimedia-compression",
+      difficulty: "basic",
+      prompt: "손실 압축과 비손실 압축의 차이를 쓰고 각각의 예를 하나씩 쓰라.",
+      answer: "손실 압축은 정보를 일부 버려 원본을 완전히 복원할 수 없고 예는 JPEG다. 비손실 압축은 원본을 정확히 복원할 수 있고 예는 ZIP이다.",
+      explanation: "손실 압축은 사진, 음악, 동영상에 자주 쓰고 비손실 압축은 데이터가 정확해야 하는 파일에 적합하다."
+    },
+    {
+      id: "ci-q-switching",
+      conceptId: "ci-network-web",
+      difficulty: "applied",
+      prompt: "전화망처럼 미리 설정된 경로를 쓰는 방식과 인터넷처럼 가장 좋은 경로를 찾아 보내는 방식의 이름을 쓰라.",
+      answer: "A는 회선교환 방식, B는 패킷교환 방식이다.",
+      explanation: "회선교환은 전용 경로를 잡고, 패킷교환은 패킷마다 경로를 유동적으로 선택한다."
+    },
+    {
+      id: "ci-q-db-three-level",
+      conceptId: "ci-database",
+      difficulty: "basic",
+      prompt: "데이터베이스를 바라보는 관점에 따라 추상화한 3가지를 쓰라.",
+      answer: "외부 단계, 개념 단계, 내부 단계다. 외부 스키마, 개념 스키마, 내부 스키마라고도 한다.",
+      explanation: "외부는 사용자별 view, 개념은 전체 논리 구조, 내부는 실제 저장 구조다."
+    },
+    {
+      id: "ci-q-dns-server-types",
+      conceptId: "ci-network-web",
+      difficulty: "applied",
+      prompt: "DNS 서비스를 제공하는 서버 2종류와 각각의 특징을 설명하라.",
+      answer: "주 DNS 서버는 도메인의 원본 zone 레코드를 관리하고, 보조 DNS 서버는 그 정보를 복제해 백업과 부하 분산을 담당한다.",
+      explanation: "교재가 재귀/권한 DNS로 설명했다면 재귀 DNS는 클라이언트 대신 질의하고 캐시하며, 권한 DNS는 해당 도메인의 최종 레코드를 가진 서버라고 답한다."
+    },
+    {
+      id: "ci-q-sniffing-spoofing",
+      conceptId: "ci-security",
+      difficulty: "basic",
+      prompt: "스니핑과 스푸핑을 각각 간단히 설명하라.",
+      answer: "스니핑은 네트워크 패킷을 몰래 엿보거나 가로채는 공격이고, 스푸핑은 주소나 신원을 위조해 다른 주체처럼 속이는 공격이다.",
+      explanation: "스니핑은 도청, 스푸핑은 위장으로 기억한다."
     }
   ],
   weekNotes: [
     {
       id: "ci-week-08",
-      label: "2026-04-30",
-      title: "컴퓨터 시스템",
-      focus: "하드웨어와 소프트웨어의 역할을 구분한다.",
-      sourceMaterialIds: ["ci-pdf-08-14"],
-      requiredKeywordIds: ["ci-kw-system"],
-      conceptIds: ["ci-system"],
-      exampleQuestionIds: ["ci-q-system"],
+      label: "8장",
+      title: "프로그래밍 언어1",
+      focus: "범위 PDF에 포함된 보조 챕터로 마지막에 핵심 용어만 확인한다.",
+      sourceMaterialIds: ["ci-pdf-08-09-10-13"],
+      requiredKeywordIds: ["ci-kw-programming"],
+      conceptIds: ["ci-programming-language"],
+      exampleQuestionIds: ["ci-q-programming-language"],
+      reviewStatus: "ready"
+    },
+    {
+      id: "ci-week-09",
+      label: "9장",
+      title: "데이터베이스",
+      focus: "기본키와 외부/개념/내부 스키마를 단답형으로 반복한다.",
+      sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
+      requiredKeywordIds: ["ci-kw-primary-key", "ci-kw-db-schema"],
+      conceptIds: ["ci-database"],
+      exampleQuestionIds: ["ci-q-primary-key", "ci-q-db-three-level"],
+      reviewStatus: "ready"
+    },
+    {
+      id: "ci-week-2024-multimedia",
+      label: "24년",
+      title: "MPEG와 압축",
+      focus: "I/P/B 프레임과 손실/비손실 압축 예시를 시험문제 기준으로 암기한다.",
+      sourceMaterialIds: ["ci-2024-exam"],
+      requiredKeywordIds: ["ci-kw-mpeg-gop", "ci-kw-compression"],
+      conceptIds: ["ci-multimedia-compression"],
+      exampleQuestionIds: ["ci-q-mpeg-gop", "ci-q-compression"],
       reviewStatus: "ready"
     },
     {
       id: "ci-week-10",
-      label: "2026-05-02",
-      title: "데이터 표현",
-      focus: "비트/바이트와 정보 표현 방식을 정리한다.",
-      sourceMaterialIds: ["ci-pdf-08-14"],
-      requiredKeywordIds: ["ci-kw-data"],
-      conceptIds: ["ci-data-representation"],
-      exampleQuestionIds: ["ci-q-data"],
+      label: "10장",
+      title: "컴퓨터 네트워크와 월드와이드웹",
+      focus: "회선교환/패킷교환과 DNS 서버 종류를 비교형 답안으로 정리한다.",
+      sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
+      requiredKeywordIds: ["ci-kw-switching", "ci-kw-dns"],
+      conceptIds: ["ci-network-web"],
+      exampleQuestionIds: ["ci-q-switching", "ci-q-dns-server-types"],
       reviewStatus: "ready"
     },
     {
-      id: "ci-week-12",
-      label: "2026-05-07",
-      title: "운영체제와 네트워크",
-      focus: "운영체제와 네트워크의 역할을 큰 그림으로 연결한다.",
-      sourceMaterialIds: ["ci-pdf-08-14"],
-      requiredKeywordIds: ["ci-kw-os-network", "ci-kw-security"],
-      conceptIds: ["ci-os-network"],
-      exampleQuestionIds: ["ci-q-os-network"],
-      reviewStatus: "needs-fill"
+      id: "ci-week-13",
+      label: "13장",
+      title: "정보보안",
+      focus: "RSA/AES 예시와 스니핑/스푸핑 정의를 한 문장으로 고정한다.",
+      sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
+      requiredKeywordIds: ["ci-kw-crypto", "ci-kw-sniffing-spoofing"],
+      conceptIds: ["ci-security"],
+      exampleQuestionIds: ["ci-q-crypto", "ci-q-sniffing-spoofing"],
+      reviewStatus: "ready"
     }
   ]
 };

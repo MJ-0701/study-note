@@ -100,10 +100,10 @@ describe("subject-class — (a) renderSubjectClassPage", () => {
 
   test("case 1c: subjects without artifacts do not expose a dead exam-prep card", () => {
     const ctx = makeCtx();
-    const html = sc.renderSubjectClassPage(ctx, makeSubject("computer-introduction", "컴퓨터개론"));
+    const html = sc.renderSubjectClassPage(ctx, makeSubject("no-artifact-subject", "자료 없는 과목"));
     const c = parseC(html);
     assert.equal(c.querySelectorAll(".subject-unit-card").length, 4);
-    assert.ok(!html.includes("#/subjects/computer-introduction/exam-prep"));
+    assert.ok(!html.includes("#/subjects/no-artifact-subject/exam-prep"));
   });
 
   test("case 2: hostile subject.title escape (multiple sites: h1 + aria-label + 4 cards meta hint)", () => {

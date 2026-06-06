@@ -15,6 +15,13 @@ export interface MemorizeExamGroup {
   weeks: MemorizeWeekItem[];
 }
 
+export interface MemorizeExamChapter {
+  label: string;
+  title: string;
+  focus: string;
+  sourceHint: string | null;
+}
+
 export interface MemorizeConcept {
   id: string;
   priority: "must-know" | "high" | "review";
@@ -50,11 +57,12 @@ export interface SubjectMemorizeViewProps {
   examScope: string;
   strategy: string;
   weakSpots: string;
+  examChapters: MemorizeExamChapter[];
   midtermGroup: MemorizeExamGroup;
   finalGroup: MemorizeExamGroup;
   mustKnowConcepts: MemorizeConcept[];
   keywords: MemorizeKeyword[];  // missingKeywords if any, else all keywords
-  examQuestions: MemorizeQuestion[];  // first 5
+  examQuestions: MemorizeQuestion[];
 }
 
 // ─── sub-components ──────────────────────────────────────────────────────────
@@ -65,6 +73,27 @@ function SummaryBlock({ label, value }: { label: string; value: string }): React
       <p className="meta">{label}</p>
       <p>{value}</p>
     </article>
+  );
+}
+
+function ExamChapterGrid({ chapters }: { chapters: MemorizeExamChapter[] }): React.ReactElement | null {
+  if (chapters.length === 0) return null;
+
+  return (
+    <section aria-labelledby="memorize-exam-chapters-title">
+      <p className="meta">시험 기준 챕터</p>
+      <h2 id="memorize-exam-chapters-title">이번 시험에서 먼저 외울 범위</h2>
+      <div className="memorize-chapter-grid">
+        {chapters.map((chapter) => (
+          <article className="memorize-chapter" key={`${chapter.label}-${chapter.title}`}>
+            <span>{chapter.label}</span>
+            <h3>{chapter.title}</h3>
+            <p>{chapter.focus}</p>
+            {chapter.sourceHint && <small>{chapter.sourceHint}</small>}
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -176,6 +205,7 @@ export function SubjectMemorizeView(props: SubjectMemorizeViewProps): React.Reac
     examScope,
     strategy,
     weakSpots,
+    examChapters,
     midtermGroup,
     finalGroup,
     mustKnowConcepts,
@@ -200,6 +230,8 @@ export function SubjectMemorizeView(props: SubjectMemorizeViewProps): React.Reac
         <SummaryBlock label="복습 전략" value={strategy} />
         <SummaryBlock label="취약 포인트" value={weakSpots} />
       </section>
+
+      <ExamChapterGrid chapters={examChapters} />
 
       <section aria-labelledby="memorize-by-exam-title">
         <p className="meta">시험 구간별 수업일</p>

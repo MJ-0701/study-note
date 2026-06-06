@@ -26,19 +26,31 @@ describe("SubjectExamPrepView / artifact registry 정적 소스 검증", () => {
     assert.match(viewSrc, /export function SubjectExamPrepView/);
   });
 
-  it("renders embedded workbook iframe and static artifact links", () => {
-    assert.match(viewSrc, /exam-prep-frame/);
-    assert.match(src, /\/exam-prep\/information-communication\/workbook\.html/);
-    assert.match(src, /\/exam-prep\/digital-engineering\/workbook\.html/);
-    assert.match(src, /\/exam-prep\/c-language\/workbook\.html/);
+  it("renders native exam-prep template sections instead of an iframe", () => {
+    assert.doesNotMatch(viewSrc, /<iframe/);
+    assert.doesNotMatch(viewSrc, /exam-prep-frame/);
+    assert.match(viewSrc, /exam-prep-template/);
+    assert.match(viewSrc, /exam-prep-question-list/);
+    assert.match(viewSrc, /QuestionCard/);
   });
 
-  it("sandboxes embedded workbook scripts away from the app origin", () => {
-    assert.match(src, /sandbox=""/);
+  it("registry carries structured workbook content for artifact subjects", () => {
+    assert.match(src, /studyOrder:/);
+    assert.match(src, /chapters:/);
+    assert.match(src, /questions:/);
+    assert.match(src, /6, 7, 8장/);
+    assert.match(src, /6, 7, 8, 9장/);
+    assert.match(src, /별도 PDF/);
+    assert.match(src, /computer-introduction/);
+    assert.match(src, /2024년도 시험문제/);
+    assert.match(src, /디코더\/인코더\/MUX\/DEMUX/);
+    assert.match(src, /de-q-flipflop-types/);
+    assert.match(src, /minterm/);
   });
 
-  it("does not expose same-origin workbook HTML through a new-tab link", () => {
-    assert.doesNotMatch(viewSrc, /href=\{workbookHref\}[^>]*target="_blank"/s);
+  it("keeps Markdown as a secondary source link only", () => {
+    assert.doesNotMatch(src, /workbookHref/);
+    assert.doesNotMatch(src, /workbook\.html/);
     assert.match(viewSrc, /href=\{markdownHref\}/);
   });
 });

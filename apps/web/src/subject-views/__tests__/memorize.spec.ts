@@ -49,6 +49,7 @@ function makeSubject(): never {
     id: "s1", title: "수학", examLabel: "기말", examPhase: "final",
     summary: {
       examScope: "범위", strategy: "전략", weakSpots: ["weak"],
+      examChapters: [{ label: "6장", title: "챕터", focus: "초점", sourceHint: "자료" }],
       mustKnowConceptIds: ["c1"]
     },
     weekNotes: [
@@ -178,6 +179,7 @@ describe("memorize — (d) renderSubjectMemorizePage", () => {
     const html = mz.renderSubjectMemorizePage(makeSubject());
     const c = parseC(html);
     assert.equal(c.querySelectorAll(".subject-page-hero").length, 1);
+    assert.equal(c.querySelectorAll(".memorize-chapter").length, 1);
     assert.equal(c.querySelectorAll(".memorize-exam-group").length, 2);
     assert.ok(c.querySelectorAll(".concept-row").length >= 1);
     assert.ok(c.querySelectorAll(".keyword-card").length >= 1);
@@ -218,9 +220,10 @@ describe("memorize — (d) renderSubjectMemorizePage", () => {
 // ─── (e) export shape + PII boundary ─────────────────────────────────────
 
 describe("memorize — (e) export + PII boundary", () => {
-  test("case 21: 4 export shape", () => {
+  test("case 21: 5 export shape", () => {
     assert.equal(typeof mz.renderSubjectMemorizePage, "function");
     assert.equal(typeof mz.renderMemorizeExamGroup, "function");
+    assert.equal(typeof mz.renderMemorizeExamChapters, "function");
     assert.equal(typeof mz.parseClassDateLabel, "function");
     assert.equal(typeof mz.safeDateMs, "function");
   });

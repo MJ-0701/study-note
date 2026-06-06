@@ -89,6 +89,7 @@ const makeMemorizeProps = (scope = "5~8주"): SubjectMemorizeViewProps => ({
   examScope: scope,
   strategy: "키워드 중심",
   weakSpots: "약점 A",
+  examChapters: [],
   midtermGroup: { title: "중간고사", weeks: [] },
   finalGroup: { title: "기말고사", weeks: [] },
   mustKnowConcepts: [],

@@ -445,20 +445,32 @@ section + section {
   padding: var(--ds-space-md);
 }
 
-.exam-prep-panel {
-  background: var(--ds-bg);
-  border: 1px solid var(--ds-rule);
-  border-radius: 8px;
-  overflow: hidden;
+.exam-prep-view {
+  container-type: inline-size;
+  display: grid;
+  gap: clamp(24px, 2.4vw, 40px);
+  margin: 0 auto;
+  max-width: 1680px;
+  min-width: 0;
+  width: 100%;
 }
 
-.exam-prep-toolbar {
+.exam-prep-hero {
+  max-width: none;
+}
+
+.exam-prep-overview {
   align-items: start;
-  border-bottom: 1px solid var(--ds-rule);
-  display: flex;
+  border-block: 1px solid var(--ds-rule);
+  display: grid;
   gap: var(--ds-space-md);
-  justify-content: space-between;
-  padding: var(--ds-space-md);
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-block: clamp(18px, 2vw, 28px);
+}
+
+.exam-prep-overview__copy {
+  max-width: 92ch;
+  min-width: 0;
 }
 
 .exam-prep-toolbar__actions {
@@ -466,15 +478,233 @@ section + section {
   display: flex;
   flex: 0 0 auto;
   gap: var(--ds-space-sm);
+  justify-content: flex-end;
 }
 
-.exam-prep-frame {
-  background: #fff;
-  border: 0;
+.exam-prep-template {
+  align-items: start;
+  display: grid;
+  gap: clamp(20px, 2.2vw, 36px);
+  grid-template-areas:
+    "order questions"
+    "chapters questions"
+    "concepts questions";
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.48fr);
+  min-width: 0;
+}
+
+.exam-prep-section {
+  min-width: 0;
+}
+
+.exam-prep-template > section + section,
+.exam-prep-bottom-grid > section + section {
+  margin-top: 0;
+}
+
+.exam-prep-section--order {
+  grid-area: order;
+}
+
+.exam-prep-section--chapters {
+  grid-area: chapters;
+}
+
+.exam-prep-section--concepts {
+  grid-area: concepts;
+}
+
+.exam-prep-section--questions {
+  grid-area: questions;
+}
+
+.exam-prep-order {
+  display: grid;
+  gap: 8px;
+  margin: var(--ds-space-sm) 0 0;
+  padding-left: 24px;
+}
+
+.exam-prep-order li::marker {
+  color: var(--ds-accent);
+  font-weight: 700;
+}
+
+.exam-prep-chapter-grid,
+.exam-prep-card-grid,
+.exam-prep-term-grid,
+.memorize-chapter-grid {
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
+.exam-prep-question-list {
+  display: grid;
+  gap: var(--ds-space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.exam-prep-chapter,
+.exam-prep-card,
+.exam-prep-term,
+.memorize-chapter {
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  padding: var(--ds-space-md);
+}
+
+.exam-prep-chapter span,
+.memorize-chapter span {
+  color: var(--ds-accent);
+  display: inline-block;
+  font-size: var(--ds-fs-meta);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.exam-prep-chapter h4,
+.exam-prep-card h3,
+.memorize-chapter h3 {
+  margin: 0 0 8px;
+}
+
+.exam-prep-chapter p,
+.exam-prep-card p,
+.exam-prep-term p,
+.memorize-chapter p {
+  margin: 0;
+}
+
+.exam-prep-chapter small,
+.memorize-chapter small {
+  color: var(--ds-muted);
   display: block;
-  height: min(1120px, 82vh);
-  min-height: 680px;
-  width: 100%;
+  font-size: var(--ds-fs-meta);
+  margin-top: 10px;
+}
+
+.exam-prep-card ul,
+.exam-prep-checklist {
+  margin: var(--ds-space-sm) 0 0;
+  padding-left: 18px;
+}
+
+.exam-prep-question {
+  background: #fff;
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.exam-prep-question[open] {
+  border-color: var(--ds-accent);
+}
+
+.exam-prep-question summary {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  gap: var(--ds-space-sm);
+  list-style: none;
+  padding: var(--ds-space-md);
+}
+
+.exam-prep-question summary::-webkit-details-marker {
+  display: none;
+}
+
+.exam-prep-question__number {
+  align-items: center;
+  background: var(--ds-bg-soft);
+  border: 1px solid var(--ds-rule);
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 34px;
+  font-weight: 700;
+  height: 34px;
+  justify-content: center;
+}
+
+.exam-prep-question__main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.exam-prep-question__meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.exam-prep-question__meta strong,
+.exam-prep-question__meta em {
+  border-radius: 999px;
+  font-size: var(--ds-fs-meta);
+  font-style: normal;
+  padding: 2px 8px;
+}
+
+.exam-prep-question__meta strong {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.exam-prep-question__meta em {
+  background: var(--ds-bg-soft);
+  color: var(--ds-fg-soft);
+}
+
+.exam-prep-question__title {
+  font-weight: 700;
+}
+
+.exam-prep-answer {
+  border-top: 1px solid var(--ds-rule);
+  display: grid;
+  gap: var(--ds-space-sm);
+  padding: 0 var(--ds-space-md) var(--ds-space-md);
+}
+
+.exam-prep-answer h4 {
+  margin: var(--ds-space-sm) 0 6px;
+}
+
+.exam-prep-answer ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.exam-prep-code {
+  background: #111827;
+  border-radius: 8px;
+  color: #f9fafb;
+  overflow-x: auto;
+  padding: var(--ds-space-sm);
+}
+
+.exam-prep-bottom-grid {
+  align-items: start;
+  display: grid;
+  gap: clamp(20px, 2.2vw, 36px);
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+}
+
+.exam-prep-bottom-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.exam-prep-term strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.exam-prep-term span {
+  color: var(--ds-muted);
+  font-size: var(--ds-fs-meta);
 }
 
 .exam-prep-empty {
@@ -3345,6 +3575,52 @@ body[data-route="pdf-workspace"] .content {
   max-width: none;
 }
 
+body[data-route="subject-exam-prep"] .content {
+  max-width: none;
+  padding: clamp(32px, 4vw, 56px) clamp(18px, 4vw, 56px) clamp(44px, 5vw, 72px);
+}
+
+@media (min-width: 1400px) {
+  .exam-prep-template {
+    grid-template-areas:
+      "order concepts questions"
+      "chapters concepts questions";
+    grid-template-columns: minmax(240px, 0.66fr) minmax(300px, 0.9fr) minmax(0, 1.54fr);
+  }
+}
+
+@media (max-width: 1180px) {
+  .exam-prep-template {
+    grid-template-areas:
+      "order chapters"
+      "concepts questions";
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+
+  .exam-prep-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .exam-prep-overview,
+  .exam-prep-template {
+    grid-template-columns: 1fr;
+  }
+
+  .exam-prep-template {
+    grid-template-areas:
+      "order"
+      "chapters"
+      "concepts"
+      "questions";
+  }
+
+  .exam-prep-toolbar__actions {
+    justify-content: flex-start;
+  }
+}
+
 /* sprint-W21-sprint-1 / iPad media breakpoint fix (sfs-harness-gaps audit
    evidence #11): 768px iPad portrait 가 mobile compact 로 collapse 되던 문제
    fix. 820px → 767px (iPad 768px 는 tablet layout 유지, < 768 phone 만 compact). */
@@ -3388,6 +3664,10 @@ body[data-route="pdf-workspace"] .content {
 
   .content {
     padding: var(--ds-space-lg) var(--ds-space-md);
+  }
+
+  body[data-route="subject-exam-prep"] .content {
+    padding: 28px clamp(14px, 4vw, 24px) 44px;
   }
 
   .topbar {
