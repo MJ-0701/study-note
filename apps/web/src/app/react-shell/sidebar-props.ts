@@ -21,6 +21,7 @@ import {
 } from "../routes";
 import { classSchedule } from "../../data/classSchedule";
 import type { StudyNotebook, SubjectNote } from "@study-note/domain";
+import { hasSubjectExamPrepArtifact } from "../../subject-views/subject-exam-prep-artifacts";
 import type { SidebarContext } from "../../subject-views/sidebar";
 import {
   isSubjectClassRoute,
@@ -190,11 +191,15 @@ function buildDepthNav(subject: SubjectNote, route: Route): DepthNavLink[] {
       label: "요약본",
       active: isSubjectSummaryRoute(subject, route)
     },
-    {
-      href: subjectExamPrepPath(subject),
-      label: "시험 대비",
-      active: isSubjectExamPrepRoute(subject, route)
-    },
+    ...(hasSubjectExamPrepArtifact(subject.id)
+      ? [
+          {
+            href: subjectExamPrepPath(subject),
+            label: "시험 대비",
+            active: isSubjectExamPrepRoute(subject, route)
+          }
+        ]
+      : []),
     {
       href: subjectMcpPath(subject),
       label: "MCP 호출",

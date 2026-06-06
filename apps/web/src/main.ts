@@ -335,7 +335,10 @@ import type { SubjectExamPrepViewProps } from "./subject-views/SubjectExamPrepVi
 import type { WeekViewProps } from "./subject-views/WeekView.tsx";
 import type { SubjectClassViewProps } from "./subject-views/SubjectClassView.tsx";
 import type { PdfWorkspacesViewProps } from "./subject-views/PdfWorkspacesView.tsx";
-import { getSubjectExamPrepArtifact } from "./subject-views/SubjectExamPrepView.tsx";
+import {
+  getSubjectExamPrepArtifact,
+  hasSubjectExamPrepArtifact
+} from "./subject-views/subject-exam-prep-artifacts";
 import { PERSONA_BY_SUBJECT } from "./subject-views/mcp";
 import { parseClassDateLabel } from "./subject-views/memorize";
 import {
@@ -5379,7 +5382,9 @@ export function buildSubjectClassProps(subject: SubjectNote): SubjectClassViewPr
     classPath: subjectClassPath(subject),
     summaryPath: subjectSummaryPath(subject),
     memorizePath: subjectMemorizePath(subject),
-    examPrepPath: subjectExamPrepPath(subject),
+    examPrepPath: hasSubjectExamPrepArtifact(subject.id)
+      ? subjectExamPrepPath(subject)
+      : null,
     pdfWorkspacePath: subjectPdfWorkspacePath(subject),
     weekCount: subject.weekNotes.length,
     materialCount: subjectMaterials.length,

@@ -79,7 +79,7 @@ function makeCtx(overrides: Partial<{
 // ─── (a) renderSubjectClassPage hero + 4 unit cards ─────────────────────
 
 describe("subject-class — (a) renderSubjectClassPage", () => {
-  test("case 1: hero + 4 unit cards + class-day grid + assignment section", () => {
+  test("case 1: hero + base unit cards + class-day grid + assignment section", () => {
     const ctx = makeCtx({ materials: [makeMaterial("m1", "x.pdf")] });
     const html = sc.renderSubjectClassPage(ctx, makeSubject());
     const c = parseC(html);
@@ -87,6 +87,23 @@ describe("subject-class — (a) renderSubjectClassPage", () => {
     assert.equal(c.querySelectorAll(".subject-unit-card").length, 4);
     assert.equal(c.querySelectorAll(".class-day-card").length, 1);
     assert.equal(c.querySelectorAll(".pdf-material-browser").length, 1);
+  });
+
+  test("case 1b: artifact subjects expose an exam-prep unit card", () => {
+    const ctx = makeCtx();
+    const html = sc.renderSubjectClassPage(ctx, makeSubject("digital-engineering", "디지털공학개론"));
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll(".subject-unit-card").length, 5);
+    assert.ok(html.includes("#/subjects/digital-engineering/exam-prep"));
+    assert.ok(html.includes("시험 대비"));
+  });
+
+  test("case 1c: subjects without artifacts do not expose a dead exam-prep card", () => {
+    const ctx = makeCtx();
+    const html = sc.renderSubjectClassPage(ctx, makeSubject("computer-introduction", "컴퓨터개론"));
+    const c = parseC(html);
+    assert.equal(c.querySelectorAll(".subject-unit-card").length, 4);
+    assert.ok(!html.includes("#/subjects/computer-introduction/exam-prep"));
   });
 
   test("case 2: hostile subject.title escape (multiple sites: h1 + aria-label + 4 cards meta hint)", () => {

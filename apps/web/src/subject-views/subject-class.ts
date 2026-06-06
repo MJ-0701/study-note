@@ -24,6 +24,7 @@ import {
 } from "../app/routes";
 import { formatReviewStatus } from "./subject-cards";
 import { getPdfMaterialKey } from "../pdf-workspace/workspace-store";
+import { hasSubjectExamPrepArtifact } from "./subject-exam-prep-artifacts";
 
 // ─── Public types ────────────────────────────────────────────────────────
 
@@ -89,11 +90,13 @@ export function renderSubjectClassPage(
         <strong>필수 암기노트</strong>
         <span class="subject-unit-card__hint">중간/기말 구간별 + 필수 개념.</span>
       </a>
-      <a class="subject-unit-card" href="${escapeHtml(subjectExamPrepPath(subject))}">
-        <span class="subject-unit-card__meta">시험</span>
-        <strong>시험 대비</strong>
-        <span class="subject-unit-card__hint">별도 PDF와 답안집을 과목 안에서 확인.</span>
-      </a>
+      ${hasSubjectExamPrepArtifact(subject.id)
+        ? `<a class="subject-unit-card" href="${escapeHtml(subjectExamPrepPath(subject))}">
+            <span class="subject-unit-card__meta">시험</span>
+            <strong>시험 대비</strong>
+            <span class="subject-unit-card__hint">별도 PDF와 답안집을 과목 안에서 확인.</span>
+          </a>`
+        : ""}
       <a class="subject-unit-card" href="${escapeHtml(subjectPdfWorkspacePath(subject))}">
         <span class="subject-unit-card__meta">PDF</span>
         <strong>PDF 작업공간</strong>

@@ -153,8 +153,8 @@ describe("sidebar — (c) renderSubjectNavItem", () => {
 
 describe("sidebar — (d) renderCurrentSubjectDepthNav", () => {
   test("case 7: active class applied to current route", () => {
-    const subject = makeSubject("s1", "수학");
-    const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject-mcp", subjectId: "s1" } as never);
+    const subject = makeSubject("digital-engineering", "디지털공학개론");
+    const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject-mcp", subjectId: "digital-engineering" } as never);
     const c = parseContainer(html);
     const mcpLink = c.querySelectorAll(".subject-sidebar-depth__link")[3];
     assert.ok(mcpLink, "mcp link exists");
@@ -167,6 +167,18 @@ describe("sidebar — (d) renderCurrentSubjectDepthNav", () => {
     const c = parseContainer(html);
     assert.equal(c.querySelectorAll("script,img").length, 0);
     assert.equal(c.querySelectorAll("[onerror]").length, 0);
+  });
+
+  test("case 8b: artifact subjects expose exam-prep depth nav", () => {
+    const subject = makeSubject("digital-engineering", "디지털공학개론");
+    const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject", subjectId: "digital-engineering" } as never);
+    assert.ok(html.includes("#/subjects/digital-engineering/exam-prep"));
+  });
+
+  test("case 8c: subjects without artifacts hide exam-prep depth nav", () => {
+    const subject = makeSubject("computer-introduction", "컴퓨터개론");
+    const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject", subjectId: "computer-introduction" } as never);
+    assert.ok(!html.includes("#/subjects/computer-introduction/exam-prep"));
   });
 });
 

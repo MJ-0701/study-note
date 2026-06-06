@@ -68,11 +68,11 @@ export interface SubjectClassViewProps {
   subjectTitle: string;
   examLabel: string;
   weekRange: string;
-  // 4 unit card hrefs
+  // unit card hrefs
   classPath: string;
   summaryPath: string;
   memorizePath: string;
-  examPrepPath: string;
+  examPrepPath: string | null;
   pdfWorkspacePath: string;
   weekCount: number;
   materialCount: number;
@@ -114,11 +114,13 @@ function UnitGrid({ props }: { props: SubjectClassViewProps }): React.ReactEleme
           <strong>필수 암기노트</strong>
           <span className="subject-unit-card__hint">중간/기말 구간별 + 필수 개념.</span>
         </a>
-        <a className="subject-unit-card" href={examPrepPath}>
-          <span className="subject-unit-card__meta">시험</span>
-          <strong>시험 대비</strong>
-          <span className="subject-unit-card__hint">별도 PDF와 답안집을 과목 안에서 확인.</span>
-        </a>
+        {examPrepPath && (
+          <a className="subject-unit-card" href={examPrepPath}>
+            <span className="subject-unit-card__meta">시험</span>
+            <strong>시험 대비</strong>
+            <span className="subject-unit-card__hint">별도 PDF와 답안집을 과목 안에서 확인.</span>
+          </a>
+        )}
         <a className="subject-unit-card" href={pdfWorkspacePath}>
           <span className="subject-unit-card__meta">PDF</span>
           <strong>PDF 작업공간</strong>
