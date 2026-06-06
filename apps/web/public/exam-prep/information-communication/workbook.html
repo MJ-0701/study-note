@@ -1,0 +1,1496 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>정보통신개론 예상문제집</title>
+  <style>
+    :root { color-scheme: light; --ink:#171717; --muted:#60646c; --line:#d6d9de; --paper:#fff; --accent:#0f766e; --soft:#eef7f5; --warn:#9a3412; --ok:#047857; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:#f7f7f4; }
+    main { max-width: 920px; margin: 0 auto; padding: 32px 20px 72px; background: var(--paper); min-height: 100vh; }
+    h1 { font-size: 30px; margin: 0 0 18px; }
+    h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+    h3 { font-size: 18px; margin: 22px 0 8px; }
+    p { margin: 8px 0; }
+    ul,ol { padding-left: 24px; }
+    li { margin: 4px 0; }
+    table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 15px; }
+    th,td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+    th { background:#f3f4f1; }
+    .meta { color: var(--muted); }
+    .explanation { border-left: 4px solid var(--accent); background: var(--soft); padding: 10px 14px; margin: 8px 0 18px; }
+    .explanation.hidden { display:none; }
+    .toggle { border:1px solid var(--accent); background:#fff; color:var(--accent); border-radius:6px; padding:7px 10px; cursor:pointer; font-weight:600; }
+    .issue-flag { display:inline-flex; align-items:center; gap:6px; margin:0 0 8px; color:var(--muted); font-size:14px; }
+    .issue-flag input { width:auto; }
+    .validation { margin: 6px 0 12px; }
+    .validation summary { cursor:pointer; list-style:none; }
+    .validation summary::-webkit-details-marker { display:none; }
+    .badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 9px; font-size:13px; font-weight:700; }
+    .badge.verified { color:#065f46; background:#dff6ec; }
+    .badge.uncertain { color:#9a3412; background:#fff1d7; }
+    .badge.wrong { color:#991b1b; background:#fee2e2; }
+    .validation-detail { color:var(--muted); margin:7px 0 0 0; }
+    .concept-card { border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:14px 0; background:#fbfbf8; }
+    .concept-card h3 { margin-top:0; }
+    .concept-actions,.question-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0 12px; }
+    .concept-output,.qa-output { border-left:4px solid var(--line); padding:8px 12px; margin:8px 0 16px; background:#f8faf9; }
+    .concept-output:empty,.qa-output:empty { display:none; }
+    .cached-answer + .cached-answer { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
+    .cached-answer-header { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin:0 0 6px; }
+    .cached-answer.is-collapsed .cached-answer-body { display:none; }
+    .cached-question { flex:1 1 auto; margin:0; font-size:14px; }
+    .cached-answer-toggle { flex:0 0 auto; border:1px solid var(--accent); background:#fff; color:var(--accent); border-radius:6px; padding:5px 8px; cursor:pointer; font-weight:700; font-size:13px; }
+    .error-card { border:1px solid #fecaca; border-left:4px solid #dc2626; background:#fff7f7; color:#7f1d1d; border-radius:8px; padding:10px 12px; margin:8px 0 16px; }
+    .error-card p { margin:0 0 8px; }
+    .error-card .retry { border:1px solid #dc2626; background:#fff; color:#991b1b; border-radius:6px; padding:6px 9px; cursor:pointer; font-weight:700; }
+    .concept-tags { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 12px; }
+    .concept-tag { border:1px solid var(--accent); color:var(--accent); border-radius:999px; padding:3px 8px; text-decoration:none; font-size:13px; font-weight:700; }
+    .qa-input { flex:1 1 240px; border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; }
+    .concept-actions, .question-actions { display:none; }
+    .katex-local { font-family: "Times New Roman", "Cambria Math", serif; white-space:nowrap; }
+    .math-overline { text-decoration: overline; text-decoration-thickness: 0.06em; display:inline-block; }
+  </style>
+</head>
+<body>
+<main>
+<h1>정보통신개론 레포트2 시험직결 답안집</h1>
+<h2>출제유력 범위 요약</h2>
+<p>교수님이 레포트2에서 시험문제를 그대로 낸다고 한 기준으로, 이 화면은 레포트 문항을 직접 대비하는 답안집입니다.
+먼저 선행개념을 보고, 그 다음 18개 설명형 문항과 12개 용어 정의를 반복하세요.</p>
+
+<h1>정보통신개론 레포트2 시험직결 해설</h1>
+<p>기준 자료: <code>정보통신개론_레포트2_채명정_3.pdf</code></p>
+
+<p>교수님이 여기서 시험문제를 그대로 낸다고 한 기준으로, 이 파일은 <strong>레포트 문항을 그대로 시험 답안화</strong>한 정리다.
+공부 순서는 <code>선행개념 -&gt; 문항별 답안 -&gt; 용어 정의</code>가 좋다.</p>
+
+<h2>선행개념 정리</h2>
+<section class="concept-card" id="concept-e59cdadee4">
+<h3>개념: LAN과 IEEE 802 데이터링크 계층</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="LAN과 IEEE 802 데이터링크 계층" data-anchor="concept-e59cdadee4" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="LAN과 IEEE 802 데이터링크 계층" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-e59cdadee4"></div><div class="qa-output"></div>
+<ul>
+<li>LAN은 한 건물, 학교, 기관처럼 좁은 범위 안의 장치들을 연결하는 근거리 통신망이다.</li>
+<li>LAN의 핵심 특징은 짧은 거리, 빠른 전송속도, 낮은 오류율, 쉬운 설치/확장, 기관 자체 관리다.</li>
+<li>IEEE 802에서는 데이터링크 계층을 LLC와 MAC으로 나누어 설명한다.</li>
+<li>LLC는 상위 네트워크 계층과의 인터페이스, 흐름제어, 오류제어, 순서제어를 맡는다.</li>
+<li>MAC은 공유 매체 접근 제어, MAC 주소 처리, 프레임 생성, FCS 오류 검출을 맡는다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-fd8bd6c53d">
+<h3>개념: 매체 접근 제어</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="매체 접근 제어" data-anchor="concept-fd8bd6c53d" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="매체 접근 제어" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-fd8bd6c53d"></div><div class="qa-output"></div>
+<ul>
+<li>여러 장치가 같은 전송매체를 공유하면 누가 언제 보낼지 정해야 한다.</li>
+<li>CSMA/CD는 유선 이더넷에서 충돌을 감지하는 방식이다.</li>
+<li>토큰링과 토큰버스는 토큰을 가진 장치만 전송하게 해서 충돌을 없애는 방식이다.</li>
+<li>무선랜은 송신 중 충돌 감지가 어려워 CSMA/CA로 충돌을 피한다.</li>
+<li>시험에서는 <code>CSMA/CD = 충돌 검출</code>, <code>CSMA/CA = 충돌 회피</code>를 가장 먼저 떠올리면 된다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-6110b65436">
+<h3>개념: 이더넷과 무선랜 프레임</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="이더넷과 무선랜 프레임" data-anchor="concept-6110b65436" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="이더넷과 무선랜 프레임" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-6110b65436"></div><div class="qa-output"></div>
+<ul>
+<li>이더넷 프레임은 목적지 MAC, 출발지 MAC, 길이/타입, 데이터, FCS를 포함한다.</li>
+<li>Preamble과 SFD는 수신 동기와 프레임 시작 표시용이다.</li>
+<li>무선랜 MAC 프레임은 AP와 분배 시스템을 거칠 수 있어 주소 필드가 최대 4개까지 있다.</li>
+<li>FCS는 프레임 오류 검출용 필드다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-572809668c">
+<h3>개념: 네트워크 장비와 OSI 계층</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="네트워크 장비와 OSI 계층" data-anchor="concept-572809668c" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="네트워크 장비와 OSI 계층" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-572809668c"></div><div class="qa-output"></div>
+<ul>
+<li>리피터와 허브는 1계층 물리계층 장비다. 신호/비트만 본다.</li>
+<li>브리지와 스위치는 2계층 데이터링크 계층 장비다. MAC 주소와 프레임을 본다.</li>
+<li>라우터는 3계층 네트워크 계층 장비다. IP 주소와 패킷을 본다.</li>
+<li>게이트웨이는 상위 계층까지 포함해 서로 다른 프로토콜을 변환한다.</li>
+<li>계층이 올라갈수록 더 많은 정보를 해석한다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-b923e7e91f">
+<h3>개념: 회선교환과 패킷교환</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="회선교환과 패킷교환" data-anchor="concept-b923e7e91f" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="회선교환과 패킷교환" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-b923e7e91f"></div><div class="qa-output"></div>
+<ul>
+<li>회선교환은 통신 전에 전용 경로를 설정한다. 전화망처럼 순서와 지연이 안정적이다.</li>
+<li>데이터그램 방식은 패킷마다 독립적으로 경로를 정한다. IP 방식과 연결된다.</li>
+<li>가상회선 방식은 통신 전에 논리 경로를 설정하고 그 경로로 순서대로 보낸다.</li>
+<li>시험 답안은 <code>경로 설정 여부</code>, <code>순서 보장 여부</code>, <code>효율</code>, <code>지연</code>, <code>장단점</code>으로 비교하면 된다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-7d7ed83c75">
+<h3>개념: TCP/IP 계층 구조</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="TCP/IP 계층 구조" data-anchor="concept-7d7ed83c75" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="TCP/IP 계층 구조" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-7d7ed83c75"></div><div class="qa-output"></div>
+<ul>
+<li>OSI는 7계층 이론 모델이고, TCP/IP는 인터넷에서 실제 사용하는 4계층 모델이다.</li>
+<li>TCP/IP 응용 계층은 OSI의 응용/표현/세션 계층에 대응한다.</li>
+<li>TCP/IP 전송 계층은 TCP와 UDP가 핵심이다.</li>
+<li>TCP/IP IP 계층은 IP, ICMP, IGMP, 라우팅 프로토콜, ARP/RARP와 연결된다.</li>
+<li>네트워크 액세스 계층은 물리/데이터링크 계층 기능을 담당한다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-7cbd5eb6fe">
+<h3>개념: 인터넷 주소 3가지</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="인터넷 주소 3가지" data-anchor="concept-7cbd5eb6fe" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="인터넷 주소 3가지" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-7cbd5eb6fe"></div><div class="qa-output"></div>
+<ul>
+<li>MAC 주소는 데이터링크 계층 주소이고 NIC에 저장된다.</li>
+<li>IP 주소는 네트워크 계층 논리 주소이고 OS 네트워크 설정에 저장된다.</li>
+<li>호스트 이름/도메인 이름은 응용 계층에서 사람이 쓰기 쉬운 문자 이름이고 DNS가 IP로 바꾼다.</li>
+<li>시험에서는 <code>계층</code>, <code>저장 위치</code>, <code>역할</code>을 세트로 써야 한다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-d7b8563fc6">
+<h3>개념: IP 헤더와 단편화</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="IP 헤더와 단편화" data-anchor="concept-d7b8563fc6" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="IP 헤더와 단편화" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-d7b8563fc6"></div><div class="qa-output"></div>
+<ul>
+<li>IPv4 헤더는 32비트 단위로 그리면 외우기 쉽다.</li>
+<li>Version, Header Length, Service Type, Total Length가 첫 줄이다.</li>
+<li>Identification, Flags, Fragment Offset은 단편화와 재조립에 쓰인다.</li>
+<li>TTL은 라우터를 지날 때마다 줄어 0이면 폐기된다.</li>
+<li>Protocol은 상위 프로토콜을 알려준다. TCP=6, UDP=17, ICMP=1.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-6fb8563b6b">
+<h3>개념: TCP 헤더와 신뢰성</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="TCP 헤더와 신뢰성" data-anchor="concept-6fb8563b6b" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="TCP 헤더와 신뢰성" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-6fb8563b6b"></div><div class="qa-output"></div>
+<ul>
+<li>TCP는 연결형, 신뢰성, 순서 보장, 흐름제어, 오류제어가 핵심이다.</li>
+<li>순서 번호는 보낸 데이터의 순서를 나타낸다.</li>
+<li>확인응답 번호는 다음에 받을 바이트 번호를 뜻한다.</li>
+<li>윈도우 크기는 수신측 버퍼 기준의 흐름제어에 쓰인다.</li>
+<li>코드 비트 U, A, P, R, S, F는 긴급/ACK/Push/Reset/SYN/FIN이다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-afb36173a3">
+<h3>개념: ARP, RARP, DNS</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="ARP, RARP, DNS" data-anchor="concept-afb36173a3" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="ARP, RARP, DNS" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-afb36173a3"></div><div class="qa-output"></div>
+<ul>
+<li>ARP는 IP 주소를 MAC 주소로 바꾼다.</li>
+<li>RARP는 MAC 주소를 IP 주소로 바꾼다.</li>
+<li>DNS는 도메인 이름을 IP 주소로 바꾼다.</li>
+<li>ARP/RARP는 같은 LAN 안의 주소 해석, DNS는 인터넷 이름 해석으로 구분한다.</li>
+</ul>
+
+</section>
+<section class="concept-card" id="concept-b05cafad96">
+<h3>개념: IPv6와 라우팅 프로토콜</h3>
+<div class="concept-actions"><button class="toggle" type="button" data-concept="IPv6와 라우팅 프로토콜" data-anchor="concept-b05cafad96" onclick="loadConcept(this)">더 깊이</button><form class="qa-form" method="get" action="/workbook" data-concept="IPv6와 라우팅 프로토콜" onsubmit="return submitStudyQuestion(event, this)"><input type="hidden" name="subject" value="정보통신개론"><input class="qa-input" name="question" placeholder="이 개념에 질문"><button class="toggle" type="submit">질문</button></form></div><div class="concept-output" id="concept-output-concept-b05cafad96"></div><div class="qa-output"></div>
+<ul>
+<li>IPv6의 핵심은 128비트 주소, 헤더 단순화, 보안, QoS, 자동 구성이다.</li>
+<li>RIP는 거리 벡터 방식이고 홉 수를 기준으로 한다.</li>
+<li>OSPF는 링크 상태 방식이고 비용을 기준으로 한다.</li>
+<li>작은 네트워크는 RIP, 큰 네트워크는 OSPF가 적합하다고 정리하면 된다.</li>
+</ul>
+
+</section>
+<h2>I. 설명형 문항</h2>
+<h3>1. LAN의 정의 및 특징, MAC 계층과 LLC 계층의 기능</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>LAN은 건물, 학교, 회사처럼 제한된 지역 안의 컴퓨터, 단말, 주변기기를 연결하여 데이터와 자원을 공유하는 근거리 통신망이다. 보통 한 기관이 직접 소유하고 관리한다.</p>
+
+<p>LAN의 특징은 전송 거리가 짧고, 전송 속도가 빠르며, 오류율이 낮고, 설치와 확장이 비교적 쉽다는 점이다. 또한 여러 장치가 전송매체를 공유할 수 있으므로 매체 접근 제어가 필요하다.</p>
+
+<p>IEEE 802에서는 데이터링크 계층을 LLC와 MAC으로 나눈다. LLC는 상위 네트워크 계층과의 인터페이스 역할을 하며 흐름제어, 오류제어, 순서제어를 담당한다. MAC은 공유 매체를 누가 사용할지 정하는 접근 제어 기능을 담당하고, MAC 주소 처리, 프레임 생성, FCS를 통한 오류 검출을 수행한다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>이 문제는 LAN 정의만 쓰면 부족하다. 반드시 <code>LAN 특징 -&gt; LLC 기능 -&gt; MAC 기능</code> 순서로 써야 한다. LLC는 상위 계층과 연결되는 공통 부분이고, MAC은 실제 매체에 접근하는 규칙이다. CSMA/CD나 토큰 패싱은 MAC 계층 예시로 넣으면 답안이 선명해진다.</p>
+
+<h3>2. LAN 토폴로지 5개</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>토폴로지는 네트워크 장치들의 연결 형태를 뜻한다.</p>
+
+<table>
+<thead>
+<tr>
+<th>토폴로지</th>
+<th>설명</th>
+<th>장단점 포인트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>성형 Star</td>
+<td>중앙 허브/스위치에 각 노드를 1:1로 연결</td>
+<td>한 노드 고장은 영향이 작지만 중앙 장치 고장 시 전체 장애</td>
+</tr>
+<tr>
+<td>버스형 Bus</td>
+<td>하나의 공통 케이블에 모든 노드를 연결</td>
+<td>단순하고 저렴하지만 케이블 장애 시 전체 영향</td>
+</tr>
+<tr>
+<td>링형 Ring</td>
+<td>노드를 고리 모양으로 연결하고 신호/토큰이 순환</td>
+<td>순서 보장, 한 곳 장애 시 전체 영향 가능</td>
+</tr>
+<tr>
+<td>트리형 Tree</td>
+<td>성형 구조를 계층적으로 확장</td>
+<td>확장 쉬움, 상위 노드 장애 시 하위 구간 단절</td>
+</tr>
+<tr>
+<td>망형 Mesh</td>
+<td>노드들을 그물처럼 다중 경로로 직접 연결</td>
+<td>신뢰성 높음, 비용과 배선 복잡도 큼</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>객관식으로 나오면 <code>중앙 장치</code>, <code>공통 케이블</code>, <code>고리</code>, <code>계층</code>, <code>그물</code> 키워드를 보고 맞추면 된다. 주관식이면 각 형태마다 장점/단점 한 개씩만 붙여도 충분하다.</p>
+
+<h3>3. CSMA/CD 특징, 동작원리, 이더넷 프레임 구조</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>CSMA/CD는 Carrier Sense Multiple Access with Collision Detection의 약자로, 유선 이더넷 IEEE 802.3에서 사용하는 매체 접근 방식이다. 전송 전에 매체가 비어 있는지 감지하고, 여러 장치가 동시에 전송해 충돌이 발생하면 이를 검출한 뒤 재전송한다.</p>
+
+<p>동작 순서는 다음과 같다.</p>
+
+<ol>
+<li>보낼 데이터가 있으면 매체가 사용 중인지 확인한다.</li>
+<li>매체가 비어 있으면 전송하고, 사용 중이면 기다린다.</li>
+<li>전송 중에도 충돌 여부를 계속 감지한다.</li>
+<li>충돌이 감지되면 전송을 멈추고 Jam 신호를 보낸다.</li>
+<li>임의의 백오프 시간을 기다린 후 다시 전송을 시도한다.</li>
+</ol>
+
+<p>이더넷 프레임 구조는 다음과 같다.</p>
+
+<p><code>Preamble(7) | SFD(1) | Destination MAC(6) | Source MAC(6) | Length/Type(2) | Data(46~1500) | FCS(4)</code></p>
+
+<p><strong>해설</strong></p>
+
+<p>CSMA/CD는 <code>듣고 -&gt; 비면 보내고 -&gt; 충돌 나면 멈추고 -&gt; 랜덤 대기 후 재전송</code>으로 외운다. 프레임 구조는 byte 수까지 묻는 빈칸형으로 나올 수 있으므로 <code>7,1,6,6,2,46~1500,4</code> 순서가 중요하다.</p>
+
+<h3>4. 토큰링과 토큰버스</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>토큰링과 토큰버스는 모두 토큰 패싱 방식이다. 토큰을 가진 노드만 데이터를 전송할 수 있으므로 충돌이 발생하지 않는다.</p>
+
+<p>토큰링 IEEE 802.5는 물리적 또는 논리적으로 링 구조를 이루며, 토큰이 링을 따라 순환한다. 토큰을 받은 노드가 데이터를 전송하고, 전송 후 토큰을 다음 노드로 넘긴다. 순서가 보장되고 부하가 높아도 안정적이다.</p>
+
+<p>토큰버스 IEEE 802.4는 물리적으로는 버스 구조지만 논리적으로는 링처럼 노드 순서를 정해 토큰을 전달한다. 우선순위 제어와 실시간 전송에 유리하여 공장 자동화 등에 사용된다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>둘의 공통점은 <code>토큰이 있어야 전송</code>, 차이점은 <code>토큰링은 링</code>, <code>토큰버스는 물리 버스/논리 링</code>이다. 객관식에서 “충돌이 없다”가 나오면 토큰 방식과 연결한다.</p>
+
+<h3>5. 10BASE-T, 10BASE5, 10BASE-F 의미</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>이더넷 규격 이름은 <code>[속도][전송방식][매체 또는 거리]</code>를 뜻한다. <code>10</code>은 10Mbps, <code>BASE</code>는 베이스밴드 전송을 뜻한다.</p>
+
+<table>
+<thead>
+<tr>
+<th>규격</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10BASE5</td>
+<td>10Mbps, 베이스밴드, 최대 500m, 굵은 동축케이블</td>
+</tr>
+<tr>
+<td>10BASE2</td>
+<td>10Mbps, 베이스밴드, 약 185m, 가는 동축케이블</td>
+</tr>
+<tr>
+<td>10BASE-T</td>
+<td>10Mbps, 베이스밴드, UTP 꼬임선, 허브 중심 성형, 약 100m</td>
+</tr>
+<tr>
+<td>10BASE-F</td>
+<td>10Mbps, 베이스밴드, 광섬유</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>숫자가 뒤에 오면 대체로 거리 단서이고, 문자가 오면 매체 단서다. <code>T = Twisted Pair</code>, <code>F = Fiber</code>로 외우면 된다.</p>
+
+<h3>6. 무선랜 IEEE 802.11</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>BSS는 AP 하나와 그 AP에 연결된 단말들의 집합으로 무선랜의 기본 단위이다. ESS는 여러 BSS를 분배 시스템으로 연결한 확장 무선망이며 AP 간 로밍이 가능하다. 애드혹 또는 IBSS는 AP 없이 단말끼리 직접 연결하는 임시 무선망이다.</p>
+
+<p>물리층 기술에는 FHSS, DSSS, IR, OFDM이 있다. FHSS는 주파수를 일정 패턴으로 바꾸며 전송해 간섭에 강하다. DSSS는 데이터를 칩 코드로 확산해 넓은 대역으로 전송한다. IR은 적외선으로 근거리 전송한다. OFDM은 여러 직교 부반송파에 데이터를 나누어 고속 전송에 유리하다.</p>
+
+<p>CSMA/CA는 무선에서 충돌을 직접 감지하기 어렵기 때문에 충돌을 미리 피하는 방식이다. 매체가 비어도 IFS를 기다리고 백오프 후 전송하며, 수신측 ACK로 성공 여부를 확인한다. 필요하면 RTS/CTS를 사용한다.</p>
+
+<p>숨겨진 터미널 문제는 서로 감지하지 못하는 두 단말이 같은 AP로 동시에 전송해 AP에서 충돌이 생기는 문제다. RTS/CTS로 매체를 예약하여 해결할 수 있다.</p>
+
+<p>무선랜 MAC 프레임 구조는 <code>Frame Control | Duration/ID | Address 1~4 | Sequence Control | Frame Body | FCS</code>이다. 무선은 AP와 분배 시스템을 거칠 수 있어 주소 필드가 최대 4개까지 있다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>이 문제는 긴 문항이라 네 덩어리로 나눠 외워야 한다. <code>BSS/ESS/Ad-hoc</code>, <code>물리층 4개</code>, <code>CSMA/CA와 숨겨진 터미널</code>, <code>MAC 프레임</code> 순서다. 객관식이면 FHSS/DSSS/OFDM 특징 구분과 RTS/CTS 역할이 자주 걸린다.</p>
+
+<h3>7. 트랜시버, 리피터, 허브, 브리지, 스위치, 라우터, 게이트웨이</h3>
+<p><strong>시험 답안</strong></p>
+
+<table>
+<thead>
+<tr>
+<th>장비</th>
+<th>계층</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>트랜시버</td>
+<td>물리</td>
+<td>신호를 송수신하는 장치</td>
+</tr>
+<tr>
+<td>리피터</td>
+<td>물리</td>
+<td>약해진 신호를 증폭/재생해 전송 거리를 늘림</td>
+</tr>
+<tr>
+<td>허브</td>
+<td>물리</td>
+<td>포트가 여러 개인 리피터, 들어온 신호를 모든 포트로 전달</td>
+</tr>
+<tr>
+<td>브리지</td>
+<td>데이터링크</td>
+<td>MAC 주소를 보고 LAN을 연결/분리하고 충돌 영역을 나눔</td>
+</tr>
+<tr>
+<td>스위치</td>
+<td>데이터링크</td>
+<td>포트가 많은 고속 브리지, MAC 주소표로 해당 포트에만 전달</td>
+</tr>
+<tr>
+<td>라우터</td>
+<td>네트워크</td>
+<td>IP 주소를 보고 서로 다른 네트워크 사이의 경로를 결정</td>
+</tr>
+<tr>
+<td>게이트웨이</td>
+<td>상위 계층</td>
+<td>서로 다른 프로토콜의 망을 연결하고 변환</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>이 문항은 장비 이름과 OSI 계층을 같이 외우는 것이 핵심이다. <code>허브까지는 물리</code>, <code>브리지/스위치는 MAC</code>, <code>라우터는 IP</code>, <code>게이트웨이는 변환</code>으로 정리한다.</p>
+
+<h3>8. 리피터, 브리지, 라우터, 게이트웨이와 OSI 7계층</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>리피터는 1계층 물리계층 장비로 비트 신호를 재생한다. 브리지는 2계층 데이터링크 계층 장비로 MAC 주소와 프레임을 보고 전달 여부를 결정한다. 라우터는 3계층 네트워크 계층 장비로 IP 주소와 패킷을 보고 경로를 선택한다. 게이트웨이는 4~7계층 상위 계층까지 포함해 서로 다른 프로토콜을 변환한다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>문장형으로 쓰면 <code>계층 -&gt; 보는 정보 -&gt; 역할</code> 순서가 좋다. 예를 들어 라우터는 “3계층에서 IP 주소를 보고 패킷을 전달한다”처럼 쓰면 깔끔하다.</p>
+
+<h3>9. 브리지와 스위치 비교</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>브리지와 스위치는 모두 데이터링크 계층에서 동작하며 MAC 주소를 보고 프레임을 전달하고 충돌 영역을 나눈다. 스위치는 포트가 많고 빠른 브리지라고 볼 수 있다.</p>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>브리지</th>
+<th>스위치</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>포트 수</td>
+<td>적음</td>
+<td>많음</td>
+</tr>
+<tr>
+<td>처리 방식</td>
+<td>소프트웨어 처리 비중 큼</td>
+<td>ASIC 등 하드웨어 기반 고속 처리</td>
+</tr>
+<tr>
+<td>속도</td>
+<td>느린 편</td>
+<td>빠름</td>
+</tr>
+<tr>
+<td>충돌 영역</td>
+<td>세그먼트 분리</td>
+<td>포트마다 충돌 영역 분리</td>
+</tr>
+<tr>
+<td>용도</td>
+<td>예전 LAN 분할</td>
+<td>현대 LAN 기본 장비</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>주관식은 공통점과 차이점을 모두 써야 점수가 안정적이다. 첫 문장에 공통점을 쓰고, 표나 문장으로 포트 수/속도/충돌 영역을 비교한다.</p>
+
+<h3>10. 회선교환망과 패킷교환망 비교</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>회선교환은 통신 전에 전용 경로를 설정하고 통신이 끝날 때까지 그 경로를 독점한다. 순서가 보장되고 지연이 안정적이어서 전화망에 적합하지만, 사용하지 않는 시간에도 회선을 차지하므로 효율이 낮다.</p>
+
+<p>패킷교환의 데이터그램 방식은 연결을 미리 설정하지 않고 패킷마다 독립적으로 경로를 선택한다. IP가 대표적이다. 회선 효율이 높고 장애에 강하지만 패킷 순서가 바뀔 수 있고 지연이 일정하지 않다.</p>
+
+<p>패킷교환의 가상회선 방식은 통신 전에 논리적인 경로를 설정한 후 그 경로로 패킷을 순서대로 전송한다. X.25, 프레임 릴레이, ATM과 연결된다. 순서 보장과 효율을 절충하지만 경로 설정 부담이 있고 설정 경로 장애에 약하다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>비교 기준은 <code>경로를 미리 잡는가</code>, <code>전용인가 공유인가</code>, <code>순서가 보장되는가</code>, <code>효율과 지연이 어떤가</code>다. 시험장에서 시간이 없으면 “회선=전용/안정/비효율, 데이터그램=비연결/효율/순서불안, 가상회선=논리연결/순서/설정부담”으로 압축한다.</p>
+
+<h3>11. OSI 참조모델과 TCP/IP 비교, TCP/IP 계층별 프로토콜</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>OSI 참조모델은 통신 기능을 7계층으로 나눈 이론적 모델이고, TCP/IP는 인터넷에서 실제 사용하는 4계층 프로토콜 체계이다.</p>
+
+<table>
+<thead>
+<tr>
+<th>OSI 7계층</th>
+<th>TCP/IP 4계층</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>응용, 표현, 세션</td>
+<td>응용 계층</td>
+</tr>
+<tr>
+<td>전송</td>
+<td>전송 계층</td>
+</tr>
+<tr>
+<td>네트워크</td>
+<td>IP 계층</td>
+</tr>
+<tr>
+<td>데이터링크, 물리</td>
+<td>네트워크 액세스 계층</td>
+</tr>
+</tbody>
+</table>
+
+<p>TCP/IP 계층별 대표 프로토콜:</p>
+
+<table>
+<thead>
+<tr>
+<th>TCP/IP 계층</th>
+<th>대표 프로토콜</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>응용 계층</td>
+<td>HTTP, FTP, TELNET, SMTP, DNS, SNMP, Ping</td>
+</tr>
+<tr>
+<td>전송 계층</td>
+<td>TCP, UDP</td>
+</tr>
+<tr>
+<td>IP 계층</td>
+<td>IP, ICMP, IGMP, OSPF, RIP, ARP, RARP</td>
+</tr>
+<tr>
+<td>네트워크 액세스 계층</td>
+<td>Ethernet, LAN 관련 프로토콜</td>
+</tr>
+</tbody>
+</table>
+
+<p>ARP와 RARP는 IP 주소와 MAC 주소를 연결하므로 IP 계층과 네트워크 액세스 계층 사이에 걸쳐 있다고 설명할 수 있다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>이 문제는 그림 8-2, 8-3을 요구하므로 표를 그대로 그릴 수 있어야 한다. 핵심은 OSI의 상위 3계층이 TCP/IP 응용 계층으로 합쳐지고, OSI의 하위 2계층이 네트워크 액세스 계층으로 합쳐진다는 점이다.</p>
+
+<h3>12. 인터넷 사용에 필요한 주소 3가지</h3>
+<p><strong>시험 답안</strong></p>
+
+<table>
+<thead>
+<tr>
+<th>주소</th>
+<th>계층</th>
+<th>저장 위치</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MAC 주소</td>
+<td>데이터링크 계층</td>
+<td>NIC에 제조 시 저장, 48비트</td>
+<td>같은 LAN 안에서 장치 구분</td>
+</tr>
+<tr>
+<td>IP 주소</td>
+<td>네트워크 계층</td>
+<td>OS 네트워크 설정, 변경 가능</td>
+<td>인터넷에서 목적지까지 패킷 전달</td>
+</tr>
+<tr>
+<td>호스트 이름/도메인 이름</td>
+<td>응용 계층</td>
+<td>DNS 서버 또는 hosts 파일</td>
+<td>사람이 읽기 쉬운 이름을 IP로 변환</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>이 문항은 괄호에 <code>어느 계층</code>, <code>어디 저장</code>, <code>역할</code>이라고 되어 있으므로 이 세 칸을 빠뜨리면 안 된다. 도메인 이름 예시는 <code>unicorn.soongsil.ac.kr</code>처럼 쓰면 좋다.</p>
+
+<h3>13. IP 주소 체계 클래스 분류</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>IPv4 주소는 32비트이고 8비트씩 네 부분으로 나누어 점 십진 표기한다. 앞부분은 네트워크 식별자, 뒷부분은 호스트 식별자이며 시작 비트에 따라 클래스를 나눈다.</p>
+
+<table>
+<thead>
+<tr>
+<th>클래스</th>
+<th>시작 비트</th>
+<th>주소 범위</th>
+<th>용도</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>0</td>
+<td>0.0.0.0 ~ 127.255.255.255</td>
+<td>대규모 네트워크</td>
+</tr>
+<tr>
+<td>B</td>
+<td>10</td>
+<td>128.0.0.0 ~ 191.255.255.255</td>
+<td>중규모 네트워크</td>
+</tr>
+<tr>
+<td>C</td>
+<td>110</td>
+<td>192.0.0.0 ~ 223.255.255.255</td>
+<td>소규모 네트워크</td>
+</tr>
+<tr>
+<td>D</td>
+<td>1110</td>
+<td>224.0.0.0 ~ 239.255.255.255</td>
+<td>멀티캐스트</td>
+</tr>
+<tr>
+<td>E</td>
+<td>1111</td>
+<td>240.0.0.0 ~ 255.255.255.255</td>
+<td>연구/예약</td>
+</tr>
+</tbody>
+</table>
+
+<p>추가로 127.x.x.x는 루프백 주소이고, 10.x.x.x, 172.16~31.x.x, 192.168.x.x는 사설 IP 주소다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>범위 포함 주관식이라 첫 옥텟 범위를 외우는 게 핵심이다. 실무 기준으로는 A 클래스에서 0과 127은 특수 용도로 빠지는 식의 세부가 있지만, 레포트 답안 기준 표를 우선 외우면 된다.</p>
+
+<h3>14. TCP와 UDP 특징</h3>
+<p><strong>시험 답안</strong></p>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>TCP</th>
+<th>UDP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>연결</td>
+<td>연결형, 3-way handshake</td>
+<td>비연결형</td>
+</tr>
+<tr>
+<td>신뢰성</td>
+<td>ACK와 재전송으로 보장</td>
+<td>보장하지 않음</td>
+</tr>
+<tr>
+<td>순서</td>
+<td>순서 번호로 보장</td>
+<td>순서가 바뀔 수 있음</td>
+</tr>
+<tr>
+<td>흐름/오류 제어</td>
+<td>있음</td>
+<td>없음</td>
+</tr>
+<tr>
+<td>헤더</td>
+<td>20바이트 이상</td>
+<td>8바이트</td>
+</tr>
+<tr>
+<td>속도</td>
+<td>상대적으로 느리고 무거움</td>
+<td>빠르고 가벼움</td>
+</tr>
+<tr>
+<td>용도</td>
+<td>웹, 메일, 파일 전송</td>
+<td>스트리밍, DNS, 게임</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>TCP는 정확성, UDP는 속도다. <code>TCP=연결형/신뢰성/순서/제어</code>, <code>UDP=비연결형/비신뢰성/가벼움</code>으로 암기한다.</p>
+
+<h3>15. IP 헤더와 TCP 헤더 구조</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>IPv4 헤더 구조:</p>
+
+<pre><code class="language-text">버전(4) | 헤더 길이(4) | 서비스 유형(8) | 전체 길이(16)
+식별자(16) | 플래그(3) | 단편화 오프셋(13)
+TTL(8) | 프로토콜(8) | 헤더 체크섬(16)
+송신측 주소(32)
+수신측 주소(32)
+옵션 및 패딩(가변)
+데이터(가변)
+</code></pre>
+
+<p>IP 헤더 필드 설명:</p>
+<ul>
+<li>버전: IP 버전이다. IPv4는 4.</li>
+<li>헤더 길이: IP 헤더 길이를 나타낸다.</li>
+<li>서비스 유형: 우선순위, 지연, 신뢰도 등 QoS 관련 정보다.</li>
+<li>전체 길이: 헤더와 데이터를 포함한 전체 길이다.</li>
+<li>식별자: 단편화된 패킷을 다시 합칠 때 사용한다.</li>
+<li>플래그: 단편화 가능 여부와 뒤에 단편이 더 있는지 표시한다.</li>
+<li>단편화 오프셋: 나뉜 패킷의 원래 위치다.</li>
+<li>TTL: 라우터를 지날 때마다 감소하고 0이면 폐기된다.</li>
+<li>프로토콜: 상위 계층 프로토콜이다. TCP=6, UDP=17, ICMP=1.</li>
+<li>헤더 체크섬: 헤더 오류를 검사한다.</li>
+<li>송신측/수신측 주소: 출발지와 목적지 IP 주소다.</li>
+<li>옵션 및 패딩: 선택 기능과 32비트 정렬을 위한 필드다.</li>
+</ul>
+
+<p>TCP 헤더 구조:</p>
+
+<pre><code class="language-text">송신 포트(16) | 수신 포트(16)
+순서 번호 Sequence Number(32)
+확인응답 번호 ACK Number(32)
+헤더 길이(4) | 예약(6) | 코드 비트(6) | 윈도우 크기(16)
+체크섬(16) | 긴급 포인터(16)
+옵션 및 패딩(32비트 배수)
+데이터(가변)
+</code></pre>
+
+<p>TCP 헤더 필드 설명:</p>
+<ul>
+<li>송신/수신 포트: 응용 프로그램을 구분한다.</li>
+<li>순서 번호: 전송 데이터의 순서를 나타낸다.</li>
+<li>확인응답 번호: 다음에 받을 번호이며 ACK 비트가 1일 때 유효하다.</li>
+<li>헤더 길이: TCP 헤더 길이다.</li>
+<li>예약: 확장을 위해 남겨둔 필드다.</li>
+<li>코드 비트: U, A, P, R, S, F로 긴급/ACK/Push/Reset/SYN/FIN을 나타낸다.</li>
+<li>윈도우 크기: 수신측 버퍼 크기를 알려 흐름제어에 사용한다.</li>
+<li>체크섬: 헤더와 데이터 오류를 검사한다.</li>
+<li>긴급 포인터: 긴급 데이터 위치를 나타낸다.</li>
+<li>옵션 및 패딩: MSS 등 선택 정보를 담고 32비트 배수를 맞춘다.</li>
+</ul>
+
+<p><strong>해설</strong></p>
+
+<p>이 문항은 수시시험 10점이라고 적혀 있어 최우선 암기 대상이다. 빈칸형으로 나오면 필드명과 비트 수가 중요하다. 특히 IP는 <code>단편화 3종 세트 = 식별자/플래그/오프셋</code>, TCP는 <code>순서 번호/ACK 번호/윈도우/코드 비트</code>를 확실히 외운다.</p>
+
+<h3>16. ARP와 RARP 비교</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>ARP는 IP 주소를 MAC 주소로 변환하는 프로토콜이다. 같은 LAN에서 상대의 IP 주소는 알고 있지만 MAC 주소를 모를 때 ARP Request를 브로드캐스트하면 해당 호스트가 ARP Response로 자신의 MAC 주소를 알려준다.</p>
+
+<p>RARP는 MAC 주소를 IP 주소로 변환하는 프로토콜이다. 자신의 MAC 주소만 알고 IP 주소를 모르는 장치가 RARP 서버에 요청하면 서버가 IP 주소를 알려준다. 요즘은 DHCP가 이 역할을 대부분 대체한다.</p>
+
+<p>즉 ARP는 <code>IP -&gt; MAC</code>, RARP는 <code>MAC -&gt; IP</code>이다.</p>
+
+<p><strong>해설</strong></p>
+
+<p>이름 때문에 헷갈리기 쉽지만 <code>R</code>은 Reverse다. ARP의 방향을 먼저 외우고, RARP는 그 반대라고 쓰면 된다.</p>
+
+<h3>17. IPv6 특징 및 장점</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>IPv6는 IPv4의 주소 부족 문제를 해결하기 위해 주소 길이를 32비트에서 128비트로 확장한 인터넷 프로토콜이다.</p>
+
+<p>주요 특징과 장점:</p>
+<ul>
+<li>주소 공간 확장: 128비트 주소로 주소 고갈 문제를 해결한다.</li>
+<li>헤더 단순화: 잘 쓰지 않는 필드를 확장 헤더로 분리해 라우터 처리가 빠르다.</li>
+<li>보안 강화: IPSec 기반 인증과 암호화를 지원한다.</li>
+<li>QoS 지원: 흐름 레이블로 실시간 트래픽 처리를 지원한다.</li>
+<li>자동 구성: 주소 자동 설정을 지원한다.</li>
+<li>유니캐스트, 멀티캐스트, 애니캐스트를 지원한다.</li>
+</ul>
+
+<p><strong>해설</strong></p>
+
+<p>가장 큰 장점은 주소 공간 확장이다. 나머지는 헤더 단순화, 보안, QoS, 자동 구성 순서로 외우면 된다.</p>
+
+<h3>18. RIP와 OSPF 비교</h3>
+<p><strong>시험 답안</strong></p>
+
+<p>RIP와 OSPF는 모두 자율 시스템 내부에서 경로를 정하는 내부 라우팅 프로토콜 IGP이다.</p>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>RIP</th>
+<th>OSPF</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>방식</td>
+<td>거리 벡터</td>
+<td>링크 상태</td>
+</tr>
+<tr>
+<td>기준</td>
+<td>홉 수</td>
+<td>비용, 대역폭</td>
+</tr>
+<tr>
+<td>규모</td>
+<td>소규모, 최대 15홉</td>
+<td>대규모, 영역 개념 사용</td>
+</tr>
+<tr>
+<td>갱신</td>
+<td>30초마다 전체 라우팅 정보 전송</td>
+<td>변화 발생 시 빠르게 알림</td>
+</tr>
+<tr>
+<td>특징</td>
+<td>단순하지만 확장성 낮음</td>
+<td>복잡하지만 빠르고 대규모에 적합</td>
+</tr>
+</tbody>
+</table>
+
+<p><strong>해설</strong></p>
+
+<p>RIP는 단순, OSPF는 정교하다. <code>거리 벡터/홉 수/15홉</code>과 <code>링크 상태/비용/대규모</code>를 짝으로 외운다.</p>
+
+<h2>II. 용어 정의</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">번호</th>
+<th>용어</th>
+<th>시험용 한 줄 정의</th>
+<th>해설 포인트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">1</td>
+<td>X.25</td>
+<td>패킷 교환망에서 쓰는 가상회선 기반 표준 프로토콜</td>
+<td>오류/흐름 제어가 강하지만 오버헤드가 큼</td>
+</tr>
+<tr>
+<td style="text-align:right">2</td>
+<td>플러딩</td>
+<td>들어온 패킷을 수신 포트만 제외하고 모든 포트로 내보내는 방식</td>
+<td>경로를 몰라도 전달 가능하지만 트래픽 증가</td>
+</tr>
+<tr>
+<td style="text-align:right">3</td>
+<td>마스크</td>
+<td>IP 주소에서 네트워크부와 호스트부를 구분하는 32비트 값</td>
+<td>1은 네트워크, 0은 호스트</td>
+</tr>
+<tr>
+<td style="text-align:right">4</td>
+<td>ICMP</td>
+<td>IP 오류나 상태 메시지를 알려주는 네트워크 계층 프로토콜</td>
+<td>ping, 목적지 도달 불가, 시간 초과</td>
+</tr>
+<tr>
+<td style="text-align:right">5</td>
+<td>IGMP</td>
+<td>호스트의 멀티캐스트 그룹 가입/탈퇴를 라우터에 알리는 프로토콜</td>
+<td>그룹 관리</td>
+</tr>
+<tr>
+<td style="text-align:right">6</td>
+<td>TELNET</td>
+<td>원격 서버에 접속해 명령을 실행하는 원격 로그인 프로토콜</td>
+<td>23번 포트, 암호화 없어 보안 약함</td>
+</tr>
+<tr>
+<td style="text-align:right">7</td>
+<td>FTP</td>
+<td>파일 전송 프로토콜</td>
+<td>제어 21번, 데이터 20번 연결</td>
+</tr>
+<tr>
+<td style="text-align:right">8</td>
+<td>SNMP</td>
+<td>네트워크 장비 상태를 감시/관리하는 프로토콜</td>
+<td>UDP, MIB, 에이전트</td>
+</tr>
+<tr>
+<td style="text-align:right">9</td>
+<td>SMTP</td>
+<td>전자우편을 송신하는 프로토콜</td>
+<td>25번 포트, 수신은 POP3/IMAP</td>
+</tr>
+<tr>
+<td style="text-align:right">10</td>
+<td>DNS</td>
+<td>도메인 이름을 IP 주소로 바꾸는 시스템</td>
+<td>문자 주소와 숫자 주소 연결</td>
+</tr>
+<tr>
+<td style="text-align:right">11</td>
+<td>FDDI</td>
+<td>광섬유 기반 이중 토큰링 방식 100Mbps 고속 LAN/백본 규격</td>
+<td>Fiber Distributed Data Interface</td>
+</tr>
+<tr>
+<td style="text-align:right">12</td>
+<td>DQDB</td>
+<td>이중 버스 구조의 분산 큐 방식 MAN 규격</td>
+<td>IEEE 802.6</td>
+</tr>
+</tbody>
+</table>
+
+<h2>시험 직전 암기표</h2>
+<table>
+<thead>
+<tr>
+<th>주제</th>
+<th>꼭 외울 말</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LAN</td>
+<td>좁은 지역, 고속, 낮은 오류율, 기관 소유</td>
+</tr>
+<tr>
+<td>LLC/MAC</td>
+<td>LLC는 상위계층 인터페이스, MAC은 매체 접근과 MAC 주소</td>
+</tr>
+<tr>
+<td>CSMA/CD</td>
+<td>듣고, 비면 보내고, 충돌 검출, Jam, Backoff</td>
+</tr>
+<tr>
+<td>CSMA/CA</td>
+<td>충돌 회피, IFS, Backoff, ACK, RTS/CTS</td>
+</tr>
+<tr>
+<td>장비 계층</td>
+<td>리피터/허브 1, 브리지/스위치 2, 라우터 3, 게이트웨이 상위</td>
+</tr>
+<tr>
+<td>교환 방식</td>
+<td>회선=전용, 데이터그램=비연결, 가상회선=논리경로</td>
+</tr>
+<tr>
+<td>주소 3개</td>
+<td>MAC/NIC/2계층, IP/OS/3계층, 도메인/DNS/응용</td>
+</tr>
+<tr>
+<td>IP 클래스</td>
+<td>A 0~127, B 128~191, C 192~223, D 224~239, E 240~255</td>
+</tr>
+<tr>
+<td>TCP/UDP</td>
+<td>TCP 정확, UDP 빠름</td>
+</tr>
+<tr>
+<td>ARP/RARP</td>
+<td>ARP IP-&gt;MAC, RARP MAC-&gt;IP</td>
+</tr>
+<tr>
+<td>IPv6</td>
+<td>128비트, 헤더 단순화, 보안, QoS, 자동 구성</td>
+</tr>
+<tr>
+<td>RIP/OSPF</td>
+<td>RIP 거리벡터/홉/15, OSPF 링크상태/비용/대규모</td>
+</tr>
+</tbody>
+</table>
+
+<h2>보충: 강의자료 핵심 정리</h2>
+<h1>정보통신개론 기말 정리</h1>
+<p>범위: 6장, 7장, 8장, 9장, 별도 PDF</p>
+
+<p>참고 자료:</p>
+<ul>
+<li><code>ch6.pdf</code>: 네트워크 구성 장비, 인터네트워킹</li>
+<li><code>ch7.pdf</code>: 교환기술, 회선교환, 패킷교환, 라우팅, X.25</li>
+<li><code>ch8.pdf</code>: TCP/IP, IP, 라우팅, IPv6, TCP/UDP, 응용 프로토콜</li>
+<li><code>ch9.pdf</code>: FDDI, DQDB, SMDS, 프레임 릴레이</li>
+<li><code>정보통신26-1_레포트2.pdf</code>: 5장~끝 정리 및 레포트 문항</li>
+</ul>
+
+<h2>우선순위</h2>
+<ol>
+<li>별도 PDF 문항 7~18과 용어 정의 1~12를 먼저 외운다.</li>
+<li>8장 TCP/IP, 주소 3종류, IP/TCP 헤더, ARP/RARP, TCP/UDP, RIP/OSPF는 주관식 가능성이 높다.</li>
+<li>6장 장비 비교, 7장 교환 방식 비교, 9장 고속망 용어는 객관식/단답식 중심으로 준비한다.</li>
+<li>별도 PDF에 5장 내용도 들어 있으므로, 시험범위 밖처럼 보여도 최소 정의 수준은 확인한다.</li>
+</ol>
+
+<h2>6장 네트워크 구성 장비</h2>
+<table>
+<thead>
+<tr>
+<th>장비</th>
+<th style="text-align:right">계층</th>
+<th>핵심 기능</th>
+<th>암기 포인트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>트랜시버</td>
+<td style="text-align:right">물리</td>
+<td>LAN에 시스템을 추가하기 위해 전송매체를 분기</td>
+<td>SPT, MPT</td>
+</tr>
+<tr>
+<td>리피터</td>
+<td style="text-align:right">물리</td>
+<td>약해진 디지털 신호를 재생, 중계</td>
+<td>세그먼트 연장</td>
+</tr>
+<tr>
+<td>허브</td>
+<td style="text-align:right">물리</td>
+<td>여러 컴퓨터를 연결하고 수신 신호를 포트로 전달</td>
+<td>더미 허브는 충돌 증가</td>
+</tr>
+<tr>
+<td>브리지</td>
+<td style="text-align:right">데이터링크</td>
+<td>MAC 주소를 보고 세그먼트 간 프레임 전달 여부 판단</td>
+<td>학습, 플러딩, 포워딩, 필터링, 에이징</td>
+</tr>
+<tr>
+<td>스위치</td>
+<td style="text-align:right">데이터링크</td>
+<td>다중 포트 브리지처럼 목적지 포트로만 전달</td>
+<td>충돌 도메인 분리</td>
+</tr>
+<tr>
+<td>라우터</td>
+<td style="text-align:right">네트워크</td>
+<td>서로 다른 LAN/네트워크 연결, 경로 선택</td>
+<td>IP 기반 라우팅</td>
+</tr>
+<tr>
+<td>게이트웨이</td>
+<td style="text-align:right">상위 계층</td>
+<td>서로 다른 프로토콜/기종 간 변환</td>
+<td>프로토콜 변환</td>
+</tr>
+</tbody>
+</table>
+
+<p>브리지/스위치 기능:</p>
+<ul>
+<li>러닝: 출발지 MAC 주소를 보고 MAC 주소 테이블을 만든다.</li>
+<li>플러딩: 목적지 MAC 주소를 모르면 수신 포트를 제외한 포트로 전송한다.</li>
+<li>포워딩: 목적지 포트가 테이블에 있으면 그 포트로 보낸다.</li>
+<li>필터링: 같은 세그먼트 안의 프레임은 다른 세그먼트로 넘기지 않는다.</li>
+<li>에이징: 오래된 MAC 주소 정보를 삭제한다.</li>
+</ul>
+
+<h2>7장 교환기술</h2>
+<p>회선교환:</p>
+<ul>
+<li>통신 전에 회선을 설정하고, 데이터 전송 후 회선을 해제한다.</li>
+<li>경로가 고정되어 전용선처럼 사용한다.</li>
+<li>장점: 전송 중 오버헤드가 작고 연속적인 대용량 전송에 유리하다.</li>
+<li>단점: 회선 설정 지연이 있고, 회선 설정 뒤 사용하지 않는 시간에도 자원이 낭비된다.</li>
+<li>대표 예: 전화망</li>
+</ul>
+
+<p>패킷교환:</p>
+<ul>
+<li>데이터를 패킷으로 나누어 패킷 교환기를 통해 전송한다.</li>
+<li>물리 회선을 독점하지 않아 사용자 수 제한이 상대적으로 작다.</li>
+</ul>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>데이터그램</th>
+<th>가상회선</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>경로 설정</td>
+<td>사전 설정 없음</td>
+<td>전송 전 논리 경로 설정</td>
+</tr>
+<tr>
+<td>패킷 처리</td>
+<td>각 패킷 독립 처리</td>
+<td>같은 가상회선을 따라 순차 전송</td>
+</tr>
+<tr>
+<td>순서</td>
+<td>순서가 바뀔 수 있음</td>
+<td>순서 유지</td>
+</tr>
+<tr>
+<td>장점</td>
+<td>장애 우회와 짧은 전송에 유리</td>
+<td>흐름/오류 제어와 순차 전송에 유리</td>
+</tr>
+<tr>
+<td>단점</td>
+<td>헤더 오버헤드, 재조립 필요</td>
+<td>설정 지연, 경로 장애 영향</td>
+</tr>
+<tr>
+<td>예</td>
+<td>인터넷 IP 방식</td>
+<td>X.25의 SVC/PVC</td>
+</tr>
+</tbody>
+</table>
+
+<p>라우팅:</p>
+<ul>
+<li>목적지까지 가는 경로를 선택하는 과정이다.</li>
+<li>평가 기준: 지연시간, 비용, 정확성, 단순성, 견고성, 안정성, 공평성, 최적성</li>
+<li>비적응 라우팅: 네트워크 상태 변화와 무관하게 경로를 정한다. 예: 고정 경로 배정</li>
+<li>적응 라우팅: 트래픽과 장애 상태에 따라 경로를 바꾼다. 예: 중앙 집중, 분산, 고립, 델타 적응</li>
+<li>플러딩: 들어온 패킷을 수신 링크를 제외한 모든 출력 링크로 내보내는 방식이다.</li>
+</ul>
+
+<p>X.25:</p>
+<ul>
+<li>ITU-T가 권고한 패킷 교환망 표준 프로토콜이다.</li>
+<li>계층: 물리계층, 링크계층, 패킷계층</li>
+<li>가상회선 방식: SVC는 필요할 때 설정/해제, PVC는 고정적으로 준비된 가상회선</li>
+<li>VCI는 가상 채널을 구분하는 식별자다.</li>
+<li>데이터 패킷과 제어 패킷을 사용한다.</li>
+</ul>
+
+<h2>8장 TCP/IP</h2>
+<p>TCP/IP 4계층과 OSI 비교:</p>
+
+<table>
+<thead>
+<tr>
+<th>TCP/IP</th>
+<th>주요 역할</th>
+<th>관련 OSI 계층</th>
+<th>대표 프로토콜</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>응용</td>
+<td>사용자 서비스</td>
+<td>응용, 표현, 세션</td>
+<td>TELNET, FTP, SNMP, SMTP, DNS</td>
+</tr>
+<tr>
+<td>전송</td>
+<td>종단 간 통신</td>
+<td>전송</td>
+<td>TCP, UDP</td>
+</tr>
+<tr>
+<td>인터넷</td>
+<td>주소 지정, 라우팅</td>
+<td>네트워크</td>
+<td>IP, ARP, RARP, ICMP, IGMP</td>
+</tr>
+<tr>
+<td>네트워크 접근</td>
+<td>물리 매체 접근</td>
+<td>데이터링크, 물리</td>
+<td>Ethernet, LAN 관련</td>
+</tr>
+</tbody>
+</table>
+
+<p>인터넷을 위한 주소 3종류:</p>
+<ul>
+<li>물리 주소: MAC 주소. 데이터링크 계층에서 사용하며 NIC에 저장된다.</li>
+<li>IP 주소: 네트워크 계층의 논리 주소. 호스트와 네트워크를 식별하고 라우팅에 사용된다.</li>
+<li>도메인 이름: 사람이 읽기 쉬운 이름. DNS가 IP 주소로 변환한다.</li>
+</ul>
+
+<p>IP 클래스:</p>
+
+<table>
+<thead>
+<tr>
+<th>클래스</th>
+<th style="text-align:right">첫 옥텟 범위</th>
+<th>용도</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td style="text-align:right">1~126</td>
+<td>대규모 네트워크</td>
+</tr>
+<tr>
+<td>B</td>
+<td style="text-align:right">128~191</td>
+<td>중규모 네트워크</td>
+</tr>
+<tr>
+<td>C</td>
+<td style="text-align:right">192~223</td>
+<td>소규모 네트워크</td>
+</tr>
+<tr>
+<td>D</td>
+<td style="text-align:right">224~239</td>
+<td>멀티캐스트</td>
+</tr>
+<tr>
+<td>E</td>
+<td style="text-align:right">240~255</td>
+<td>예약/실험용</td>
+</tr>
+</tbody>
+</table>
+
+<p>IP 헤더 빈칸 대비:</p>
+<ul>
+<li>Version: IP 버전</li>
+<li>Header Length: 헤더 길이</li>
+<li>Type of Service/Service: 서비스 품질 관련</li>
+<li>Total Length: 전체 데이터그램 길이</li>
+<li>Identification, Flags, Fragment Offset: 단편화와 재조립</li>
+<li>TTL: 라우터를 지날 때 감소, 0이면 폐기</li>
+<li>Protocol: 상위 프로토콜 식별</li>
+<li>Header Checksum: 헤더 오류 검사</li>
+<li>Source/Destination Address: 송신지/수신지 IP 주소</li>
+<li>Options/Padding: 선택 기능과 패딩</li>
+</ul>
+
+<p>ARP/RARP:</p>
+<ul>
+<li>ARP: IP 주소를 알고 있을 때 MAC 주소를 찾는다.</li>
+<li>RARP: MAC 주소를 알고 있을 때 IP 주소를 찾는다.</li>
+</ul>
+
+<p>ICMP/IGMP:</p>
+<ul>
+<li>ICMP: IP 전달 오류와 네트워크 문제를 알리는 제어 메시지 프로토콜이다.</li>
+<li>IGMP: 멀티캐스트 그룹 가입/관리를 위한 프로토콜이다.</li>
+</ul>
+
+<p>RIP/OSPF:</p>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>RIP</th>
+<th>OSPF</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>유형</td>
+<td>거리 벡터</td>
+<td>링크 상태</td>
+</tr>
+<tr>
+<td>기준</td>
+<td>홉 수</td>
+<td>비용</td>
+</tr>
+<tr>
+<td>알고리즘</td>
+<td>Bellman-Ford 계열</td>
+<td>Dijkstra SPF</td>
+</tr>
+<tr>
+<td>특징</td>
+<td>단순하지만 대규모망에 약함</td>
+<td>수렴이 빠르고 대규모망에 적합</td>
+</tr>
+<tr>
+<td>제한</td>
+<td>최대 15홉</td>
+<td>영역 기반 운영 가능</td>
+</tr>
+</tbody>
+</table>
+
+<p>IPv6 특징:</p>
+<ul>
+<li>주소 길이가 32비트에서 128비트로 확장된다.</li>
+<li>헤더 구조가 단순화된다.</li>
+<li>확장 헤더를 사용한다.</li>
+<li>흐름 레이블 등 QoS 처리가 개선된다.</li>
+<li>보안 기능이 강화된다.</li>
+</ul>
+
+<p>TCP/UDP:</p>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>TCP</th>
+<th>UDP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>연결</td>
+<td>연결형</td>
+<td>비연결형</td>
+</tr>
+<tr>
+<td>신뢰성</td>
+<td>ACK, 순서 제어, 오류/흐름 제어</td>
+<td>보장하지 않음</td>
+</tr>
+<tr>
+<td>헤더</td>
+<td>비교적 큼</td>
+<td>8바이트</td>
+</tr>
+<tr>
+<td>용도</td>
+<td>파일전송, 웹, 메일처럼 신뢰성 필요</td>
+<td>실시간, 단순 질의, 오버헤드 최소</td>
+</tr>
+</tbody>
+</table>
+
+<p>응용 프로토콜:</p>
+<ul>
+<li>TELNET: 원격 로그인</li>
+<li>FTP: 파일 전송. 제어 연결 21번, 데이터 연결 20번</li>
+<li>SNMP: 네트워크 관리. UDP 사용</li>
+<li>SMTP: 전자우편 전송</li>
+<li>DNS: 도메인 이름과 IP 주소 변환</li>
+</ul>
+
+<h2>9장 고속/광역 데이터 서비스</h2>
+<p>FDDI:</p>
+<ul>
+<li>Fiber Distributed Data Interface</li>
+<li>광섬유 기반 고속 LAN/MAN 기술이다.</li>
+<li>토큰 링과 유사하게 동작하고 이중 링 구조를 사용한다.</li>
+<li>DAS, SAS, DAC, SAC 같은 접속 형태가 나온다.</li>
+<li>SMT는 스테이션 추가/제거, 장애 탐지, 링 재구성을 담당한다.</li>
+</ul>
+
+<p>DQDB:</p>
+<ul>
+<li>Distributed Queue Dual Bus</li>
+<li>IEEE 802.6 계열 MAN 기술이다.</li>
+<li>두 개의 단방향 버스를 사용하고 분산 큐 방식으로 접근을 제어한다.</li>
+</ul>
+
+<p>SMDS:</p>
+<ul>
+<li>Switched Multimegabit Data Service</li>
+<li>고속 교환 데이터 서비스다.</li>
+<li>SNI는 사용자와 네트워크 사이, ISSI는 교환기 사이, ICI는 다른 사업자/외부 네트워크와의 인터페이스다.</li>
+</ul>
+
+<p>프레임 릴레이:</p>
+<ul>
+<li>패킷 교환 기반의 고속 WAN 기술이다.</li>
+<li>에러/흐름 제어를 단순화하여 고속 전송을 지향한다.</li>
+<li>DLCI는 가상 연결을 식별한다.</li>
+<li>FECN은 전방향 혼잡 알림, BECN은 역방향 혼잡 알림, DE는 폐기 가능 비트다.</li>
+<li>프레임 필드: Flag, Address, Data, FCS</li>
+</ul>
+
+</main>
+<script>
+function toggleNext(button) {
+  const panel = button.nextElementSibling;
+  if (panel) panel.classList.toggle('hidden');
+}
+const WORKBOOK_SUBJECT = "정보통신개론";
+async function loadIssueFlags() {
+  try {
+    const response = await fetch(`/api/issue-flags?subject=${encodeURIComponent(WORKBOOK_SUBJECT)}`);
+    if (!response.ok) return;
+    const payload = await response.json();
+    for (const checkbox of document.querySelectorAll('input[data-question]')) {
+      checkbox.checked = Boolean(payload.flags && payload.flags[checkbox.dataset.question]);
+    }
+  } catch (_error) {}
+}
+async function reportIssue(input) {
+  try {
+    await fetch('/api/issue-flags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: WORKBOOK_SUBJECT, question: Number(input.dataset.question), flagged: input.checked })
+    });
+  } catch (_error) {}
+}
+async function loadConcept(button) {
+  const concept = button.dataset.concept;
+  const anchor = button.dataset.anchor;
+  const target = document.getElementById(`concept-output-${button.dataset.anchor}`);
+  target.textContent = '불러오는 중...';
+  try {
+    const response = await fetch(`/api/concept-detail?subject=${encodeURIComponent(WORKBOOK_SUBJECT)}&concept=${encodeURIComponent(concept)}`);
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      const retry = payload.retryable === false ? '' : `<button class="retry" type="button" data-concept="${escapeHtml(concept)}" data-anchor="${escapeHtml(anchor)}" onclick="loadConcept(this)">재시도</button>`;
+      target.innerHTML = renderErrorCard(payload.error || '상세 설명을 불러오지 못했습니다.', retry);
+      return;
+    }
+    target.innerHTML = payload.html || payload.error || '응답 없음';
+  } catch (_error) {
+    const retry = `<button class="retry" type="button" data-concept="${escapeHtml(concept)}" data-anchor="${escapeHtml(anchor)}" onclick="loadConcept(this)">재시도</button>`;
+    target.innerHTML = renderErrorCard('네트워크 오류로 상세 설명을 불러오지 못했습니다.', retry);
+  }
+}
+function resolveQaOutput(form) {
+  return form.parentElement.querySelector('.qa-output')
+    || form.closest('.concept-card')?.querySelector('.qa-output')
+    || form.closest('.question-actions')?.querySelector('.qa-output');
+}
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
+}
+function findQaForm(entry) {
+  for (const form of document.querySelectorAll('form.qa-form')) {
+    if (entry.concept && form.dataset.concept === entry.concept) return form;
+    if (entry.question_number && form.dataset.question === String(entry.question_number)) return form;
+  }
+  return null;
+}
+function renderCachedAnswer(question, answerHtml, collapsed) {
+  const stateClass = collapsed ? ' is-collapsed' : '';
+  const expanded = collapsed ? 'false' : 'true';
+  const label = collapsed ? '펼치기' : '접기';
+  const title = question ? `저장된 질문: ${escapeHtml(question)}` : '저장된 답변';
+  return `<section class="cached-answer${stateClass}"><div class="cached-answer-header"><p class="meta cached-question">${title}</p><button class="cached-answer-toggle" type="button" aria-expanded="${expanded}" onclick="toggleCachedAnswer(this)">${label}</button></div><div class="cached-answer-body">${answerHtml || ''}</div></section>`;
+}
+function toggleCachedAnswer(button) {
+  const answer = button.closest('.cached-answer');
+  if (!answer) return;
+  const collapsed = answer.classList.toggle('is-collapsed');
+  button.textContent = collapsed ? '펼치기' : '접기';
+  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+}
+function renderErrorCard(message, retryHtml) {
+  const retry = retryHtml || '';
+  return `<section class="error-card" role="alert"><p>${escapeHtml(message || '요청을 처리하지 못했습니다.')}</p>${retry}</section>`;
+}
+function retryStudyQuestion(button) {
+  const output = button.closest('.qa-output');
+  const container = output?.closest('.concept-card') || output?.closest('.question-actions');
+  const form = container?.querySelector('form.qa-form');
+  if (form) askStudyQuestion(form);
+}
+function submitStudyQuestion(event, form) {
+  event.preventDefault();
+  askStudyQuestion(form);
+  return false;
+}
+async function loadCachedStudyAnswers() {
+  try {
+    const response = await fetch(`/api/concept-qa-cache?subject=${encodeURIComponent(WORKBOOK_SUBJECT)}`);
+    if (!response.ok) return;
+    const payload = await response.json();
+    for (const entry of payload.entries || []) {
+      const form = findQaForm(entry);
+      if (!form) continue;
+      const target = resolveQaOutput(form);
+      if (!target) continue;
+      target.insertAdjacentHTML('beforeend', renderCachedAnswer(entry.question, entry.html, true));
+    }
+  } catch (_error) {}
+}
+async function askStudyQuestion(form) {
+  const target = resolveQaOutput(form);
+  const input = form.querySelector('input[name="question"]');
+  const subjectInput = form.querySelector('input[name="subject"]');
+  const payload = { subject: subjectInput?.value || WORKBOOK_SUBJECT, question: input.value, concept: form.dataset.concept || '', question_number: Number(form.dataset.question || 0) || null };
+  if (!target) return false;
+  target.textContent = '답변 생성 중...';
+  try {
+    const response = await fetch('/api/concept-qa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      const retry = data.retryable === false ? '' : '<button class="retry" type="button" onclick="retryStudyQuestion(this)">재시도</button>';
+      target.innerHTML = renderErrorCard(data.error || '답변 생성에 실패했습니다.', retry);
+      return false;
+    }
+    target.innerHTML = renderCachedAnswer(input.value, data.html || data.error || '응답 없음', false);
+  } catch (_error) {
+    target.innerHTML = renderErrorCard('네트워크 오류로 답변을 생성하지 못했습니다.', '<button class="retry" type="button" onclick="retryStudyQuestion(this)">재시도</button>');
+  }
+  return false;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  loadIssueFlags();
+  loadCachedStudyAnswers();
+});
+</script>
+</body>
+</html>

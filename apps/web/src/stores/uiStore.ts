@@ -43,6 +43,7 @@ import type { SubjectSummariesViewProps } from "../subject-views/SubjectSummarie
 import type { SubjectSummaryDetailViewProps } from "../subject-views/SubjectSummaryDetailView.tsx";
 import type { SubjectMcpViewProps } from "../subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "../subject-views/SubjectMemorizeView.tsx";
+import type { SubjectExamPrepViewProps } from "../subject-views/SubjectExamPrepView.tsx";
 import type { WeekViewProps } from "../subject-views/WeekView.tsx";
 import type { SubjectClassViewProps } from "../subject-views/SubjectClassView.tsx";
 import type { PdfWorkspacesViewProps } from "../subject-views/PdfWorkspacesView.tsx";
@@ -65,6 +66,8 @@ interface UiStoreState {
   subjectMcpProps: SubjectMcpViewProps | null;
   subjectMemorizeSlot: HTMLElement | null;
   subjectMemorizeProps: SubjectMemorizeViewProps | null;
+  subjectExamPrepSlot: HTMLElement | null;
+  subjectExamPrepProps: SubjectExamPrepViewProps | null;
   // S4b-1 week island
   weekSlot: HTMLElement | null;
   weekProps: WeekViewProps | null;
@@ -93,6 +96,8 @@ export const uiStore = createStore<UiStoreState>(() => ({
   subjectMcpProps: null,
   subjectMemorizeSlot: null,
   subjectMemorizeProps: null,
+  subjectExamPrepSlot: null,
+  subjectExamPrepProps: null,
   weekSlot: null,
   weekProps: null,
   subjectClassSlot: null,
@@ -206,6 +211,18 @@ export const setSubjectMemorizeProps = (props: SubjectMemorizeViewProps | null):
   const current = uiStore.getState().subjectMemorizeProps;
   if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
   uiStore.setState({ subjectMemorizeProps: props });
+};
+
+export const getSubjectExamPrepSlot = (): HTMLElement | null => uiStore.getState().subjectExamPrepSlot;
+export const setSubjectExamPrepSlot = (el: HTMLElement | null): void => {
+  uiStore.setState({ subjectExamPrepSlot: el });
+};
+
+export const getSubjectExamPrepProps = (): SubjectExamPrepViewProps | null => uiStore.getState().subjectExamPrepProps;
+export const setSubjectExamPrepProps = (props: SubjectExamPrepViewProps | null): void => {
+  const current = uiStore.getState().subjectExamPrepProps;
+  if (props !== null && current !== null && JSON.stringify(props) === JSON.stringify(current)) return;
+  uiStore.setState({ subjectExamPrepProps: props });
 };
 
 // ─── S4b-1 week slot/props getters + setters ─────────────────────────────────

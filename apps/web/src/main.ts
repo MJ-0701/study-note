@@ -128,6 +128,7 @@ import "./styles.css";
 import {
   parseRoute,
   subjectClassPath,
+  subjectExamPrepPath,
   subjectMcpPath,
   subjectMemorizePath,
   subjectPdfWorkspacePath,
@@ -321,6 +322,7 @@ import {
   renderSubjectSummaryDetailSlot,
   renderSubjectMcpSlot,
   renderSubjectMemorizeSlot,
+  renderSubjectExamPrepSlot,
   renderWeekSlot,
   renderSubjectClassSlot,
   renderPdfWorkspacesSlot,
@@ -329,9 +331,11 @@ import type { SubjectSummariesViewProps } from "./subject-views/SubjectSummaries
 import type { SubjectSummaryDetailViewProps } from "./subject-views/SubjectSummaryDetailView.tsx";
 import type { SubjectMcpViewProps } from "./subject-views/SubjectMcpView.tsx";
 import type { SubjectMemorizeViewProps } from "./subject-views/SubjectMemorizeView.tsx";
+import type { SubjectExamPrepViewProps } from "./subject-views/SubjectExamPrepView.tsx";
 import type { WeekViewProps } from "./subject-views/WeekView.tsx";
 import type { SubjectClassViewProps } from "./subject-views/SubjectClassView.tsx";
 import type { PdfWorkspacesViewProps } from "./subject-views/PdfWorkspacesView.tsx";
+import { getSubjectExamPrepArtifact } from "./subject-views/SubjectExamPrepView.tsx";
 import { PERSONA_BY_SUBJECT } from "./subject-views/mcp";
 import { parseClassDateLabel } from "./subject-views/memorize";
 import {
@@ -420,6 +424,9 @@ import {
   setSubjectMemorizeSlot,
   setSubjectMemorizeProps,
   getSubjectMemorizeSlot,
+  setSubjectExamPrepSlot,
+  setSubjectExamPrepProps,
+  getSubjectExamPrepSlot,
   setWeekSlot,
   setWeekProps,
   getWeekSlot,
@@ -675,6 +682,12 @@ const mainRenderSink: RenderSink | null = appRoot
           const el = root.querySelector<HTMLElement>('[data-react-island="subject-memorize"]');
           if (getSubjectMemorizeSlot() !== el) {
             setSubjectMemorizeSlot(el);
+          }
+        },
+        (root) => {
+          const el = root.querySelector<HTMLElement>('[data-react-island="subject-exam-prep"]');
+          if (getSubjectExamPrepSlot() !== el) {
+            setSubjectExamPrepSlot(el);
           }
         },
         // S4b-1: week island slot signal (route 이탈 시 null → portal unmount).
@@ -4594,6 +4607,7 @@ function renderApp(): void {
     route.name === "subject-summary-detail" ||
     route.name === "subject-mcp" ||
     route.name === "subject-memorize" ||
+    route.name === "subject-exam-prep" ||
     route.name === "subject-intake" ||
     route.name === "pdf-workspace" ||
     route.name === "week"
@@ -4768,6 +4782,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setSubjectExamPrepProps(null);
     setWeekProps(null);
     setPdfWorkspacesProps(null);
     mountRender(composeShell(
@@ -4812,6 +4827,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setSubjectExamPrepProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
     setPdfWorkspacesProps(null);
@@ -4905,6 +4921,7 @@ function renderApp(): void {
     setSubjectSummariesProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setSubjectExamPrepProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
     setPdfWorkspacesProps(null);
@@ -4948,6 +4965,7 @@ function renderApp(): void {
     setSubjectSummariesProps(null);
     setSubjectSummaryDetailProps(null);
     setSubjectMemorizeProps(null);
+    setSubjectExamPrepProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
     setPdfWorkspacesProps(null);
@@ -5036,6 +5054,7 @@ function renderApp(): void {
     setSubjectSummariesProps(null);
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
+    setSubjectExamPrepProps(null);
     setWeekProps(null);
     setSubjectClassProps(null);
     setPdfWorkspacesProps(null);
@@ -5043,6 +5062,33 @@ function renderApp(): void {
       { variant: "subject", subject, route },
       renderSubjectMemorizeSlot(),
       `${subject.title} / 필수 암기노트`
+    ));
+    return;
+  }
+
+  if (route.name === "subject-exam-prep" && subject) {
+    const examPrepProps: SubjectExamPrepViewProps = {
+      subjectId: subject.id,
+      subjectTitle: subject.title,
+      examLabel: subject.examLabel,
+      weekRange: subject.summary.weekRange,
+      summaryPath: subjectSummaryPath(subject),
+      memorizePath: subjectMemorizePath(subject),
+      pdfWorkspacePath: subjectPdfWorkspacePath(subject),
+      artifact: getSubjectExamPrepArtifact(subject.id),
+    };
+    setSubjectExamPrepProps(examPrepProps);
+    setSubjectSummariesProps(null);
+    setSubjectSummaryDetailProps(null);
+    setSubjectMcpProps(null);
+    setSubjectMemorizeProps(null);
+    setWeekProps(null);
+    setSubjectClassProps(null);
+    setPdfWorkspacesProps(null);
+    mountRender(composeShell(
+      { variant: "subject", subject, route },
+      renderSubjectExamPrepSlot(),
+      `${subject.title} / 시험 대비`
     ));
     return;
   }
@@ -5139,6 +5185,7 @@ function renderApp(): void {
     setSubjectSummaryDetailProps(null);
     setSubjectMcpProps(null);
     setSubjectMemorizeProps(null);
+    setSubjectExamPrepProps(null);
     setSubjectClassProps(null);
     setPdfWorkspacesProps(null);
     mountRender(composeShell(
@@ -5332,6 +5379,7 @@ export function buildSubjectClassProps(subject: SubjectNote): SubjectClassViewPr
     classPath: subjectClassPath(subject),
     summaryPath: subjectSummaryPath(subject),
     memorizePath: subjectMemorizePath(subject),
+    examPrepPath: subjectExamPrepPath(subject),
     pdfWorkspacePath: subjectPdfWorkspacePath(subject),
     weekCount: subject.weekNotes.length,
     materialCount: subjectMaterials.length,

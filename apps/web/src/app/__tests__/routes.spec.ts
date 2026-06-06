@@ -12,6 +12,7 @@ import {
   intakePath,
   parseRoute,
   subjectClassPath,
+  subjectExamPrepPath,
   subjectIntakePath,
   subjectMcpPath,
   subjectMemorizePath,
@@ -126,6 +127,13 @@ describe("parseRoute — AC2 happy paths", () => {
     });
   });
 
+  it("(h5b) #/subjects/sub-1/exam-prep → subject-exam-prep", () => {
+    assert.deepEqual(parseRoute("#/subjects/sub-1/exam-prep"), {
+      name: "subject-exam-prep",
+      subjectId: "sub-1"
+    });
+  });
+
   it("(h6) #/subjects/sub-1/intake → subject-intake", () => {
     assert.deepEqual(parseRoute("#/subjects/sub-1/intake"), {
       name: "subject-intake",
@@ -168,6 +176,10 @@ describe("path helpers — AC2 round-trip", () => {
 
   it("subjectMemorizePath", () => {
     assert.equal(subjectMemorizePath(subject("s")), "#/subjects/s/memorize");
+  });
+
+  it("subjectExamPrepPath", () => {
+    assert.equal(subjectExamPrepPath(subject("s")), "#/subjects/s/exam-prep");
   });
 
   it("subjectIntakePath", () => {

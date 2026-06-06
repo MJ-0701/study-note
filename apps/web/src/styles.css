@@ -445,6 +445,44 @@ section + section {
   padding: var(--ds-space-md);
 }
 
+.exam-prep-panel {
+  background: var(--ds-bg);
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.exam-prep-toolbar {
+  align-items: start;
+  border-bottom: 1px solid var(--ds-rule);
+  display: flex;
+  gap: var(--ds-space-md);
+  justify-content: space-between;
+  padding: var(--ds-space-md);
+}
+
+.exam-prep-toolbar__actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--ds-space-sm);
+}
+
+.exam-prep-frame {
+  background: #fff;
+  border: 0;
+  display: block;
+  height: min(1120px, 82vh);
+  min-height: 680px;
+  width: 100%;
+}
+
+.exam-prep-empty {
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  padding: var(--ds-space-md);
+}
+
 .class-date-add-section {
   align-items: start;
   border: 1px solid var(--ds-rule);

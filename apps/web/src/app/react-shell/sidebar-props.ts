@@ -12,6 +12,7 @@ import type { Route } from "../routes";
 import {
   intakePath,
   subjectClassPath,
+  subjectExamPrepPath,
   subjectIntakePath,
   subjectMcpPath,
   subjectMemorizePath,
@@ -23,6 +24,7 @@ import type { StudyNotebook, SubjectNote } from "@study-note/domain";
 import type { SidebarContext } from "../../subject-views/sidebar";
 import {
   isSubjectClassRoute,
+  isSubjectExamPrepRoute,
   isSubjectMemorizeRoute,
   isSubjectMcpRoute,
   isSubjectSummaryRoute
@@ -187,6 +189,11 @@ function buildDepthNav(subject: SubjectNote, route: Route): DepthNavLink[] {
       href: subjectSummaryPath(subject),
       label: "요약본",
       active: isSubjectSummaryRoute(subject, route)
+    },
+    {
+      href: subjectExamPrepPath(subject),
+      label: "시험 대비",
+      active: isSubjectExamPrepRoute(subject, route)
     },
     {
       href: subjectMcpPath(subject),

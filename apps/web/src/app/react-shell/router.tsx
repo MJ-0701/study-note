@@ -43,6 +43,7 @@ import { SubjectSummariesIslandPortal } from "./SubjectSummariesIslandPortal.tsx
 import { SubjectSummaryDetailIslandPortal } from "./SubjectSummaryDetailIslandPortal.tsx";
 import { SubjectMcpIslandPortal } from "./SubjectMcpIslandPortal.tsx";
 import { SubjectMemorizeIslandPortal } from "./SubjectMemorizeIslandPortal.tsx";
+import { SubjectExamPrepIslandPortal } from "./SubjectExamPrepIslandPortal.tsx";
 import { WeekIslandPortal } from "./WeekIslandPortal.tsx";
 import { SubjectClassIslandPortal } from "./SubjectClassIslandPortal.tsx";
 import { PdfWorkspacesIslandPortal } from "./PdfWorkspacesIslandPortal.tsx";
@@ -160,6 +161,7 @@ export function ReactShellRouter({
       <SubjectSummaryDetailIslandPortal />
       <SubjectMcpIslandPortal />
       <SubjectMemorizeIslandPortal />
+      <SubjectExamPrepIslandPortal />
       <WeekPortal />
       <SubjectClassPortal />
       <PdfWorkspacesPortal />

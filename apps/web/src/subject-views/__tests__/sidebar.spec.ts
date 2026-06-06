@@ -94,6 +94,7 @@ describe("sidebar — (a) route predicates", () => {
     assert.equal(sidebar.isSubjectSummaryRoute(subject, { name: "subject-summary-detail", subjectId: "s1" } as never), true);
     assert.equal(sidebar.isSubjectMcpRoute(subject, { name: "subject-mcp", subjectId: "s1" } as never), true);
     assert.equal(sidebar.isSubjectMemorizeRoute(subject, { name: "subject-memorize", subjectId: "s1" } as never), true);
+    assert.equal(sidebar.isSubjectExamPrepRoute(subject, { name: "subject-exam-prep", subjectId: "s1" } as never), true);
     assert.equal(sidebar.isSubjectMcpRoute(subject, { name: "home" } as never), false);
   });
 });
@@ -155,7 +156,7 @@ describe("sidebar — (d) renderCurrentSubjectDepthNav", () => {
     const subject = makeSubject("s1", "수학");
     const html = sidebar.renderCurrentSubjectDepthNav(subject, { name: "subject-mcp", subjectId: "s1" } as never);
     const c = parseContainer(html);
-    const mcpLink = c.querySelectorAll(".subject-sidebar-depth__link")[2];
+    const mcpLink = c.querySelectorAll(".subject-sidebar-depth__link")[3];
     assert.ok(mcpLink, "mcp link exists");
     assert.ok((mcpLink!.getAttribute("class") ?? "").includes("active"));
   });

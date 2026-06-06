@@ -15,6 +15,7 @@ import type { PdfMaterialDraft, SubjectNote, WeekNote } from "@study-note/domain
 import { escapeHtml } from "../app/escape-html";
 import {
   subjectClassPath,
+  subjectExamPrepPath,
   subjectMemorizePath,
   subjectPdfWorkspacePath,
   subjectSummaryPath,
@@ -87,6 +88,11 @@ export function renderSubjectClassPage(
         <span class="subject-unit-card__meta">암기</span>
         <strong>필수 암기노트</strong>
         <span class="subject-unit-card__hint">중간/기말 구간별 + 필수 개념.</span>
+      </a>
+      <a class="subject-unit-card" href="${escapeHtml(subjectExamPrepPath(subject))}">
+        <span class="subject-unit-card__meta">시험</span>
+        <strong>시험 대비</strong>
+        <span class="subject-unit-card__hint">별도 PDF와 답안집을 과목 안에서 확인.</span>
       </a>
       <a class="subject-unit-card" href="${escapeHtml(subjectPdfWorkspacePath(subject))}">
         <span class="subject-unit-card__meta">PDF</span>

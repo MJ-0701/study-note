@@ -14,6 +14,7 @@ export type Route =
   | { name: "subject-summary-detail"; subjectId: string; weekId: string }
   | { name: "subject-mcp"; subjectId: string }
   | { name: "subject-memorize"; subjectId: string }
+  | { name: "subject-exam-prep"; subjectId: string }
   | { name: "subject-intake"; subjectId: string }
   | { name: "pdf-workspace"; subjectId: string }
   | { name: "week"; subjectId: string; weekId: string };
@@ -65,6 +66,10 @@ export function parseRoute(hash: string): Route {
     return { name: "subject-memorize", subjectId: parts[1] };
   }
 
+  if (parts[0] === "subjects" && parts[1] && parts[2] === "exam-prep") {
+    return { name: "subject-exam-prep", subjectId: parts[1] };
+  }
+
   if (parts[0] === "subjects" && parts[1]) {
     return { name: "subject", subjectId: parts[1] };
   }
@@ -106,6 +111,10 @@ export function subjectMcpPath(subject: SubjectNote): string {
 
 export function subjectMemorizePath(subject: SubjectNote): string {
   return `#/subjects/${subject.id}/memorize`;
+}
+
+export function subjectExamPrepPath(subject: SubjectNote): string {
+  return `#/subjects/${subject.id}/exam-prep`;
 }
 
 export function subjectIntakePath(subject: SubjectNote): string {

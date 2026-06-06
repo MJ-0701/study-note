@@ -23,6 +23,7 @@ import type { Route } from "../app/routes";
 import {
   intakePath,
   subjectClassPath,
+  subjectExamPrepPath,
   subjectIntakePath,
   subjectMcpPath,
   subjectMemorizePath,
@@ -69,6 +70,10 @@ export function isSubjectMemorizeRoute(subject: SubjectNote, route: Route): bool
   return route.name === "subject-memorize" && route.subjectId === subject.id;
 }
 
+export function isSubjectExamPrepRoute(subject: SubjectNote, route: Route): boolean {
+  return route.name === "subject-exam-prep" && route.subjectId === subject.id;
+}
+
 // ─── Pure helpers (no Context) ───────────────────────────────────────────
 
 /**
@@ -97,6 +102,7 @@ export function renderCurrentSubjectDepthNav(subject: SubjectNote, route: Route)
     <div class="subject-sidebar-depth" aria-label="${safeTitle} 하위 화면">
       <a class="subject-sidebar-depth__link ${isSubjectClassRoute(subject, route) ? "active" : ""}" href="${escapeHtml(subjectClassPath(subject))}">수업</a>
       <a class="subject-sidebar-depth__link ${isSubjectSummaryRoute(subject, route) ? "active" : ""}" href="${escapeHtml(subjectSummaryPath(subject))}">요약본</a>
+      <a class="subject-sidebar-depth__link ${isSubjectExamPrepRoute(subject, route) ? "active" : ""}" href="${escapeHtml(subjectExamPrepPath(subject))}">시험 대비</a>
       <a class="subject-sidebar-depth__link ${isSubjectMcpRoute(subject, route) ? "active" : ""}" href="${escapeHtml(subjectMcpPath(subject))}">MCP 호출</a>
       <a class="subject-sidebar-depth__link ${isSubjectMemorizeRoute(subject, route) ? "active" : ""}" href="${escapeHtml(subjectMemorizePath(subject))}">필수 암기노트</a>
     </div>
