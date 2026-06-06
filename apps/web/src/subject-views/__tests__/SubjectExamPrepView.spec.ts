@@ -43,6 +43,11 @@ describe("SubjectExamPrepView / artifact registry 정적 소스 검증", () => {
     assert.match(src, /별도 PDF/);
     assert.match(src, /computer-introduction/);
     assert.match(src, /2024년도 시험문제/);
+    assert.match(src, /프로그래밍언어/);
+    assert.match(src, /컴파일러/);
+    assert.match(src, /인터프리터/);
+    assert.match(src, /회선교환/);
+    assert.doesNotMatch(src, /ci-multimedia-compression/);
     assert.match(src, /디코더\/인코더\/MUX\/DEMUX/);
     assert.match(src, /de-q-flipflop-types/);
     assert.match(src, /minterm/);
