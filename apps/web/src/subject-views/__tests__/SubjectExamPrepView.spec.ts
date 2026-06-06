@@ -29,4 +29,8 @@ describe("SubjectExamPrepView 정적 소스 검증", () => {
     assert.match(src, /\/exam-prep\/digital-engineering\/workbook\.html/);
     assert.match(src, /\/exam-prep\/c-language\/workbook\.html/);
   });
+
+  it("sandboxes embedded workbook scripts away from the app origin", () => {
+    assert.match(src, /sandbox=""/);
+  });
 });

@@ -100,6 +100,7 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
           </div>
           <iframe
             className="exam-prep-frame"
+            sandbox=""
             src={workbookHref}
             title={`${subjectTitle} 시험 대비 답안집`}
           />
