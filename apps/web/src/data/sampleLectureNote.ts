@@ -828,14 +828,20 @@ const computerIntroduction: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "수업자료 8장, 9장, 10장, 13장을 범위로 유지하되 2024년도 시험문제 8문항을 답안형으로 암기한다.",
-    examScope: "8장 프로그래밍 언어1, 9장 데이터베이스, 10장 컴퓨터 네트워크와 월드와이드웹, 13장 정보보안, 2024년도 시험문제",
-    weekRange: "8장, 9장, 10장, 13장 + 2024년도 시험문제",
+    goal: "확정된 통신, 프로그래밍언어, 데이터베이스, 보안 네 축을 기준으로 2024년도 문제형 답안을 암기한다.",
+    examScope: "통신, 프로그래밍언어, 데이터베이스, 보안",
+    weekRange: "10장 통신, 8장 프로그래밍 언어1, 9장 데이터베이스, 13장 정보보안",
     examChapters: [
       {
+        label: "10장",
+        title: "통신",
+        focus: "회선교환/패킷교환, DNS 서버 종류와 역할",
+        sourceHint: "단원10 컴퓨터 네트워크와 월드와이드웹.pdf, 2024년도 시험문제 5, 7번"
+      },
+      {
         label: "8장",
-        title: "프로그래밍 언어1",
-        focus: "프로그래밍 언어의 개념과 번역 방식은 범위로 유지하되, 2024년 타이핑 문제에는 직접 문항 없음",
+        title: "프로그래밍언어",
+        focus: "프로그래밍 언어의 목적, 알고리즘 표현, 컴파일러와 인터프리터",
         sourceHint: "단원08 프로그래밍 언어1.pdf"
       },
       {
@@ -845,27 +851,15 @@ const computerIntroduction: SubjectNote = {
         sourceHint: "2024년도 시험문제 1, 6번"
       },
       {
-        label: "24년",
-        title: "MPEG와 압축",
-        focus: "GOP의 I/P/B 프레임, 손실 압축과 비손실 압축의 차이와 예",
-        sourceHint: "2024년도 시험문제 2, 4번"
-      },
-      {
-        label: "10장",
-        title: "컴퓨터 네트워크와 월드와이드웹",
-        focus: "회선교환/패킷교환, DNS 서버 종류와 역할",
-        sourceHint: "2024년도 시험문제 5, 7번"
-      },
-      {
         label: "13장",
         title: "정보보안",
         focus: "공개키/비공개키 암호, 스니핑, 스푸핑",
         sourceHint: "2024년도 시험문제 3, 8번"
       }
     ],
-    mustKnowConceptIds: ["ci-database", "ci-multimedia-compression", "ci-network-web", "ci-security"],
-    weakSpots: ["기본키와 후보키의 표현 차이", "DNS 서버 2종류의 수업자료 용어", "I/P/B 프레임 역할 순서", "스니핑과 스푸핑 한 문장 구분"],
-    strategy: "24년도 시험문제 8문항을 제목만 보고 먼저 말하고, 헷갈리는 DNS와 키 용어는 해설의 보충 표현까지 같이 외운다."
+    mustKnowConceptIds: ["ci-network-web", "ci-programming-language", "ci-database", "ci-security"],
+    weakSpots: ["DNS 서버 2종류의 수업자료 용어", "컴파일러와 인터프리터 한 문장 구분", "기본키와 후보키의 표현 차이", "외부/개념/내부 스키마 순서", "스니핑과 스푸핑 한 문장 구분"],
+    strategy: "네 확정축을 먼저 제목만 보고 말한 뒤, 통신과 보안은 비교형, 프로그래밍언어와 데이터베이스는 정확한 용어 정의형으로 반복한다."
   },
   sources: [
     {
@@ -886,10 +880,38 @@ const computerIntroduction: SubjectNote = {
   ],
   requiredKeywords: [
     {
+      id: "ci-kw-switching",
+      label: "회선교환과 패킷교환",
+      status: "covered",
+      professorSignal: "통신 확정범위, 2024년도 시험문제 5번",
+      conceptIds: ["ci-network-web"]
+    },
+    {
+      id: "ci-kw-dns",
+      label: "DNS 서버 종류",
+      status: "covered",
+      professorSignal: "통신 확정범위, 2024년도 시험문제 7번",
+      conceptIds: ["ci-network-web"]
+    },
+    {
       id: "ci-kw-programming",
       label: "프로그래밍 언어",
       status: "covered",
-      professorSignal: "8장 수업자료 기준, 2024년 타이핑 문제에는 직접 문항 없음",
+      professorSignal: "프로그래밍언어 확정범위",
+      conceptIds: ["ci-programming-language"]
+    },
+    {
+      id: "ci-kw-algorithm",
+      label: "알고리즘과 소스 코드",
+      status: "covered",
+      professorSignal: "프로그래밍언어 확정범위",
+      conceptIds: ["ci-programming-language"]
+    },
+    {
+      id: "ci-kw-compiler-interpreter",
+      label: "컴파일러와 인터프리터",
+      status: "covered",
+      professorSignal: "프로그래밍언어 확정범위",
       conceptIds: ["ci-programming-language"]
     },
     {
@@ -905,34 +927,6 @@ const computerIntroduction: SubjectNote = {
       status: "covered",
       professorSignal: "2024년도 시험문제 6번",
       conceptIds: ["ci-database"]
-    },
-    {
-      id: "ci-kw-mpeg-gop",
-      label: "MPEG GOP",
-      status: "covered",
-      professorSignal: "2024년도 시험문제 2번",
-      conceptIds: ["ci-multimedia-compression"]
-    },
-    {
-      id: "ci-kw-compression",
-      label: "손실/비손실 압축",
-      status: "covered",
-      professorSignal: "2024년도 시험문제 4번",
-      conceptIds: ["ci-multimedia-compression"]
-    },
-    {
-      id: "ci-kw-switching",
-      label: "회선교환과 패킷교환",
-      status: "covered",
-      professorSignal: "2024년도 시험문제 5번",
-      conceptIds: ["ci-network-web"]
-    },
-    {
-      id: "ci-kw-dns",
-      label: "DNS 서버 종류",
-      status: "covered",
-      professorSignal: "2024년도 시험문제 7번",
-      conceptIds: ["ci-network-web"]
     },
     {
       id: "ci-kw-crypto",
@@ -952,13 +946,13 @@ const computerIntroduction: SubjectNote = {
   concepts: [
     {
       id: "ci-programming-language",
-      title: "8장 프로그래밍 언어1",
-      priority: "review",
-      summary: "프로그래밍 언어의 목적, 분류, 번역 방식, 알고리즘 표현은 범위 자료로 유지한다.",
-      easyExplanation: "24년도 타이핑 문제에는 직접 출제되지 않았지만 범위 PDF에 포함되어 마지막에 빠르게 훑는다.",
+      title: "프로그래밍언어: 알고리즘과 번역",
+      priority: "must-know",
+      summary: "프로그래밍 언어는 알고리즘을 컴퓨터가 실행할 수 있는 명령으로 표현하고, 컴파일러나 인터프리터가 실행 가능한 형태로 처리한다.",
+      easyExplanation: "알고리즘은 해결 절차, 소스 코드는 그 절차를 언어로 쓴 것, 컴파일러는 전체 번역, 인터프리터는 바로 해석 실행이다.",
       sourceHints: ["단원08 프로그래밍 언어1.pdf"],
-      relatedKeywordIds: ["ci-kw-programming"],
-      exampleQuestionIds: ["ci-q-programming-language"]
+      relatedKeywordIds: ["ci-kw-programming", "ci-kw-algorithm", "ci-kw-compiler-interpreter"],
+      exampleQuestionIds: ["ci-q-programming-language", "ci-q-compiler-interpreter"]
     },
     {
       id: "ci-database",
@@ -971,18 +965,8 @@ const computerIntroduction: SubjectNote = {
       exampleQuestionIds: ["ci-q-primary-key", "ci-q-db-three-level"]
     },
     {
-      id: "ci-multimedia-compression",
-      title: "24년도 기출 MPEG와 압축",
-      priority: "must-know",
-      summary: "MPEG GOP의 I/P/B 프레임 역할과 손실/비손실 압축 차이를 예시와 함께 답한다.",
-      easyExplanation: "I는 혼자 복원, P는 이전을 보고 예측, B는 앞뒤를 보고 더 세게 압축한다. 손실은 버리고, 비손실은 그대로 되살린다.",
-      sourceHints: ["2024년도 시험문제 2, 4번"],
-      relatedKeywordIds: ["ci-kw-mpeg-gop", "ci-kw-compression"],
-      exampleQuestionIds: ["ci-q-mpeg-gop", "ci-q-compression"]
-    },
-    {
       id: "ci-network-web",
-      title: "10장 컴퓨터 네트워크와 월드와이드웹",
+      title: "통신: 교환 방식과 DNS",
       priority: "must-know",
       summary: "회선교환과 패킷교환을 대표 예로 비교하고, DNS 서버의 역할 차이를 설명한다.",
       easyExplanation: "전화망은 길을 먼저 잡고, 인터넷은 조각을 그때그때 보낸다. DNS는 주소 이름을 IP로 바꿔준다.",
@@ -1003,12 +987,36 @@ const computerIntroduction: SubjectNote = {
   ],
   exampleQuestions: [
     {
+      id: "ci-q-switching",
+      conceptId: "ci-network-web",
+      difficulty: "applied",
+      prompt: "전화망처럼 미리 설정된 경로를 쓰는 방식과 인터넷처럼 가장 좋은 경로를 찾아 보내는 방식의 이름을 쓰라.",
+      answer: "A는 회선교환 방식, B는 패킷교환 방식이다.",
+      explanation: "회선교환은 전용 경로를 잡고, 패킷교환은 패킷마다 경로를 유동적으로 선택한다."
+    },
+    {
+      id: "ci-q-dns-server-types",
+      conceptId: "ci-network-web",
+      difficulty: "applied",
+      prompt: "DNS 서비스를 제공하는 서버 2종류와 각각의 특징을 설명하라.",
+      answer: "주 DNS 서버는 도메인의 원본 zone 레코드를 관리하고, 보조 DNS 서버는 그 정보를 복제해 백업과 부하 분산을 담당한다.",
+      explanation: "교재가 재귀/권한 DNS로 설명했다면 재귀 DNS는 클라이언트 대신 질의하고 캐시하며, 권한 DNS는 해당 도메인의 최종 레코드를 가진 서버라고 답한다."
+    },
+    {
       id: "ci-q-programming-language",
       conceptId: "ci-programming-language",
       difficulty: "basic",
       prompt: "프로그래밍 언어를 배우는 이유를 설명하라.",
-      answer: "문제 해결 절차를 컴퓨터가 실행할 수 있는 명령으로 표현하기 위해서다.",
-      explanation: "8장 범위 확인용 보조 문항이다. 2024년도 타이핑 문제의 직접 문항은 아니므로 마지막에 훑는다."
+      answer: "문제 해결 절차인 알고리즘을 컴퓨터가 실행할 수 있는 명령으로 표현하기 위해서다.",
+      explanation: "프로그래밍 언어는 사람이 설계한 절차를 소스 코드로 작성하고, 컴퓨터가 처리할 수 있게 만드는 도구다."
+    },
+    {
+      id: "ci-q-compiler-interpreter",
+      conceptId: "ci-programming-language",
+      difficulty: "basic",
+      prompt: "컴파일러와 인터프리터의 차이를 설명하라.",
+      answer: "컴파일러는 소스 프로그램 전체를 한 번에 번역해 실행 가능한 형태를 만들고, 인터프리터는 명령 단위로 해석하면서 바로 실행한다.",
+      explanation: "컴파일러는 전체 번역, 인터프리터는 즉시 해석 실행으로 대비하면 단답형 답안이 선명하다."
     },
     {
       id: "ci-q-primary-key",
@@ -1019,14 +1027,6 @@ const computerIntroduction: SubjectNote = {
       explanation: "유일 식별성만 보면 후보키도 맞는 성질이지만, 시험 단답은 기본키로 쓰는 것이 가장 안전하다."
     },
     {
-      id: "ci-q-mpeg-gop",
-      conceptId: "ci-multimedia-compression",
-      difficulty: "applied",
-      prompt: "MPEG GOP의 I, P, B 프레임이 각각 어떻게 사용되는지 설명하라.",
-      answer: "I 프레임은 독립 복원 기준 프레임, P 프레임은 이전 I/P 프레임 기준 예측 프레임, B 프레임은 이전과 이후를 모두 참조하는 양방향 예측 프레임이다.",
-      explanation: "I는 크지만 기준이 되고, P는 차이를 저장하며, B는 압축률을 높인다."
-    },
-    {
       id: "ci-q-crypto",
       conceptId: "ci-security",
       difficulty: "basic",
@@ -1035,36 +1035,12 @@ const computerIntroduction: SubjectNote = {
       explanation: "RSA는 공개키/개인키 한 쌍, AES는 송수신자가 공유하는 같은 비밀키를 사용한다."
     },
     {
-      id: "ci-q-compression",
-      conceptId: "ci-multimedia-compression",
-      difficulty: "basic",
-      prompt: "손실 압축과 비손실 압축의 차이를 쓰고 각각의 예를 하나씩 쓰라.",
-      answer: "손실 압축은 정보를 일부 버려 원본을 완전히 복원할 수 없고 예는 JPEG다. 비손실 압축은 원본을 정확히 복원할 수 있고 예는 ZIP이다.",
-      explanation: "손실 압축은 사진, 음악, 동영상에 자주 쓰고 비손실 압축은 데이터가 정확해야 하는 파일에 적합하다."
-    },
-    {
-      id: "ci-q-switching",
-      conceptId: "ci-network-web",
-      difficulty: "applied",
-      prompt: "전화망처럼 미리 설정된 경로를 쓰는 방식과 인터넷처럼 가장 좋은 경로를 찾아 보내는 방식의 이름을 쓰라.",
-      answer: "A는 회선교환 방식, B는 패킷교환 방식이다.",
-      explanation: "회선교환은 전용 경로를 잡고, 패킷교환은 패킷마다 경로를 유동적으로 선택한다."
-    },
-    {
       id: "ci-q-db-three-level",
       conceptId: "ci-database",
       difficulty: "basic",
       prompt: "데이터베이스를 바라보는 관점에 따라 추상화한 3가지를 쓰라.",
       answer: "외부 단계, 개념 단계, 내부 단계다. 외부 스키마, 개념 스키마, 내부 스키마라고도 한다.",
       explanation: "외부는 사용자별 view, 개념은 전체 논리 구조, 내부는 실제 저장 구조다."
-    },
-    {
-      id: "ci-q-dns-server-types",
-      conceptId: "ci-network-web",
-      difficulty: "applied",
-      prompt: "DNS 서비스를 제공하는 서버 2종류와 각각의 특징을 설명하라.",
-      answer: "주 DNS 서버는 도메인의 원본 zone 레코드를 관리하고, 보조 DNS 서버는 그 정보를 복제해 백업과 부하 분산을 담당한다.",
-      explanation: "교재가 재귀/권한 DNS로 설명했다면 재귀 DNS는 클라이언트 대신 질의하고 캐시하며, 권한 DNS는 해당 도메인의 최종 레코드를 가진 서버라고 답한다."
     },
     {
       id: "ci-q-sniffing-spoofing",
@@ -1077,14 +1053,25 @@ const computerIntroduction: SubjectNote = {
   ],
   weekNotes: [
     {
+      id: "ci-week-10",
+      label: "10장",
+      title: "통신",
+      focus: "회선교환/패킷교환과 DNS 서버 종류를 비교형 답안으로 정리한다.",
+      sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
+      requiredKeywordIds: ["ci-kw-switching", "ci-kw-dns"],
+      conceptIds: ["ci-network-web"],
+      exampleQuestionIds: ["ci-q-switching", "ci-q-dns-server-types"],
+      reviewStatus: "ready"
+    },
+    {
       id: "ci-week-08",
       label: "8장",
-      title: "프로그래밍 언어1",
-      focus: "범위 PDF에 포함된 보조 챕터로 마지막에 핵심 용어만 확인한다.",
+      title: "프로그래밍언어",
+      focus: "프로그래밍 언어 목적, 알고리즘/소스 코드, 컴파일러/인터프리터 차이를 정리한다.",
       sourceMaterialIds: ["ci-pdf-08-09-10-13"],
-      requiredKeywordIds: ["ci-kw-programming"],
+      requiredKeywordIds: ["ci-kw-programming", "ci-kw-algorithm", "ci-kw-compiler-interpreter"],
       conceptIds: ["ci-programming-language"],
-      exampleQuestionIds: ["ci-q-programming-language"],
+      exampleQuestionIds: ["ci-q-programming-language", "ci-q-compiler-interpreter"],
       reviewStatus: "ready"
     },
     {
@@ -1096,28 +1083,6 @@ const computerIntroduction: SubjectNote = {
       requiredKeywordIds: ["ci-kw-primary-key", "ci-kw-db-schema"],
       conceptIds: ["ci-database"],
       exampleQuestionIds: ["ci-q-primary-key", "ci-q-db-three-level"],
-      reviewStatus: "ready"
-    },
-    {
-      id: "ci-week-2024-multimedia",
-      label: "24년",
-      title: "MPEG와 압축",
-      focus: "I/P/B 프레임과 손실/비손실 압축 예시를 시험문제 기준으로 암기한다.",
-      sourceMaterialIds: ["ci-2024-exam"],
-      requiredKeywordIds: ["ci-kw-mpeg-gop", "ci-kw-compression"],
-      conceptIds: ["ci-multimedia-compression"],
-      exampleQuestionIds: ["ci-q-mpeg-gop", "ci-q-compression"],
-      reviewStatus: "ready"
-    },
-    {
-      id: "ci-week-10",
-      label: "10장",
-      title: "컴퓨터 네트워크와 월드와이드웹",
-      focus: "회선교환/패킷교환과 DNS 서버 종류를 비교형 답안으로 정리한다.",
-      sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
-      requiredKeywordIds: ["ci-kw-switching", "ci-kw-dns"],
-      conceptIds: ["ci-network-web"],
-      exampleQuestionIds: ["ci-q-switching", "ci-q-dns-server-types"],
       reviewStatus: "ready"
     },
     {
