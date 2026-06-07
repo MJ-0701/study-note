@@ -888,7 +888,7 @@ const COMPUTER_INTRODUCTION: SubjectExamPrepArtifact = {
     {
       label: "9장",
       title: "데이터베이스",
-      focus: "기본키, 후보키, 관계형 모델, 외부/개념/내부 스키마",
+      focus: "주키/기본키/primary key, 뷰/논리적/물리적 단계",
       sourceHint: "2024년도 시험문제 1, 6번"
     },
     {
@@ -1030,7 +1030,7 @@ const COMPUTER_INTRODUCTION: SubjectExamPrepArtifact = {
       ],
       explanation: [
         "정답지 표현은 뷰단계, 논리적 단계, 물리적 단계다.",
-        "기존 외부/개념/내부 단계와 대응되지만 답안에는 정답지 표현을 먼저 쓴다."
+        "답안에는 이 세 용어를 그대로 쓰는 것이 가장 안전하다."
       ]
     },
     {
@@ -1080,10 +1080,9 @@ const COMPUTER_INTRODUCTION: SubjectExamPrepArtifact = {
     { term: "컴파일러", definition: "소스 프로그램 전체를 번역해 목적 코드나 실행 파일을 만드는 프로그램", note: "일괄 번역" },
     { term: "인터프리터", definition: "소스 프로그램을 명령 단위로 해석하며 바로 실행하는 프로그램", note: "즉시 실행" },
     { term: "기본키", definition: "관계형 테이블에서 튜플을 유일하게 식별하도록 선택한 대표 키", note: "주키, primary key" },
-    { term: "후보키", definition: "유일성과 최소성을 만족해 기본키가 될 수 있는 키", note: "기본키의 후보" },
-    { term: "외부 스키마", definition: "사용자나 응용 프로그램별로 보이는 데이터 관점", note: "사용자 view" },
-    { term: "개념 스키마", definition: "전체 데이터베이스의 논리적 구조", note: "전체 설계" },
-    { term: "내부 스키마", definition: "데이터가 저장장치에 실제 저장되는 물리적 구조", note: "저장 방식" },
+    { term: "뷰단계", definition: "사용자에게 보이는 데이터베이스 관점", note: "정답지 6번" },
+    { term: "논리적 단계", definition: "데이터베이스 전체의 논리적 구조를 보는 단계", note: "정답지 6번" },
+    { term: "물리적 단계", definition: "데이터가 실제 저장되는 구조를 보는 단계", note: "정답지 6번" },
     { term: "공개키 암호", definition: "공개키와 개인키 한 쌍을 사용하는 암호 방식", note: "RSA" },
     { term: "비공개키 암호", definition: "송수신자가 같은 비밀키를 공유하는 암호 방식", note: "DES" },
     { term: "스니핑", definition: "sender와 receiver 사이 packet을 캡처해 훔쳐보는 일", note: "packet capture" },
