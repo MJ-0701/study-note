@@ -828,15 +828,21 @@ const computerIntroduction: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "확정된 통신, 프로그래밍언어, 데이터베이스, 보안 네 축을 기준으로 2024년도 문제형 답안을 암기한다.",
-    examScope: "통신, 프로그래밍언어, 데이터베이스, 보안",
-    weekRange: "10장 통신, 8장 프로그래밍 언어1, 9장 데이터베이스, 13장 정보보안",
+    goal: "확정된 통신, 프로그래밍언어, 데이터베이스, 보안 네 축을 유지하면서 2024년도 정답지 8문항을 정답 표현 그대로 암기한다.",
+    examScope: "통신, 프로그래밍언어, 데이터베이스, 보안 + 2024년도 정답지",
+    weekRange: "10장 통신, 8장 프로그래밍 언어1, 9장 데이터베이스, 13장 정보보안, 2024년도 정답지",
     examChapters: [
       {
         label: "10장",
         title: "통신",
-        focus: "회선교환/패킷교환, DNS 서버 종류와 역할",
+        focus: "회선교환/패킷교환 또는 데이터그램, recursive DNS와 authoritative DNS",
         sourceHint: "단원10 컴퓨터 네트워크와 월드와이드웹.pdf, 2024년도 시험문제 5, 7번"
+      },
+      {
+        label: "24년",
+        title: "MPEG와 압축",
+        focus: "I/P/B 프레임, 손실 압축과 비손실 압축 예시",
+        sourceHint: "2024년도 정답지 2, 4번"
       },
       {
         label: "8장",
@@ -853,13 +859,13 @@ const computerIntroduction: SubjectNote = {
       {
         label: "13장",
         title: "정보보안",
-        focus: "공개키/비공개키 암호, 스니핑, 스푸핑",
+        focus: "RSA/DES, 스니핑, 스푸핑",
         sourceHint: "2024년도 시험문제 3, 8번"
       }
     ],
-    mustKnowConceptIds: ["ci-network-web", "ci-programming-language", "ci-database", "ci-security"],
-    weakSpots: ["DNS 서버 2종류의 수업자료 용어", "컴파일러와 인터프리터 한 문장 구분", "기본키와 후보키의 표현 차이", "외부/개념/내부 스키마 순서", "스니핑과 스푸핑 한 문장 구분"],
-    strategy: "네 확정축을 먼저 제목만 보고 말한 뒤, 통신과 보안은 비교형, 프로그래밍언어와 데이터베이스는 정확한 용어 정의형으로 반복한다."
+    mustKnowConceptIds: ["ci-network-web", "ci-multimedia-compression", "ci-programming-language", "ci-database", "ci-security"],
+    weakSpots: ["I/P/B 프레임의 정답지 표현", "손실/비손실 압축 예시", "recursive DNS와 authoritative DNS 구분", "DES를 비공개키 암호 예시로 쓰기", "뷰/논리적/물리적 단계 순서", "스니핑과 스푸핑 한 문장 구분"],
+    strategy: "정답지 8문항을 먼저 번호순으로 암기하고, 프로그래밍언어는 확정 범위 개념으로 별도 보충한다. 답안 예시는 수업 정답지 표현을 우선한다."
   },
   sources: [
     {
@@ -888,10 +894,24 @@ const computerIntroduction: SubjectNote = {
     },
     {
       id: "ci-kw-dns",
-      label: "DNS 서버 종류",
+      label: "recursive DNS와 authoritative DNS",
       status: "covered",
       professorSignal: "통신 확정범위, 2024년도 시험문제 7번",
       conceptIds: ["ci-network-web"]
+    },
+    {
+      id: "ci-kw-mpeg-gop",
+      label: "MPEG I/P/B 프레임",
+      status: "covered",
+      professorSignal: "2024년도 정답지 2번",
+      conceptIds: ["ci-multimedia-compression"]
+    },
+    {
+      id: "ci-kw-compression",
+      label: "손실/비손실 압축",
+      status: "covered",
+      professorSignal: "2024년도 정답지 4번",
+      conceptIds: ["ci-multimedia-compression"]
     },
     {
       id: "ci-kw-programming",
@@ -949,27 +969,37 @@ const computerIntroduction: SubjectNote = {
       title: "프로그래밍언어: 알고리즘과 번역",
       priority: "must-know",
       summary: "프로그래밍 언어는 알고리즘을 컴퓨터가 실행할 수 있는 명령으로 표현하고, 컴파일러나 인터프리터가 실행 가능한 형태로 처리한다.",
-      easyExplanation: "알고리즘은 해결 절차, 소스 코드는 그 절차를 언어로 쓴 것, 컴파일러는 전체 번역, 인터프리터는 바로 해석 실행이다.",
+      easyExplanation: "알고리즘은 해결 절차, 소스 코드는 그 절차를 언어로 쓴 것이다. 2024년도 정답지 직접 문항은 아니지만 확정 범위라 개념은 유지한다.",
       sourceHints: ["단원08 프로그래밍 언어1.pdf"],
       relatedKeywordIds: ["ci-kw-programming", "ci-kw-algorithm", "ci-kw-compiler-interpreter"],
-      exampleQuestionIds: ["ci-q-programming-language", "ci-q-compiler-interpreter"]
+      exampleQuestionIds: []
     },
     {
       id: "ci-database",
       title: "9장 데이터베이스 키와 3단계 스키마",
       priority: "must-know",
-      summary: "관계형 모델에서 기본키로 튜플을 식별하고, 외부/개념/내부 단계로 데이터베이스 관점을 나눈다.",
-      easyExplanation: "기본키는 한 행을 찍어내는 이름표이고, 3단계 스키마는 사용자 눈, 전체 설계도, 실제 저장 방식이다.",
+      summary: "관계형 모델에서 주키, 기본키, primary key로 튜플을 식별하고, 뷰/논리적/물리적 단계로 데이터베이스 관점을 나눈다.",
+      easyExplanation: "1번은 주키, 기본키, primary key 중 하나를 쓰면 된다. 6번은 뷰단계, 논리적 단계, 물리적 단계 순서로 고정한다.",
       sourceHints: ["단원09 데이터베이스.pdf", "2024년도 시험문제 1, 6번"],
       relatedKeywordIds: ["ci-kw-primary-key", "ci-kw-db-schema"],
       exampleQuestionIds: ["ci-q-primary-key", "ci-q-db-three-level"]
     },
     {
+      id: "ci-multimedia-compression",
+      title: "2024 정답지: MPEG와 압축",
+      priority: "must-know",
+      summary: "MPEG의 I/P/B 프레임 역할과 손실/비손실 압축의 차이 및 예시를 정답지 표현에 맞춰 암기한다.",
+      easyExplanation: "I는 복호화 기준 정보, P는 I 이후 미래 움직임 정보, B는 I와 P 사이 시간 차이를 보완하는 재생 영상 정보로 외운다. 손실 예시는 JPEG/MPEG, 비손실 예시는 run length coding/Huffman coding이다.",
+      sourceHints: ["2024년도 정답지 2, 4번"],
+      relatedKeywordIds: ["ci-kw-mpeg-gop", "ci-kw-compression"],
+      exampleQuestionIds: ["ci-q-mpeg-gop", "ci-q-compression"]
+    },
+    {
       id: "ci-network-web",
       title: "통신: 교환 방식과 DNS",
       priority: "must-know",
-      summary: "회선교환과 패킷교환을 대표 예로 비교하고, DNS 서버의 역할 차이를 설명한다.",
-      easyExplanation: "전화망은 길을 먼저 잡고, 인터넷은 조각을 그때그때 보낸다. DNS는 주소 이름을 IP로 바꿔준다.",
+      summary: "회선교환과 패킷교환 또는 데이터그램 방식을 비교하고, recursive DNS와 authoritative DNS의 역할 차이를 설명한다.",
+      easyExplanation: "회선교환은 전화망처럼 길을 먼저 잡는다. 패킷교환/데이터그램은 인터넷처럼 그때그때 보낸다. recursive DNS는 지역 사용자 안내 데스크, authoritative DNS는 원본 IP 파일을 가진 마스터 DNS다.",
       sourceHints: ["단원10 컴퓨터 네트워크와 월드와이드웹.pdf", "2024년도 시험문제 5, 7번"],
       relatedKeywordIds: ["ci-kw-switching", "ci-kw-dns"],
       exampleQuestionIds: ["ci-q-switching", "ci-q-dns-server-types"]
@@ -978,8 +1008,8 @@ const computerIntroduction: SubjectNote = {
       id: "ci-security",
       title: "13장 정보보안",
       priority: "must-know",
-      summary: "공개키/비공개키 암호 알고리즘 예시와 스니핑/스푸핑의 공격 의미를 구분한다.",
-      easyExplanation: "RSA는 키 한 쌍, AES는 같은 비밀키다. 스니핑은 엿보기, 스푸핑은 속이기다.",
+      summary: "공개키/비공개키 암호 알고리즘 예시는 RSA/DES로 쓰고, 스니핑/스푸핑의 공격 의미를 구분한다.",
+      easyExplanation: "공개키는 RSA, 비공개키는 DES로 정답지 기준 고정. 스니핑은 패킷 훔쳐보기, 스푸핑은 통신 주체를 속이는 행동이다.",
       sourceHints: ["단원13 정보보안.pdf", "2024년도 시험문제 3, 8번"],
       relatedKeywordIds: ["ci-kw-crypto", "ci-kw-sniffing-spoofing"],
       exampleQuestionIds: ["ci-q-crypto", "ci-q-sniffing-spoofing"]
@@ -987,68 +1017,68 @@ const computerIntroduction: SubjectNote = {
   ],
   exampleQuestions: [
     {
-      id: "ci-q-switching",
-      conceptId: "ci-network-web",
-      difficulty: "applied",
-      prompt: "전화망처럼 미리 설정된 경로를 쓰는 방식과 인터넷처럼 가장 좋은 경로를 찾아 보내는 방식의 이름을 쓰라.",
-      answer: "A는 회선교환 방식, B는 패킷교환 방식이다.",
-      explanation: "회선교환은 전용 경로를 잡고, 패킷교환은 패킷마다 경로를 유동적으로 선택한다."
-    },
-    {
-      id: "ci-q-dns-server-types",
-      conceptId: "ci-network-web",
-      difficulty: "applied",
-      prompt: "DNS 서비스를 제공하는 서버 2종류와 각각의 특징을 설명하라.",
-      answer: "주 DNS 서버는 도메인의 원본 zone 레코드를 관리하고, 보조 DNS 서버는 그 정보를 복제해 백업과 부하 분산을 담당한다.",
-      explanation: "교재가 재귀/권한 DNS로 설명했다면 재귀 DNS는 클라이언트 대신 질의하고 캐시하며, 권한 DNS는 해당 도메인의 최종 레코드를 가진 서버라고 답한다."
-    },
-    {
-      id: "ci-q-programming-language",
-      conceptId: "ci-programming-language",
-      difficulty: "basic",
-      prompt: "프로그래밍 언어를 배우는 이유를 설명하라.",
-      answer: "문제 해결 절차인 알고리즘을 컴퓨터가 실행할 수 있는 명령으로 표현하기 위해서다.",
-      explanation: "프로그래밍 언어는 사람이 설계한 절차를 소스 코드로 작성하고, 컴퓨터가 처리할 수 있게 만드는 도구다."
-    },
-    {
-      id: "ci-q-compiler-interpreter",
-      conceptId: "ci-programming-language",
-      difficulty: "basic",
-      prompt: "컴파일러와 인터프리터의 차이를 설명하라.",
-      answer: "컴파일러는 소스 프로그램 전체를 한 번에 번역해 실행 가능한 형태를 만들고, 인터프리터는 명령 단위로 해석하면서 바로 실행한다.",
-      explanation: "컴파일러는 전체 번역, 인터프리터는 즉시 해석 실행으로 대비하면 단답형 답안이 선명하다."
-    },
-    {
       id: "ci-q-primary-key",
       conceptId: "ci-database",
       difficulty: "basic",
       prompt: "관계형 데이터베이스 모델에서 여러 튜플 중 하나의 튜플을 유일하게 식별할 수 있는 키는 무엇인가.",
-      answer: "기본키다. 후보키 중 대표 식별자로 선택된 키이며 중복과 NULL을 허용하지 않는다.",
-      explanation: "유일 식별성만 보면 후보키도 맞는 성질이지만, 시험 단답은 기본키로 쓰는 것이 가장 안전하다."
+      answer: "주키, 기본키, primary key 중 한 가지로 답하면 된다.",
+      explanation: "정답지 허용 표현은 주키, 기본키, primary key다. 보충 설명을 붙이면 한 튜플을 유일하게 식별하는 키라고 쓰면 된다."
+    },
+    {
+      id: "ci-q-mpeg-gop",
+      conceptId: "ci-multimedia-compression",
+      difficulty: "applied",
+      prompt: "MPEG에서 사용하는 GOP의 I, P, B 프레임이 각각 어떻게 사용되는지 설명하라.",
+      answer: "I 프레임은 복호화 시 기준이 되는 정보를 가지고 있는 프레임이다. P 프레임은 I 프레임을 기준으로 하여 미래의 정보를 가지고 있으며, I 프레임 이후 어떻게 움직일 것인가에 대한 정보를 가진다. B 프레임은 I 프레임과 P 프레임의 중간에 위치하며, I 프레임과 P 프레임의 시간 차이를 메우는 형태로 재생 영상 정보를 가진다.",
+      explanation: "정답지 표현은 I=기준 정보, P=I 이후 미래 움직임 정보, B=I와 P 사이의 재생 영상 정보다. 일반 교재식 표현보다 이 표현을 우선 암기한다."
     },
     {
       id: "ci-q-crypto",
       conceptId: "ci-security",
       difficulty: "basic",
       prompt: "공개키 암호 알고리즘과 비공개키 암호 알고리즘의 예를 각각 하나씩 쓰라.",
-      answer: "공개키 암호의 예는 RSA, 비공개키 또는 대칭키 암호의 예는 AES다.",
-      explanation: "RSA는 공개키/개인키 한 쌍, AES는 송수신자가 공유하는 같은 비밀키를 사용한다."
+      answer: "공개키 암호 알고리즘은 RSA 암호 알고리즘, 비공개키 암호 알고리즘은 DES 암호 알고리즘이다.",
+      explanation: "정답지 기준은 RSA/DES다. 이 시험 답안에서는 비공개키 암호 알고리즘 예시를 DES로 고정한다."
+    },
+    {
+      id: "ci-q-compression",
+      conceptId: "ci-multimedia-compression",
+      difficulty: "basic",
+      prompt: "손실 압축과 비손실 압축의 차이와 각각의 예를 쓰라.",
+      answer: "손실 압축은 중복되는 데이터나 삭제되어도 눈으로 보거나 귀로 들을 때 전체 데이터에 큰 영향을 미치지 않는 데이터를 삭제해 데이터 크기를 줄이는 압축 방법이다. 손실 압축의 예는 JPEG, MPEG이고, 비손실 압축의 예는 run length coding, Huffman coding이다.",
+      explanation: "정답지는 손실 압축 예시로 jpeg/mpeg, 비손실 압축 예시로 run length coding/huffman coding을 제시한다. 예시 철자까지 같이 외운다."
+    },
+    {
+      id: "ci-q-switching",
+      conceptId: "ci-network-web",
+      difficulty: "applied",
+      prompt: "전화망처럼 미리 설정된 경로를 쓰는 방식과 인터넷처럼 가장 좋은 경로를 찾아 보내는 방식의 이름을 쓰라.",
+      answer: "A는 회선 교환 방식(circuit switching)이고, B는 패킷 교환 방식 또는 데이터그램 방식이다.",
+      explanation: "정답지 표현은 A=회선 교환 방식, B=패킷 교환 방식 또는 데이터그램 방식이다. 영어로 circuit switching까지 같이 외우면 안전하다."
     },
     {
       id: "ci-q-db-three-level",
       conceptId: "ci-database",
       difficulty: "basic",
       prompt: "데이터베이스를 바라보는 관점에 따라 추상화한 3가지를 쓰라.",
-      answer: "외부 단계, 개념 단계, 내부 단계다. 외부 스키마, 개념 스키마, 내부 스키마라고도 한다.",
-      explanation: "외부는 사용자별 view, 개념은 전체 논리 구조, 내부는 실제 저장 구조다."
+      answer: "뷰단계, 논리적 단계, 물리적 단계다.",
+      explanation: "기존 외부/개념/내부 단계와 대응되지만, 정답지 표현은 뷰단계, 논리적 단계, 물리적 단계 순서다."
+    },
+    {
+      id: "ci-q-dns-server-types",
+      conceptId: "ci-network-web",
+      difficulty: "applied",
+      prompt: "DNS 서비스를 제공하는 서버 2종류와 각각의 특징을 설명하라.",
+      answer: "recursive DNS는 지역 DNS라고도 하며, 지역 사용자에게 information desk 역할을 해주는 DNS다. authoritative DNS는 마스터 DNS라고도 하며, 도메인 안에서 서비스되는 모든 서버 IP 주소의 원본 파일을 가지고 있고 recursive DNS의 요청에 대해 자신이 관리하는 도메인 내 서버 IP 주소를 응답한다.",
+      explanation: "정답지 용어는 recursive DNS와 authoritative DNS다. recursive는 지역 사용자 안내 데스크, authoritative는 원본 파일을 가진 마스터 DNS로 구분한다."
     },
     {
       id: "ci-q-sniffing-spoofing",
       conceptId: "ci-security",
       difficulty: "basic",
       prompt: "스니핑과 스푸핑을 각각 간단히 설명하라.",
-      answer: "스니핑은 네트워크 패킷을 몰래 엿보거나 가로채는 공격이고, 스푸핑은 주소나 신원을 위조해 다른 주체처럼 속이는 공격이다.",
-      explanation: "스니핑은 도청, 스푸핑은 위장으로 기억한다."
+      answer: "스니핑은 sender와 receiver 사이에 전달되는 packet들을 캡처하여 훔쳐보는 일이다. 스푸핑은 통신 주체들, 즉 송신자와 수신자를 속이고 상대 주체들에게 다른 상대 주체가 공격자라고 속이는 모든 행동이다.",
+      explanation: "정답지 표현은 스니핑=패킷 캡처 후 훔쳐보기, 스푸핑=통신 주체를 속이는 행동이다. 단답에서는 도청/위장으로 압축해도 된다."
     }
   ],
   weekNotes: [
@@ -1064,6 +1094,17 @@ const computerIntroduction: SubjectNote = {
       reviewStatus: "ready"
     },
     {
+      id: "ci-week-2024-multimedia",
+      label: "24년",
+      title: "MPEG와 압축",
+      focus: "I/P/B 프레임 역할과 손실/비손실 압축 예시를 정답지 표현으로 암기한다.",
+      sourceMaterialIds: ["ci-2024-exam"],
+      requiredKeywordIds: ["ci-kw-mpeg-gop", "ci-kw-compression"],
+      conceptIds: ["ci-multimedia-compression"],
+      exampleQuestionIds: ["ci-q-mpeg-gop", "ci-q-compression"],
+      reviewStatus: "ready"
+    },
+    {
       id: "ci-week-08",
       label: "8장",
       title: "프로그래밍언어",
@@ -1071,7 +1112,7 @@ const computerIntroduction: SubjectNote = {
       sourceMaterialIds: ["ci-pdf-08-09-10-13"],
       requiredKeywordIds: ["ci-kw-programming", "ci-kw-algorithm", "ci-kw-compiler-interpreter"],
       conceptIds: ["ci-programming-language"],
-      exampleQuestionIds: ["ci-q-programming-language", "ci-q-compiler-interpreter"],
+      exampleQuestionIds: [],
       reviewStatus: "ready"
     },
     {
@@ -1089,7 +1130,7 @@ const computerIntroduction: SubjectNote = {
       id: "ci-week-13",
       label: "13장",
       title: "정보보안",
-      focus: "RSA/AES 예시와 스니핑/스푸핑 정의를 한 문장으로 고정한다.",
+      focus: "RSA/DES 예시와 스니핑/스푸핑 정의를 정답지 표현으로 고정한다.",
       sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
       requiredKeywordIds: ["ci-kw-crypto", "ci-kw-sniffing-spoofing"],
       conceptIds: ["ci-security"],
