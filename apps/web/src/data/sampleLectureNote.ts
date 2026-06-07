@@ -853,7 +853,7 @@ const computerIntroduction: SubjectNote = {
       {
         label: "9장",
         title: "데이터베이스",
-        focus: "관계형 데이터베이스의 기본키와 외부/개념/내부 스키마",
+        focus: "주키/기본키/primary key와 뷰/논리적/물리적 단계",
         sourceHint: "2024년도 시험문제 1, 6번"
       },
       {
@@ -936,7 +936,7 @@ const computerIntroduction: SubjectNote = {
     },
     {
       id: "ci-kw-primary-key",
-      label: "기본키와 후보키",
+      label: "주키/기본키/primary key",
       status: "covered",
       professorSignal: "2024년도 시험문제 1번",
       conceptIds: ["ci-database"]
@@ -1062,7 +1062,7 @@ const computerIntroduction: SubjectNote = {
       difficulty: "basic",
       prompt: "데이터베이스를 바라보는 관점에 따라 추상화한 3가지를 쓰라.",
       answer: "뷰단계, 논리적 단계, 물리적 단계다.",
-      explanation: "기존 외부/개념/내부 단계와 대응되지만, 정답지 표현은 뷰단계, 논리적 단계, 물리적 단계 순서다."
+      explanation: "정답지 표현은 뷰단계, 논리적 단계, 물리적 단계 순서다. 답안에는 이 세 용어를 그대로 쓴다."
     },
     {
       id: "ci-q-dns-server-types",
@@ -1119,7 +1119,7 @@ const computerIntroduction: SubjectNote = {
       id: "ci-week-09",
       label: "9장",
       title: "데이터베이스",
-      focus: "기본키와 외부/개념/내부 스키마를 단답형으로 반복한다.",
+      focus: "주키/기본키/primary key와 뷰/논리적/물리적 단계를 단답형으로 반복한다.",
       sourceMaterialIds: ["ci-pdf-08-09-10-13", "ci-2024-exam"],
       requiredKeywordIds: ["ci-kw-primary-key", "ci-kw-db-schema"],
       conceptIds: ["ci-database"],
