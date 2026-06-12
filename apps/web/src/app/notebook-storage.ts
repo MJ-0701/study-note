@@ -23,7 +23,7 @@
 //   MANUAL CLEAR (no prior error):
 //     noop, onErrorChanged() 호출 안 함.
 
-import { type StudyNotebook } from "@study-note/domain";
+import { type StudyNotebook, type SubjectNote, type WeekNote } from "@study-note/domain";
 import { sampleLectureNote } from "../data/sampleLectureNote";
 
 export const notebookStorageKey = "study-note.notebook.v2";
@@ -57,7 +57,11 @@ export function loadStoredNotebook(userId: string): StudyNotebook {
       Array.isArray(parsed.subjects) &&
       hasCurrentSubjectSet(parsed)
     ) {
-      return parsed as StudyNotebook;
+      const upgraded = applyBundledContentUpdates(parsed as StudyNotebook);
+      if (upgraded !== parsed) {
+        try { window.localStorage.setItem(scopedKey, JSON.stringify(upgraded)); } catch { /* ignore */ }
+      }
+      return upgraded;
     }
 
     try { window.localStorage.removeItem(scopedKey); } catch { /* ignore */ }
@@ -66,6 +70,93 @@ export function loadStoredNotebook(userId: string): StudyNotebook {
   }
 
   return sampleLectureNote;
+}
+
+const DIGITAL_ENGINEERING_ID = "digital-engineering";
+const OLD_DIGITAL_ENGINEERING_GOAL =
+  "6장 논리식 간소화, 7장 조합논리회로, 8장 플립플롭을 힌트/퀴즈 PDF 유형 중심으로 정리한다.";
+const OLD_DIGITAL_ENGINEERING_STRATEGY =
+  "힌트 PDF와 퀴즈 PDF 유형을 먼저 풀고, 6장 계산형 -> 7장 공식/선택회로형 -> 8장 표/파형형 순서로 반복한다.";
+const OLD_DIGITAL_ENGINEERING_KMAP_ANSWER =
+  "minterm을 표시하고 Gray code 순서로 배치한 뒤 가능한 큰 묶음을 만들고 변하지 않는 변수만 남긴다.";
+
+function applyBundledContentUpdates(notebook: StudyNotebook): StudyNotebook {
+  const bundledDigitalEngineering = sampleLectureNote.subjects.find(
+    (subject) => subject.id === DIGITAL_ENGINEERING_ID
+  );
+
+  if (!bundledDigitalEngineering) {
+    return notebook;
+  }
+
+  let changed = false;
+  const subjects = notebook.subjects.map((subject) => {
+    if (subject.id !== DIGITAL_ENGINEERING_ID || !isStockDigitalEngineeringContent(subject)) {
+      return subject;
+    }
+    changed = true;
+    return mergeBundledSubjectPreservingUserWork(subject, bundledDigitalEngineering);
+  });
+
+  if (!changed) {
+    return notebook;
+  }
+
+  return {
+    ...notebook,
+    updatedAt: sampleLectureNote.updatedAt,
+    subjects
+  };
+}
+
+function isStockDigitalEngineeringContent(subject: SubjectNote): boolean {
+  const kmapQuestion = subject.exampleQuestions.find((question) => question.id === "de-q-kmap");
+
+  return (
+    subject.summary.goal === OLD_DIGITAL_ENGINEERING_GOAL ||
+    subject.summary.strategy === OLD_DIGITAL_ENGINEERING_STRATEGY ||
+    kmapQuestion?.answer === OLD_DIGITAL_ENGINEERING_KMAP_ANSWER
+  );
+}
+
+function mergeBundledSubjectPreservingUserWork(stored: SubjectNote, bundled: SubjectNote): SubjectNote {
+  return {
+    ...bundled,
+    termId: stored.termId ?? bundled.termId,
+    sources: mergeById(bundled.sources, stored.sources),
+    requiredKeywords: mergeById(bundled.requiredKeywords, stored.requiredKeywords),
+    concepts: mergeById(bundled.concepts, stored.concepts),
+    exampleQuestions: mergeById(bundled.exampleQuestions, stored.exampleQuestions),
+    weekNotes: mergeWeekNotesPreservingUserNotes(bundled.weekNotes, stored.weekNotes)
+  };
+}
+
+function mergeById<T extends { id: string }>(bundledItems: T[], storedItems: T[]): T[] {
+  const bundledIds = new Set(bundledItems.map((item) => item.id));
+  return [
+    ...bundledItems,
+    ...storedItems.filter((item) => !bundledIds.has(item.id))
+  ];
+}
+
+function mergeWeekNotesPreservingUserNotes(bundledWeeks: WeekNote[], storedWeeks: WeekNote[]): WeekNote[] {
+  const storedById = new Map(storedWeeks.map((week) => [week.id, week]));
+  const bundledIds = new Set(bundledWeeks.map((week) => week.id));
+  const mergedBundledWeeks = bundledWeeks.map((week) => {
+    const storedWeek = storedById.get(week.id);
+    if (typeof storedWeek?.userNotes !== "string") {
+      return week;
+    }
+    return {
+      ...week,
+      userNotes: storedWeek.userNotes
+    };
+  });
+
+  return [
+    ...mergedBundledWeeks,
+    ...storedWeeks.filter((week) => !bundledIds.has(week.id))
+  ];
 }
 
 export function hasCurrentSubjectSet(candidate: Partial<StudyNotebook>): boolean {

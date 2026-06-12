@@ -7,7 +7,7 @@ const digitalEngineering: SubjectNote = {
   examLabel: "기말고사",
   examPhase: "final",
   summary: {
-    goal: "6장 논리식 간소화, 7장 조합논리회로, 8장 플립플롭을 힌트/퀴즈 PDF 유형 중심으로 정리한다.",
+    goal: "6장 논리식 간소화, 7장 조합논리회로, 8장 플립플롭을 힌트/퀴즈 PDF 계산형 문제의 풀이 순서까지 정리한다.",
     examScope: "6장 논리식의 간소화, 7장 조합논리회로, 8장 플립플롭, 별도 힌트/퀴즈 PDF",
     weekRange: "6장, 7장, 8장 + 별도 PDF",
     examChapters: [
@@ -38,7 +38,7 @@ const digitalEngineering: SubjectNote = {
       "de-flipflop"
     ],
     weakSpots: ["무관항 사용 여부", "NAND/NOR 회로 중간 출력", "디코더/MUX 선택선", "D/JK/T 다음 상태", "SR 래치 파형 구간별 상태"],
-    strategy: "힌트 PDF와 퀴즈 PDF 유형을 먼저 풀고, 6장 계산형 -> 7장 공식/선택회로형 -> 8장 표/파형형 순서로 반복한다."
+    strategy: "문제 제목을 외우는 방식이 아니라 힌트 PDF의 실제 문항처럼 식 세우기, K-map 표시, 진리표 작성, 파형 추적을 손으로 반복한다."
   },
   sources: [
     {
@@ -165,41 +165,41 @@ const digitalEngineering: SubjectNote = {
       id: "de-q-kmap",
       conceptId: "de-kmap",
       difficulty: "applied",
-      prompt: "진리표에서 1이 되는 항을 카르노맵으로 묶어 논리식을 간소화하는 절차를 설명하라.",
-      answer: "minterm을 표시하고 Gray code 순서로 배치한 뒤 가능한 큰 묶음을 만들고 변하지 않는 변수만 남긴다.",
-      explanation: "열 순서 00, 01, 11, 10과 모든 1 포함 여부가 핵심 감점 포인트다."
+      prompt: "힌트 PDF 3쪽의 f = x'y'z' + x'y'z + x'yz' + xy'z + xyz'를 K-map으로 간소화하라.",
+      answer: "각 곱항을 minterm으로 바꾸면 m0, m1, m2, m5, m6이므로 f = Σm(0,1,2,5,6)이다. 3변수 K-map은 yz 열을 00, 01, 11, 10 순서로 놓고 해당 칸에 1을 표시한다. yz=01 세로 묶음은 y'z, yz=10 세로 묶음은 yz', x=0 행의 00-01 묶음은 x'y'가 되어 한 가지 최소식은 f = x'y' + y'z + yz'다.",
+      explanation: "m5와 m6은 각각 101, 110이므로 아래 행의 01, 10 열에 들어간다. m0은 x'y'로 묶어도 되고 x'z'로 묶어도 되어 f = x'z' + y'z + yz'도 동치 최소식이다. 객관식이면 보기와 같은 최소식을 고르면 된다."
     },
     {
       id: "de-q-dont-care",
       conceptId: "de-kmap",
       difficulty: "applied",
-      prompt: "카르노맵에서 무관항 X를 언제 사용하는지 설명하라.",
-      answer: "무관항은 더 큰 묶음을 만들어 식이 짧아질 때만 1처럼 사용하고, 필요 없으면 사용하지 않는다.",
-      explanation: "X는 정답에 반드시 포함해야 하는 1이 아니다. 간소화에 도움이 되는 선택지로 보는 것이 안전하다."
+      prompt: "4변수 K-map에서 1항과 무관항 d가 함께 주어질 때 풀이 순서를 쓰라.",
+      answer: "먼저 반드시 포함해야 하는 1을 모두 표시하고, d는 더 큰 2, 4, 8칸 묶음을 만들 때만 1처럼 사용한다. 묶음 안에서 값이 변하는 변수는 사라지고, 고정되는 변수만 곱항으로 남긴다. 마지막에는 모든 1이 최소 한 번 포함됐는지 확인하고, d만 포함된 묶음은 만들지 않는다.",
+      explanation: "무관항은 답에 꼭 넣어야 하는 칸이 아니라 간소화에 써도 되는 선택지다. 시험에서는 d를 무조건 쓰는 것보다 식이 짧아지는지 먼저 보는 판단이 중요하다."
     },
     {
       id: "de-q-nand-output",
       conceptId: "de-universal-gates",
       difficulty: "applied",
-      prompt: "NAND 회로에서 중간 출력을 적어 최종 출력을 간소화하라.",
-      answer: "중간 NAND 출력을 괄호와 보수로 적고 드모르간을 적용해 최종식을 구한다.",
-      explanation: "힌트 PDF 마지막 회로는 B'와 (AB')'를 거쳐 X = A + B로 간소화된다."
+      prompt: "힌트 PDF 7쪽 NAND 회로의 최종 출력 X를 구하라.",
+      answer: "첫 번째 NAND는 B와 B를 묶은 형태라서 B'를 만든다. 다음 NAND의 출력은 N1 = (AB')'이다. 마지막 출력은 X = (N1B')' = ((AB')'B')'가 된다. 드모르간을 적용하면 X = AB' + B이고, 흡수법칙으로 AB' + B = A + B가 된다.",
+      explanation: "NAND 회로는 중간 출력마다 보수가 붙으므로 괄호를 생략하면 틀리기 쉽다. 마지막 단계에서 B + AB' = A + B로 줄어드는 흡수법칙까지 확인해야 한다."
     },
     {
       id: "de-q-logic-expression",
       conceptId: "de-combinational-circuit",
       difficulty: "applied",
-      prompt: "두 회로가 각각 F = HD + DK와 F = D(H + K)를 만들 때 같은 회로인지 판단하라.",
-      answer: "HD + DK = D(H + K)이므로 두 회로는 같은 논리식이다.",
-      explanation: "게이트별 중간 출력을 먼저 쓰고 공통 인수 D를 묶는다."
+      prompt: "힌트 PDF 2쪽의 두 회로가 같은 기능인지 논리식으로 판단하라.",
+      answer: "왼쪽 회로는 위 AND가 HD, 아래 AND가 DK를 만들고 두 출력을 OR하므로 F = HD + DK다. 공통 인수 D를 묶으면 F = D(H + K)가 된다. 오른쪽 회로는 H와 K를 먼저 OR해서 H + K를 만들고 D와 AND하므로 F = D(H + K)다. 따라서 두 회로는 같은 논리식을 갖는다.",
+      explanation: "이 유형은 그림을 보고 바로 같다고 찍는 문제가 아니라 게이트별 중간 출력을 쓰는 문제다. 핵심 법칙은 분배법칙 AB + AC = A(B + C)다."
     },
     {
       id: "de-q-adders",
       conceptId: "de-combinational-circuit",
       difficulty: "basic",
       prompt: "반가산기와 전가산기의 합과 자리올림 식을 쓰라.",
-      answer: "반가산기 S=A xor B, C=AB. 전가산기 S=A xor B xor Cin, Cout=AB+ACin+BCin.",
-      explanation: "자리올림은 입력 셋 중 적어도 두 개가 1인 경우다. 병렬 가산기는 전가산기를 자리수만큼 이어 붙인 구조로 본다."
+      answer: "반가산기는 두 비트 A, B만 더하므로 합은 S = A xor B이고 자리올림은 C = AB다. 전가산기는 A, B, Cin 세 비트를 더하므로 S = A xor B xor Cin이다. 자리올림은 세 입력 중 적어도 두 개가 1일 때 1이므로 Cout = AB + ACin + BCin이다.",
+      explanation: "퀴즈 힌트 5쪽처럼 B 입력 앞에 XOR들이 있고 C0 = S가 들어가면 4비트 병렬 가산기/감산기다. S=0이면 B가 그대로 들어가 덧셈, S=1이면 B가 반전되고 C0=1이 더해져 2의 보수 뺄셈 A-B가 된다."
     },
     {
       id: "de-q-comparator",
@@ -222,8 +222,16 @@ const digitalEngineering: SubjectNote = {
       conceptId: "de-flipflop",
       difficulty: "applied",
       prompt: "NOR SR 래치의 S/R 입력에 따른 다음 Q 상태를 설명하라.",
-      answer: "00은 유지, 01은 Reset, 10은 Set, 11은 금지/부정 상태다.",
-      explanation: "파형 문제는 각 구간의 S/R 조합을 표에 대입하면 된다."
+      answer: "NOR SR 래치에서 S=0, R=0이면 Q(n+1)=Q(n)으로 유지된다. S=0, R=1이면 Reset이므로 Q(n+1)=0이다. S=1, R=0이면 Set이므로 Q(n+1)=1이다. S=1, R=1이면 Q와 Q'가 모두 0이 될 수 있어 금지 상태다.",
+      explanation: "힌트 PDF 그림은 입력 위치 때문에 S/R 순서를 헷갈리기 쉽다. NOR형은 active-high라서 입력이 1일 때 Set 또는 Reset 동작이 일어난다."
+    },
+    {
+      id: "de-q-sr-waveform",
+      conceptId: "de-flipflop",
+      difficulty: "applied",
+      prompt: "힌트 PDF 6쪽 NOR SR 래치 파형에서 Q를 그리는 순서를 설명하라.",
+      answer: "초기 Q=0에서 시작한다. 첫 번째 S 펄스 동안 S=1, R=0이므로 Q는 1로 올라간다. 이후 S=R=0이면 그 값을 유지한다. 첫 번째 R 펄스에서 S=0, R=1이 되어 Q는 0으로 내려간다. 두 번째 S 펄스에서 다시 1로 올라가고, 두 번째 R 펄스에서 다시 0으로 내려간다.",
+      explanation: "파형 문제는 모양을 통째로 외우는 문제가 아니라 각 시간 구간의 S/R 조합을 NOR SR 래치 표에 대입하는 문제다. S와 R이 모두 0인 구간에서는 직전 Q를 그대로 이어 그린다."
     },
     {
       id: "de-q-flipflop-types",
@@ -265,7 +273,7 @@ const digitalEngineering: SubjectNote = {
       sourceMaterialIds: ["de-pdf-06-08", "de-hint-quiz-pdf"],
       requiredKeywordIds: ["de-kw-flipflop", "de-kw-flipflop-types"],
       conceptIds: ["de-flipflop"],
-      exampleQuestionIds: ["de-q-sr-latch", "de-q-flipflop-types"],
+      exampleQuestionIds: ["de-q-sr-latch", "de-q-sr-waveform", "de-q-flipflop-types"],
       reviewStatus: "ready"
     }
   ]
@@ -1143,7 +1151,7 @@ const computerIntroduction: SubjectNote = {
 export const sampleLectureNote: StudyNotebook = {
   id: "final-study-notebook-001",
   title: "기말고사 4과목 Lecture Note",
-  updatedAt: "2026-05-02",
+  updatedAt: "2026-06-12",
   term: "2026년 1학기",
   audience: "직장인 전형 대학생 + 같은 수업 동기",
   sourceWorkspaceUrl: "https://www.notion.so/1-33ff019a655181a1813ae6a1ad37a02a",

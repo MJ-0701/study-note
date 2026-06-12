@@ -29,6 +29,35 @@ register(
             id: "nb-sample",
             updatedAt: "2026-01-01T00:00:00.000Z",
             subjects: [
+              {
+                id: "digital-engineering",
+                title: "디지털공학개론",
+                summary: {
+                  goal: "새 풀이형 디지털공학 목표",
+                  strategy: "새 풀이형 디지털공학 전략"
+                },
+                termId: "sample-term",
+                sources: [{ id: "de-source-new", title: "새 출처" }],
+                requiredKeywords: [{ id: "de-kw-new", label: "새 키워드" }],
+                concepts: [{ id: "de-concept-new", title: "새 개념" }],
+                exampleQuestions: [
+                  { id: "de-q-kmap", answer: "새 풀이형 K-map 답안" },
+                  { id: "de-q-sr-waveform", answer: "새 파형 답안" }
+                ],
+                weekNotes: [
+                  {
+                    id: "de-chapter-08",
+                    label: "8장",
+                    title: "플립플롭",
+                    focus: "새 풀이형 파형",
+                    sourceMaterialIds: [],
+                    requiredKeywordIds: [],
+                    conceptIds: [],
+                    exampleQuestionIds: ["de-q-sr-waveform"],
+                    reviewStatus: "ready"
+                  }
+                ]
+              },
               { id: "s1", title: "수학" },
               { id: "s2", title: "물리" }
             ]
@@ -92,6 +121,16 @@ const VALID_NOTEBOOK = {
   id: "nb-x",
   updatedAt: "2026-05-27T00:00:00.000Z",
   subjects: [
+    {
+      id: "digital-engineering",
+      title: "사용자 디지털공학",
+      summary: { goal: "사용자 목표", strategy: "사용자 전략" },
+      sources: [],
+      requiredKeywords: [],
+      concepts: [],
+      exampleQuestions: [{ id: "de-q-kmap", answer: "사용자 답안" }],
+      weekNotes: []
+    },
     { id: "s1", title: "수학" },
     { id: "s2", title: "물리" }
   ]
@@ -135,7 +174,76 @@ describe("notebook-storage — (a) loadStoredNotebook", () => {
     storageBacking.set("study-note.notebook.v2:u1", JSON.stringify(VALID_NOTEBOOK));
     const nb = ns.loadStoredNotebook("u1");
     assert.equal(nb.id, "nb-x");
-    assert.equal(nb.subjects.length, 2);
+    assert.equal(nb.subjects.length, 3);
+    assert.equal(nb.subjects[0].title, "사용자 디지털공학");
+  });
+
+  test("case 5b: stock digital-engineering content → bundled 풀이형 upgrade, user work preserved", () => {
+    const stockNotebook = {
+      id: "nb-old",
+      updatedAt: "2026-05-02",
+      subjects: [
+        {
+          id: "digital-engineering",
+          title: "예전 디지털공학",
+          termId: "stored-term",
+          summary: {
+            goal: "6장 논리식 간소화, 7장 조합논리회로, 8장 플립플롭을 힌트/퀴즈 PDF 유형 중심으로 정리한다.",
+            strategy: "힌트 PDF와 퀴즈 PDF 유형을 먼저 풀고, 6장 계산형 -> 7장 공식/선택회로형 -> 8장 표/파형형 순서로 반복한다."
+          },
+          sources: [{ id: "de-source-custom", title: "사용자 추가 출처" }],
+          requiredKeywords: [],
+          concepts: [],
+          exampleQuestions: [
+            {
+              id: "de-q-kmap",
+              answer: "minterm을 표시하고 Gray code 순서로 배치한 뒤 가능한 큰 묶음을 만들고 변하지 않는 변수만 남긴다."
+            },
+            { id: "de-q-custom", answer: "사용자 추가 문제" }
+          ],
+          weekNotes: [
+            {
+              id: "de-chapter-08",
+              label: "8장",
+              title: "예전 플립플롭",
+              focus: "예전",
+              sourceMaterialIds: [],
+              requiredKeywordIds: [],
+              conceptIds: [],
+              exampleQuestionIds: [],
+              reviewStatus: "ready",
+              userNotes: "내가 적은 파형 메모"
+            },
+            {
+              id: "de-week-custom",
+              label: "추가",
+              title: "사용자 추가 주차",
+              focus: "보존",
+              sourceMaterialIds: [],
+              requiredKeywordIds: [],
+              conceptIds: [],
+              exampleQuestionIds: [],
+              reviewStatus: "ready",
+              userNotes: "추가 메모"
+            }
+          ]
+        },
+        { id: "s1", title: "수학" },
+        { id: "s2", title: "물리" }
+      ]
+    };
+    storageBacking.set("study-note.notebook.v2:u1", JSON.stringify(stockNotebook));
+
+    const nb = ns.loadStoredNotebook("u1");
+    const digital = nb.subjects.find((subject: { id: string }) => subject.id === "digital-engineering");
+    assert.equal(digital.title, "디지털공학개론");
+    assert.equal(digital.termId, "stored-term");
+    assert.equal(digital.summary.goal, "새 풀이형 디지털공학 목표");
+    assert.ok(digital.exampleQuestions.some((question: { id: string }) => question.id === "de-q-sr-waveform"));
+    assert.ok(digital.exampleQuestions.some((question: { id: string }) => question.id === "de-q-custom"));
+    assert.equal(digital.weekNotes.find((week: { id: string }) => week.id === "de-chapter-08").userNotes, "내가 적은 파형 메모");
+    assert.equal(digital.weekNotes.find((week: { id: string }) => week.id === "de-week-custom").userNotes, "추가 메모");
+    assert.equal(JSON.parse(storageBacking.get("study-note.notebook.v2:u1") ?? "{}").updatedAt, "2026-01-01T00:00:00.000Z");
   });
 });
 
@@ -216,7 +324,7 @@ describe("notebook-storage — (c) clearNotebookStorageError", () => {
 
 describe("notebook-storage — (d) hasCurrentSubjectSet + shape", () => {
   test("case 13: hasCurrentSubjectSet matching / mismatching / undefined", () => {
-    assert.equal(ns.hasCurrentSubjectSet({ subjects: [{ id: "s1" }, { id: "s2" }] as never }), true);
+    assert.equal(ns.hasCurrentSubjectSet({ subjects: [{ id: "digital-engineering" }, { id: "s1" }, { id: "s2" }] as never }), true);
     assert.equal(ns.hasCurrentSubjectSet({ subjects: [{ id: "DIFFERENT" }] as never }), false);
     assert.equal(ns.hasCurrentSubjectSet({}), false);
     assert.equal(ns.hasCurrentSubjectSet({ subjects: undefined } as never), false);
