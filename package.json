@@ -15,6 +15,7 @@
     "dev:backend": "pnpm --filter @study-note/api prisma:migrate:deploy && pnpm --filter @study-note/api prisma:seed && pnpm --filter @study-note/api build && node --env-file-if-exists=.env apps/api/dist/main.js",
     "build": "pnpm --filter @study-note/web build && pnpm --filter @study-note/api build",
     "build:frontend": "pnpm --filter @study-note/web build",
+    "build:exam-prep-pdfs": "node --experimental-strip-types --no-warnings scripts/build-exam-prep-pdfs.mjs",
     "build:backend": "pnpm --filter @study-note/api build",
     "prisma:generate": "pnpm --filter @study-note/api prisma:generate",
     "prisma:migrate:deploy": "pnpm --filter @study-note/api prisma:migrate:deploy",

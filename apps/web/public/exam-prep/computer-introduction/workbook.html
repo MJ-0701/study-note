@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>컴퓨터개론 2024년도 정답지 시험 대비 템플릿</title>
+  <style>
+  :root {
+    color-scheme: light;
+    --ink: #171717;
+    --muted: #60646c;
+    --line: #d6d9de;
+    --paper: #fff;
+    --accent: #0f766e;
+    --soft: #eef7f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.62 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: #f7f7f4;
+  }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 20px 72px;
+    background: var(--paper);
+    min-height: 100vh;
+  }
+  h1 { font-size: 30px; margin: 0 0 18px; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: #f3f4f1; }
+  code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  pre { background: #f8faf9; border: 1px solid var(--line); border-radius: 8px; overflow: auto; padding: 10px 12px; }
+  main img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin: 10px 0 18px; }
+  .meta { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<h1>컴퓨터개론 2024년도 정답지 시험 대비 템플릿</h1>
+<p>기준 자료: 2024년도 정답지 + 통신, 프로그래밍언어, 데이터베이스, 보안</p>
+<p>새로 올라온 2024년도 정답지를 기준으로 8문항 답안을 다시 맞추고, 확정 범위 개념은 필요한 만큼만 압축했습니다.</p>
+<h2>시험 전 반복 루틴</h2>
+<ol>
+<li>24년도 정답지 8문항을 번호순으로 먼저 암기</li>
+<li>MPEG I/P/B 프레임과 손실/비손실 압축 예시는 정답지 표현 그대로 고정</li>
+<li>통신은 회선교환/패킷교환 또는 데이터그램, recursive/authoritative DNS를 비교</li>
+<li>보안은 RSA/DES와 스니핑/스푸핑 정의를 정답지 문장으로 반복</li>
+</ol>
+<h2>시험 기준 챕터</h2>
+<h3>24년 정답지 핵심</h3>
+<ul>
+<li>집중: 주키/기본키/primary key, MPEG, 압축, recursive DNS, RSA/DES</li>
+<li>단서: 2024년도 정답지 1~8번</li>
+</ul>
+<h3>10장 통신</h3>
+<ul>
+<li>집중: 회선교환/패킷교환 또는 데이터그램, recursive DNS와 authoritative DNS</li>
+<li>단서: 단원10 컴퓨터 네트워크와 월드와이드웹.pdf, 2024년도 시험문제 5, 7번</li>
+</ul>
+<h3>8장 프로그래밍언어</h3>
+<ul>
+<li>집중: 프로그래밍 언어의 목적, 알고리즘 표현, 컴파일러와 인터프리터</li>
+<li>단서: 단원08 프로그래밍 언어1.pdf</li>
+</ul>
+<h3>9장 데이터베이스</h3>
+<ul>
+<li>집중: 주키/기본키/primary key, 뷰/논리적/물리적 단계</li>
+<li>단서: 2024년도 시험문제 1, 6번</li>
+</ul>
+<h3>13장 정보보안</h3>
+<ul>
+<li>집중: RSA/DES, 스니핑, 스푸핑</li>
+<li>단서: 2024년도 시험문제 3, 8번</li>
+</ul>
+<h2>선행개념</h2>
+<h3>2024 정답지: MPEG와 압축</h3>
+<ul>
+<li>I 프레임은 복호화 시 기준이 되는 정보를 가지고 있는 프레임이다.</li>
+<li>P 프레임은 I 프레임을 기준으로 미래의 정보를 가지며, I 프레임 이후 어떻게 움직일지에 대한 정보를 가진다.</li>
+<li>B 프레임은 I 프레임과 P 프레임 중간에 위치하고, 두 프레임의 시간 차이를 메우는 형태로 재생 영상 정보를 가진다.</li>
+<li>손실 압축은 눈이나 귀로 인지하기에 큰 영향이 없는 데이터 또는 중복 데이터를 삭제해 크기를 줄인다.</li>
+<li>손실 예시는 JPEG/MPEG, 비손실 예시는 run length coding/Huffman coding이다.</li>
+</ul>
+<h3>프로그래밍언어: 알고리즘과 번역</h3>
+<ul>
+<li>프로그래밍 언어는 문제 해결 절차를 컴퓨터가 실행할 수 있는 명령으로 표현하는 언어다.</li>
+<li>알고리즘은 문제 해결 절차이고, 소스 코드는 그 절차를 프로그래밍 언어로 작성한 것이다.</li>
+<li>컴파일러는 소스 코드를 한 번에 번역해 목적 코드나 실행 파일을 만든다.</li>
+<li>인터프리터는 소스 코드를 한 줄 또는 명령 단위로 해석하며 실행한다.</li>
+<li>답안에서는 컴파일러는 일괄 번역, 인터프리터는 즉시 해석 실행으로 대비하면 된다.</li>
+</ul>
+<h3>데이터베이스: 키와 3단계 스키마</h3>
+<ul>
+<li>1번 정답은 주키, 기본키, primary key 중 한 가지다.</li>
+<li>주키/기본키는 관계형 데이터베이스에서 하나의 튜플을 유일하게 식별하는 키다.</li>
+<li>6번 정답지 표현은 뷰단계, 논리적 단계, 물리적 단계다.</li>
+<li>뷰단계는 사용자에게 보이는 관점, 논리적 단계는 데이터베이스 전체 논리 구조, 물리적 단계는 실제 저장 구조로 이해한다.</li>
+</ul>
+<h3>통신: 교환 방식과 DNS</h3>
+<ul>
+<li>A는 회선 교환 방식(circuit switching)이다.</li>
+<li>B는 패킷 교환 방식 또는 데이터그램 방식이다.</li>
+<li>recursive DNS는 지역 DNS라고도 하며, 지역 사용자에게 information desk 역할을 해주는 DNS다.</li>
+<li>authoritative DNS는 마스터 DNS라고도 하며, 도메인 내 서버 IP 주소의 원본 파일을 가지고 있다.</li>
+<li>authoritative DNS는 recursive DNS 요청에 대해 자신이 관리하는 도메인 내 서버 IP 주소를 응답한다.</li>
+</ul>
+<h3>보안: 암호와 네트워크 공격</h3>
+<ul>
+<li>공개키 암호 알고리즘 예시는 RSA 암호 알고리즘이다.</li>
+<li>비공개키 암호 알고리즘 예시는 DES 암호 알고리즘이다.</li>
+<li>스니핑은 sender와 receiver 사이에 전달되는 packet들을 캡처하여 훔쳐보는 일이다.</li>
+<li>스푸핑은 송신자와 수신자를 속이고 상대 주체들에게 다른 상대 주체가 공격자라고 속이는 행동이다.</li>
+</ul>
+<h2>문항별 풀이 확인</h2>
+<h3>1. 관계형 데이터베이스에서 하나의 튜플을 유일하게 식별하는 키</h3>
+<p>우선도: 최우선 / 태그: DB, 키</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>주키, 기본키, primary key 중 한 가지로 답하면 된다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>정답지가 허용한 표현은 주키, 기본키, primary key다.</li>
+<li>보충 설명이 필요하면 여러 튜플 중 하나의 튜플을 유일하게 식별할 수 있는 키라고 쓰면 된다.</li>
+</ul>
+<h3>2. MPEG GOP의 I, P, B 프레임 역할</h3>
+<p>우선도: 최우선 / 태그: MPEG, GOP, 정답지</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>I 프레임은 복호화 시 기준이 되는 정보를 가지고 있는 프레임이다.</li>
+<li>P 프레임은 I 프레임을 기준으로 하여 미래의 정보를 가지고 있는 프레임으로, I 프레임 이후 어떻게 움직이게 될 것인가에 대한 정보를 가지고 있다.</li>
+<li>B 프레임은 I 프레임과 P 프레임의 중간에 위치하고 있으며, I 프레임과 P 프레임의 시간 차이를 메우는 형태로 재생 영상 정보를 가지고 있다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>기존 교재식 설명보다 정답지 표현을 우선한다.</li>
+<li>암기 압축형은 I=복호화 기준, P=I 이후 미래 움직임, B=I/P 사이 재생 영상 정보다.</li>
+</ul>
+<h3>3. 공개키 암호와 비공개키 암호의 예</h3>
+<p>우선도: 최우선 / 태그: 암호, 보안</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>공개키 암호 알고리즘의 예는 RSA다.</li>
+<li>비공개키 암호 알고리즘의 예는 DES다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>정답지 기준은 공개키=RSA 암호 알고리즘, 비공개키=DES 암호 알고리즘이다.</li>
+<li>이 시험 답안에서는 비공개키 암호 알고리즘 예시를 DES로 고정한다.</li>
+</ul>
+<h3>4. 손실 압축과 비손실 압축의 차이와 예</h3>
+<p>우선도: 최우선 / 태그: 압축, 정답지</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>손실 압축은 중복되는 데이터나 삭제되어도 전체 데이터, 즉 눈으로 보거나 귀로 듣기에 큰 영향이 미치지 않는 데이터 위주로 삭제해 데이터 사이즈를 줄이는 압축 방법이다.</li>
+<li>손실 압축 방법의 예는 JPEG, MPEG이다.</li>
+<li>비손실 압축 방법의 예는 run length coding, Huffman coding이다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>차이점은 원본 일부를 버리는지 여부다.</li>
+<li>정답지 예시는 손실=jpeg/mpeg, 비손실=run length coding/huffman coding이므로 예시를 그대로 암기한다.</li>
+</ul>
+<h3>5. 전화망과 인터넷의 데이터 전달 방식</h3>
+<p>우선도: 최우선 / 태그: 통신, 교환방식</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>A는 회선 교환 방식(circuit switching)이다.</li>
+<li>B는 패킷 교환 방식 또는 데이터그램 방식이다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>회선교환은 미리 설정된 경로로 데이터를 전달하고, 통신 중에는 그 경로를 다른 단말이 사용할 수 없다.</li>
+<li>패킷교환 또는 데이터그램 방식은 미리 고정된 경로 없이 그때그때 좋은 경로를 찾아 데이터를 전달한다.</li>
+</ul>
+<h3>6. 데이터베이스를 바라보는 3가지 추상화 관점</h3>
+<p>우선도: 최우선 / 태그: DB, 스키마</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>뷰단계, 논리적 단계, 물리적 단계다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>정답지 표현은 뷰단계, 논리적 단계, 물리적 단계다.</li>
+<li>답안에는 이 세 용어를 그대로 쓰는 것이 가장 안전하다.</li>
+</ul>
+<h3>7. DNS 서비스를 제공하는 서버 2종류와 특징</h3>
+<p>우선도: 최우선 / 태그: 통신, DNS, 정답지</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>recursive DNS는 지역 DNS라고도 하며, 지역 사용자에게 information desk 역할을 해주는 DNS다.</li>
+<li>authoritative DNS는 마스터 DNS라고도 하며, 도메인 내에서 서비스되는 모든 서버들의 IP 주소 원본 파일을 가지고 있는 서버다.</li>
+<li>authoritative DNS는 recursive DNS가 요청하면 자신이 관리하는 도메인 내 서버 IP 주소를 응답한다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>정답지 용어는 recursive DNS와 authoritative DNS다.</li>
+<li>recursive는 지역 사용자 요청을 받아 안내하는 쪽, authoritative는 원본 주소 정보를 가진 마스터 쪽으로 구분한다.</li>
+</ul>
+<h3>8. 스니핑과 스푸핑 설명</h3>
+<p>우선도: 최우선 / 태그: 보안공격, 네트워크</p>
+<p><strong>시험 답안</strong></p>
+<ul>
+<li>스니핑은 sender와 receiver 사이에 전달되는 packet들을 캡처하여 훔쳐보는 일이다.</li>
+<li>스푸핑은 통신 주체들, 즉 송신자와 수신자를 속이고 상대 주체들에게 다른 상대 주체가 공격자라고 속이는 모든 행동이다.</li>
+</ul>
+<p><strong>해설</strong></p>
+<ul>
+<li>스니핑의 핵심은 packet 캡처와 훔쳐보기다.</li>
+<li>스푸핑의 핵심은 통신 주체를 속이는 행동이다.</li>
+</ul>
+<h2>용어 정의</h2>
+<table>
+<thead>
+<tr>
+<th>용어</th>
+<th>정의</th>
+<th>메모</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>회선교환</td>
+<td>통신 전에 전용 경로를 설정해 데이터를 전달하는 방식</td>
+<td>전화망</td>
+</tr>
+<tr>
+<td>패킷교환</td>
+<td>데이터를 패킷으로 나누고 상황에 맞는 경로로 전달하는 방식</td>
+<td>데이터그램 방식</td>
+</tr>
+<tr>
+<td>DNS</td>
+<td>도메인 이름을 IP 주소로 변환하는 이름 해석 서비스</td>
+<td>URL/IP 변환</td>
+</tr>
+<tr>
+<td>recursive DNS</td>
+<td>지역 사용자에게 information desk 역할을 해주는 지역 DNS</td>
+<td>지역 DNS</td>
+</tr>
+<tr>
+<td>authoritative DNS</td>
+<td>도메인 내 서버 IP 주소 원본 파일을 가지고 응답하는 마스터 DNS</td>
+<td>마스터 DNS</td>
+</tr>
+<tr>
+<td>I 프레임</td>
+<td>복호화 시 기준이 되는 정보를 가지고 있는 프레임</td>
+<td>기준</td>
+</tr>
+<tr>
+<td>P 프레임</td>
+<td>I 프레임을 기준으로 미래 움직임 정보를 가지는 프레임</td>
+<td>미래 정보</td>
+</tr>
+<tr>
+<td>B 프레임</td>
+<td>I/P 사이 시간 차이를 메우는 형태의 재생 영상 정보를 가지는 프레임</td>
+<td>중간</td>
+</tr>
+<tr>
+<td>손실 압축</td>
+<td>인지 영향이 작은 데이터나 중복 데이터를 삭제해 크기를 줄이는 압축</td>
+<td>JPEG, MPEG</td>
+</tr>
+<tr>
+<td>비손실 압축</td>
+<td>원본 데이터를 잃지 않고 압축하는 방식</td>
+<td>run length, Huffman</td>
+</tr>
+<tr>
+<td>프로그래밍 언어</td>
+<td>알고리즘을 컴퓨터가 실행할 수 있는 명령으로 표현하는 언어</td>
+<td>8장</td>
+</tr>
+<tr>
+<td>알고리즘</td>
+<td>문제를 해결하기 위한 단계적 절차</td>
+<td>프로그램의 설계</td>
+</tr>
+<tr>
+<td>소스 코드</td>
+<td>프로그래밍 언어로 작성한 프로그램 문장</td>
+<td>번역 전</td>
+</tr>
+<tr>
+<td>컴파일러</td>
+<td>소스 프로그램 전체를 번역해 목적 코드나 실행 파일을 만드는 프로그램</td>
+<td>일괄 번역</td>
+</tr>
+<tr>
+<td>인터프리터</td>
+<td>소스 프로그램을 명령 단위로 해석하며 바로 실행하는 프로그램</td>
+<td>즉시 실행</td>
+</tr>
+<tr>
+<td>기본키</td>
+<td>관계형 테이블에서 튜플을 유일하게 식별하도록 선택한 대표 키</td>
+<td>주키, primary key</td>
+</tr>
+<tr>
+<td>뷰단계</td>
+<td>사용자에게 보이는 데이터베이스 관점</td>
+<td>정답지 6번</td>
+</tr>
+<tr>
+<td>논리적 단계</td>
+<td>데이터베이스 전체의 논리적 구조를 보는 단계</td>
+<td>정답지 6번</td>
+</tr>
+<tr>
+<td>물리적 단계</td>
+<td>데이터가 실제 저장되는 구조를 보는 단계</td>
+<td>정답지 6번</td>
+</tr>
+<tr>
+<td>공개키 암호</td>
+<td>공개키와 개인키 한 쌍을 사용하는 암호 방식</td>
+<td>RSA</td>
+</tr>
+<tr>
+<td>비공개키 암호</td>
+<td>송수신자가 같은 비밀키를 공유하는 암호 방식</td>
+<td>DES</td>
+</tr>
+<tr>
+<td>스니핑</td>
+<td>sender와 receiver 사이 packet을 캡처해 훔쳐보는 일</td>
+<td>packet capture</td>
+</tr>
+<tr>
+<td>스푸핑</td>
+<td>통신 주체를 속이고 상대 주체가 공격자라고 속이는 행동</td>
+<td>위장</td>
+</tr>
+</tbody></table>
+<h2>마지막 체크리스트</h2>
+<ul>
+<li>1번은 주키/기본키/primary key 중 하나</li>
+<li>I/P/B 프레임은 정답지 표현으로 암기</li>
+<li>손실 예시는 JPEG/MPEG, 비손실 예시는 run length coding/Huffman coding</li>
+<li>통신은 회선교환=전화망, 패킷교환=인터넷으로 고정</li>
+<li>B 방식은 패킷 교환 방식 또는 데이터그램 방식</li>
+<li>DNS 서버 종류는 recursive DNS와 authoritative DNS</li>
+<li>프로그래밍언어는 알고리즘을 실행 가능한 명령으로 표현하는 도구</li>
+<li>DB 3단계는 뷰단계, 논리적 단계, 물리적 단계</li>
+<li>RSA는 공개키, DES는 비공개키로 고정</li>
+<li>스니핑은 packet 훔쳐보기, 스푸핑은 통신 주체 속이기</li>
+</ul>
+<p>인쇄용 산출물: 컴퓨터개론 시험 대비</p>
+
+</main>
+</body>
+</html>

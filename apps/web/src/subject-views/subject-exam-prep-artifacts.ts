@@ -39,6 +39,7 @@ export interface SubjectExamPrepArtifact {
   sourceLabel: string;
   markdownHref: string;
   htmlHref?: string;
+  pdfHref?: string;
   presentation?: "cards" | "worked";
   note: string;
   studyOrder: string[];
@@ -56,9 +57,11 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
   sourceLabel: "6, 7, 8장 + 힌트 PDF + 퀴즈 PDF",
   markdownHref: "/exam-prep/digital-engineering/workbook.md",
   htmlHref: "/exam-prep/digital-engineering/workbook.html",
+  pdfHref: "/exam-prep/digital-engineering/workbook.pdf",
   presentation: "worked",
   note: "디지털공학개론은 서술 암기보다 회로식, K-map, 진리표, 파형을 직접 푸는 과목이라 문항마다 풀이 순서와 최종식을 같이 정리했습니다.",
   studyOrder: [
+    "문제 풀기 전 공식표: 부울대수, minterm/K-map, 가산기/비교기, SR/D/JK/T 상태표를 먼저 훑기",
     "힌트 PDF 2, 3, 5, 6, 7쪽을 풀이 순서대로 따라가며 중간식을 직접 적기",
     "K-map 문제는 먼저 minterm 번호와 Gray code 배치를 확인한 뒤 묶음별 항을 쓰기",
     "가산기/비교기/가산기-감산기는 회로 단서를 보고 명칭과 식을 같이 연결하기",
@@ -85,6 +88,26 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
     }
   ],
   concepts: [
+    {
+      title: "부울대수 기본 공식",
+      points: [
+        "항등/영원: A + 0 = A, A1 = A, A + 1 = 1, A0 = 0이다.",
+        "보수: A + A' = 1, AA' = 0, (A')' = A다.",
+        "멱등/흡수: A + A = A, AA = A, A + AB = A, A(A + B) = A다.",
+        "분배/인수분해: AB + AC = A(B + C), (A + B)(A + C) = A + BC다.",
+        "드모르간: (AB)' = A' + B', (A + B)' = A'B'다."
+      ]
+    },
+    {
+      title: "문제 풀기 전 사전지식",
+      points: [
+        "입력이 n개면 진리표 행은 2^n개이고, minterm 번호는 입력값을 2진수로 읽은 10진 번호다.",
+        "minterm에서 값이 0인 변수는 보수, 값이 1인 변수는 원래 변수로 쓴다.",
+        "조합논리회로는 현재 입력만으로 출력이 정해지고, 순서논리회로는 이전 상태 Q도 같이 봐야 한다.",
+        "NAND/NOR 회로는 중간 출력마다 괄호와 보수를 붙인 뒤 마지막에 드모르간으로 정리한다.",
+        "파형 문제는 시간축 모양을 외우지 말고 S/R/D/J/K/T 입력 조합으로 Q+를 순서대로 갱신한다."
+      ]
+    },
     {
       title: "카르노맵과 논리식 간소화",
       points: [
@@ -444,6 +467,8 @@ const INFORMATION_COMMUNICATION: SubjectExamPrepArtifact = {
   title: "정보통신개론 레포트2 시험직결 템플릿",
   sourceLabel: "6, 7, 8, 9장 + 별도 PDF + 레포트2",
   markdownHref: "/exam-prep/information-communication/workbook.md",
+  htmlHref: "/exam-prep/information-communication/workbook.html",
+  pdfHref: "/exam-prep/information-communication/workbook.pdf",
   note: "레포트 문항에서 그대로 출제된다는 기준으로, 선행개념과 문항별 답안 흐름을 한 화면에 묶었습니다.",
   studyOrder: [
     "선행개념을 먼저 읽고 용어의 계층/역할을 고정",
@@ -791,6 +816,8 @@ const C_LANGUAGE: SubjectExamPrepArtifact = {
   title: "C언어 기말 참고자료 풀이 템플릿",
   sourceLabel: "별도 PDF",
   markdownHref: "/exam-prep/c-language/workbook.md",
+  htmlHref: "/exam-prep/c-language/workbook.html",
+  pdfHref: "/exam-prep/c-language/workbook.pdf",
   note: "기말고사 참고자료의 코드 읽기, 빈칸, 출력 예측, 배열/함수 문제를 실전 답안 카드로 정리했습니다.",
   studyOrder: [
     "각 문제의 출력과 오류 원인을 먼저 말로 설명",
@@ -1006,7 +1033,9 @@ const COMPUTER_INTRODUCTION: SubjectExamPrepArtifact = {
   artifactSlug: "computer-introduction",
   title: "컴퓨터개론 2024년도 정답지 시험 대비 템플릿",
   sourceLabel: "2024년도 정답지 + 통신, 프로그래밍언어, 데이터베이스, 보안",
-  markdownHref: "",
+  markdownHref: "/exam-prep/computer-introduction/workbook.md",
+  htmlHref: "/exam-prep/computer-introduction/workbook.html",
+  pdfHref: "/exam-prep/computer-introduction/workbook.pdf",
   note: "새로 올라온 2024년도 정답지를 기준으로 8문항 답안을 다시 맞추고, 확정 범위 개념은 필요한 만큼만 압축했습니다.",
   studyOrder: [
     "24년도 정답지 8문항을 번호순으로 먼저 암기",

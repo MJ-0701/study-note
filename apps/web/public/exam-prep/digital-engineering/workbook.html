@@ -5,55 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>디지털공학개론 기말 풀이형 답안집</title>
   <style>
-    :root { color-scheme: light; --ink:#171717; --muted:#60646c; --line:#d6d9de; --paper:#fff; --accent:#0f766e; --soft:#eef7f5; --warn:#9a3412; --ok:#047857; }
-    * { box-sizing: border-box; }
-    body { margin:0; font:16px/1.62 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--ink); background:#f7f7f4; }
-    main { max-width: 920px; margin: 0 auto; padding: 32px 20px 72px; background: var(--paper); min-height: 100vh; }
-    h1 { font-size: 30px; margin: 0 0 18px; }
-    h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 20px; border-top: 1px solid var(--line); }
-    h3 { font-size: 18px; margin: 22px 0 8px; }
-    p { margin: 8px 0; }
-    ul,ol { padding-left: 24px; }
-    li { margin: 4px 0; }
-    table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 15px; }
-    th,td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
-    th { background:#f3f4f1; }
-    .meta { color: var(--muted); }
-    .explanation { border-left: 4px solid var(--accent); background: var(--soft); padding: 10px 14px; margin: 8px 0 18px; }
-    .explanation.hidden { display:none; }
-    .toggle { border:1px solid var(--accent); background:#fff; color:var(--accent); border-radius:6px; padding:7px 10px; cursor:pointer; font-weight:600; }
-    .issue-flag { display:inline-flex; align-items:center; gap:6px; margin:0 0 8px; color:var(--muted); font-size:14px; }
-    .issue-flag input { width:auto; }
-    .validation { margin: 6px 0 12px; }
-    .validation summary { cursor:pointer; list-style:none; }
-    .validation summary::-webkit-details-marker { display:none; }
-    .badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 9px; font-size:13px; font-weight:700; }
-    .badge.verified { color:#065f46; background:#dff6ec; }
-    .badge.uncertain { color:#9a3412; background:#fff1d7; }
-    .badge.wrong { color:#991b1b; background:#fee2e2; }
-    .validation-detail { color:var(--muted); margin:7px 0 0 0; }
-    .concept-card { border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin:14px 0; background:#fbfbf8; }
-    .concept-card h3 { margin-top:0; }
-    .concept-actions,.question-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0 12px; }
-    .concept-output,.qa-output { border-left:4px solid var(--line); padding:8px 12px; margin:8px 0 16px; background:#f8faf9; }
-    .concept-output:empty,.qa-output:empty { display:none; }
-    .cached-answer + .cached-answer { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
-    .cached-answer-header { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin:0 0 6px; }
-    .cached-answer.is-collapsed .cached-answer-body { display:none; }
-    .cached-question { flex:1 1 auto; margin:0; font-size:14px; }
-    .cached-answer-toggle { flex:0 0 auto; border:1px solid var(--accent); background:#fff; color:var(--accent); border-radius:6px; padding:5px 8px; cursor:pointer; font-weight:700; font-size:13px; }
-    .error-card { border:1px solid #fecaca; border-left:4px solid #dc2626; background:#fff7f7; color:#7f1d1d; border-radius:8px; padding:10px 12px; margin:8px 0 16px; }
-    .error-card p { margin:0 0 8px; }
-    .error-card .retry { border:1px solid #dc2626; background:#fff; color:#991b1b; border-radius:6px; padding:6px 9px; cursor:pointer; font-weight:700; }
-    .concept-tags { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 12px; }
-    .concept-tag { border:1px solid var(--accent); color:var(--accent); border-radius:999px; padding:3px 8px; text-decoration:none; font-size:13px; font-weight:700; }
-    .qa-input { flex:1 1 240px; border:1px solid var(--line); border-radius:6px; padding:7px 9px; font:inherit; }
-    .concept-actions, .question-actions { display:none; }
-    .katex-local { font-family: "Times New Roman", "Cambria Math", serif; white-space:nowrap; }
-    .math-overline { text-decoration: overline; text-decoration-thickness: 0.06em; display:inline-block; }
-    main img { display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:8px; background:#fff; margin:10px 0 18px; }
-    main p + img, main h3 + p img { margin-top:8px; }
-  </style>
+  :root {
+    color-scheme: light;
+    --ink: #171717;
+    --muted: #60646c;
+    --line: #d6d9de;
+    --paper: #fff;
+    --accent: #0f766e;
+    --soft: #eef7f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.62 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: #f7f7f4;
+  }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 20px 72px;
+    background: var(--paper);
+    min-height: 100vh;
+  }
+  h1 { font-size: 30px; margin: 0 0 18px; }
+  h2 { font-size: 22px; margin: 36px 0 12px; padding-top: 20px; border-top: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 16px; font-size: 15px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+  th { background: #f3f4f1; }
+  code, pre { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  pre { background: #f8faf9; border: 1px solid var(--line); border-radius: 8px; overflow: auto; padding: 10px 12px; }
+  main img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; margin: 10px 0 18px; }
+  .meta { color: var(--muted); }
+</style>
 </head>
 <body>
 <main>
@@ -74,6 +62,322 @@
 </ul>
 <hr>
 <h2>0. 시험장에서 먼저 고정할 규칙</h2>
+<h3>풀이 시작 전 사전지식</h3>
+<p>디지털공학개론 문제는 대부분 아래 전제를 알고 있어야 풀 수 있다. 시험장에서 문제를 보는 순간 먼저 “이 문제가 조합논리인지, 순서논리인지”를 나눈다.</p>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>뜻</th>
+<th>이 자료에서 나오는 문제</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>조합논리회로</td>
+<td>현재 입력만으로 출력이 결정되는 회로</td>
+<td>논리식, K-map, 가산기, 비교기, 디코더, MUX</td>
+</tr>
+<tr>
+<td>순서논리회로</td>
+<td>현재 입력과 이전 상태 <code>Q</code>로 다음 상태가 결정되는 회로</td>
+<td>SR 래치, D/JK/T 플립플롭, 파형</td>
+</tr>
+</tbody></table>
+<p>입력이 <code>n</code>개면 가능한 입력 조합은 <code>2^n</code>개다. 그래서 2변수 진리표는 4행, 3변수 진리표는 8행, 4변수 진리표는 16행이다.</p>
+<p>minterm 번호는 변수값을 그대로 2진수로 읽은 10진수 번호다.</p>
+<table>
+<thead>
+<tr>
+<th>변수값</th>
+<th align="right">minterm</th>
+<th>곱항</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>000</code></td>
+<td align="right"><code>m0</code></td>
+<td><code>x&#39;y&#39;z&#39;</code></td>
+</tr>
+<tr>
+<td><code>001</code></td>
+<td align="right"><code>m1</code></td>
+<td><code>x&#39;y&#39;z</code></td>
+</tr>
+<tr>
+<td><code>010</code></td>
+<td align="right"><code>m2</code></td>
+<td><code>x&#39;yz&#39;</code></td>
+</tr>
+<tr>
+<td><code>101</code></td>
+<td align="right"><code>m5</code></td>
+<td><code>xy&#39;z</code></td>
+</tr>
+<tr>
+<td><code>110</code></td>
+<td align="right"><code>m6</code></td>
+<td><code>xyz&#39;</code></td>
+</tr>
+</tbody></table>
+<p>규칙은 단순하다. 값이 <code>0</code>인 변수는 보수(<code>&#39;</code>)로 쓰고, 값이 <code>1</code>인 변수는 원래 변수로 쓴다.</p>
+<h3>시험장 공식표: 부울대수</h3>
+<table>
+<thead>
+<tr>
+<th>공식</th>
+<th>시험에서 쓰는 순간</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>A + 0 = A</code>, <code>A1 = A</code></td>
+<td>의미 없는 항 제거</td>
+</tr>
+<tr>
+<td><code>A + 1 = 1</code>, <code>A0 = 0</code></td>
+<td>전체가 1 또는 0으로 고정될 때</td>
+</tr>
+<tr>
+<td><code>A + A = A</code>, <code>AA = A</code></td>
+<td>같은 항 반복 제거</td>
+</tr>
+<tr>
+<td><code>A + A&#39; = 1</code>, <code>AA&#39; = 0</code></td>
+<td>보수쌍 정리</td>
+</tr>
+<tr>
+<td><code>(A&#39;)&#39; = A</code></td>
+<td>이중 보수 제거</td>
+</tr>
+<tr>
+<td><code>AB + AC = A(B + C)</code></td>
+<td>공통 인수 묶기</td>
+</tr>
+<tr>
+<td><code>(A + B)(A + C) = A + BC</code></td>
+<td>POS식 간소화</td>
+</tr>
+<tr>
+<td><code>A + AB = A</code></td>
+<td>흡수법칙</td>
+</tr>
+<tr>
+<td><code>A(A + B) = A</code></td>
+<td>흡수법칙</td>
+</tr>
+<tr>
+<td><code>(AB)&#39; = A&#39; + B&#39;</code></td>
+<td>NAND 출력 정리</td>
+</tr>
+<tr>
+<td><code>(A + B)&#39; = A&#39;B&#39;</code></td>
+<td>NOR 출력 정리</td>
+</tr>
+</tbody></table>
+<h3>시험장 공식표: 기본 게이트</h3>
+<table>
+<thead>
+<tr>
+<th>게이트</th>
+<th>출력식</th>
+<th>1이 되는 조건</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>NOT</td>
+<td><code>Y = A&#39;</code></td>
+<td><code>A=0</code></td>
+</tr>
+<tr>
+<td>AND</td>
+<td><code>Y = AB</code></td>
+<td><code>A=1</code>이고 <code>B=1</code></td>
+</tr>
+<tr>
+<td>OR</td>
+<td><code>Y = A + B</code></td>
+<td>둘 중 하나 이상 1</td>
+</tr>
+<tr>
+<td>NAND</td>
+<td><code>Y = (AB)&#39;</code></td>
+<td>AND 결과가 0</td>
+</tr>
+<tr>
+<td>NOR</td>
+<td><code>Y = (A + B)&#39;</code></td>
+<td>OR 결과가 0</td>
+</tr>
+<tr>
+<td>XOR</td>
+<td><code>Y = A xor B = A&#39;B + AB&#39;</code></td>
+<td>두 입력이 다름</td>
+</tr>
+<tr>
+<td>XNOR</td>
+<td><code>Y = A xnor B = A&#39;B&#39; + AB</code></td>
+<td>두 입력이 같음</td>
+</tr>
+</tbody></table>
+<p>회로 그림에서 작은 동그라미(bubble)가 보이면 그 지점은 NOT이 걸린 것이다. NAND/NOR 문제는 bubble 때문에 보수 위치를 놓치기 쉽다. 중간 출력마다 괄호를 쓰면 실수가 줄어든다.</p>
+<h3>시험장 공식표: 조합논리회로</h3>
+<table>
+<thead>
+<tr>
+<th>회로</th>
+<th>핵심 공식/판단</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>반가산기</td>
+<td><code>S = A xor B</code>, <code>C = AB</code></td>
+</tr>
+<tr>
+<td>전가산기</td>
+<td><code>S = A xor B xor Cin</code></td>
+</tr>
+<tr>
+<td>전가산기 자리올림</td>
+<td><code>Cout = AB + ACin + BCin</code></td>
+</tr>
+<tr>
+<td>1비트 비교기 <code>A&gt;B</code></td>
+<td><code>AB&#39;</code></td>
+</tr>
+<tr>
+<td>1비트 비교기 <code>A=B</code></td>
+<td><code>A&#39;B&#39; + AB</code></td>
+</tr>
+<tr>
+<td>1비트 비교기 <code>A&lt;B</code></td>
+<td><code>A&#39;B</code></td>
+</tr>
+<tr>
+<td>4비트 가산기/감산기</td>
+<td><code>B xor S</code>, <code>C0 = S</code>; <code>S=0</code>이면 더하기, <code>S=1</code>이면 빼기</td>
+</tr>
+<tr>
+<td>디코더</td>
+<td><code>n</code>비트 입력을 <code>2^n</code>개 출력 중 하나로 해석</td>
+</tr>
+<tr>
+<td>인코더</td>
+<td>활성 입력 번호를 이진 코드로 변환</td>
+</tr>
+<tr>
+<td>MUX</td>
+<td>여러 입력 중 선택선이 가리키는 하나를 출력</td>
+</tr>
+<tr>
+<td>DEMUX</td>
+<td>하나의 입력을 선택선이 가리키는 출력으로 분배</td>
+</tr>
+</tbody></table>
+<p>전가산기 자리올림은 “세 입력 중 적어도 두 개가 1”이라는 조건으로 복원할 수 있다. 공식이 순간적으로 기억나지 않으면 <code>A,B,Cin</code> 중 두 개씩 AND한 항을 OR로 더하면 된다.</p>
+<h3>시험장 공식표: 래치와 플립플롭</h3>
+<table>
+<thead>
+<tr>
+<th>회로</th>
+<th>입력</th>
+<th>다음 상태 <code>Q+</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>NOR SR 래치</td>
+<td><code>S=0, R=0</code></td>
+<td>유지</td>
+</tr>
+<tr>
+<td>NOR SR 래치</td>
+<td><code>S=0, R=1</code></td>
+<td>Reset, <code>Q+=0</code></td>
+</tr>
+<tr>
+<td>NOR SR 래치</td>
+<td><code>S=1, R=0</code></td>
+<td>Set, <code>Q+=1</code></td>
+</tr>
+<tr>
+<td>NOR SR 래치</td>
+<td><code>S=1, R=1</code></td>
+<td>금지</td>
+</tr>
+<tr>
+<td>D 플립플롭</td>
+<td><code>D</code></td>
+<td><code>Q+ = D</code></td>
+</tr>
+<tr>
+<td>JK 플립플롭</td>
+<td><code>J=0, K=0</code></td>
+<td>유지</td>
+</tr>
+<tr>
+<td>JK 플립플롭</td>
+<td><code>J=0, K=1</code></td>
+<td>Reset</td>
+</tr>
+<tr>
+<td>JK 플립플롭</td>
+<td><code>J=1, K=0</code></td>
+<td>Set</td>
+</tr>
+<tr>
+<td>JK 플립플롭</td>
+<td><code>J=1, K=1</code></td>
+<td>Toggle</td>
+</tr>
+<tr>
+<td>T 플립플롭</td>
+<td><code>T=0</code></td>
+<td>유지</td>
+</tr>
+<tr>
+<td>T 플립플롭</td>
+<td><code>T=1</code></td>
+<td>Toggle</td>
+</tr>
+</tbody></table>
+<p>래치는 enable 또는 입력이 열려 있는 동안 상태가 바뀔 수 있고, 플립플롭은 보통 클록 에지에서 상태가 바뀐다. 파형 문제에서는 이전 <code>Q</code>를 옆에 적어두고, 입력 조합이 바뀌는 구간마다 <code>Q+</code>를 갱신한다.</p>
+<h3>문제 유형별 풀이 루틴</h3>
+<ol>
+<li><p>회로식 문제</p>
+<ul>
+<li>게이트마다 중간 출력 이름을 붙인다.</li>
+<li>AND/OR/NOT/NAND/NOR를 식으로 바꾼다.</li>
+<li>공통 인수, 흡수법칙, 드모르간으로 정리한다.</li>
+</ul>
+</li>
+<li><p>K-map 문제</p>
+<ul>
+<li>논리식 또는 진리표를 minterm 번호로 바꾼다.</li>
+<li>Gray code 순서로 1과 무관항 <code>x</code>를 배치한다.</li>
+<li>가장 큰 묶음부터 만들고, 변하지 않는 변수만 남긴다.</li>
+<li>모든 1이 최소 한 번 포함됐는지 확인한다.</li>
+</ul>
+</li>
+<li><p>NAND/NOR 회로 문제</p>
+<ul>
+<li>중간 출력마다 <code>N1 = (...)&#39;</code>처럼 괄호와 보수를 붙인다.</li>
+<li>마지막 출력까지 쓴 뒤 드모르간을 적용한다.</li>
+<li><code>A + AB = A</code>, <code>A + A&#39;B = A + B</code> 같은 흡수형을 확인한다.</li>
+</ul>
+</li>
+<li><p>가산기/비교기 문제</p>
+<ul>
+<li>반가산기인지 전가산기인지 입력 개수로 먼저 구분한다.</li>
+<li>비교기는 <code>A&gt;B</code>, <code>A=B</code>, <code>A&lt;B</code> 세 출력을 따로 쓴다.</li>
+<li>여러 비트 비교는 최상위 비트가 먼저 결정한다.</li>
+</ul>
+</li>
+<li><p>SR 래치/플립플롭 파형 문제</p>
+<ul>
+<li>첫 상태 <code>Q</code>를 정한다. 문제에 없으면 보통 이전 상태 유지부터 시작한다.</li>
+<li>각 시간 구간에서 입력 조합을 표로 읽는다.</li>
+<li>Set/Reset/유지/Toggle만 순서대로 적용한다.</li>
+</ul>
+</li>
+</ol>
 <h3>논리식 표기</h3>
 <ul>
 <li>AND는 곱처럼 붙여 쓴다. 예: <code>AB</code></li>

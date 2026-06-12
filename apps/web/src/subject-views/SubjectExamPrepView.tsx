@@ -156,6 +156,7 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
 
   const markdownHref = sanitizeExternalUrl(artifact?.markdownHref);
   const htmlHref = sanitizeExternalUrl(artifact?.htmlHref);
+  const pdfHref = sanitizeExternalUrl(artifact?.pdfHref);
   const expandedQuestions = artifact?.presentation === "worked";
 
   return (
@@ -180,7 +181,8 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
             <p className="lede">{artifact.note}</p>
           </div>
           <div className="exam-prep-toolbar__actions">
-            {htmlHref && <a className="action-button" href={htmlHref} target="_blank" rel="noreferrer">전체 풀이 답안집 열기</a>}
+            {pdfHref && <a className="action-button" href={pdfHref} download={`${artifact.artifactSlug}-exam-prep.pdf`}>인쇄용 PDF 다운로드</a>}
+            {htmlHref && <a className="secondary-link" href={htmlHref} target="_blank" rel="noreferrer">전체 풀이 답안집 열기</a>}
             {markdownHref && <a className="secondary-link" href={markdownHref} target="_blank" rel="noreferrer">Markdown</a>}
           </div>
         </section>

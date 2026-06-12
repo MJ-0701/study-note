@@ -53,6 +53,11 @@ describe("SubjectExamPrepView / artifact registry 정적 소스 검증", () => {
     assert.match(src, /DES/);
     assert.match(src, /run length coding/);
     assert.match(src, /디코더\/인코더\/MUX\/DEMUX/);
+    assert.match(src, /부울대수 기본 공식/);
+    assert.match(src, /문제 풀기 전 사전지식/);
+    assert.match(src, /A \+ AB = A/);
+    assert.match(src, /Cout = AB \+ ACin \+ BCin/);
+    assert.match(src, /Toggle/);
     assert.match(src, /de-q-flipflop-types/);
     assert.match(src, /minterm/);
   });
@@ -62,6 +67,13 @@ describe("SubjectExamPrepView / artifact registry 정적 소스 검증", () => {
     assert.match(src, /htmlHref:/);
     assert.match(src, /workbook\.html/);
     assert.match(viewSrc, /전체 풀이 답안집 열기/);
+    assert.match(viewSrc, /인쇄용 PDF 다운로드/);
+    assert.match(viewSrc, /href=\{pdfHref\}/);
+    assert.match(src, /pdfHref:/);
+    assert.match(src, /information-communication\/workbook\.pdf/);
+    assert.match(src, /digital-engineering\/workbook\.pdf/);
+    assert.match(src, /c-language\/workbook\.pdf/);
+    assert.match(src, /computer-introduction\/workbook\.pdf/);
     assert.match(viewSrc, /exam-prep-template--worked/);
     assert.match(viewSrc, /exam-prep-question-list--worked/);
     assert.match(viewSrc, /exam-prep-question--expanded/);
