@@ -161,7 +161,7 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
 
             <section className="exam-prep-section exam-prep-section--questions" aria-labelledby="exam-prep-questions-title">
               <p className="meta">문항별 답안</p>
-              <h3 id="exam-prep-questions-title">제목만 보고 먼저 말해보기</h3>
+              <h3 id="exam-prep-questions-title">문항별 풀이 확인</h3>
               <div className="exam-prep-question-list">
                 {artifact.questions.map((question, index) => (
                   <QuestionCard key={question.id} question={question} index={index} />

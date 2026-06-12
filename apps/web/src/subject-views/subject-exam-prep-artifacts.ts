@@ -44,55 +44,55 @@ export interface SubjectExamPrepArtifact {
 const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
   subjectId: "digital-engineering",
   artifactSlug: "digital-engineering",
-  title: "디지털공학개론 기말 실전 템플릿",
+  title: "디지털공학개론 기말 풀이형 답안집",
   sourceLabel: "6, 7, 8장 + 힌트 PDF + 퀴즈 PDF",
   markdownHref: "/exam-prep/digital-engineering/workbook.md",
-  note: "힌트 PDF와 퀴즈 PDF에 나온 유형을 6장 간소화, 7장 조합논리회로, 8장 플립플롭 순서로 다시 묶었습니다.",
+  note: "디지털공학개론은 서술 암기보다 회로식, K-map, 진리표, 파형을 직접 푸는 과목이라 문항마다 풀이 순서와 최종식을 같이 정리했습니다.",
   studyOrder: [
-    "힌트/퀴즈 PDF에 나온 회로식과 진리표 문제를 먼저 한 번 풀기",
-    "6장 카르노맵, 무관항, NAND/NOR 변환을 계산형으로 반복",
-    "7장 가산기, 비교기, 디코더/인코더, MUX/DEMUX를 기능과 선택선 기준으로 암기",
-    "8장 SR 래치와 D/JK/T 플립플롭의 입력별 다음 상태를 표로 고정"
+    "힌트 PDF 2, 3, 5, 6, 7쪽을 풀이 순서대로 따라가며 중간식을 직접 적기",
+    "K-map 문제는 먼저 minterm 번호와 Gray code 배치를 확인한 뒤 묶음별 항을 쓰기",
+    "가산기/비교기/가산기-감산기는 회로 단서를 보고 명칭과 식을 같이 연결하기",
+    "SR 래치 파형은 시간축을 외우지 말고 S/R 조합으로 Q 변화를 판단하기"
   ],
   chapters: [
     {
       label: "6장",
       title: "논리식의 간소화",
-      focus: "카르노맵, 무관항, 드모르간, NAND/NOR 변환, XOR/XNOR",
-      sourceHint: "제06장 논리식의 간소화 + 힌트 PDF 3쪽/마지막 회로"
+      focus: "minterm 변환, K-map 묶음, 무관항 사용, 드모르간, NAND 회로 출력식",
+      sourceHint: "힌트 PDF 3쪽, 7쪽 + 퀴즈 힌트 2~4쪽"
     },
     {
       label: "7장",
       title: "조합논리회로",
-      focus: "회로의 논리식, 반가산기/전가산기, 비교기, 디코더/인코더, MUX/DEMUX",
-      sourceHint: "제07장 조합논리회로 + 퀴즈 PDF 5쪽"
+      focus: "회로의 논리식, 반가산기/전가산기, 비교기, 4비트 병렬 가산기/감산기",
+      sourceHint: "힌트 PDF 2쪽, 4쪽 + 퀴즈 힌트 5쪽"
     },
     {
       label: "8장",
       title: "플립플롭",
-      focus: "NOR SR 래치, SR/D/JK/T 플립플롭 진리표, 특성표, 파형",
-      sourceHint: "제08장 플립플롭 + 힌트 PDF 파형"
+      focus: "NOR SR 래치 진리표, SR 래치 파형, D/JK/T 다음 상태",
+      sourceHint: "힌트 PDF 5~6쪽 + 퀴즈 힌트 6쪽"
     }
   ],
   concepts: [
     {
       title: "카르노맵과 논리식 간소화",
       points: [
-        "진리표나 논리식을 minterm 번호로 옮긴 뒤 SOP 형태로 생각한다.",
-        "카르노맵 행/열은 Gray code 순서인 00, 01, 11, 10을 사용한다.",
-        "1과 필요한 무관항 X를 1, 2, 4, 8개처럼 2의 거듭제곱 크기로 최대한 크게 묶는다.",
-        "묶음 안에서 변하지 않는 변수만 남기고, 변하는 변수는 제거한다.",
-        "답을 쓰기 전 모든 1이 최소 한 번 포함됐는지 확인한다."
+        "보수 표시를 먼저 읽고 각 곱항을 minterm 번호로 바꾼다.",
+        "3변수 열은 yz = 00, 01, 11, 10 순서, 4변수 행/열도 Gray code 순서다.",
+        "묶음 크기는 1, 2, 4, 8처럼 2의 거듭제곱만 가능하고 가장자리끼리 이어진다.",
+        "묶음 안에서 변하는 변수는 사라지고 값이 고정된 변수만 남는다.",
+        "모든 1이 최소 한 번 포함됐는지 마지막에 다시 확인한다."
       ]
     },
     {
       title: "NAND/NOR 변환과 드모르간",
       points: [
-        "NAND와 NOR는 모든 논리식을 만들 수 있는 범용 게이트다.",
-        "NAND 회로는 각 중간 출력에 보수가 붙으므로 괄호를 끝까지 유지한다.",
+        "NAND 출력은 입력 AND의 보수이므로 중간 출력에 괄호와 보수를 끝까지 붙인다.",
         "드모르간 법칙은 (AB)' = A' + B', (A + B)' = A'B'다.",
-        "NAND만으로 OR를 만들 때는 입력을 각각 반전한 뒤 NAND를 사용한다.",
-        "NOR만으로 AND를 만들 때는 입력을 각각 반전한 뒤 NOR를 사용한다."
+        "힌트 PDF 7쪽 회로는 B'를 만든 뒤 N1 = (AB')', X = (N1B')' 순서로 푼다.",
+        "((AB')'B')'는 AB' + B로 바뀌고, 흡수법칙으로 A + B가 된다.",
+        "NOR SR 래치는 S/R 입력이 1일 때 동작하는 active-high 회로다."
       ]
     },
     {
@@ -101,8 +101,8 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
         "반가산기: S = A xor B, C = AB",
         "전가산기: S = A xor B xor Cin",
         "전가산기 자리올림: Cout = AB + ACin + BCin",
-        "전감산기 빌림: Bout = A'B + A'Bin + BBin",
-        "1비트 비교기: A>B = AB', A=B = AB + A'B', A<B = A'B"
+        "1비트 비교기: A>B = AB', A=B = A'B' + AB, A<B = A'B",
+        "4비트 가산기/감산기는 B xor S와 C0 = S를 보고 판별한다."
       ]
     },
     {
@@ -112,7 +112,7 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
         "인코더는 여러 입력 중 활성화된 입력의 번호를 이진 코드로 바꾼다.",
         "MUX는 여러 입력 중 선택선이 가리키는 하나를 출력으로 보낸다.",
         "DEMUX는 하나의 입력을 선택선이 가리키는 출력선 하나로 보낸다.",
-        "선택선이 n개이면 MUX/DEMUX는 보통 2^n개 경로를 고를 수 있다."
+        "이번 힌트의 직접 출제 유형은 아니지만 7장 객관식 보기에 섞일 수 있어 기능 구분만 고정한다."
       ]
     },
     {
@@ -120,6 +120,7 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       points: [
         "래치는 enable이 열려 있는 동안 입력을 반영하고, 플립플롭은 클록 에지에서 상태가 변한다.",
         "NOR SR 래치에서 S/R = 00은 유지, 01은 Reset, 10은 Set, 11은 금지다.",
+        "SR 래치 파형은 첫 S 펄스에서 Q가 1, 첫 R 펄스에서 Q가 0으로 바뀌는 식으로 추적한다.",
         "D 플립플롭은 다음 상태 Q+가 D와 같다.",
         "JK 플립플롭은 00 유지, 01 Reset, 10 Set, 11 toggle이다.",
         "T 플립플롭은 T=0 유지, T=1 toggle이다."
@@ -133,61 +134,48 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       priority: "최우선",
       tags: ["회로식", "인수분해"],
       answer: [
-        "왼쪽 회로는 위 AND가 HD, 아래 AND가 DK이고 OR 출력은 F = HD + DK다.",
-        "공통 인수 D를 묶으면 F = D(H + K)가 된다.",
-        "오른쪽 회로는 먼저 H + K를 만들고 D와 AND하므로 F = D(H + K)다.",
-        "따라서 두 회로는 같은 논리식을 갖는다."
+        "왼쪽 회로는 위 AND 출력이 HD, 아래 AND 출력이 DK이고 OR 출력은 F = HD + DK다.",
+        "HD + DK에서 공통 인수 D를 묶으면 F = D(H + K)가 된다.",
+        "오른쪽 회로는 H와 K를 먼저 OR해서 H + K를 만들고 D와 AND하므로 F = D(H + K)다.",
+        "따라서 두 회로는 같은 논리식을 갖고 같은 기능을 한다."
       ],
       explanation: [
-        "게이트마다 중간 출력을 적고 마지막에 간소화하면 실수가 줄어든다.",
-        "시험에서는 완성식만 쓰기보다 HD + DK에서 D(H + K)로 가는 과정이 보이게 쓰는 편이 안전하다."
+        "이 유형은 그림을 보고 바로 답을 찍는 문제가 아니라 게이트별 중간 출력을 쓰는 문제다.",
+        "핵심 법칙은 분배법칙 AB + AC = A(B + C)다."
       ]
     },
     {
-      id: "de-q-kmap-basic",
-      title: "6장 카르노맵으로 논리식 간소화",
+      id: "de-q-kmap-hint-expression",
+      title: "힌트 PDF 3쪽 논리함수 K-map 간소화",
       priority: "최우선",
-      tags: ["카르노맵", "무관항"],
+      tags: ["카르노맵", "minterm"],
       answer: [
-        "각 곱항을 minterm으로 표시하고 3변수 카르노맵 열을 yz = 00, 01, 11, 10 순서로 배치한다.",
-        "인접한 1을 가능한 크게 묶고, 묶음 안에서 변하지 않는 변수만 남긴다.",
-        "무관항 X는 더 큰 묶음을 만들 수 있을 때만 1처럼 사용한다."
+        "식은 f = x'y'z' + x'y'z + x'yz' + xy'z + xyz'로 읽는다.",
+        "각 항은 m0, m1, m2, m5, m6이므로 f = Σm(0,1,2,5,6)이다.",
+        "3변수 K-map은 yz = 00, 01, 11, 10 순서로 두고, 1은 x=0 행의 00/01/10과 x=1 행의 01/10에 놓인다.",
+        "yz=01 세로 묶음은 y'z, yz=10 세로 묶음은 yz', x=0 행의 00-01 묶음은 x'y'다.",
+        "한 가지 최소 답은 f = x'y' + y'z + yz'다."
       ],
       explanation: [
-        "카르노맵 문제의 핵심 실수는 Gray code 순서를 일반 이진 순서로 쓰는 것이다.",
-        "보수 표시 x', y', z'를 먼저 minterm 번호로 바꿔두면 풀이가 안정된다.",
-        "묶음이 겹쳐도 되지만 모든 1이 포함되어야 하고, 불필요하게 작은 묶음을 만들면 식이 길어진다."
-      ]
-    },
-    {
-      id: "de-q-dont-care",
-      title: "6장 무관항을 포함한 카르노맵",
-      priority: "중요",
-      tags: ["무관항", "간소화"],
-      answer: [
-        "무관항 X는 반드시 사용하지 않아도 된다.",
-        "더 큰 묶음을 만들 수 있을 때만 X를 1처럼 포함한다.",
-        "X를 포함해도 최종식은 실제 1이 되는 minterm을 모두 덮어야 한다."
-      ],
-      explanation: [
-        "무관항은 입력 조합이 실제로 발생하지 않거나 출력이 중요하지 않은 경우다.",
-        "시험에서는 X를 무조건 1로 처리하는 실수가 많다. 식이 더 짧아지는 경우에만 사용한다."
+        "m5와 m6은 각각 101, 110이므로 아래 행의 01과 10 열에 들어간다.",
+        "m0은 x'y'로 묶어도 되고 x'z'로 묶어도 되어 f = x'z' + y'z + yz'도 동치 최소식이다.",
+        "선택지형이면 두 최소식 중 보기와 같은 형태를 고르면 된다."
       ]
     },
     {
       id: "de-q-adders",
-      title: "7장 반가산기와 전가산기 식",
+      title: "7장 반가산기, 전가산기, 병렬 가산기 풀이",
       priority: "최우선",
       tags: ["가산기", "공식"],
       answer: [
-        "반가산기: S = A xor B, C = AB",
-        "전가산기: S = A xor B xor Cin",
-        "전가산기 자리올림: Cout = AB + ACin + BCin",
-        "감산기에서 빌림은 작은 자리에서 빌려와야 하는 조건을 논리식으로 표현한다."
+        "반가산기는 두 비트 A, B를 더하므로 S = A xor B, C = AB다.",
+        "전가산기는 A, B, Cin 세 비트를 더하므로 S = A xor B xor Cin이다.",
+        "전가산기 자리올림은 세 입력 중 적어도 두 개가 1일 때 1이므로 Cout = AB + ACin + BCin이다.",
+        "전가산기를 여러 개 연결하고 이전 자리 carry를 다음 자리 Cin으로 보내면 병렬 가산기다."
       ],
       explanation: [
-        "자리올림은 입력 셋 중 적어도 두 개가 1이면 1이 된다고 이해하면 AB + ACin + BCin을 바로 복원할 수 있다.",
-        "병렬 가산기/감산기는 1비트 전가산기를 자리수만큼 연결하고, 이전 자리의 carry/borrow가 다음 자리로 넘어간다고 보면 된다."
+        "자리올림 공식은 무작정 외우기보다 '셋 중 두 개 이상 1' 조건으로 복원하면 안전하다.",
+        "FA가 4개 있으면 4비트 병렬 가산기 구조를 먼저 의심한다."
       ]
     },
     {
@@ -196,57 +184,47 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       priority: "중요",
       tags: ["비교기"],
       answer: [
-        "A > B는 AB', A = B는 AB + A'B', A < B는 A'B다.",
-        "여러 비트 비교기는 최상위 비트부터 우선 비교한다."
+        "1비트에서 A>B는 A=1, B=0일 때만 1이므로 AB'다.",
+        "A=B는 00 또는 11일 때 1이므로 A'B' + AB, 즉 XNOR다.",
+        "A<B는 A=0, B=1일 때만 1이므로 A'B다.",
+        "여러 비트 비교기는 최상위 비트부터 보고, 높은 자리가 같을 때만 다음 자리를 비교한다."
       ],
       explanation: [
-        "A = B 식은 XNOR와 같다. 다중 비트 비교는 낮은 자리보다 높은 자리의 결과가 먼저 결정권을 가진다."
-      ]
-    },
-    {
-      id: "de-q-decoder-mux",
-      title: "7장 디코더/인코더/MUX/DEMUX 구분",
-      priority: "중요",
-      tags: ["디코더", "MUX"],
-      answer: [
-        "디코더는 n비트 입력을 받아 2^n개 출력 중 하나를 활성화한다.",
-        "인코더는 활성화된 입력선의 번호를 이진 코드로 출력한다.",
-        "MUX는 여러 입력 중 선택선이 지정한 하나를 출력으로 보낸다.",
-        "DEMUX는 하나의 입력을 선택선이 지정한 출력선 하나로 보낸다."
-      ],
-      explanation: [
-        "디코더와 DEMUX는 출력선이 여러 개라는 점에서 헷갈리지만, 디코더는 입력 코드 자체를 해석하고 DEMUX는 데이터 입력 하나를 분배한다.",
-        "MUX 문제는 선택선 값이 어느 입력 번호를 가리키는지 먼저 표로 적으면 빠르다."
+        "예를 들어 2비트 A1A0와 B1B0에서 A>B는 A1B1' + (A1 xnor B1)A0B0'로 쓴다.",
+        "대소 비교에서는 낮은 자리보다 높은 자리의 결과가 우선한다."
       ]
     },
     {
       id: "de-q-nor-sr-latch",
-      title: "8장 NOR SR 래치 진리표와 파형",
+      title: "8장 NOR SR 래치 진리표",
       priority: "최우선",
-      tags: ["SR 래치", "파형"],
+      tags: ["SR 래치", "진리표"],
       answer: [
-        "S=0, R=0이면 유지, S=0, R=1이면 Reset, S=1, R=0이면 Set, S=1, R=1이면 부정/금지다.",
-        "초기 Q=0이면 S 펄스 구간에서 Q=1, R 펄스 구간에서 Q=0, 둘 다 0인 구간에서는 이전 Q를 유지한다."
+        "NOR SR 래치에서 S=0, R=0이면 Q(n+1)=Q(n)으로 유지된다.",
+        "S=0, R=1이면 Reset이므로 Q(n+1)=0이다.",
+        "S=1, R=0이면 Set이므로 Q(n+1)=1이다.",
+        "S=1, R=1이면 Q와 Q'가 모두 0이 될 수 있어 부정/금지 상태다."
       ],
       explanation: [
-        "파형 문제는 시간축을 외우려 하지 말고 각 구간의 S/R 조합을 표에 대입하면 된다.",
-        "금지 입력 이후의 상태는 회로가 안정적으로 예측되지 않으므로 시험 답안에는 금지/부정 상태라고 명확히 쓴다."
+        "힌트 PDF 그림은 위 입력이 R, 아래 입력이 S라서 표를 쓸 때 순서를 헷갈리기 쉽다.",
+        "NOR형은 active-high이므로 S 또는 R이 1일 때 동작한다."
       ]
     },
     {
-      id: "de-q-flipflop-types",
-      title: "8장 D/JK/T 플립플롭 다음 상태",
+      id: "de-q-nor-sr-waveform",
+      title: "8장 NOR SR 래치 파형 그리기",
       priority: "최우선",
-      tags: ["플립플롭", "진리표"],
+      tags: ["SR 래치", "파형"],
       answer: [
-        "D 플립플롭은 Q+ = D다.",
-        "JK 플립플롭은 J/K = 00 유지, 01 Reset, 10 Set, 11 Toggle이다.",
-        "T 플립플롭은 T=0 유지, T=1 Toggle이다."
+        "초기 Q=0이다.",
+        "첫 번째 S 펄스에서 S=1, R=0이 되어 Q는 1로 올라간다.",
+        "S와 R이 모두 0인 구간에서는 Q가 직전 값 1을 유지한다.",
+        "첫 번째 R 펄스에서 S=0, R=1이 되어 Q는 0으로 내려간다.",
+        "두 번째 S 펄스에서 다시 Q=1, 두 번째 R 펄스에서 다시 Q=0이 된다."
       ],
       explanation: [
-        "D는 입력을 그대로 저장하는 형태라 파형 문제에서 가장 단순하다.",
-        "JK는 SR의 금지 상태를 toggle로 바꾼 형태로 외우면 된다.",
-        "T는 toggle 전용 플립플롭처럼 보고, 입력이 1인 클록 에지마다 Q가 반전된다고 판단한다."
+        "파형 문제는 시간 번호를 외우는 문제가 아니라 구간별 S/R 조합을 진리표에 넣는 문제다.",
+        "전파 지연이 없다고 했으므로 입력 펄스가 들어오는 순간 Q도 바로 바뀐다고 그린다."
       ]
     },
     {
@@ -256,11 +234,94 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       tags: ["NAND", "드모르간"],
       answer: [
         "B가 먼저 반전되어 B'가 된다.",
-        "첫 NAND 출력은 (AB')'이고 마지막 NAND 출력은 X = ((AB')'B')'이다.",
-        "드모르간을 적용하면 X = A + B다."
+        "첫 NAND 출력은 N1 = (AB')'이다.",
+        "마지막 NAND 출력은 X = (N1B')' = ((AB')'B')'이다.",
+        "드모르간을 적용하면 X = AB' + B이고, 흡수법칙으로 X = A + B가 된다."
       ],
       explanation: [
-        "NAND 회로는 출력마다 보수가 붙으므로 중간 출력을 괄호로 정확히 적는 것이 가장 중요하다."
+        "NAND 회로는 중간 출력마다 보수가 붙으므로 괄호를 빼먹으면 마지막 식이 틀린다.",
+        "검산하면 A,B = 00일 때만 X=0이고 나머지는 1이라 A+B와 같다."
+      ]
+    },
+    {
+      id: "de-q-truth-table-2var",
+      title: "퀴즈 2쪽 2변수 진리표 간소화",
+      priority: "최우선",
+      tags: ["진리표", "카르노맵"],
+      answer: [
+        "진리표에서 Y=1인 행은 AB=00, 10, 11이므로 Y = Σm(0,2,3)이다.",
+        "K-map에서 A=1인 아래 행 두 칸을 묶으면 항 A가 나온다.",
+        "B=0인 왼쪽 열 두 칸을 묶으면 항 B'가 나온다.",
+        "따라서 Y = A + B'이다."
+      ],
+      explanation: [
+        "A=1 묶음에서는 B가 0과 1로 변하므로 사라진다.",
+        "B=0 묶음에서는 A가 0과 1로 변하므로 사라진다."
+      ]
+    },
+    {
+      id: "de-q-truth-table-3var",
+      title: "퀴즈 3쪽 3변수 진리표 간소화",
+      priority: "최우선",
+      tags: ["진리표", "카르노맵"],
+      answer: [
+        "K-map에서 A=0인 윗행 네 칸이 모두 1이므로 묶음 항은 A'다.",
+        "B=0인 두 열 BC=00, 01을 위아래로 묶으면 항은 B'다.",
+        "따라서 X = A' + B'이다."
+      ],
+      explanation: [
+        "윗행 4칸 묶음에서는 B와 C가 모두 변하므로 A만 남는다.",
+        "B=0 묶음에서는 A와 C가 변하므로 B만 남고, 값이 0이라 B'가 된다."
+      ]
+    },
+    {
+      id: "de-q-dont-care-4var",
+      title: "퀴즈 4쪽 무관항 포함 4변수 K-map",
+      priority: "중요",
+      tags: ["무관항", "카르노맵"],
+      answer: [
+        "무관항 x는 더 큰 묶음을 만들 수 있을 때 1처럼 사용한다.",
+        "행 AB=00,01과 열 CD=00,10의 wrap 묶음은 A=0, D=0이 고정되어 A'D'가 된다.",
+        "행 AB=00,01과 열 CD=11,10 묶음은 A=0, C=1이 고정되어 A'C가 된다.",
+        "모서리 묶음은 B=0, D=0이 고정되어 B'D'가 된다.",
+        "따라서 F = A'D' + A'C + B'D'이다."
+      ],
+      explanation: [
+        "4변수 K-map에서 4칸 묶음은 변수 2개가 남는다.",
+        "좌우 끝과 위아래 끝이 이어진다는 점을 써야 이 답이 나온다."
+      ]
+    },
+    {
+      id: "de-q-adder-subtractor",
+      title: "퀴즈 5쪽 조합회로 명칭",
+      priority: "중요",
+      tags: ["가산기", "감산기"],
+      answer: [
+        "회로에는 FA가 4개 있으므로 4비트 병렬 가산기 구조다.",
+        "각 B 입력이 XOR를 거치고 XOR의 다른 입력은 제어선 S다.",
+        "S=0이면 B xor 0 = B이고 C0=0이므로 A+B를 수행한다.",
+        "S=1이면 B xor 1 = B'이고 C0=1이므로 A+B'+1 = A-B를 수행한다.",
+        "따라서 명칭은 4비트 병렬 가산기/감산기다."
+      ],
+      explanation: [
+        "XOR가 B를 선택적으로 반전하고 C0에 1을 넣는 구조가 2의 보수 감산의 핵심 단서다."
+      ]
+    },
+    {
+      id: "de-q-flipflop-types",
+      title: "8장 D/JK/T 플립플롭 다음 상태",
+      priority: "중요",
+      tags: ["플립플롭", "진리표"],
+      answer: [
+        "D 플립플롭은 Q(n+1)=D다.",
+        "JK 플립플롭은 J/K=00 유지, 01 Reset, 10 Set, 11 Toggle이다.",
+        "T 플립플롭은 T=0 유지, T=1 Toggle이다.",
+        "JK 특성식은 Q(n+1)=JQ' + K'Q이고, T 특성식은 Q(n+1)=T xor Q다."
+      ],
+      explanation: [
+        "D는 입력을 그대로 저장하는 형태라 가장 단순하다.",
+        "JK는 SR의 금지 상태를 toggle로 바꾼 형태로 기억하면 된다.",
+        "T는 toggle 전용이라 T=1인 클록 에지마다 Q가 반전된다."
       ]
     }
   ],
@@ -271,6 +332,7 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
     { term: "드모르간 법칙", definition: "AND/OR의 보수를 서로 바꾸고 각 항을 반전하는 법칙", note: "(AB)' = A' + B'" },
     { term: "범용 게이트", definition: "단독 종류만으로 모든 논리회로를 구성할 수 있는 게이트", note: "NAND, NOR" },
     { term: "전가산기", definition: "A, B, Cin 세 입력으로 합과 자리올림을 구하는 회로", note: "Cout = AB + ACin + BCin" },
+    { term: "병렬 가산기/감산기", definition: "여러 전가산기와 XOR 제어로 덧셈과 2의 보수 감산을 수행하는 회로", note: "B xor S, C0=S" },
     { term: "비교기", definition: "두 이진수의 대소/같음을 판단하는 조합회로", note: "상위 비트 우선" },
     { term: "디코더", definition: "n비트 입력을 2^n개 출력 중 하나로 변환", note: "코드 해석" },
     { term: "MUX", definition: "여러 입력 중 선택선이 가리키는 하나를 출력", note: "데이터 선택" },
@@ -283,9 +345,13 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
     "minterm 번호와 보수 변수 변환 먼저 적기",
     "무관항은 도움이 될 때만 사용",
     "NAND/NOR 회로는 중간 출력 괄호와 보수 유지",
+    "힌트 3쪽: f = x'y' + y'z + yz' 또는 동치 최소식",
+    "힌트 7쪽 NAND 회로: X = A + B",
     "전가산기 Cout = AB + ACin + BCin",
+    "4비트 가산기/감산기: S=0 Add, S=1 Sub",
     "디코더는 코드 해석, MUX는 데이터 선택",
     "NOR SR 래치 11 금지",
+    "SR 래치 파형은 S 펄스에서 Set, R 펄스에서 Reset",
     "D는 Q+=D, JK 11 toggle, T 1 toggle"
   ]
 };

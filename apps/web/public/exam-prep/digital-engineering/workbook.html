@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>디지털공학개론 예상문제집</title>
+  <title>디지털공학개론 기말 풀이형 답안집</title>
   <style>
     :root { color-scheme: light; --ink:#171717; --muted:#60646c; --line:#d6d9de; --paper:#fff; --accent:#0f766e; --soft:#eef7f5; --warn:#9a3412; --ok:#047857; }
     * { box-sizing: border-box; }
@@ -55,627 +55,1074 @@
 </head>
 <body>
 <main>
-<h1>디지털공학개론 예상문제집 v1</h1>
-<h2>출제유력 범위 요약</h2>
-<p>컴퓨터개론은 아직 공지 대기 중이므로, 현재 확보된 자료 기준으로 먼저 만든 로컬 학습 산출물입니다.</p>
-
-<h2>선행 개념 정리</h2>
-<p>아래 정리와 풀이 문항을 먼저 보고, 시험 직전에는 표/진리표/비교표/코드 작성형만 반복합니다.</p>
-
-<h2>힌트/퀴즈 풀이</h2>
-<h1>디지털공학개론 힌트/퀴즈 풀이</h1>
+<h1>디지털공학개론 기말 풀이형 답안집 v2</h1>
+<h2>이 과목은 이렇게 대비</h2>
+<p>디지털공학개론은 다른 과목처럼 긴 서술형 답안을 통째로 외우는 방식보다, 문제 그림을 보고 바로 식을 세우고 표를 채우는 방식이 맞다. 시험장에서 해야 할 일은 대부분 아래 네 가지다.</p>
+<ol>
+<li>회로를 게이트 단위로 끊어서 중간 출력부터 적는다.</li>
+<li>진리표나 논리식을 minterm 번호로 바꾼다.</li>
+<li>카르노맵에서는 큰 묶음을 만들고 변하지 않는 변수만 남긴다.</li>
+<li>래치/플립플롭은 입력 조합을 보고 다음 상태를 결정한다.</li>
+</ol>
+<p>따라서 이 자료는 “문제 제목만 보고 암기”가 아니라, 힌트 PDF와 퀴즈 힌트 PDF에 나온 유형을 실제 풀이 순서대로 정리한 답안집이다.</p>
 <p>기준 자료:</p>
 <ul>
 <li><code>디지털공학개론-기말고사 - 힌트.pdf</code></li>
-<li><code>퀴즈.pdf</code></li>
+<li><code>퀴즈 힌트.pdf</code></li>
 </ul>
-
-<h2>힌트 PDF</h2>
-<h3>7장 회로의 논리식</h3>
-<p>왼쪽 회로:</p>
+<hr>
+<h2>0. 시험장에서 먼저 고정할 규칙</h2>
+<h3>논리식 표기</h3>
 <ul>
-<li>위 AND: <code>HD</code></li>
-<li>아래 AND: <code>DK</code></li>
-<li>OR 출력: <code>F = HD + DK</code></li>
-<li>인수분해: <code>F = D(H + K)</code></li>
+<li>AND는 곱처럼 붙여 쓴다. 예: <code>AB</code></li>
+<li>OR는 <code>+</code>로 쓴다. 예: <code>A + B</code></li>
+<li>NOT은 <code>&#39;</code>로 쓴다. 예: <code>A&#39;</code></li>
+<li>XOR는 <code>A xor B</code>, XNOR는 <code>A xnor B</code>로 읽는다.</li>
 </ul>
-
-<p>오른쪽 회로:</p>
+<h3>카르노맵 순서</h3>
+<p>3변수 K-map의 열은 반드시 Gray code 순서다.</p>
+<table>
+<thead>
+<tr>
+<th>yz</th>
+<th align="right">00</th>
+<th align="right">01</th>
+<th align="right">11</th>
+<th align="right">10</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>x=0</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td>x=1</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+</tbody></table>
+<p>4변수 K-map도 행과 열 모두 Gray code 순서다.</p>
+<table>
+<thead>
+<tr>
+<th>AB \ CD</th>
+<th align="right">00</th>
+<th align="right">01</th>
+<th align="right">11</th>
+<th align="right">10</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>00</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td>01</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td>11</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td>10</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+</tbody></table>
+<p><code>00, 01, 10, 11</code>처럼 일반 이진 순서로 쓰면 인접 관계가 깨져서 답이 틀어진다.</p>
+<h3>묶음 규칙</h3>
 <ul>
-<li>OR 출력: <code>H + K</code></li>
-<li>AND 출력: <code>F = D(H + K)</code></li>
+<li>묶음 크기는 <code>1, 2, 4, 8, 16</code>처럼 2의 거듭제곱만 가능하다.</li>
+<li>가능한 크게 묶는다.</li>
+<li>묶음은 겹쳐도 된다.</li>
+<li>가장자리끼리 이어진다. 왼쪽 끝과 오른쪽 끝, 위쪽 끝과 아래쪽 끝은 인접이다.</li>
+<li><code>x</code> 무관항은 도움이 될 때만 1처럼 쓴다. 도움이 안 되면 버린다.</li>
+<li>묶음 안에서 값이 바뀌는 변수는 사라지고, 값이 고정된 변수만 남는다.</li>
 </ul>
-
-<p>결론: 두 회로는 같은 논리식 <code>F = D(H + K)</code>를 갖는다.</p>
-
-<h3>6장 카르노맵 간소화</h3>
-<p>힌트 PDF 3쪽은 식을 카르노맵으로 옮긴 뒤 묶는 문제다.</p>
-
-<p>풀이 순서:</p>
+<hr>
+<h2>1. 힌트 PDF 2쪽: 7장 회로의 논리식</h2>
+<h3>문제</h3>
+<p>두 회로의 논리식을 작성한다.</p>
+<h3>왼쪽 회로 풀이</h3>
+<p>입력은 <code>H</code>, <code>D</code>, <code>K</code>다. 왼쪽 회로는 AND 게이트 두 개와 OR 게이트 한 개로 되어 있다.</p>
 <ol>
-<li>각 곱항을 minterm 번호로 바꾼다.</li>
-<li>3변수 카르노맵은 열을 <code>yz = 00, 01, 11, 10</code> 순서로 놓는다.</li>
-<li>1이 들어간 칸을 최대 크기로 묶는다.</li>
-<li>묶음에서 변하지 않는 변수만 남긴다.</li>
+<li>위 AND 게이트 입력은 <code>H</code>와 <code>D</code>다.<ul>
+<li>위 AND 출력: <code>HD</code></li>
+</ul>
+</li>
+<li>아래 AND 게이트 입력은 <code>D</code>와 <code>K</code>다.<ul>
+<li>아래 AND 출력: <code>DK</code></li>
+</ul>
+</li>
+<li>두 AND 출력이 OR 게이트로 들어간다.<ul>
+<li>최종 출력: <code>F = HD + DK</code></li>
+</ul>
+</li>
+<li>공통으로 들어 있는 <code>D</code>를 묶는다.<ul>
+<li><code>F = D(H + K)</code></li>
+</ul>
+</li>
 </ol>
-
-<p>시험장에서 식의 보수 표시를 잘못 읽는 실수가 제일 크다. 원본을 보면서 <code>x'</code>, <code>y'</code>, <code>z'</code>를 먼저 minterm 번호로 써두고 시작한다.</p>
-
-<h3>7장 가산기</h3>
-<p>외울 식:</p>
+<p>답:</p>
+<pre><code class="language-text">F = HD + DK = D(H + K)
+</code></pre>
+<h3>오른쪽 회로 풀이</h3>
+<p>오른쪽 회로는 먼저 <code>H</code>와 <code>K</code>를 OR로 더한 뒤, 그 결과를 <code>D</code>와 AND한다.</p>
+<ol>
+<li>OR 게이트 출력: <code>H + K</code></li>
+<li>AND 게이트 출력: <code>D(H + K)</code></li>
+</ol>
+<p>답:</p>
+<pre><code class="language-text">F = D(H + K)
+</code></pre>
+<h3>결론</h3>
+<p>두 회로는 겉모양은 다르지만 최종 논리식이 같다.</p>
+<pre><code class="language-text">HD + DK = D(H + K)
+</code></pre>
+<p>즉 왼쪽 회로와 오른쪽 회로는 같은 기능을 한다.</p>
+<h3>시험 포인트</h3>
 <ul>
-<li>반가산기: <code>S = A xor B</code>, <code>C = AB</code></li>
-<li>전가산기: <code>S = A xor B xor Cin</code></li>
-<li>전가산기 자리올림: <code>Cout = AB + ACin + BCin</code></li>
+<li>회로식 문제는 한 번에 최종식을 쓰려 하지 말고, 게이트별 중간 출력을 먼저 적는다.</li>
+<li>공통 인수분해가 보이면 회로를 더 단순하게 바꿀 수 있다.</li>
+<li>이 문제는 분배법칙 <code>AB + AC = A(B + C)</code>를 묻는 유형이다.</li>
 </ul>
-
-<h3>7장 비교기</h3>
-<p>1비트 비교:</p>
-<ul>
-<li><code>A &gt; B = AB'</code></li>
-<li><code>A = B = AB + A'B'</code></li>
-<li><code>A &lt; B = A'B</code></li>
-</ul>
-
-<p>다중 비트 비교는 최상위 비트부터 본다.</p>
-
-<h3>8장 NOR SR 래치 진리표</h3>
+<hr>
+<h2>2. 힌트 PDF 3쪽: 6장 카르노맵 간소화</h2>
+<h3>문제</h3>
+<p>다음 논리함수를 카르노맵으로 간소화한다.</p>
+<pre><code class="language-text">f = x&#39;y&#39;z&#39; + x&#39;y&#39;z + x&#39;yz&#39; + xy&#39;z + xyz&#39;
+</code></pre>
+<h3>1단계: 각 항을 minterm 번호로 바꾸기</h3>
+<p>변수 순서는 <code>x y z</code>로 본다.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align:right">S</th>
-<th style="text-align:right">R</th>
-<th>Q 다음 상태</th>
+<th>항</th>
+<th>x y z 값</th>
+<th align="right">minterm</th>
 </tr>
 </thead>
-<tbody>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">0</td>
-<td>유지</td>
+<tbody><tr>
+<td><code>x&#39;y&#39;z&#39;</code></td>
+<td>000</td>
+<td align="right">m0</td>
 </tr>
 <tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
+<td><code>x&#39;y&#39;z</code></td>
+<td>001</td>
+<td align="right">m1</td>
+</tr>
+<tr>
+<td><code>x&#39;yz&#39;</code></td>
+<td>010</td>
+<td align="right">m2</td>
+</tr>
+<tr>
+<td><code>xy&#39;z</code></td>
+<td>101</td>
+<td align="right">m5</td>
+</tr>
+<tr>
+<td><code>xyz&#39;</code></td>
+<td>110</td>
+<td align="right">m6</td>
+</tr>
+</tbody></table>
+<p>따라서</p>
+<pre><code class="language-text">f = Σm(0, 1, 2, 5, 6)
+</code></pre>
+<h3>2단계: 3변수 K-map에 1 배치</h3>
+<p>열 순서는 <code>yz = 00, 01, 11, 10</code>이다.</p>
+<table>
+<thead>
+<tr>
+<th>x \ yz</th>
+<th align="right">00</th>
+<th align="right">01</th>
+<th align="right">11</th>
+<th align="right">10</th>
+</tr>
+</thead>
+<tbody><tr>
 <td>0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
 </tr>
 <tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">0</td>
 <td>1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
 </tr>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">1</td>
-<td>부정</td>
-</tr>
-</tbody>
-</table>
-
-<h3>NOR SR 래치 파형</h3>
-<p>조건: 초기 <code>Q = 0</code>, 게이트 지연 없음.</p>
-
+</tbody></table>
+<h3>3단계: 묶음 만들기</h3>
+<p>필수로 커버해야 하는 1은 <code>m0, m1, m2, m5, m6</code>이다.</p>
+<p>묶음 A:</p>
 <ul>
-<li><code>S = 1, R = 0</code>이면 Set이므로 <code>Q = 1</code></li>
-<li><code>S = 0, R = 1</code>이면 Reset이므로 <code>Q = 0</code></li>
-<li><code>S = 0, R = 0</code>이면 이전 상태 유지</li>
+<li><code>yz = 01</code> 열의 위아래 1을 묶는다.</li>
+<li>포함 minterm: <code>m1, m5</code></li>
+<li>이 묶음에서 <code>y=0</code>, <code>z=1</code>은 고정이고 <code>x</code>만 변한다.</li>
+<li>항: <code>y&#39;z</code></li>
 </ul>
-
-<p>힌트 PDF 파형 기준:</p>
+<p>묶음 B:</p>
 <ul>
-<li>1~2 구간: S 펄스 때문에 <code>Q = 1</code></li>
-<li>2~3 구간: 유지, <code>Q = 1</code></li>
-<li>3~4 구간: R 펄스 때문에 <code>Q = 0</code></li>
-<li>4~5 구간: 유지, <code>Q = 0</code></li>
-<li>5~6 구간: S 펄스 때문에 <code>Q = 1</code></li>
-<li>6~7 구간: 유지, <code>Q = 1</code></li>
-<li>7~8 구간: R 펄스 때문에 <code>Q = 0</code></li>
-<li>8~9 구간: 유지, <code>Q = 0</code></li>
+<li><code>yz = 10</code> 열의 위아래 1을 묶는다.</li>
+<li>포함 minterm: <code>m2, m6</code></li>
+<li>이 묶음에서 <code>y=1</code>, <code>z=0</code>은 고정이고 <code>x</code>만 변한다.</li>
+<li>항: <code>yz&#39;</code></li>
 </ul>
-
-<h3>6장 NAND 회로 출력 간소화</h3>
-<p>힌트 PDF 마지막 회로:</p>
+<p>묶음 C:</p>
 <ul>
-<li>B가 먼저 반전되어 <code>B'</code>가 된다.</li>
-<li>첫 NAND 출력: <code>(AB')'</code></li>
-<li>마지막 NAND 출력: <code>X = ((AB')'B')'</code></li>
-<li>드모르간 적용: <code>X = A + B</code></li>
+<li><code>x=0</code> 행에서 <code>yz=00</code>과 <code>yz=01</code>을 묶는다.</li>
+<li>포함 minterm: <code>m0, m1</code></li>
+<li>이 묶음에서 <code>x=0</code>, <code>y=0</code>은 고정이고 <code>z</code>만 변한다.</li>
+<li>항: <code>x&#39;y&#39;</code></li>
 </ul>
-
-<h2>퀴즈 PDF</h2>
-<h3>진리표 간소화 1</h3>
-<p>진리표:</p>
-
+<h3>답</h3>
+<pre><code class="language-text">f = x&#39;y&#39; + y&#39;z + yz&#39;
+</code></pre>
+<p>동일하게 최소항을 묶는 방법에 따라 다음 식도 같은 최소형으로 볼 수 있다.</p>
+<pre><code class="language-text">f = x&#39;z&#39; + y&#39;z + yz&#39;
+</code></pre>
+<p>두 식 모두 원래 1인 칸만 덮는다. 선택지형 시험이면 보기 중 같은 형태를 고르면 된다.</p>
+<h3>시험 포인트</h3>
+<ul>
+<li>보수 표시를 잘못 읽으면 minterm이 전부 틀어진다.</li>
+<li><code>m5</code>는 <code>101</code>, <code>m6</code>은 <code>110</code>이다. 3변수에서 minterm 번호는 <code>xyz</code>를 2진수로 본다.</li>
+<li>답이 하나로만 나오지 않을 수 있다. 같은 크기의 묶음 선택지가 여러 개면 동치인 최소식이 생긴다.</li>
+</ul>
+<hr>
+<h2>3. 힌트 PDF 4쪽: 7장 가산기</h2>
+<p>힌트 PDF 4쪽은 “7장 가산기”가 나온다는 범위 힌트다. 이 유형은 공식만 외우는 것보다 진리표에서 식이 왜 나오는지 알아두면 객관식이 바뀌어도 맞출 수 있다.</p>
+<h3>반가산기</h3>
+<p>반가산기는 입력 <code>A</code>, <code>B</code> 두 비트를 더해서 합 <code>S</code>와 자리올림 <code>C</code>를 만든다.</p>
 <table>
 <thead>
 <tr>
-<th style="text-align:right">A</th>
-<th style="text-align:right">B</th>
-<th style="text-align:right">Y</th>
+<th align="right">A</th>
+<th align="right">B</th>
+<th align="right">S</th>
+<th align="right">C</th>
 </tr>
 </thead>
-<tbody>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
 </tr>
 <tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
-<td style="text-align:right">0</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
 </tr>
 <tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
 </tr>
 <tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">1</td>
-<td style="text-align:right">1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
 </tr>
-</tbody>
-</table>
-
-<p>1이 되는 항: <code>m0, m2, m3</code></p>
-
-<p>카르노맵으로 묶으면:</p>
+</tbody></table>
+<p>합 <code>S</code>는 두 입력이 서로 다를 때 1이다.</p>
+<pre><code class="language-text">S = A xor B = A&#39;B + AB&#39;
+</code></pre>
+<p>자리올림 <code>C</code>는 두 입력이 모두 1일 때만 1이다.</p>
+<pre><code class="language-text">C = AB
+</code></pre>
+<h3>전가산기</h3>
+<p>전가산기는 입력 <code>A</code>, <code>B</code>, <code>Cin</code> 세 비트를 더한다.</p>
+<p>합은 1의 개수가 홀수일 때 1이므로 XOR로 표현한다.</p>
+<pre><code class="language-text">S = A xor B xor Cin
+</code></pre>
+<p>자리올림은 세 입력 중 적어도 두 개가 1일 때 1이다.</p>
+<pre><code class="language-text">Cout = AB + ACin + BCin
+</code></pre>
+<p>다른 형태로는 다음처럼도 쓴다.</p>
+<pre><code class="language-text">Cout = AB + (A xor B)Cin
+</code></pre>
+<h3>4비트 병렬 가산기</h3>
+<p>4비트 병렬 가산기는 전가산기 4개를 연결한다.</p>
 <ul>
-<li><code>A = 1</code>인 묶음</li>
-<li><code>B = 0</code>인 묶음</li>
+<li>최하위 비트에서 나온 carry가 다음 비트의 <code>Cin</code>으로 들어간다.</li>
+<li>이런 방식은 ripple carry 방식이다.</li>
+<li>구조를 보면 FA가 여러 개 줄줄이 연결되어 있다.</li>
 </ul>
-
-<p>답: <code>Y = A + B'</code></p>
-
-<h3>진리표 간소화 2</h3>
-<p>퀴즈 PDF 3쪽 답:</p>
-
-<p><code>X = A' + B'</code></p>
-
+<h3>가산기/감산기 판별</h3>
+<p>퀴즈 힌트 PDF 5쪽처럼 <code>B</code> 입력마다 XOR 게이트가 붙고 제어 입력 <code>S</code>가 같이 들어가면 4비트 병렬 가산기/감산기다.</p>
+<ul>
+<li><code>S=0</code>: <code>B xor 0 = B</code>, <code>C0=0</code>이므로 <code>A + B</code></li>
+<li><code>S=1</code>: <code>B xor 1 = B&#39;</code>, <code>C0=1</code>이므로 <code>A + B&#39; + 1 = A - B</code></li>
+</ul>
+<p>답:</p>
+<pre><code class="language-text">4비트 병렬 가산기/감산기
+</code></pre>
+<h3>시험 포인트</h3>
+<ul>
+<li><code>FA</code>가 여러 개 있으면 병렬 가산기 계열을 의심한다.</li>
+<li><code>B</code> 입력에 XOR가 붙어 있고 제어선이 <code>C0</code>에도 들어가면 감산 기능까지 있는 회로다.</li>
+<li>2의 보수 감산은 <code>A - B = A + B&#39; + 1</code>로 처리한다.</li>
+</ul>
+<hr>
+<h2>4. 힌트 PDF 4쪽: 7장 비교기</h2>
+<h3>1비트 비교기</h3>
+<p>입력 <code>A</code>, <code>B</code>를 비교할 때 가능한 결과는 세 가지다.</p>
+<table>
+<thead>
+<tr>
+<th align="right">A</th>
+<th align="right">B</th>
+<th align="right">A&gt;B</th>
+<th align="right">A=B</th>
+<th align="right">A&lt;B</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+</tbody></table>
+<p>각 출력식은 다음과 같다.</p>
+<pre><code class="language-text">A &gt; B = AB&#39;
+A = B = A&#39;B&#39; + AB = A xnor B
+A &lt; B = A&#39;B
+</code></pre>
+<h3>다중 비트 비교기</h3>
+<p>여러 비트 비교는 최상위 비트부터 본다.</p>
+<p>예를 들어 2비트 수 <code>A1A0</code>, <code>B1B0</code>를 비교하면:</p>
+<pre><code class="language-text">A &gt; B = A1B1&#39; + (A1 xnor B1)A0B0&#39;
+A = B = (A1 xnor B1)(A0 xnor B0)
+A &lt; B = A1&#39;B1 + (A1 xnor B1)A0&#39;B0
+</code></pre>
 <p>해석:</p>
 <ul>
-<li><code>A = 0</code>인 행 전체 묶음</li>
-<li><code>B = 0</code>인 열 묶음</li>
+<li>먼저 최상위 비트 <code>A1</code>과 <code>B1</code>를 비교한다.</li>
+<li>최상위 비트에서 이미 크기가 결정되면 하위 비트는 볼 필요가 없다.</li>
+<li>최상위 비트가 같을 때만 하위 비트를 비교한다.</li>
 </ul>
-
-<h3>선택적 카르노맵 간소화</h3>
-<p>퀴즈 PDF 4쪽 답:</p>
-
-<p><code>F = A'D' + A'C + B'D'</code></p>
-
-<p>핵심:</p>
+<h3>시험 포인트</h3>
 <ul>
-<li><code>x</code> 무관항은 큰 묶음을 만들 수 있으면 사용한다.</li>
-<li>가장자리 래핑으로 모서리끼리 묶을 수 있다.</li>
+<li><code>A=B</code>는 XNOR다.</li>
+<li>다중 비트 비교기는 “높은 자리 우선”이 핵심이다.</li>
+<li>객관식에서 <code>AB&#39;</code>, <code>A&#39;B</code>, <code>AB + A&#39;B&#39;</code>가 보이면 1비트 비교기 공식과 연결한다.</li>
 </ul>
-
-<h3>조합회로 명칭</h3>
-<p>퀴즈 PDF 5쪽 회로:</p>
-
-<p>답: 4비트 병렬 가산기/감산기</p>
-
-<p>이유:</p>
+<hr>
+<h2>5. 힌트 PDF 5쪽: NOR SR 래치 진리표</h2>
+<h3>문제</h3>
+<p>NOR 게이트로 만든 SR 래치의 진리표를 작성한다.</p>
+<p>그림에서는 위쪽 입력이 <code>R</code>, 아래쪽 입력이 <code>S</code>다. 하지만 표는 보통 <code>S, R</code> 순서로 쓴다. 이 순서를 헷갈리면 Set과 Reset이 뒤집힌다.</p>
+<h3>NOR SR 래치의 동작</h3>
+<p>NOR 게이트는 입력 중 하나라도 1이면 출력이 0이다.</p>
+<p>NOR SR 래치에서는:</p>
 <ul>
-<li>각 비트에 전가산기 FA가 있다.</li>
-<li>B 입력이 XOR를 통과한다.</li>
-<li>제어 입력 <code>S</code>가 <code>0</code>이면 덧셈, <code>1</code>이면 B를 반전하고 <code>C0 = 1</code>이 되어 2의 보수 감산이 된다.</li>
+<li><code>S=1, R=0</code>: Set, <code>Q=1</code></li>
+<li><code>S=0, R=1</code>: Reset, <code>Q=0</code></li>
+<li><code>S=0, R=0</code>: 이전 상태 유지</li>
+<li><code>S=1, R=1</code>: 금지 상태</li>
 </ul>
-
-<h3>NOR 게이트 SR 플립플롭 진리표</h3>
+<h3>진리표</h3>
 <table>
 <thead>
 <tr>
-<th style="text-align:right">S</th>
-<th style="text-align:right">R</th>
-<th>Q 다음 상태</th>
+<th align="right">S</th>
+<th align="right">R</th>
+<th>Q 다음 상태 <code>Q(n+1)</code></th>
+<th>의미</th>
 </tr>
 </thead>
-<tbody>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">0</td>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td><code>Q(n)</code></td>
 <td>유지</td>
 </tr>
 <tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
-<td>Reset, 0</td>
-</tr>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">0</td>
-<td>Set, 1</td>
-</tr>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">1</td>
-<td>부정/금지</td>
-</tr>
-</tbody>
-</table>
-
-<h2>시험 직전 10분 체크</h2>
-<ul>
-<li>카르노맵 열 순서 <code>00, 01, 11, 10</code>을 실수하지 않는다.</li>
-<li>무관항은 무조건 쓰는 것이 아니라 도움이 될 때만 쓴다.</li>
-<li>NOR SR 래치에서 <code>S=1,R=1</code>은 금지다.</li>
-<li>NAND SR 래치는 입력이 active-low라 금지 입력이 <code>S'=0,R'=0</code>이다.</li>
-<li>전가산기 <code>Cout = AB + ACin + BCin</code>을 바로 쓴다.</li>
-<li>JK <code>11</code>은 toggle, T <code>1</code>도 toggle이다.</li>
-<li>회로식은 게이트마다 중간 출력을 먼저 적고 간소화한다.</li>
-</ul>
-
-<h2>기말 핵심 정리</h2>
-<h1>디지털공학개론 기말 정리</h1>
-<p>범위: 6장, 7장, 8장, 별도 PDF</p>
-
-<p>참고 자료:</p>
-<ul>
-<li><code>제06장 논리식의 간소화_2ndE.pdf</code></li>
-<li><code>제07장 조합논리회로_(수정본)_GT.pdf</code></li>
-<li><code>제08장 플립플롭_2ndE.pdf</code></li>
-<li><code>디지털공학개론-기말고사 - 힌트.pdf</code></li>
-<li><code>퀴즈.pdf</code></li>
-</ul>
-
-<h2>우선순위</h2>
-<ol>
-<li>힌트 PDF와 퀴즈 PDF의 유형을 먼저 푼다.</li>
-<li>6장은 카르노맵, 무관항, NAND/NOR 변환, XOR/XNOR를 집중한다.</li>
-<li>7장은 가산기, 비교기, 디코더/인코더, MUX/DEMUX, 가산기/감산기 명칭을 외운다.</li>
-<li>8장은 SR 래치, SR/D/JK/T 플립플롭 진리표와 특성식을 외운다.</li>
-</ol>
-
-<h2>6장 논리식의 간소화</h2>
-<p>카르노맵 기본:</p>
-<ul>
-<li>인접 칸은 변수 하나만 달라야 한다.</li>
-<li>묶음 크기는 1, 2, 4, 8처럼 2의 거듭제곱이다.</li>
-<li>가능한 크게 묶고, 묶음 수는 적게 만든다.</li>
-<li>가장자리끼리도 인접한다. 좌우 끝, 위아래 끝을 이어서 생각한다.</li>
-<li>무관항 <code>X</code>는 간소화에 도움이 되면 1처럼 묶고, 도움이 안 되면 버린다.</li>
-<li>4변수 카르노맵 순서는 보통 <code>00, 01, 11, 10</code>의 Gray code 순서를 쓴다.</li>
-</ul>
-
-<p>대표식:</p>
-<ul>
-<li>XOR: <code>A xor B = A'B + AB'</code></li>
-<li>XNOR: <code>A xnor B = AB + A'B'</code></li>
-<li>드모르간: <code>(AB)' = A' + B'</code>, <code>(A + B)' = A'B'</code></li>
-</ul>
-
-<p>NAND/NOR 변환:</p>
-<ul>
-<li>NAND는 AND 뒤 NOT이다. SOP 형태를 NAND-NAND 구조로 바꾸기 좋다.</li>
-<li>NOR는 OR 뒤 NOT이다. POS 형태를 NOR-NOR 구조로 바꾸기 좋다.</li>
-<li>모든 논리 게이트는 NAND만으로도, NOR만으로도 구현 가능하다.</li>
-</ul>
-
-<h2>7장 조합논리회로</h2>
-<p>가산기:</p>
-<ul>
-<li>반가산기: <code>S = A xor B</code>, <code>C = AB</code></li>
-<li>전가산기: <code>S = A xor B xor Cin</code></li>
-<li>전가산기 자리올림: <code>Cout = AB + (A xor B)Cin = AB + ACin + BCin</code></li>
-<li>병렬 가산기는 여러 전가산기를 연결한다.</li>
-<li>자리올림 예측 가산기에서는 보통 <code>G = AB</code>, <code>P = A xor B</code> 또는 교재 정의에 따라 <code>P = A + B</code>를 쓰고 <code>Cnext = G + P Cin</code> 형태로 본다.</li>
-</ul>
-
-<p>비교기:</p>
-<ul>
-<li>1비트 <code>A &gt; B</code>: <code>AB'</code></li>
-<li>1비트 <code>A = B</code>: <code>AB + A'B'</code>, 즉 XNOR</li>
-<li>1비트 <code>A &lt; B</code>: <code>A'B</code></li>
-<li>여러 비트 비교는 최상위 비트부터 우선 비교한다.</li>
-</ul>
-
-<p>디코더/인코더:</p>
-<ul>
-<li>디코더: n개의 입력을 최대 <code>2^n</code>개의 출력 중 하나로 변환한다.</li>
-<li>인코더: 여러 입력 중 활성 입력을 이진 코드로 변환한다.</li>
-<li>우선순위 인코더는 여러 입력이 동시에 1이어도 높은 우선순위 입력을 출력한다.</li>
-</ul>
-
-<p>MUX/DEMUX:</p>
-<ul>
-<li>MUX: 여러 입력 중 하나를 선택해 하나의 출력으로 보낸다.</li>
-<li>DEMUX: 하나의 입력을 선택선에 따라 여러 출력 중 하나로 보낸다.</li>
-<li><code>2^n</code>개 입력 MUX에는 n개의 선택선이 필요하다.</li>
-</ul>
-
-<p>가산기/감산기:</p>
-<ul>
-<li>4비트 병렬 가산기/감산기는 XOR로 B 입력을 선택적으로 반전하고, <code>C0 = S</code>를 넣는다.</li>
-<li><code>S = 0</code>이면 덧셈, <code>S = 1</code>이면 2의 보수 방식 감산이 된다.</li>
-</ul>
-
-<h2>8장 플립플롭</h2>
-<p>래치와 플립플롭:</p>
-<ul>
-<li>래치는 입력 레벨에 민감하다.</li>
-<li>플립플롭은 클록 에지에 민감하다.</li>
-<li>게이티드 래치는 Enable/Clock이 허용될 때만 입력이 반영된다.</li>
-<li>에지 트리거 플립플롭은 상승/하강 에지 순간에만 상태가 바뀐다.</li>
-</ul>
-
-<p>NOR SR 래치:</p>
-
-<table>
-<thead>
-<tr>
-<th style="text-align:right">S</th>
-<th style="text-align:right">R</th>
-<th>Q 다음 상태</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">0</td>
-<td>유지</td>
-</tr>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
-<td>0, Reset</td>
-</tr>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">0</td>
-<td>1, Set</td>
-</tr>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">1</td>
-<td>부정/금지</td>
-</tr>
-</tbody>
-</table>
-
-<p>NAND SR 래치:</p>
-
-<table>
-<thead>
-<tr>
-<th style="text-align:right">S'</th>
-<th style="text-align:right">R'</th>
-<th>Q 다음 상태</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">1</td>
-<td>유지</td>
-</tr>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">1</td>
-<td>1, Set</td>
-</tr>
-<tr>
-<td style="text-align:right">1</td>
-<td style="text-align:right">0</td>
-<td>0, Reset</td>
-</tr>
-<tr>
-<td style="text-align:right">0</td>
-<td style="text-align:right">0</td>
-<td>부정/금지</td>
-</tr>
-</tbody>
-</table>
-
-<p>플립플롭 진리표:</p>
-
-<table>
-<thead>
-<tr>
-<th>종류</th>
-<th>입력</th>
-<th>Q 다음 상태</th>
-<th>핵심</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>D</td>
-<td>D=0</td>
-<td>0</td>
-<td>입력을 그대로 저장</td>
-</tr>
-<tr>
-<td>D</td>
-<td>D=1</td>
-<td>1</td>
-<td><code>Q+ = D</code></td>
-</tr>
-<tr>
-<td>JK</td>
-<td>J=0, K=0</td>
-<td>유지</td>
-<td>SR의 금지 상태 해결</td>
-</tr>
-<tr>
-<td>JK</td>
-<td>J=0, K=1</td>
+<td align="right">0</td>
+<td align="right">1</td>
 <td>0</td>
 <td>Reset</td>
 </tr>
 <tr>
-<td>JK</td>
-<td>J=1, K=0</td>
+<td align="right">1</td>
+<td align="right">0</td>
 <td>1</td>
 <td>Set</td>
 </tr>
 <tr>
-<td>JK</td>
-<td>J=1, K=1</td>
-<td>반전</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td>부정/금지</td>
+<td>두 NOR 출력이 모두 0이 되어 정상 보수 관계가 깨짐</td>
+</tr>
+</tbody></table>
+<h3>왜 <code>S=R=1</code>이 금지인가</h3>
+<p>NOR 래치에서 <code>S=1</code>이면 아래쪽 NOR 출력인 <code>Q&#39;</code>가 0이 된다. <code>R=1</code>이면 위쪽 NOR 출력인 <code>Q</code>도 0이 된다.</p>
+<p>그러면 <code>Q=0</code>, <code>Q&#39;=0</code>이 되어 원래 보수 관계인 <code>Q&#39; = Q의 반대</code>가 깨진다. 그래서 <code>S=R=1</code>은 금지 또는 부정 상태라고 쓴다.</p>
+<h3>시험 포인트</h3>
+<ul>
+<li>NOR형 SR 래치는 입력이 active-high다.</li>
+<li>Set은 <code>S=1</code>, Reset은 <code>R=1</code>이다.</li>
+<li>NAND형 SR 래치는 보통 active-low라 표가 반대로 나온다. 이 문제는 NOR형이다.</li>
+</ul>
+<hr>
+<h2>6. 힌트 PDF 6쪽: NOR SR 래치 파형</h2>
+<h3>문제 조건</h3>
+<ul>
+<li>NOR 게이트 SR 래치</li>
+<li>초기 <code>Q = 0</code></li>
+<li>게이트 전파 지연 없음</li>
+<li>입력 파형 <code>S</code>, <code>R</code>이 주어졌을 때 출력 <code>Q</code> 파형을 그린다.</li>
+</ul>
+<h3>풀이 원리</h3>
+<p>파형을 외우지 말고 구간마다 아래 규칙을 적용한다.</p>
+<table>
+<thead>
+<tr>
+<th align="right">S</th>
+<th align="right">R</th>
+<th>Q</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td>이전 Q 유지</td>
+</tr>
+<tr>
+<td align="right">0</td>
+<td align="right">1</td>
+<td>0</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td>1</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td>금지</td>
+</tr>
+</tbody></table>
+<h3>구간별 해설</h3>
+<p>초기값이 <code>Q=0</code>이다.</p>
+<ol>
+<li><p>첫 번째 <code>S</code> 펄스가 올라가기 전</p>
+<ul>
+<li><code>S=0</code>, <code>R=0</code></li>
+<li>유지이므로 <code>Q=0</code></li>
+</ul>
+</li>
+<li><p>첫 번째 <code>S</code> 펄스 구간</p>
+<ul>
+<li><code>S=1</code>, <code>R=0</code></li>
+<li>Set이므로 <code>Q=1</code></li>
+</ul>
+</li>
+<li><p>첫 번째 <code>S</code> 펄스가 내려간 뒤, 첫 번째 <code>R</code> 펄스 전</p>
+<ul>
+<li><code>S=0</code>, <code>R=0</code></li>
+<li>유지이므로 <code>Q=1</code></li>
+</ul>
+</li>
+<li><p>첫 번째 <code>R</code> 펄스 구간</p>
+<ul>
+<li><code>S=0</code>, <code>R=1</code></li>
+<li>Reset이므로 <code>Q=0</code></li>
+</ul>
+</li>
+<li><p>첫 번째 <code>R</code> 펄스가 내려간 뒤, 두 번째 <code>S</code> 펄스 전</p>
+<ul>
+<li><code>S=0</code>, <code>R=0</code></li>
+<li>유지이므로 <code>Q=0</code></li>
+</ul>
+</li>
+<li><p>두 번째 <code>S</code> 펄스 구간</p>
+<ul>
+<li><code>S=1</code>, <code>R=0</code></li>
+<li>Set이므로 <code>Q=1</code></li>
+</ul>
+</li>
+<li><p>두 번째 <code>S</code> 펄스가 내려간 뒤, 두 번째 <code>R</code> 펄스 전</p>
+<ul>
+<li><code>S=0</code>, <code>R=0</code></li>
+<li>유지이므로 <code>Q=1</code></li>
+</ul>
+</li>
+<li><p>두 번째 <code>R</code> 펄스 구간</p>
+<ul>
+<li><code>S=0</code>, <code>R=1</code></li>
+<li>Reset이므로 <code>Q=0</code></li>
+</ul>
+</li>
+<li><p>두 번째 <code>R</code> 펄스 이후</p>
+<ul>
+<li><code>S=0</code>, <code>R=0</code></li>
+<li>유지이므로 <code>Q=0</code></li>
+</ul>
+</li>
+</ol>
+<h3>답안으로 그릴 Q 파형</h3>
+<p>글로 쓰면 다음과 같다.</p>
+<pre><code class="language-text">Q는 처음 0이다.
+첫 S 펄스에서 1로 올라간다.
+첫 R 펄스에서 0으로 내려간다.
+두 번째 S 펄스에서 다시 1로 올라간다.
+두 번째 R 펄스에서 다시 0으로 내려간다.
+그 사이 S=R=0인 구간은 직전 값을 유지한다.
+</code></pre>
+<h3>시험 포인트</h3>
+<ul>
+<li>래치는 클록 에지가 아니라 입력 레벨에 반응한다.</li>
+<li><code>S</code>가 1인 구간에서 Set, <code>R</code>이 1인 구간에서 Reset이다.</li>
+<li>지연이 없다고 했으므로 입력이 바뀌는 순간 바로 <code>Q</code>가 바뀐다고 그린다.</li>
+</ul>
+<hr>
+<h2>7. 힌트 PDF 7쪽: NAND 회로 출력 간소화</h2>
+<h3>문제</h3>
+<p>아래 회로에서 출력 <code>X</code>를 논리식으로 표현하고, 카르노맵 또는 논리 법칙으로 간단히 한다.</p>
+<h3>1단계: 중간 신호 만들기</h3>
+<p>입력 <code>B</code>가 먼저 NOT 게이트를 통과한다.</p>
+<pre><code class="language-text">B -&gt; B&#39;
+</code></pre>
+<p>첫 번째 NAND 게이트 입력은 <code>A</code>와 <code>B&#39;</code>다.</p>
+<pre><code class="language-text">N1 = (AB&#39;)&#39;
+</code></pre>
+<p>마지막 NAND 게이트 입력은 <code>N1</code>과 <code>B&#39;</code>다.</p>
+<pre><code class="language-text">X = (N1 · B&#39;)&#39;
+</code></pre>
+<p>따라서</p>
+<pre><code class="language-text">X = ((AB&#39;)&#39;B&#39;)&#39;
+</code></pre>
+<h3>2단계: 드모르간 적용</h3>
+<pre><code class="language-text">X = ((AB&#39;)&#39;B&#39;)&#39;
+</code></pre>
+<p><code>(PQ)&#39; = P&#39; + Q&#39;</code>를 적용한다.</p>
+<pre><code class="language-text">X = ((AB&#39;)&#39;)&#39; + (B&#39;)&#39;
+</code></pre>
+<p>이중 보수를 제거한다.</p>
+<pre><code class="language-text">X = AB&#39; + B
+</code></pre>
+<p>흡수법칙을 적용한다.</p>
+<pre><code class="language-text">AB&#39; + B = A + B
+</code></pre>
+<h3>답</h3>
+<pre><code class="language-text">X = A + B
+</code></pre>
+<h3>진리표로 확인</h3>
+<table>
+<thead>
+<tr>
+<th align="right">A</th>
+<th align="right">B</th>
+<th align="right">B&#39;</th>
+<th align="right">N1=(AB&#39;)&#39;</th>
+<th align="right">X=(N1B&#39;)&#39;</th>
+<th align="right">A+B</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+</tbody></table>
+<p><code>X</code>열과 <code>A+B</code>열이 같으므로 최종식 <code>A+B</code>가 맞다.</p>
+<h3>시험 포인트</h3>
+<ul>
+<li>NAND는 출력에 보수가 붙는다. 중간 출력을 괄호로 정확히 잡아야 한다.</li>
+<li><code>B&#39;</code>가 두 군데로 갈라져 들어가므로 배선을 놓치면 안 된다.</li>
+<li>마지막에 <code>AB&#39; + B = A + B</code>로 줄이는 흡수법칙을 기억한다.</li>
+</ul>
+<hr>
+<h2>8. 퀴즈 힌트 2쪽: 2변수 진리표 간소화 1</h2>
+<h3>문제 진리표</h3>
+<table>
+<thead>
+<tr>
+<th align="right">A</th>
+<th align="right">B</th>
+<th align="right">Y</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td align="right">0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+</tbody></table>
+<h3>1단계: 1이 되는 행 찾기</h3>
+<p><code>Y=1</code>인 행은 다음과 같다.</p>
+<table>
+<thead>
+<tr>
+<th align="right">A</th>
+<th align="right">B</th>
+<th align="right">minterm</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td align="right">m0</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">m2</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">m3</td>
+</tr>
+</tbody></table>
+<p>따라서</p>
+<pre><code class="language-text">Y = Σm(0, 2, 3)
+</code></pre>
+<h3>2단계: K-map 묶기</h3>
+<p>2변수 K-map은 다음처럼 본다.</p>
+<table>
+<thead>
+<tr>
+<th>A \ B</th>
+<th align="right">0</th>
+<th align="right">1</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td>1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+</tbody></table>
+<p>묶음 1:</p>
+<ul>
+<li><code>A=1</code>인 아래 행 두 칸을 묶는다.</li>
+<li><code>B</code>는 0에서 1로 변하므로 사라진다.</li>
+<li>항: <code>A</code></li>
+</ul>
+<p>묶음 2:</p>
+<ul>
+<li><code>B=0</code>인 왼쪽 열 두 칸을 묶는다.</li>
+<li><code>A</code>는 0에서 1로 변하므로 사라진다.</li>
+<li>항: <code>B&#39;</code></li>
+</ul>
+<h3>답</h3>
+<pre><code class="language-text">Y = A + B&#39;
+</code></pre>
+<h3>시험 포인트</h3>
+<ul>
+<li><code>A=1</code>인 행 전체가 1이면 항은 <code>A</code>다.</li>
+<li><code>B=0</code>인 열 전체가 1이면 항은 <code>B&#39;</code>다.</li>
+</ul>
+<hr>
+<h2>9. 퀴즈 힌트 3쪽: 3변수 진리표 간소화</h2>
+<h3>문제 진리표 요약</h3>
+<p><code>X=1</code>인 행은 <code>A=0</code>인 모든 행과, <code>A=1</code>이면서 <code>B=0</code>인 행이다. 반대로 <code>A=1</code>, <code>B=1</code>인 행에서는 <code>X=0</code>이다.</p>
+<h3>K-map</h3>
+<p>열 순서는 <code>BC = 00, 01, 11, 10</code>이다.</p>
+<table>
+<thead>
+<tr>
+<th>A \ BC</th>
+<th align="right">00</th>
+<th align="right">01</th>
+<th align="right">11</th>
+<th align="right">10</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td>1</td>
+<td align="right">1</td>
+<td align="right">1</td>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+</tbody></table>
+<h3>묶음 풀이</h3>
+<p>묶음 1:</p>
+<ul>
+<li><code>A=0</code>인 윗행 네 칸을 묶는다.</li>
+<li><code>B</code>, <code>C</code>는 변하고 <code>A=0</code>만 고정이다.</li>
+<li>항: <code>A&#39;</code></li>
+</ul>
+<p>묶음 2:</p>
+<ul>
+<li><code>B=0</code>인 두 열 <code>BC=00</code>, <code>BC=01</code>을 위아래 포함해 네 칸으로 묶는다.</li>
+<li><code>A</code>, <code>C</code>는 변하고 <code>B=0</code>만 고정이다.</li>
+<li>항: <code>B&#39;</code></li>
+</ul>
+<h3>답</h3>
+<pre><code class="language-text">X = A&#39; + B&#39;
+</code></pre>
+<h3>시험 포인트</h3>
+<ul>
+<li>4칸 묶음은 변수가 2개 사라지고 1개만 남는다.</li>
+<li>3변수 K-map에서도 열 순서가 <code>00, 01, 11, 10</code>이다.</li>
+</ul>
+<hr>
+<h2>10. 퀴즈 힌트 4쪽: 무관항 포함 4변수 K-map</h2>
+<h3>문제</h3>
+<p>4변수 K-map이 주어지고, <code>1</code>, <code>0</code>, <code>x</code>가 섞여 있다.</p>
+<p>행은 <code>AB = 00, 01, 11, 10</code>, 열은 <code>CD = 00, 01, 11, 10</code>이다.</p>
+<h3>핵심</h3>
+<p><code>x</code>는 무관항이다. 더 큰 묶음을 만들 수 있으면 1처럼 사용하고, 필요 없으면 버린다.</p>
+<h3>묶음 1: <code>A&#39;D&#39;</code></h3>
+<p>사용하는 칸:</p>
+<ul>
+<li><code>AB=00</code>, <code>AB=01</code></li>
+<li><code>CD=00</code>, <code>CD=10</code></li>
+<li>좌우 끝 열은 서로 인접하므로 wrap-around 묶음이 가능하다.</li>
+</ul>
+<p>이 묶음에서:</p>
+<ul>
+<li><code>A=0</code>은 고정</li>
+<li><code>D=0</code>은 고정</li>
+<li><code>B</code>, <code>C</code>는 변함</li>
+</ul>
+<p>따라서 항은:</p>
+<pre><code class="language-text">A&#39;D&#39;
+</code></pre>
+<h3>묶음 2: <code>A&#39;C</code></h3>
+<p>사용하는 칸:</p>
+<ul>
+<li><code>AB=00</code>, <code>AB=01</code></li>
+<li><code>CD=11</code>, <code>CD=10</code></li>
+</ul>
+<p>이 묶음에서:</p>
+<ul>
+<li><code>A=0</code>은 고정</li>
+<li><code>C=1</code>은 고정</li>
+<li><code>B</code>, <code>D</code>는 변함</li>
+</ul>
+<p>따라서 항은:</p>
+<pre><code class="language-text">A&#39;C
+</code></pre>
+<h3>묶음 3: <code>B&#39;D&#39;</code></h3>
+<p>사용하는 칸:</p>
+<ul>
+<li><code>AB=00</code>, <code>AB=10</code></li>
+<li><code>CD=00</code>, <code>CD=10</code></li>
+<li>위아래 끝 행과 좌우 끝 열을 함께 이어서 모서리 네 칸을 묶는 형태다.</li>
+</ul>
+<p>이 묶음에서:</p>
+<ul>
+<li><code>B=0</code>은 고정</li>
+<li><code>D=0</code>은 고정</li>
+<li><code>A</code>, <code>C</code>는 변함</li>
+</ul>
+<p>따라서 항은:</p>
+<pre><code class="language-text">B&#39;D&#39;
+</code></pre>
+<h3>답</h3>
+<pre><code class="language-text">F = A&#39;D&#39; + A&#39;C + B&#39;D&#39;
+</code></pre>
+<h3>시험 포인트</h3>
+<ul>
+<li>무관항 <code>x</code>를 쓰는 이유는 2칸 묶음을 4칸 묶음으로 키우기 위해서다.</li>
+<li>모서리 네 칸도 서로 인접할 수 있다.</li>
+<li>4변수에서 4칸 묶음을 만들면 변수 2개가 남는다.</li>
+</ul>
+<hr>
+<h2>11. 퀴즈 힌트 5쪽: 조합회로 명칭</h2>
+<h3>문제</h3>
+<p>FA 4개와 XOR 게이트 4개가 있는 조합회로의 명칭을 묻는다.</p>
+<h3>회로 해석</h3>
+<p>회로에는 <code>A3~A0</code>, <code>B3~B0</code> 입력이 있고, 각 자리마다 전가산기 <code>FA</code>가 있다.</p>
+<p>또한 각 <code>B</code> 입력은 XOR 게이트를 거친다. XOR의 다른 입력은 제어선 <code>S</code>다.</p>
+<pre><code class="language-text">B_i xor S
+</code></pre>
+<p>제어선 설명은 다음과 같다.</p>
+<pre><code class="language-text">S = 0: Add
+S = 1: Sub
+</code></pre>
+<h3><code>S=0</code>일 때</h3>
+<pre><code class="language-text">B_i xor 0 = B_i
+C0 = 0
+</code></pre>
+<p>따라서 회로는 그냥 덧셈을 한다.</p>
+<pre><code class="language-text">A + B
+</code></pre>
+<h3><code>S=1</code>일 때</h3>
+<pre><code class="language-text">B_i xor 1 = B_i&#39;
+C0 = 1
+</code></pre>
+<p>따라서 회로는 다음을 계산한다.</p>
+<pre><code class="language-text">A + B&#39; + 1
+</code></pre>
+<p><code>B&#39; + 1</code>은 <code>B</code>의 2의 보수이므로:</p>
+<pre><code class="language-text">A + B&#39; + 1 = A - B
+</code></pre>
+<h3>답</h3>
+<pre><code class="language-text">4비트 병렬 가산기/감산기
+</code></pre>
+<p>또는</p>
+<pre><code class="language-text">4-bit parallel adder/subtractor
+</code></pre>
+<h3>시험 포인트</h3>
+<ul>
+<li><code>FA</code>가 4개면 4비트 병렬 가산기 구조다.</li>
+<li><code>B</code> 쪽에 XOR가 있고 제어선 <code>S</code>가 들어가면 감산 기능까지 있다.</li>
+<li><code>S=1</code>에서 <code>B</code>를 반전하고 <code>C0=1</code>을 더하는 것이 2의 보수 감산이다.</li>
+</ul>
+<hr>
+<h2>12. 퀴즈 힌트 6쪽: NOR 게이트 SR 플립플롭 진리표</h2>
+<p>자료에는 “SR 플립플롭”이라고 되어 있지만, 그림과 표의 동작은 NOR형 SR 래치/플립플롭 기본 진리표와 같다. 시험에서는 아래 표를 쓰면 된다.</p>
+<table>
+<thead>
+<tr>
+<th align="right">S</th>
+<th align="right">R</th>
+<th>Q(n+1)</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td><code>Q(n)</code></td>
+<td>유지</td>
+</tr>
+<tr>
+<td align="right">0</td>
+<td align="right">1</td>
+<td>0</td>
+<td>Reset</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td>1</td>
+<td>Set</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td>부정/금지</td>
+<td>사용 금지</td>
+</tr>
+</tbody></table>
+<h3>풀이 설명</h3>
+<ul>
+<li><code>S=0, R=0</code>: 두 입력이 모두 비활성이라 현재 상태를 유지한다.</li>
+<li><code>S=0, R=1</code>: Reset 입력이 활성화되어 다음 <code>Q</code>가 0이다.</li>
+<li><code>S=1, R=0</code>: Set 입력이 활성화되어 다음 <code>Q</code>가 1이다.</li>
+<li><code>S=1, R=1</code>: Set과 Reset을 동시에 요구하므로 정상적인 저장 상태가 아니다.</li>
+</ul>
+<h3>시험 포인트</h3>
+<ul>
+<li>NOR형은 <code>S</code>와 <code>R</code>이 1일 때 동작하는 active-high 입력이다.</li>
+<li>NAND형은 보통 active-low라 표가 반대로 나온다.</li>
+<li><code>S=R=1</code>은 “1”이나 “유지”가 아니라 금지/부정이다.</li>
+</ul>
+<hr>
+<h2>13. 8장 플립플롭 기본표</h2>
+<p>힌트에는 SR 래치가 직접 나왔지만, 시험 범위상 D/JK/T 플립플롭 표도 같이 고정해야 한다.</p>
+<h3>D 플립플롭</h3>
+<pre><code class="language-text">Q(n+1) = D
+</code></pre>
+<table>
+<thead>
+<tr>
+<th align="right">D</th>
+<th align="right">Q(n+1)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+</tr>
+</tbody></table>
+<p>해석: 클록 에지에서 입력 <code>D</code>가 그대로 저장된다.</p>
+<h3>JK 플립플롭</h3>
+<table>
+<thead>
+<tr>
+<th align="right">J</th>
+<th align="right">K</th>
+<th>Q(n+1)</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td align="right">0</td>
+<td><code>Q(n)</code></td>
+<td>유지</td>
+</tr>
+<tr>
+<td align="right">0</td>
+<td align="right">1</td>
+<td>0</td>
+<td>Reset</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">0</td>
+<td>1</td>
+<td>Set</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td align="right">1</td>
+<td><code>Q(n)&#39;</code></td>
 <td>Toggle</td>
 </tr>
-<tr>
-<td>T</td>
-<td>T=0</td>
-<td>유지</td>
-<td>Toggle 플립플롭</td>
-</tr>
-<tr>
-<td>T</td>
-<td>T=1</td>
-<td>반전</td>
-<td><code>Q+ = T xor Q</code></td>
-</tr>
-</tbody>
-</table>
-
+</tbody></table>
 <p>특성식:</p>
+<pre><code class="language-text">Q(n+1) = JQ&#39; + K&#39;Q
+</code></pre>
+<p>해석: JK는 SR의 금지 상태를 toggle로 바꾼 플립플롭이다.</p>
+<h3>T 플립플롭</h3>
+<table>
+<thead>
+<tr>
+<th align="right">T</th>
+<th>Q(n+1)</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">0</td>
+<td><code>Q(n)</code></td>
+<td>유지</td>
+</tr>
+<tr>
+<td align="right">1</td>
+<td><code>Q(n)&#39;</code></td>
+<td>Toggle</td>
+</tr>
+</tbody></table>
+<p>특성식:</p>
+<pre><code class="language-text">Q(n+1) = T xor Q
+</code></pre>
+<p>해석: T가 1인 클록 에지마다 출력이 반전된다.</p>
+<hr>
+<h2>14. 마지막 10분 체크</h2>
 <ul>
-<li>SR: <code>Q+ = S + R'Q</code>, 단 <code>S = R = 1</code> 금지</li>
-<li>D: <code>Q+ = D</code></li>
-<li>JK: <code>Q+ = JQ' + K'Q</code></li>
-<li>T: <code>Q+ = TQ' + T'Q = T xor Q</code></li>
-</ul>
-
-<p>비동기 입력:</p>
-<ul>
-<li>Preset/Set과 Clear/Reset은 클록보다 우선한다.</li>
-<li>비동기 입력은 클록 에지와 무관하게 즉시 출력을 바꾼다.</li>
+<li>회로식은 게이트마다 중간 출력부터 적는다.</li>
+<li>보수 표시를 minterm으로 바꾼 뒤 K-map에 넣는다.</li>
+<li>K-map 열/행 순서는 <code>00, 01, 11, 10</code>이다.</li>
+<li>묶음은 1, 2, 4, 8개만 가능하고 가장자리끼리 이어진다.</li>
+<li>무관항 <code>x</code>는 큰 묶음을 만들 때만 쓴다.</li>
+<li>반가산기: <code>S = A xor B</code>, <code>C = AB</code></li>
+<li>전가산기: <code>S = A xor B xor Cin</code>, <code>Cout = AB + ACin + BCin</code></li>
+<li>1비트 비교기: <code>A&gt;B = AB&#39;</code>, <code>A=B = A&#39;B&#39; + AB</code>, <code>A&lt;B = A&#39;B</code></li>
+<li>4비트 가산기/감산기는 <code>B xor S</code>와 <code>C0=S</code>를 찾는다.</li>
+<li>NOR SR 래치: <code>00 유지</code>, <code>01 Reset</code>, <code>10 Set</code>, <code>11 금지</code></li>
+<li>래치 파형은 <code>S</code> 펄스에서 올라가고 <code>R</code> 펄스에서 내려간다.</li>
+<li>NAND 회로는 중간 출력의 보수를 괄호로 끝까지 유지한다.</li>
 </ul>
 
 </main>
-<script>
-function toggleNext(button) {
-  const panel = button.nextElementSibling;
-  if (panel) panel.classList.toggle('hidden');
-}
-const WORKBOOK_SUBJECT = "디지털공학개론";
-async function loadIssueFlags() {
-  try {
-    const response = await fetch(`/api/issue-flags?subject=${encodeURIComponent(WORKBOOK_SUBJECT)}`);
-    if (!response.ok) return;
-    const payload = await response.json();
-    for (const checkbox of document.querySelectorAll('input[data-question]')) {
-      checkbox.checked = Boolean(payload.flags && payload.flags[checkbox.dataset.question]);
-    }
-  } catch (_error) {}
-}
-async function reportIssue(input) {
-  try {
-    await fetch('/api/issue-flags', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subject: WORKBOOK_SUBJECT, question: Number(input.dataset.question), flagged: input.checked })
-    });
-  } catch (_error) {}
-}
-async function loadConcept(button) {
-  const concept = button.dataset.concept;
-  const anchor = button.dataset.anchor;
-  const target = document.getElementById(`concept-output-${button.dataset.anchor}`);
-  target.textContent = '불러오는 중...';
-  try {
-    const response = await fetch(`/api/concept-detail?subject=${encodeURIComponent(WORKBOOK_SUBJECT)}&concept=${encodeURIComponent(concept)}`);
-    const payload = await response.json();
-    if (!response.ok || payload.error) {
-      const retry = payload.retryable === false ? '' : `<button class="retry" type="button" data-concept="${escapeHtml(concept)}" data-anchor="${escapeHtml(anchor)}" onclick="loadConcept(this)">재시도</button>`;
-      target.innerHTML = renderErrorCard(payload.error || '상세 설명을 불러오지 못했습니다.', retry);
-      return;
-    }
-    target.innerHTML = payload.html || payload.error || '응답 없음';
-  } catch (_error) {
-    const retry = `<button class="retry" type="button" data-concept="${escapeHtml(concept)}" data-anchor="${escapeHtml(anchor)}" onclick="loadConcept(this)">재시도</button>`;
-    target.innerHTML = renderErrorCard('네트워크 오류로 상세 설명을 불러오지 못했습니다.', retry);
-  }
-}
-function resolveQaOutput(form) {
-  return form.parentElement.querySelector('.qa-output')
-    || form.closest('.concept-card')?.querySelector('.qa-output')
-    || form.closest('.question-actions')?.querySelector('.qa-output');
-}
-function escapeHtml(value) {
-  return String(value || '').replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
-}
-function findQaForm(entry) {
-  for (const form of document.querySelectorAll('form.qa-form')) {
-    if (entry.concept && form.dataset.concept === entry.concept) return form;
-    if (entry.question_number && form.dataset.question === String(entry.question_number)) return form;
-  }
-  return null;
-}
-function renderCachedAnswer(question, answerHtml, collapsed) {
-  const stateClass = collapsed ? ' is-collapsed' : '';
-  const expanded = collapsed ? 'false' : 'true';
-  const label = collapsed ? '펼치기' : '접기';
-  const title = question ? `저장된 질문: ${escapeHtml(question)}` : '저장된 답변';
-  return `<section class="cached-answer${stateClass}"><div class="cached-answer-header"><p class="meta cached-question">${title}</p><button class="cached-answer-toggle" type="button" aria-expanded="${expanded}" onclick="toggleCachedAnswer(this)">${label}</button></div><div class="cached-answer-body">${answerHtml || ''}</div></section>`;
-}
-function toggleCachedAnswer(button) {
-  const answer = button.closest('.cached-answer');
-  if (!answer) return;
-  const collapsed = answer.classList.toggle('is-collapsed');
-  button.textContent = collapsed ? '펼치기' : '접기';
-  button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-}
-function renderErrorCard(message, retryHtml) {
-  const retry = retryHtml || '';
-  return `<section class="error-card" role="alert"><p>${escapeHtml(message || '요청을 처리하지 못했습니다.')}</p>${retry}</section>`;
-}
-function retryStudyQuestion(button) {
-  const output = button.closest('.qa-output');
-  const container = output?.closest('.concept-card') || output?.closest('.question-actions');
-  const form = container?.querySelector('form.qa-form');
-  if (form) askStudyQuestion(form);
-}
-function submitStudyQuestion(event, form) {
-  event.preventDefault();
-  askStudyQuestion(form);
-  return false;
-}
-async function loadCachedStudyAnswers() {
-  try {
-    const response = await fetch(`/api/concept-qa-cache?subject=${encodeURIComponent(WORKBOOK_SUBJECT)}`);
-    if (!response.ok) return;
-    const payload = await response.json();
-    for (const entry of payload.entries || []) {
-      const form = findQaForm(entry);
-      if (!form) continue;
-      const target = resolveQaOutput(form);
-      if (!target) continue;
-      target.insertAdjacentHTML('beforeend', renderCachedAnswer(entry.question, entry.html, true));
-    }
-  } catch (_error) {}
-}
-async function askStudyQuestion(form) {
-  const target = resolveQaOutput(form);
-  const input = form.querySelector('input[name="question"]');
-  const subjectInput = form.querySelector('input[name="subject"]');
-  const payload = { subject: subjectInput?.value || WORKBOOK_SUBJECT, question: input.value, concept: form.dataset.concept || '', question_number: Number(form.dataset.question || 0) || null };
-  if (!target) return false;
-  target.textContent = '답변 생성 중...';
-  try {
-    const response = await fetch('/api/concept-qa', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await response.json();
-    if (!response.ok || data.error) {
-      const retry = data.retryable === false ? '' : '<button class="retry" type="button" onclick="retryStudyQuestion(this)">재시도</button>';
-      target.innerHTML = renderErrorCard(data.error || '답변 생성에 실패했습니다.', retry);
-      return false;
-    }
-    target.innerHTML = renderCachedAnswer(input.value, data.html || data.error || '응답 없음', false);
-  } catch (_error) {
-    target.innerHTML = renderErrorCard('네트워크 오류로 답변을 생성하지 못했습니다.', '<button class="retry" type="button" onclick="retryStudyQuestion(this)">재시도</button>');
-  }
-  return false;
-}
-document.addEventListener('DOMContentLoaded', () => {
-  loadIssueFlags();
-  loadCachedStudyAnswers();
-});
-</script>
 </body>
 </html>
