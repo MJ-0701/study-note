@@ -56,6 +56,28 @@ function AnswerBlock({ question }: { question: ExamPrepQuestion }): React.ReactE
   );
 }
 
+function ProblemBlock({ question }: { question: ExamPrepQuestion }): React.ReactElement | null {
+  const problem = question.problem;
+  const problemSrc = sanitizeExternalUrl(problem?.src);
+
+  if (!problem || !problemSrc) {
+    return null;
+  }
+
+  return (
+    <figure className="exam-prep-problem">
+      <figcaption>
+        <span>{problem.sourceLabel}</span>
+        <strong>문제 원문</strong>
+        <p>{problem.caption}</p>
+      </figcaption>
+      <a href={problemSrc} target="_blank" rel="noreferrer" aria-label={`${problem.sourceLabel} 문제 이미지 크게 열기`}>
+        <img src={problemSrc} alt={problem.alt} loading="lazy" decoding="async" />
+      </a>
+    </figure>
+  );
+}
+
 function QuestionHeader({ question, index }: { question: ExamPrepQuestion; index: number }): React.ReactElement {
   return (
     <>
@@ -80,7 +102,10 @@ function QuestionCard(
         <header className="exam-prep-question__header">
           <QuestionHeader question={question} index={index} />
         </header>
-        <AnswerBlock question={question} />
+        <div className="exam-prep-question__body">
+          <ProblemBlock question={question} />
+          <AnswerBlock question={question} />
+        </div>
       </article>
     );
   }
@@ -90,7 +115,10 @@ function QuestionCard(
       <summary>
         <QuestionHeader question={question} index={index} />
       </summary>
-      <AnswerBlock question={question} />
+      <div className="exam-prep-question__body">
+        <ProblemBlock question={question} />
+        <AnswerBlock question={question} />
+      </div>
     </details>
   );
 }

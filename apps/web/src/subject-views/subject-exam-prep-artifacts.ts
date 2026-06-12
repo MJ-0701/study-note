@@ -15,6 +15,12 @@ export interface ExamPrepQuestion {
   title: string;
   priority: "최우선" | "중요" | "연습";
   tags: string[];
+  problem?: {
+    sourceLabel: string;
+    src: string;
+    alt: string;
+    caption: string;
+  };
   answer: string[];
   explanation: string[];
   code?: string;
@@ -137,6 +143,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "7장 회로의 논리식을 쓰고 두 회로가 같은지 판단",
       priority: "최우선",
       tags: ["회로식", "인수분해"],
+      problem: {
+        sourceLabel: "힌트 PDF 2쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-2.png",
+        alt: "H, D, K 입력 회로 두 개의 논리식을 작성하는 7장 회로 문제",
+        caption: "두 회로의 게이트 연결을 보고 각각의 F 식을 세운 뒤 같은 회로인지 판단한다."
+      },
       answer: [
         "왼쪽 회로는 위 AND 출력이 HD, 아래 AND 출력이 DK이고 OR 출력은 F = HD + DK다.",
         "HD + DK에서 공통 인수 D를 묶으면 F = D(H + K)가 된다.",
@@ -153,6 +165,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "힌트 PDF 3쪽 논리함수 K-map 간소화",
       priority: "최우선",
       tags: ["카르노맵", "minterm"],
+      problem: {
+        sourceLabel: "힌트 PDF 3쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-3.png",
+        alt: "x, y, z 논리함수 f를 K-map으로 간소화하는 문제",
+        caption: "곱항을 minterm 번호로 바꾼 뒤 3변수 K-map에 표시해서 최소식을 구한다."
+      },
       answer: [
         "식은 f = x'y'z' + x'y'z + x'yz' + xy'z + xyz'로 읽는다.",
         "각 항은 m0, m1, m2, m5, m6이므로 f = Σm(0,1,2,5,6)이다.",
@@ -171,6 +189,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "7장 반가산기, 전가산기, 병렬 가산기 풀이",
       priority: "최우선",
       tags: ["가산기", "공식"],
+      problem: {
+        sourceLabel: "힌트 PDF 4쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-4.png",
+        alt: "7장 가산기와 비교기 출제 단서가 적힌 PDF 페이지",
+        caption: "7장 가산기 단서에서 반가산기, 전가산기, 병렬 가산기 공식을 먼저 고정한다."
+      },
       answer: [
         "반가산기는 두 비트 A, B를 더하므로 S = A xor B, C = AB다.",
         "전가산기는 A, B, Cin 세 비트를 더하므로 S = A xor B xor Cin이다.",
@@ -187,6 +211,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "7장 1비트 비교기와 다중 비트 비교",
       priority: "중요",
       tags: ["비교기"],
+      problem: {
+        sourceLabel: "힌트 PDF 4쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-4.png",
+        alt: "7장 가산기와 비교기 출제 단서가 적힌 PDF 페이지",
+        caption: "비교기 단서가 나오면 1비트 대소/같음 식과 상위 비트 우선 규칙을 연결한다."
+      },
       answer: [
         "1비트에서 A>B는 A=1, B=0일 때만 1이므로 AB'다.",
         "A=B는 00 또는 11일 때 1이므로 A'B' + AB, 즉 XNOR다.",
@@ -203,6 +233,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "8장 NOR SR 래치 진리표",
       priority: "최우선",
       tags: ["SR 래치", "진리표"],
+      problem: {
+        sourceLabel: "힌트 PDF 5쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-5.png",
+        alt: "NOR 게이트 SR 래치 회로로 진리표를 작성하는 문제",
+        caption: "NOR형 SR 래치 회로에서 S/R 입력 조합별 다음 Q 상태를 채운다."
+      },
       answer: [
         "NOR SR 래치에서 S=0, R=0이면 Q(n+1)=Q(n)으로 유지된다.",
         "S=0, R=1이면 Reset이므로 Q(n+1)=0이다.",
@@ -219,6 +255,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "8장 NOR SR 래치 파형 그리기",
       priority: "최우선",
       tags: ["SR 래치", "파형"],
+      problem: {
+        sourceLabel: "힌트 PDF 6쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-6.png",
+        alt: "S와 R 입력 파형이 주어지고 Q 출력을 그리는 NOR SR 래치 파형 문제",
+        caption: "시간 구간별 S/R 조합을 진리표에 대입해서 Q 파형을 이어 그린다."
+      },
       answer: [
         "초기 Q=0이다.",
         "첫 번째 S 펄스에서 S=1, R=0이 되어 Q는 1로 올라간다.",
@@ -236,6 +278,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "6장 NAND 회로 출력 간소화",
       priority: "중요",
       tags: ["NAND", "드모르간"],
+      problem: {
+        sourceLabel: "힌트 PDF 7쪽",
+        src: "/exam-prep/digital-engineering/problem-images/hint-page-7.png",
+        alt: "A와 B 입력 NAND 회로의 최종 출력 X를 간소화하는 문제",
+        caption: "NAND 중간 출력의 보수를 유지한 채 드모르간과 흡수법칙으로 X를 줄인다."
+      },
       answer: [
         "B가 먼저 반전되어 B'가 된다.",
         "첫 NAND 출력은 N1 = (AB')'이다.",
@@ -252,6 +300,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "퀴즈 2쪽 2변수 진리표 간소화",
       priority: "최우선",
       tags: ["진리표", "카르노맵"],
+      problem: {
+        sourceLabel: "퀴즈 힌트 PDF 2쪽",
+        src: "/exam-prep/digital-engineering/problem-images/quiz-page-2.png",
+        alt: "A와 B의 2변수 진리표에서 Y를 간소화하는 문제",
+        caption: "Y=1인 행을 minterm으로 옮긴 뒤 2변수 K-map 묶음으로 식을 구한다."
+      },
       answer: [
         "진리표에서 Y=1인 행은 AB=00, 10, 11이므로 Y = Σm(0,2,3)이다.",
         "K-map에서 A=1인 아래 행 두 칸을 묶으면 항 A가 나온다.",
@@ -268,6 +322,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "퀴즈 3쪽 3변수 진리표 간소화",
       priority: "최우선",
       tags: ["진리표", "카르노맵"],
+      problem: {
+        sourceLabel: "퀴즈 힌트 PDF 3쪽",
+        src: "/exam-prep/digital-engineering/problem-images/quiz-page-3.png",
+        alt: "A, B, C의 3변수 진리표에서 X를 간소화하는 문제",
+        caption: "3변수 K-map에서 행/열 묶음을 읽어 X = A' + B' 형태로 줄인다."
+      },
       answer: [
         "K-map에서 A=0인 윗행 네 칸이 모두 1이므로 묶음 항은 A'다.",
         "B=0인 두 열 BC=00, 01을 위아래로 묶으면 항은 B'다.",
@@ -283,6 +343,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "퀴즈 4쪽 무관항 포함 4변수 K-map",
       priority: "중요",
       tags: ["무관항", "카르노맵"],
+      problem: {
+        sourceLabel: "퀴즈 힌트 PDF 4쪽",
+        src: "/exam-prep/digital-engineering/problem-images/quiz-page-4.png",
+        alt: "A, B, C, D의 4변수 K-map에서 무관항을 사용해 F를 간소화하는 문제",
+        caption: "1과 무관항 x를 이용해 큰 묶음을 만들고 F의 최소 SOP 식을 구한다."
+      },
       answer: [
         "무관항 x는 더 큰 묶음을 만들 수 있을 때 1처럼 사용한다.",
         "행 AB=00,01과 열 CD=00,10의 wrap 묶음은 A=0, D=0이 고정되어 A'D'가 된다.",
@@ -300,6 +366,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "퀴즈 5쪽 조합회로 명칭",
       priority: "중요",
       tags: ["가산기", "감산기"],
+      problem: {
+        sourceLabel: "퀴즈 힌트 PDF 5쪽",
+        src: "/exam-prep/digital-engineering/problem-images/quiz-page-5.png",
+        alt: "전가산기 4개와 XOR 제어 입력 S로 구성된 4비트 조합회로 명칭 문제",
+        caption: "B 입력의 XOR 제어와 C0=S 단서를 보고 4비트 병렬 가산기/감산기로 판별한다."
+      },
       answer: [
         "회로에는 FA가 4개 있으므로 4비트 병렬 가산기 구조다.",
         "각 B 입력이 XOR를 거치고 XOR의 다른 입력은 제어선 S다.",
@@ -316,6 +388,12 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
       title: "8장 D/JK/T 플립플롭 다음 상태",
       priority: "중요",
       tags: ["플립플롭", "진리표"],
+      problem: {
+        sourceLabel: "퀴즈 힌트 PDF 6쪽",
+        src: "/exam-prep/digital-engineering/problem-images/quiz-page-6.png",
+        alt: "SR 플립플롭 진리표와 관련된 8장 플립플롭 퀴즈 문제",
+        caption: "SR 래치 표를 기준으로 D, JK, T 플립플롭의 다음 상태 규칙까지 확장해 확인한다."
+      },
       answer: [
         "D 플립플롭은 Q(n+1)=D다.",
         "JK 플립플롭은 J/K=00 유지, 01 Reset, 10 Set, 11 Toggle이다.",

@@ -65,6 +65,11 @@ describe("SubjectExamPrepView / artifact registry 정적 소스 검증", () => {
     assert.match(viewSrc, /exam-prep-template--worked/);
     assert.match(viewSrc, /exam-prep-question-list--worked/);
     assert.match(viewSrc, /exam-prep-question--expanded/);
+    assert.match(viewSrc, /ProblemBlock/);
+    assert.match(viewSrc, /문제 원문/);
+    assert.match(viewSrc, /<img src=\{problemSrc\}/);
+    assert.match(src, /problem-images\/hint-page-2\.png/);
+    assert.match(src, /problem-images\/quiz-page-5\.png/);
     assert.match(viewSrc, /href=\{markdownHref\}/);
   });
 });

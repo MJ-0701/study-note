@@ -631,6 +631,14 @@ section + section {
   padding: var(--ds-space-md);
 }
 
+.exam-prep-question__body {
+  border-top: 1px solid var(--ds-rule);
+  display: grid;
+  gap: var(--ds-space-md);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  padding: var(--ds-space-md);
+}
+
 .exam-prep-question summary::-webkit-details-marker {
   display: none;
 }
@@ -686,6 +694,50 @@ section + section {
   font-size: clamp(1.08rem, 1.25vw, 1.35rem);
 }
 
+.exam-prep-problem {
+  display: grid;
+  gap: var(--ds-space-sm);
+  margin: 0;
+  min-width: 0;
+}
+
+.exam-prep-problem figcaption {
+  display: grid;
+  gap: 4px;
+}
+
+.exam-prep-problem figcaption span {
+  color: var(--ds-accent);
+  font-size: var(--ds-fs-meta);
+  font-weight: 700;
+}
+
+.exam-prep-problem figcaption strong {
+  font-size: 0.98rem;
+}
+
+.exam-prep-problem figcaption p {
+  color: var(--ds-muted);
+  font-size: var(--ds-fs-meta);
+  margin: 0;
+}
+
+.exam-prep-problem a {
+  display: block;
+  min-width: 0;
+}
+
+.exam-prep-problem img {
+  aspect-ratio: 4 / 3;
+  background: #fff;
+  border: 1px solid var(--ds-rule);
+  border-radius: 8px;
+  display: block;
+  height: auto;
+  object-fit: contain;
+  width: 100%;
+}
+
 .exam-prep-answer {
   border-top: 1px solid var(--ds-rule);
   display: grid;
@@ -693,9 +745,19 @@ section + section {
   padding: 0 var(--ds-space-md) var(--ds-space-md);
 }
 
+.exam-prep-question__body .exam-prep-answer {
+  align-content: start;
+  border-top: 0;
+  padding: 0;
+}
+
 .exam-prep-question--expanded .exam-prep-answer {
   gap: var(--ds-space-md);
   padding-top: var(--ds-space-sm);
+}
+
+.exam-prep-question--expanded .exam-prep-question__body .exam-prep-answer {
+  padding-top: 0;
 }
 
 .exam-prep-answer h4 {
