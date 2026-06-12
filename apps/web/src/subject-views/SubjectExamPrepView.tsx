@@ -34,36 +34,63 @@ function ConceptCard({ concept }: { concept: ExamPrepConcept }): React.ReactElem
   );
 }
 
-function QuestionCard({ question, index }: { question: ExamPrepQuestion; index: number }): React.ReactElement {
+function AnswerBlock({ question }: { question: ExamPrepQuestion }): React.ReactElement {
+  return (
+    <div className="exam-prep-answer">
+      <section>
+        <h4>시험 답안</h4>
+        <ul>
+          {question.answer.map((line, lineIndex) => <li key={lineIndex}>{line}</li>)}
+        </ul>
+      </section>
+      {question.code && (
+        <pre className="exam-prep-code"><code>{question.code}</code></pre>
+      )}
+      <section>
+        <h4>해설</h4>
+        <ul>
+          {question.explanation.map((line, lineIndex) => <li key={lineIndex}>{line}</li>)}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function QuestionHeader({ question, index }: { question: ExamPrepQuestion; index: number }): React.ReactElement {
+  return (
+    <>
+      <span className="exam-prep-question__number">{index + 1}</span>
+      <span className="exam-prep-question__main">
+        <span className="exam-prep-question__meta">
+          <strong>{question.priority}</strong>
+          {question.tags.map((tag) => <em key={tag}>{tag}</em>)}
+        </span>
+        <span className="exam-prep-question__title">{question.title}</span>
+      </span>
+    </>
+  );
+}
+
+function QuestionCard(
+  { question, index, expanded }: { question: ExamPrepQuestion; index: number; expanded: boolean }
+): React.ReactElement {
+  if (expanded) {
+    return (
+      <article className={`exam-prep-question exam-prep-question--expanded exam-prep-question--${question.priority}`}>
+        <header className="exam-prep-question__header">
+          <QuestionHeader question={question} index={index} />
+        </header>
+        <AnswerBlock question={question} />
+      </article>
+    );
+  }
+
   return (
     <details className={`exam-prep-question exam-prep-question--${question.priority}`}>
       <summary>
-        <span className="exam-prep-question__number">{index + 1}</span>
-        <span className="exam-prep-question__main">
-          <span className="exam-prep-question__meta">
-            <strong>{question.priority}</strong>
-            {question.tags.map((tag) => <em key={tag}>{tag}</em>)}
-          </span>
-          <span className="exam-prep-question__title">{question.title}</span>
-        </span>
+        <QuestionHeader question={question} index={index} />
       </summary>
-      <div className="exam-prep-answer">
-        <section>
-          <h4>시험 답안</h4>
-          <ul>
-            {question.answer.map((line, lineIndex) => <li key={lineIndex}>{line}</li>)}
-          </ul>
-        </section>
-        {question.code && (
-          <pre className="exam-prep-code"><code>{question.code}</code></pre>
-        )}
-        <section>
-          <h4>해설</h4>
-          <ul>
-            {question.explanation.map((line, lineIndex) => <li key={lineIndex}>{line}</li>)}
-          </ul>
-        </section>
-      </div>
+      <AnswerBlock question={question} />
     </details>
   );
 }
@@ -100,6 +127,8 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
   } = props;
 
   const markdownHref = sanitizeExternalUrl(artifact?.markdownHref);
+  const htmlHref = sanitizeExternalUrl(artifact?.htmlHref);
+  const expandedQuestions = artifact?.presentation === "worked";
 
   return (
     <div className="exam-prep-view">
@@ -123,11 +152,12 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
             <p className="lede">{artifact.note}</p>
           </div>
           <div className="exam-prep-toolbar__actions">
-            {markdownHref && <a className="secondary-link" href={markdownHref} target="_blank" rel="noreferrer">원본 Markdown</a>}
+            {htmlHref && <a className="action-button" href={htmlHref} target="_blank" rel="noreferrer">전체 풀이 답안집 열기</a>}
+            {markdownHref && <a className="secondary-link" href={markdownHref} target="_blank" rel="noreferrer">Markdown</a>}
           </div>
         </section>
 
-        <div className="exam-prep-template">
+        <div className={`exam-prep-template${expandedQuestions ? " exam-prep-template--worked" : ""}`}>
             <section className="exam-prep-section exam-prep-section--order" aria-labelledby="exam-prep-order-title">
               <p className="meta">공부 순서</p>
               <h3 id="exam-prep-order-title">시험 전 반복 루틴</h3>
@@ -161,10 +191,10 @@ export function SubjectExamPrepView(props: SubjectExamPrepViewProps): React.Reac
 
             <section className="exam-prep-section exam-prep-section--questions" aria-labelledby="exam-prep-questions-title">
               <p className="meta">문항별 답안</p>
-              <h3 id="exam-prep-questions-title">문항별 풀이 확인</h3>
-              <div className="exam-prep-question-list">
+              <h3 id="exam-prep-questions-title">{expandedQuestions ? "문항별 풀이 답안" : "문항별 풀이 확인"}</h3>
+              <div className={`exam-prep-question-list${expandedQuestions ? " exam-prep-question-list--worked" : ""}`}>
                 {artifact.questions.map((question, index) => (
-                  <QuestionCard key={question.id} question={question} index={index} />
+                  <QuestionCard key={question.id} question={question} index={index} expanded={expandedQuestions} />
                 ))}
               </div>
             </section>

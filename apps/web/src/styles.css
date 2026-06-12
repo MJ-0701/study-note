@@ -493,6 +493,14 @@ section + section {
   min-width: 0;
 }
 
+.exam-prep-template--worked {
+  grid-template-areas:
+    "order chapters"
+    "questions questions"
+    "concepts concepts";
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+}
+
 .exam-prep-section {
   min-width: 0;
 }
@@ -543,6 +551,11 @@ section + section {
   display: grid;
   gap: var(--ds-space-sm);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.exam-prep-question-list--worked {
+  gap: clamp(16px, 1.8vw, 24px);
+  grid-template-columns: 1fr;
 }
 
 .exam-prep-chapter,
@@ -611,6 +624,13 @@ section + section {
   padding: var(--ds-space-md);
 }
 
+.exam-prep-question__header {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--ds-space-sm);
+  padding: var(--ds-space-md);
+}
+
 .exam-prep-question summary::-webkit-details-marker {
   display: none;
 }
@@ -662,11 +682,20 @@ section + section {
   font-weight: 700;
 }
 
+.exam-prep-question--expanded .exam-prep-question__title {
+  font-size: clamp(1.08rem, 1.25vw, 1.35rem);
+}
+
 .exam-prep-answer {
   border-top: 1px solid var(--ds-rule);
   display: grid;
   gap: var(--ds-space-sm);
   padding: 0 var(--ds-space-md) var(--ds-space-md);
+}
+
+.exam-prep-question--expanded .exam-prep-answer {
+  gap: var(--ds-space-md);
+  padding-top: var(--ds-space-sm);
 }
 
 .exam-prep-answer h4 {
@@ -3587,6 +3616,14 @@ body[data-route="subject-exam-prep"] .content {
       "chapters concepts questions";
     grid-template-columns: minmax(240px, 0.66fr) minmax(300px, 0.9fr) minmax(0, 1.54fr);
   }
+
+  .exam-prep-template--worked {
+    grid-template-areas:
+      "order chapters"
+      "questions questions"
+      "concepts concepts";
+    grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1.35fr);
+  }
 }
 
 @media (max-width: 1180px) {
@@ -3599,6 +3636,13 @@ body[data-route="subject-exam-prep"] .content {
 
   .exam-prep-bottom-grid {
     grid-template-columns: 1fr;
+  }
+
+  .exam-prep-template--worked {
+    grid-template-areas:
+      "order chapters"
+      "questions questions"
+      "concepts concepts";
   }
 }
 
@@ -3614,6 +3658,14 @@ body[data-route="subject-exam-prep"] .content {
       "chapters"
       "concepts"
       "questions";
+  }
+
+  .exam-prep-template--worked {
+    grid-template-areas:
+      "order"
+      "chapters"
+      "questions"
+      "concepts";
   }
 
   .exam-prep-toolbar__actions {

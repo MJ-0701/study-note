@@ -57,9 +57,14 @@ describe("SubjectExamPrepView / artifact registry 정적 소스 검증", () => {
     assert.match(src, /minterm/);
   });
 
-  it("keeps Markdown as a secondary source link only", () => {
-    assert.doesNotMatch(src, /workbookHref/);
-    assert.doesNotMatch(src, /workbook\.html/);
+  it("connects digital engineering to the full worked-answer workbook", () => {
+    assert.match(src, /presentation:\s*"worked"/);
+    assert.match(src, /htmlHref:/);
+    assert.match(src, /workbook\.html/);
+    assert.match(viewSrc, /전체 풀이 답안집 열기/);
+    assert.match(viewSrc, /exam-prep-template--worked/);
+    assert.match(viewSrc, /exam-prep-question-list--worked/);
+    assert.match(viewSrc, /exam-prep-question--expanded/);
     assert.match(viewSrc, /href=\{markdownHref\}/);
   });
 });

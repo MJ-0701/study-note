@@ -32,6 +32,8 @@ export interface SubjectExamPrepArtifact {
   title: string;
   sourceLabel: string;
   markdownHref: string;
+  htmlHref?: string;
+  presentation?: "cards" | "worked";
   note: string;
   studyOrder: string[];
   chapters: ExamPrepChapter[];
@@ -47,6 +49,8 @@ const DIGITAL_ENGINEERING: SubjectExamPrepArtifact = {
   title: "디지털공학개론 기말 풀이형 답안집",
   sourceLabel: "6, 7, 8장 + 힌트 PDF + 퀴즈 PDF",
   markdownHref: "/exam-prep/digital-engineering/workbook.md",
+  htmlHref: "/exam-prep/digital-engineering/workbook.html",
+  presentation: "worked",
   note: "디지털공학개론은 서술 암기보다 회로식, K-map, 진리표, 파형을 직접 푸는 과목이라 문항마다 풀이 순서와 최종식을 같이 정리했습니다.",
   studyOrder: [
     "힌트 PDF 2, 3, 5, 6, 7쪽을 풀이 순서대로 따라가며 중간식을 직접 적기",
